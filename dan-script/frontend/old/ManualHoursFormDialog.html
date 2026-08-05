@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, Verdana, sans-serif; }
+    html, body { width: 100%; height: 100%; margin: 0; color: #333; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+
+    label { font-size: 13px; margin-bottom: 6px; color:#334155 }
+
+    input[type=text], input[type=number], select, textarea { width: 100%; height: 38px; padding: 10px 12px; margin: 6px 0 14px 0; border: 1px solid #e6e9ee; border-radius: 8px; font-size: 14px; outline: none; }
+
+    form { width: 100%; max-width: 480px; border-radius: 12px; padding: 24px; padding-bottom: 10px; transition: all .3s ease; }
+
+    .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); font-size: 14px; color: #333; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0.4s ease; z-index: 9999; } 
+    .popup.show { opacity: 1; visibility: visible; }
+    .popup.failed {border-left: 3px solid #f03a17;}
+    .popup.success {border-left: 3px solid #16c60c;}
+    .popup.warning {border-left: 3px solid #fce100;}
+    .popup .typ {font-weight: 600;}
+    .popup .msg {color: #666; font-size: 13px;}
+
+    button { color: #334155; background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%); color:#334155; padding: 12px 16px; border-radius: 8px; font-weight:600; border: 0; cursor:pointer; transition:all .36s cubic-bezier(.2,.9,.2,1); }
+    button:hover { background: #334155; color:#e6e9f0; }
+
+    .select2.select2-container { width: 100% !important; } 
+    .select2.select2-container .select2-selection { width: 100%; height: 38px; border: 1px solid #e6e9ee; border-radius: 8px; margin-top: 7px; border: 1px solid #e6e9ee; -webkit-border-radius: 3px; -moz-border-radius: 3px; border-radius: 3px; height: 38px; margin-bottom: 10px; outline: none !important; transition: all .15s ease-in-out; font-size: 12px; } 
+    .select2.select2-container .select2-selection .select2-selection__rendered { color: #333; line-height: 32px; padding-right: 33px; } 
+    .select2.select2-container .select2-selection .select2-selection__arrow { background: #fff; border-left: 1px solid #fff; -webkit-border-radius: 0 3px 3px 0; -moz-border-radius: 0 3px 3px 0; border-radius: 0 3px 3px 0; height: 32px; width: 33px; top: 8px; } 
+    .select2.select2-container.select2-container--open .select2-selection.select2-selection--single { background: #f8f8f8; } 
+    .select2.select2-container.select2-container--open .select2-selection.select2-selection--single .select2-selection__arrow { -webkit-border-radius: 0 3px 0 0; -moz-border-radius: 0 3px 0 0; border-radius: 0 3px 0 0; } 
+    .select2-container .select2-dropdown { background: #fff; border: none; font-size: 12px; margin-top: -10px; box-shadow: 0px 0px 50px 0px rgba(82, 63, 105, 0.15); } 
+    .select2-container .select2-dropdown .select2-search { margin: 3px; } 
+    .select2-container .select2-dropdown .select2-search input { outline: 1px solid #dbdfe9 !important; border: none; border-radius: 5px;  border-bottom: none !important; padding: 4px 6px !important; } 
+    .select2-container .select2-dropdown .select2-results { padding: 0; } 
+    .select2-container .select2-dropdown .select2-results ul { background: #fff; border: 1px solid white; }
+    .select2-container--default .select2-results__option--highlighted { background-color: #f9f9f9 !important; color: #c5963c !important; }
+    .select2-container--default .select2-results__option--selected { background-color: transparent; }
+    .select2-container .select2-dropdown .select2-results > .select2-results__options { max-height: 140px !important; overflow-y: auto !important; }
+
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch;}
+    .card { position: relative; width: 100%; background: linear-gradient(135deg, #f3f4f6, #fff); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; min-width: 370px; }
+    .reveal-btn{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:20; }
+    .reveal-btn:focus, .reveal-btn:active { border: none; outline: none;}
+    form.reveal-form{ opacity:0; transform:translateY(8px) scale(.98); pointer-events:none; transition:all .32s ease; z-index:10; }
+    .card.open form.reveal-form{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+    .card.open .reveal-btn{ opacity:0; transform:translate(-50%,-50%) scale(.86); pointer-events:none; }
+    .actions{ display:flex; gap:8px; align-items:center; margin-top:10px }
+    .actions button { margin-top: 10px; }
+    .close{ background:transparent; border:0; color:#475569; cursor:pointer; padding:8px; border-radius:8px }
+    .hint{ font-size:12px; color:#64748b; margin-top:8px }
+    .blink { animation: blink 2s infinite; } 
+    @keyframes blink { 0%   { opacity: 1; } 50%  { opacity: 0; } 100% { opacity: 1; } }
+
+    table { border-collapse: collapse; width: 100%; } 
+    td, th { text-align: center; padding: 8px; font-size: 11px; } 
+    th { border-bottom: 1px solid #ccc; }
+    .table {height: 165px;}
+
+  </style>
+</head>
+<body>
+
+<div class="popup" id="popup"><span class="typ"></span><br><span class="msg"></span></div>
+
+<div class="cards">
+  <div class="card">
+    <button class="reveal-btn" aria-expanded="false" aria-controls="userForm">Select Client</button>
+    <form id="userForm" class="reveal-form" >
+      <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px">
+        <h3 style="margin:0;font-size:15px;color:#0f172a">Client</h3>
+        <div style="flex:1"></div>
+        <button type="button" class="close" title="Close form">✕</button>
+      </div>
+      <label>Client Name:</label>
+      <div class="field">
+        <select name="client_user" id="client_user" class="js-select2" required></select>
+      </div>
+      <div class="actions">
+        <button id="btnFullData" type="button">View 🕮</button>
+        <button id="btnGoto">Goto 🕮</button>
+        <div class="hint">Or press <kbd>Esc</kbd> to close</div>
+      </div>
+      <div class="table">
+        <h6>Recent Records <span id="refreshResentRec" style="cursor: pointer; float: right">⭮</span></h6>
+        <table id="labTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Hours</th>
+              <th>Type</th>
+              <th>Task</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <button class="reveal-btn"  aria-expanded="false" aria-controls="taskForm">Add Manual Hours</button>
+    <form id="taskForm" class="reveal-form" >
+      <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px">
+        <h3 style="margin:0;font-size:15px;color:#0f172a">Hours</h3>
+        <div style="flex:1"></div>
+        <button type="button" class="close" title="Close form">✕</button>
+      </div>
+          
+        <input type="hidden" name="client" id="client" required>
+
+      <div class="field">
+        <label>Task:</label>
+        <select name="task" id="task" class="js-select2" required></select>
+      </div>
+
+      <div class="field">
+        <label>Type:</label>
+        <select name="type" id="type" class="js-select2" required>
+          <option value="DEV">Dev</option>
+          <option value="DESIGN">Design</option>
+          <option value="SEO">SEO</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Hours:</label>
+        <input type="number" step="0.5" name="hour" id="hour" placeholder="#" required>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Add</button>
+        <div class="hint">Or press <kbd>Esc</kbd> to close</div>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
+
+<script>
+  $(function () {
+    const $clientUser = $('#client_user');
+    const $client = $('#client');
+    const $taskSelect = $('#task');
+    const $taskForm = $('#taskForm');
+    const $userForm = $('#userForm');
+    const $hour = $('#hour');
+    const $type = $('#type');
+    const popup = $('#popup');
+
+    /** --------------------------
+     * Utility Functions
+     * -------------------------- */
+    function showPopup(type, message, duration = 3000) {
+      const $popup = $('#popup');
+      $popup.addClass(type.toLowerCase());
+      $popup.find('.msg').text(message);
+      $popup.find('.typ').text(type);
+      $popup.addClass('show');
+      setTimeout(() => {
+        $popup.removeClass('show');
+      }, duration);
+    }
+
+    const hideForm = $card => {
+      $card.removeClass('open');
+      $card.find('.reveal-btn').attr('aria-expanded', 'false').focus();
+    };
+
+    /** --------------------------
+     * Init Select2
+     * -------------------------- */
+    $('.js-select2').not($taskSelect).select2({
+      dropdownParent: $('body'),
+      placeholder: "Loading data ..."
+    }).on('select2:open', () => {
+      document.querySelector('.select2-container--open .select2-search__field')?.focus();
+    });
+
+    $taskSelect.select2({
+      dropdownParent: $('body'),
+      placeholder: "Loading data ...",
+      tags: true
+    }).on('select2:open', () => {
+      document.querySelector('.select2-container--open .select2-search__field')?.focus();
+    });
+
+    /** --------------------------
+     * Modal / Navigation
+     * -------------------------- */
+    $('#btnFullData').on('click', function () {
+      $userForm.find(".hint").text("Loading Full View ...").addClass("blink");
+      google.script.run
+        .withSuccessHandler(function () {
+          google.script.host.close();
+        })
+        .showClientHourLog();
+    });
+
+    $('#btnGoto').on('click', () => {
+      const sheetName = $clientUser.val();
+      if (!sheetName) return showPopup("Warning", "⚠️ No client selected to go to sheet! ");
+
+      showPopup("Success", "✅ Redirecting to sheet! ");
+      google.script.run
+        .withSuccessHandler(() => google.script.host.close())
+        .goToSheet(sheetName);
+    });
+
+    /** --------------------------
+     * Data Loaders
+     * -------------------------- */
+    const loadTasks = clientName => {
+      if (!clientName) return;
+      google.script.run
+        .withSuccessHandler(tasks => {
+          $taskSelect.empty();
+          tasks.forEach(task => $taskSelect.append(new Option(task, task)));
+          $taskSelect.trigger('change');
+        })
+        .withFailureHandler(() => showPopup("Failed", "❌ Failed to load the tasks! "))
+        .getTaskOptions(clientName);
+    };
+
+    const loadClients = (clientName) => {
+      const cacheKey = "clientList";
+      const cacheTimeKey = "clientList_time";
+      const cached = localStorage.getItem(cacheKey);
+      const cacheTime = Number(localStorage.getItem(cacheTimeKey) || 0);
+      const ONE_DAY = 24 * 60 * 60 * 1000;
+
+      // --- Helper: render client list ---
+      const renderClients = (clients) => {
+        $clientUser.empty();
+        clients.forEach(c => $clientUser.append(new Option(c, c)));
+        if (clientName) $clientUser.val(clientName).trigger('change.select2');
+      };
+
+      // --- If cache exists, render immediately ---
+      if (cached) {
+        const list = JSON.parse(cached);
+        console.log("📦 Loaded clientList from localStorage");
+        renderClients(list);
+
+        // --- Determine if refresh is needed ---
+        const cacheExpired = (Date.now() - cacheTime) > ONE_DAY;
+
+        if (cacheExpired) {
+          console.log(`🔄 Background refresh: cacheExpired=${cacheExpired}`);
+          google.script.run
+            .withSuccessHandler(clients => {
+              if (Array.isArray(clients)) {
+                localStorage.setItem(cacheKey, JSON.stringify(clients));
+                localStorage.setItem(cacheTimeKey, Date.now());
+                console.log("✅ clientList updated in localStorage");
+                renderClients(clients);
+              }
+            })
+            .withFailureHandler(() => console.log("❌ Failed to refresh clientList"))
+            .getClientOptions();
+        }
+
+        return;
+      }
+
+      // --- No cache found — fetch directly from GS ---
+      console.log("🔄 No cache found — fetching clientList from GS...");
+      google.script.run
+        .withSuccessHandler(clients => {
+          if (!Array.isArray(clients)) return;
+          localStorage.setItem(cacheKey, JSON.stringify(clients));
+          localStorage.setItem(cacheTimeKey, Date.now());
+          console.log("✅ Saved new clientList to localStorage");
+          renderClients(clients);
+        })
+        .withFailureHandler(() => console.log("❌ Could not load clientList"))
+        .getClientOptions();
+    };
+
+    const loadRecentRecords = (clientName) => {
+      const cname = clientName || $clientUser.val();
+      const tbody = document.querySelector("#labTable tbody");
+
+      if (!cname) return;
+
+      google.script.run
+        .withSuccessHandler(newRows => {
+          if (!newRows || !newRows.length) return;
+
+          const existingRows = Array.from(tbody.querySelectorAll('tr')).map(tr =>
+            Array.from(tr.querySelectorAll('td')).map(td => td.textContent)
+          );
+
+          const isSame = existingRows.length === newRows.length &&
+            existingRows.every((row, i) =>
+              row.every((cell, j) => cell === (newRows[i][j] || ""))
+            );
+
+          if (isSame) return;
+
+          while (tbody.firstChild) {
+            tbody.removeChild(tbody.firstChild);
+          }
+
+          newRows.forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach(cell => {
+              const td = document.createElement('td');
+              td.textContent = cell || "";
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          $userForm.find(".hint").text("Or press Esc to close").removeClass("blink");
+        })
+        .withFailureHandler(err => {
+          showPopup("Failed", '❌ Failed to load recent records');
+        })
+        .getRecentRecordsForManualForm(cname);
+    };
+
+    $('#refreshResentRec').on('click', function () { loadRecentRecords(clientName) });
+
+    const updateClientonP24 = clientName => {
+      if (!clientName) return;
+      google.script.run.selectClient({ client: clientName });
+    };
+
+    /** --------------------------
+     * Event Handlers
+     * -------------------------- */
+    $clientUser.on('change', function () {
+      const clientName = this.value;
+      const tbody = document.querySelector("#labTable tbody");
+
+      $client.val(clientName);
+      $taskSelect.empty().append('<option></option>');
+
+      $taskSelect.select2({
+        dropdownParent: $('body'),
+        placeholder: "Loading data ...",
+        tags: true
+      });
+
+      $userForm.find(".hint").text("Updating data ...").addClass("blink");
+      tbody.innerHTML = "";
+      loadTasks(clientName);
+      updateClientonP24(clientName);
+      loadRecentRecords(clientName);
+    });
+
+    $taskForm.on('submit', function (e) {
+      e.preventDefault();
+
+      $taskForm.find(".hint").text("Saving in progress ...").addClass("blink");
+
+      const data = {
+        client: $client.val(),
+        hour: $hour.val(),
+        type: $type.val(),
+        task: $taskSelect.val(),
+      };
+
+      google.script.run
+        .withSuccessHandler(() => {
+          const clientName = $client.val();
+          $taskForm.find(".hint").text("Or press Esc to close").removeClass("blink");
+          showPopup("Success", "✅ Hours have been successfully recorded! ");
+          $hour.val("");
+          loadRecentRecords(clientName);
+        })
+        .withFailureHandler(() => showPopup("Failed", "❌ Failed to add the hours! "))
+        .recordManualClientHoursFromForm(data);
+    });
+
+    $('.reveal-btn').on('click', function () {
+      const $this = $(this);
+      const $card = $this.closest('.card');
+      const formId = $this.attr('aria-controls');
+      const $form = $('#' + formId);
+      $card.addClass('open');
+      $this.attr('aria-expanded', 'true');
+
+      function loadCardSelect(client) {
+        if (formId === 'taskForm' && !$taskSelect.children().length && client) {
+          loadTasks(client);
+        }
+
+        if (formId === 'userForm' && !$clientUser.children().length) {
+          loadClients(client);
+          loadRecentRecords(client);
+        }
+      }
+
+      let clientName = $client.val();
+
+      if (!clientName) {
+        google.script.run
+          .withSuccessHandler(function (client) {
+            if (!client) return showPopup("Warning", "⚠️ No default client found!");
+            $client.val(client);
+            clientName = client;
+            loadCardSelect(clientName);
+          })
+          .withFailureHandler(() => showPopup("Failed", "❌ Failed to load client from P24"))
+          .getP24Client();
+      } else {
+        loadCardSelect(clientName);
+      }
+    });
+
+
+    $(document).on('click', '.close', function () {
+      hideForm($(this).closest('.card'));
+    });
+
+    $(document).on('keydown', e => {
+      if (e.key === 'Escape') {
+        $('.card.open').each((_, card) => hideForm($(card)));
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

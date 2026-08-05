@@ -1,0 +1,103 @@
+<div class="main">
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Generate Report
+                </div>
+                <div class="card-body">
+                    <form class>
+                        <div class="position-relative">
+                            <label class="form-label">Month</label>
+
+                            <select class="form-select form-control" type="select" id="monthly-report-month">
+                                <option>January</option>
+                                <option>February</option>
+                                <option>March</option>
+                                <option>April</option>
+                                <option>May</option>
+                                <option>June</option>
+                                <option>July</option>
+                                <option>August</option>
+                                <option>September</option>
+                                <option>October</option>
+                                <option>November</option>
+                                <option>December</option>
+                            </select>
+                        </div>
+                        <div class="position-relative">
+                            <label class="form-label">Year</label>
+
+                            <select class="form-select form-control" type="select" id="monthly-report-year"></select>
+                        </div>
+                        <button class="btn btn-primary btn-lg" id="btn-generate-monthly-report">
+                            <i class="bi bi-play-fill"></i>
+                            Generate Monthly Report
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    Quick Actions
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-3">
+                        <button class="btn btn-success btn-lg" id="generate-yearly-report">
+                            <i class="bi bi-calendar3">
+                            </i>
+                            Generate Yearly Report
+                        </button>
+                        <button class="btn btn-danger btn-lg" id="download-latest-pdf">
+                            <i class="bi bi-file-earmark-pdf">
+                            </i>
+                            Download Latest PDF
+                        </button>
+                        <button class="btn btn-warning btn-lg" id="email-latest-report">
+                            <i class="bi bi-envelope-fill">
+                            </i>
+                            Email Latest Report
+                        </button>
+                        <button class="btn btn-dark btn-lg" id="send-discord-notification">
+                            <i class="bi bi-discord">
+                            </i>
+                            Send Discord Notification
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="main-card mb-3 card">
+                        <div class="card-header">
+                            Recent Generated Reports
+                        </div>
+                        <div class="table-responsive" style="max-height: 570px; overflow-y: auto;">
+                            <table class="align-middle mb-0 table table-borderless table-hover">
+                                <thead>
+                                <tr>
+                                    <th class="text-center">#</th>
+                                    <th>Date</th>
+                                    <th class="text-center">Name</th>
+                                    <th class="text-center">Action</th>
+                                </tr>
+                                </thead>
+                                <tbody id="monthlyReportsTable">
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">
+                                            No reports generated yet.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- DataTables (Bootstrap 5 theme) -->
+  <link href="https://cdn.datatables.net/2.3.4/css/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+
+  <style>
+    body { padding: 24px; font-family: system-ui, Verdana, sans-serif; }
+    h6 { text-align: center; text-transform: uppercase; margin-bottom: 20px; }
+
+    /* Loader */
+    #loadercontainer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; }
+    #loadercontainer .spinner-border { color: #c5963c; }
+
+    /* Status badge */
+    td span.ACTIVE { background: #e8fee7; color: #16c60c; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; }
+    td span.INACTIVE { background: #fde7e9; color: #e81224; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; }
+
+    /* Button */
+    button.view-btn { background: #c5963c; color: #fff; border: none; border-radius: 4px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+    button.view-btn:hover { background: #a47d2e; }
+
+    /* DataTable custom */
+    .dt-buttons { margin-bottom: 12px; }
+    .dt-paging { margin-top: 25px !important; }
+    .dt-paging-button button { background: #fff !important; border-color: #ccc !important; color: #c5963c }
+    .dt-paging-button.active button { background: #f9f9f9; color: #666 }
+    table tbody tr:hover td { background: #f9f9f9 !important; color: #c5963c!important; }
+
+    .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); font-size: 14px; color: #333; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0.4s ease; z-index: 9999; } 
+    .popup.show { opacity: 1; visibility: visible; }
+    .popup.failed {border-left: 3px solid #f03a17;}
+    .popup.success {border-left: 3px solid #16c60c;}
+    .popup.warning {border-left: 3px solid #fce100;}
+    .popup .typ {font-weight: 600;}
+    .popup .msg {color: #666; font-size: 13px;}
+  </style>
+</head>
+<body>
+  <h6>Client Sheets</h6>
+
+  <div class="popup" id="popup"><span class="typ"></span><br><span class="msg"></span></div>
+
+  <!-- Loader -->
+  <div id="loadercontainer">
+    <div class="d-flex justify-content-center text-warning" id="loader">
+      <div class="spinner-border" role="status"></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div id="tableContainer" style="display:none;">
+    <table id="clientsTable" class="table nowrap" style="width:100%">
+      <thead>
+        <tr>
+          <th>Client Name</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- JS libs -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.3.4/js/dataTables.bootstrap5.min.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const loader = document.getElementById("loadercontainer");
+      const tableContainer = document.getElementById("tableContainer");
+      let dataTable;
+      loader.style.display = "block";
+
+      const ONE_DAY = 24 * 60 * 60 * 1000;
+
+      // ✅ Parse localStorage safely
+      const clientList = JSON.parse(localStorage.getItem("clientList") || "[]");
+      const activeClients = JSON.parse(localStorage.getItem("activeClients") || "[]");
+
+      // ✅ Only consider valid cache if both arrays have length
+      const hasValidCache = clientList.length > 0 && activeClients.length > 0;
+
+      const clientListTime = Number(localStorage.getItem("clientList_time") || 0);
+      const activeClientsTime = Number(localStorage.getItem("activeClients_time") || 0);
+
+      const cacheExpired =
+        (Date.now() - clientListTime > ONE_DAY) ||
+        (Date.now() - activeClientsTime > ONE_DAY);
+
+      if (hasValidCache) {
+        console.log("⏩ Using valid localStorage data instantly...");
+        loadRenderData(clientList, activeClients);
+
+        // ✅ Background refresh if cache expired
+        if (cacheExpired) {
+          console.log(`🔄 Background refresh triggered — cacheExpired=${cacheExpired}`);
+          google.script.run
+            .withSuccessHandler(function (result) {
+              const { sheets, activeClients } = result;
+
+              if (Array.isArray(sheets) && sheets.length) {
+                localStorage.setItem("clientList", JSON.stringify(sheets));
+                localStorage.setItem("clientList_time", Date.now());
+              }
+              if (Array.isArray(activeClients) && activeClients.length) {
+                localStorage.setItem("activeClients", JSON.stringify(activeClients));
+                localStorage.setItem("activeClients_time", Date.now());
+              }
+
+              console.log("✅ Background refresh complete.");
+            })
+            .withFailureHandler(() => console.log("❌ Could not refresh data from GS"))
+            .getClientSheetsListAndActive();
+        }
+      } else {
+        // --- No valid cache, fetch fresh from Google Script ---
+        console.log("🔄 No valid cache — fetching fresh data...");
+        google.script.run
+          .withSuccessHandler(function (result) {
+            const { sheets, activeClients } = result;
+
+            if (Array.isArray(sheets) && sheets.length) {
+              localStorage.setItem("clientList", JSON.stringify(sheets));
+              localStorage.setItem("clientList_time", Date.now());
+            }
+            if (Array.isArray(activeClients) && activeClients.length) {
+              localStorage.setItem("activeClients", JSON.stringify(activeClients));
+              localStorage.setItem("activeClients_time", Date.now());
+            }
+
+            renderData(result);
+            loader.style.display = "none";
+            tableContainer.style.display = "block";
+          })
+          .withFailureHandler(() => showPopup("Failed", "❌ Could not load data"))
+          .getClientSheetsListAndActive();
+      }
+
+      function showPopup(type, message, duration = 3000) {
+        const $popup = $('#popup');
+        $popup.addClass(type.toLowerCase());
+        $popup.find('.msg').text(message);
+        $popup.find('.typ').text(type);
+        $popup.addClass('show');
+        setTimeout(() => {
+          $popup.removeClass('show');
+        }, duration);
+      }
+
+      function loadRenderData(clientList, activeClients) {
+        tableContainer.style.display = "none";
+        renderData({ sheets: clientList, activeClients });
+        loader.style.display = "none";
+        tableContainer.style.display = "block";
+      }
+
+      function renderData({ sheets, activeClients }) {
+        const tbody = document.querySelector("#dataTableBody");
+        tbody.innerHTML = "";
+
+        if (!sheets || sheets.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="3">⚠️ No data found</td></tr>`;
+          return;
+        }
+
+        sheets.forEach(name => {
+          const tr = document.createElement("tr");
+
+          // Client name
+          const tdName = document.createElement("td");
+          tdName.textContent = name;
+          tr.appendChild(tdName);
+
+          // Status
+          const tdStatus = document.createElement("td");
+          const span = document.createElement("span");
+          const isActive = activeClients.includes(name);
+          span.className = isActive ? "ACTIVE" : "INACTIVE";
+          span.textContent = isActive ? "ACTIVE" : "INACTIVE";
+          tdStatus.appendChild(span);
+          tr.appendChild(tdStatus);
+
+          // Action
+          const tdAction = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.textContent = "VIEW";
+          btn.className = "view-btn";
+          btn.addEventListener("click", () => {
+            showPopup("Success", "✅ Redirecting to sheet! ", 15000);
+            google.script.run
+              .withSuccessHandler(() => google.script.host.close())
+              .withFailureHandler(() => showPopup("Failed", "❌ Failed to add the hours! "))
+              .openClientSheet(name);
+          });
+          tdAction.appendChild(btn);
+          tr.appendChild(tdAction);
+
+          tbody.appendChild(tr);
+        });
+
+        // Initialize or reinitialize DataTable
+        if ($.fn.DataTable.isDataTable("#clientsTable")) {
+          dataTable.destroy();
+        }
+
+        dataTable = $("#clientsTable").DataTable({
+          paging: true,
+          searching: true,
+          ordering: true,
+          info: true,
+          initComplete: function () {
+            setTimeout(() => {
+              $('.dt-search input').focus();
+            }, 100);
+          }
+        });
+      }
+    });
+    </script>
+
+</body>
+</html>

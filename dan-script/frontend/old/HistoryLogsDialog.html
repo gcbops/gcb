@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Material Icons (loads in dialog) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+    <style>
+      body { font-family: system-ui, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #ffffff; color: #111111; } 
+      h3 { margin: 0 0 16px; font-weight: 600; color: #111111; } 
+      .row { display: flex; gap: 20px; align-items: stretch; justify-content: center; flex-wrap: wrap; } 
+      .card { flex: 1 1 120px; min-width: 120px; max-width: 160px; text-align: center; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 14px; padding: 16px 12px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; } 
+      .card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); border-color: #d1d5db; } 
+      .icon { font-size: 36px; display: block; margin-bottom: 10px; color: #111111; } 
+      .label { font-size: 14px; font-weight: 500; color: #374151; } 
+      .footer { margin-top: 18px; display: flex; justify-content: center; } .btn { border: 1px solid #d1d5db; background: #ffffff; padding: 8px 14px; border-radius: 12px; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; } 
+      .btn:hover { background: #f9fafb; border-color: #cbd5e1; }
+    </style>
+
+  </head>
+  <body>
+
+    <div class="row">
+      <div class="card" onclick="doAction('goToCurrentMonthLog')">
+        <span class="material-symbols-outlined">early_on</span>
+        <div class="label">Current Month Log</div>
+      </div>
+      <div class="card" onclick="doAction('goToMonthlyHoursLog')">
+        <span class="material-symbols-outlined">calendar_month</span>
+        <div class="label">Monthly Log</div>
+      </div>
+      <div class="card" onclick="doAction('goToYearlySummary')">
+        <span class="material-symbols-outlined">calendar_apps_script</span>
+        <div class="label">Yearly Log</div>
+      </div>
+    </div>
+
+    <script>
+      function doAction(key) {
+     
+        if (!key) return;
+        
+        google.script.run
+          .withSuccessHandler(() => google.script.host.close())
+          [key]();
+      }
+    </script>
+
+  </body>
+</html>

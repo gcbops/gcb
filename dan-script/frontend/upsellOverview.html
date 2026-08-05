@@ -1,0 +1,112 @@
+<div class="row">
+    <div class="col-md-6">
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px">
+                    <h5 class="card-title">Add Upsell Entry</h5>
+                <div style="flex:1"></div>
+                    <button type="button" class="btn btn-info" id="addtoSheet-upsell">
+                        Skip Form &amp; Add to Sheet &rarr;
+                    </button>
+                </div>
+                <form id="upsellForm">
+                    <div class="position-relative form-group">
+                        <label for="clientName" class="">Client Name</label>
+                        <input name="clientName" id="clientName" placeholder="Client Name" type="text" class="form-control" required="">
+                    </div>
+                    <div class="position-relative form-group">
+                        <label for="screenshot" class="">Screenshot</label>
+                        <input name="screenshot" id="screenshot" placeholder="Screenshot Link" type="text" class="form-control" required="">
+                    </div>
+                    <div class="position-relative form-group">
+                        <label for="upsellHours" class="">Upsell Hours</label>
+                        <input name="upsellHours" id="upsellHours" placeholder="#" type="number" step="0.5" class="form-control" required="">
+                    </div>
+                    <div class="position-relative form-group">
+                        <label for="totalHours" class="">Orasan Hours</label>
+                        <input name="totalHours" id="totalHours" placeholder="#" type="number" step="0.5" class="form-control" required="">
+                    </div>
+                    <div class="position-relative form-group">
+                        <label for="orasanDate" class="">Orasan Date</label>
+                        <input name="orasanDate" id="orasanDate" placeholder="xx/xx/xxxx" type="text" class="form-control" required="">
+                    </div>
+                    <div class="position-relative form-group">
+                        <label for="reportedDate" class="">Reported Date</label>
+                        <input name="reportedDate" id="reportedDate" placeholder="xx/xx/xxxx" type="text" class="form-control" required="">
+                    </div>
+                    <button class="mt-1 btn btn-primary">Submit</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="main-card mb-3 card">
+            <div class="card-body pt-4 pb-4">
+                <ul class="list-group">
+                    <li class="list-group-item">
+                        <div class="widget-content p-0">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                    <div class="widget-content-left">
+                                        <div class="widget-heading">Total Hours</div>
+                                        <div class="widget-subheading">Current Total Upsell Hours</div>
+                                    </div>
+                                    <div class="widget-content-right">
+                                        <div class="widget-numbers text-primary" id="total">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="list-group-item">
+                        <div class="widget-content p-0">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                    <div class="widget-content-left">
+                                        <div class="widget-heading">Today’s Upsell</div>
+                                        <div class="widget-subheading">Upsell Hours Today</div>
+                                    </div>
+                                    <div class="widget-content-right">
+                                        <div class="widget-numbers text-primary" id="today">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="list-group-item">
+                        <div class="widget-content p-0">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                    <div class="widget-content-left">
+                                        <div class="widget-heading">This Month</div>
+                                        <div class="widget-subheading">Upsell Hours Added This Month</div>
+                                    </div>
+                                    <div class="widget-content-right">
+                                        <div class="widget-numbers text-primary" id="month">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="main-card card">
+            <div class="card-body pt-4 pb-5">
+                <table id="upsellTable" class="display table nowrap">
+                    <thead>
+                    <tr>
+                        <th>Client Name</th>
+                        <th>Upsell Hours</th>
+                        <th>Orasan Date</th>
+                    </tr>
+                    </thead>
+                    <tbody id="recordsBody">
+                    <tr><td colspan="3" style="text-align:center;color:#64748b">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
+
+  <title>Notifications</title>
+
+  <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; } 
+      body { font-family: "Inter", "Lato", sans-serif; background-color: #ffffff; color: #333; padding: 40px; } 
+      h2 { margin-bottom: 20px; font-size: 24px; color: #111; font-weight: 600; } 
+      h3 { font-size: 20px; color: #222; margin-bottom: 15px; } 
+      .tab { float: left; width: 25%; background-color: #fafafa; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 380px; } 
+      .tab button { display: block; width: 100%; background-color: transparent; color: #333; padding: 16px 20px; border: none; text-align: left; font-size: 16px; cursor: pointer; transition: all 0.3s ease; border-bottom: 1px solid #eee; } 
+      .tab button:hover { background-color: #f3f4f6; } 
+      .tab button.active { background-color: #e5e7eb; font-weight: 600; color: #000; } 
+      .tabcontent { float: left; width: 70%; padding: 20px 30px; margin-left: 20px; background-color: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); height: 380px; overflow-y: auto; } 
+      .accordion { background-color: #f9fafb; color: #333; cursor: pointer; padding: 14px 18px; width: 100%; border: 1px solid #e5e7eb; text-align: left; font-size: 15px; border-radius: 8px; margin-bottom: 8px; transition: 0.3s ease; } 
+      .accordion:hover { background-color: #f3f4f6; } 
+      .accordion.active { background-color: #e5e7eb; } 
+      .panel { display: none; padding: 10px 16px; background-color: #fff; border-left: 3px solid #e5e7eb; border-radius: 5px; margin-bottom: 10px; } 
+      .panel pre, .panel p { font-size: 14px; line-height: 1.5; color: #444; white-space: pre-wrap; } 
+      a { color: #2563eb; text-decoration: none; } 
+      a:hover { text-decoration: underline; } /* Scrollbar styling (optional subtle look) */ 
+      ::-webkit-scrollbar { width: 6px; } 
+      ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; } 
+      ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+  </style>
+</head>
+
+<body>
+  <div class="tab">
+    <button class="tablinks" onclick="openBoard(event, 'Daily')" id="defaultOpen">Daily</button>
+    <button class="tablinks" onclick="openBoard(event, 'Report')">Report</button>
+    <button class="tablinks" onclick="openBoard(event, 'Reminder')">Reminder</button>
+  </div>
+
+  <div id="Daily" class="tabcontent"><div class="loading">Loading daily notifications...</div></div>
+  <div id="Report" class="tabcontent"><div class="loading">Loading monthly reports...</div></div>
+  <div id="Reminder" class="tabcontent"><div class="loading">Loading reminders...</div></div>
+
+<script>
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function openBoard(evt, tabName) {
+  // hide all tab contents
+  const tabs = document.getElementsByClassName("tabcontent");
+  for (let t of tabs) t.style.display = "none";
+
+  // remove "active" from all buttons
+  const links = document.getElementsByClassName("tablinks");
+  for (let l of links) l.classList.remove("active");
+
+  // show current tab
+  const current = document.getElementById(tabName);
+  current.style.display = "block";
+  evt.currentTarget.classList.add("active");
+
+  // load data if not yet loaded
+  if (!current.dataset.loaded) {
+    current.innerHTML = `<div class="loading">Loading ${tabName.toLowerCase()}...</div>`;
+    console.log(`🚀 Fetching data for "${tabName}"...`);
+
+    google.script.run
+      .withSuccessHandler(rawData => {
+        console.log(`✅ Received ${tabName} data (raw):`, rawData);
+
+        let data = [];
+
+        try {
+          // Convert to plain JS object/array (fixes Apps Script "server object" issue)
+          data = JSON.parse(JSON.stringify(rawData));
+        } catch (err) {
+          console.warn("⚠️ Could not safely parse data, using raw instead:", err);
+          data = rawData;
+        }
+
+        // Handle explicit error objects
+        if (data && data.error) {
+          current.innerHTML = `<p class="error">Error loading ${tabName}: ${escapeHtml(data.error)}</p>`;
+          return;
+        }
+
+        // Handle null / undefined
+        if (!data) {
+          current.innerHTML = `<p class="error">Error loading ${tabName}: No data returned from server.</p>`;
+          return;
+        }
+
+        // If not an array, try converting (Apps Script sometimes sends as object-like)
+        if (!Array.isArray(data)) {
+          if (typeof data === "object" && Object.keys(data).length > 0) {
+            console.log("ℹ️ Converting object to array:", data);
+            data = Object.values(data);
+          } else {
+            console.warn("⚠️ Unexpected data type for", tabName, data);
+            current.innerHTML = `<p class="error">Unexpected data format for ${tabName}.</p>`;
+            return;
+          }
+        }
+
+        // Empty data
+        if (!data.length) {
+          current.innerHTML = `<p>No ${tabName.toLowerCase()} found.</p>`;
+          current.dataset.loaded = true;
+          return;
+        }
+
+        // Render UI
+        renderSection(tabName, data);
+        initAccordion();
+        current.dataset.loaded = true;
+      })
+      .withFailureHandler(err => {
+        console.error(`❌ google.script.run failed for ${tabName}:`, err);
+        current.innerHTML = `<p class="error">Failed to load ${tabName} data. (${escapeHtml(String(err))})</p>`;
+      })
+      .getNotificationData(tabName);
+  }
+}
+
+document.getElementById("defaultOpen").click();
+
+function renderSection(id, items) {
+  const container = document.getElementById(id);
+  console.log(`🧩 Rendering section "${id}" with ${items?.length || 0} items`);
+
+  if (!items?.length) {
+    container.innerHTML = "<p>No data found.</p>";
+    return;
+  }
+
+  if (id === "Daily" || id === "Reminder") {
+    container.innerHTML = items.map(item => `
+      <button class="accordion">${escapeHtml(item.title)}</button>
+      <div class="panel"><pre>${escapeHtml(item.content)}</pre></div>
+    `).join('');
+  }
+
+  if (id === "Report") {
+    container.innerHTML = items.map(item => `
+      <button class="accordion">${escapeHtml(item.title)} (${escapeHtml(item.date)})</button>
+      <div class="panel">
+        <p><strong>ID:</strong> ${escapeHtml(item.id)}</p>
+        <p><a href="${escapeHtml(item.link)}" target="_blank">📄 View Report</a></p>
+      </div>
+    `).join('');
+  }
+}
+
+function initAccordion() {
+  const acc = document.getElementsByClassName("accordion");
+  for (let el of acc) {
+    el.onclick = function() {
+      this.classList.toggle("active");
+      const panel = this.nextElementSibling;
+      panel.style.display = panel.style.display === "block" ? "none" : "block";
+    };
+  }
+}
+</script>
+
+
+</body>
+
+</html>

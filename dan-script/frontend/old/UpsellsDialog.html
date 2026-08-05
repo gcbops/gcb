@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <style>
+      body { font-family: system-ui, Verdana, sans-serif; padding: 24px; color:#0f172a; }
+      .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      label { font-weight: 600; color:#334155; font-size:13px; margin-bottom:4px; display:block; }
+      input[type=text], input[type=date], input[type=number] { width: 95%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; margin-top:12px; margin-bottom:12px; font-size:14px; outline:none; }
+      input:focus { border-color:#0ea5e9; box-shadow:0 0 0 2px rgba(14,165,233,0.2); }
+      button {
+        background:#334155; color:#f8fafc; padding:10px 14px; border:none; border-radius:8px;
+        cursor:pointer; font-weight:600; transition:0.3s;
+      }
+      button:hover { background:#0ea5e9; }
+      .summary, .records { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; }
+      table.dataTable thead th { background-color:#e2e8f0; color:#0f172a; font-weight:600; font-size: 14px; }
+      table.dataTable tbody td { font-size: 12px; }
+      #upsellTable { width:100%; border-radius:8px; overflow:hidden; background:#fff; }
+      .dataTables_wrapper .dataTables_filter input { border-radius:6px; border:1px solid #cbd5e1; padding:6px 10px; }
+      .paginate_button {padding: 5px 12px !important}
+      .actions { display:flex; gap:8px; margin-top:10px; }
+      .error { font-size:13px; color:#dc2626; margin-top:6px; }
+      .success { color:#16a34a; margin-top:8px; font-size:13px; }
+      .summary { margin-bottom: 10px; }
+    </style>
+  </head>
+
+  <body>
+    <div class="layout">
+      <!-- LEFT -->
+      <div>
+        <h3>Add Upsell Entry</h3>
+        <label>Client Name</label><input type="text" id="clientName">
+        <label>Screenshot</label><input type="text" id="screenshot">
+        <label>Upsell Hours</label><input type="number" id="upsellHours" step="0.5">
+        <label>Total Hours on Orasan</label><input type="number" id="totalHours" step="0.5">
+        <label id="orasanLabel">Orasan Date (e.g. ...)</label><input type="text" id="orasanDate">
+        <label id="reportedLabel">Reported Date (e.g. ...)</label><input type="text" id="reportedDate">
+        <div class="actions">
+          <button onclick="saveUpsell()">Save</button>
+          <button onclick="google.script.host.close()">Cancel</button>
+        </div>
+        <div class="error" id="errorMsg"></div>
+      </div>
+
+      <!-- RIGHT -->
+      <div>
+        <div class="summary">
+          <h3>Upsell Summary</h3>
+          <p><b>Total Hours:</b> <span id="total">0</span></p>
+          <p><b>Today’s Upsell:</b> <span id="today">0</span></p>
+          <p><b>This Month:</b> <span id="month">0</span></p>
+          <button onclick="clearAllRecords()">🧹 Clear All Records</button>
+        </div>
+
+        <div class="records">
+          <h3>Upsell Records</h3>
+          <table id="upsellTable" class="display">
+            <thead>
+              <tr>
+                <th>Client Name</th>
+                <th>Upsell Hours</th>
+                <th>Orasan Date</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody">
+              <tr><td colspan="3" style="text-align:center;color:#64748b">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+    <script>
+      const CACHE_RECORDS = "upsellRecords";
+      const CACHE_RECORDS_TIME = "upsellRecords_time";
+      const CACHE_SUMMARY = "upsellSummary";
+      const CACHE_SUMMARY_TIME = "upsellSummary_time";
+      const CACHE_LIFETIME = 24 * 60 * 60 * 1000; // 24 hours
+
+      /** ✅ escape html */
+      function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      /** ✅ format date as mm/dd/yyyy */
+      function formatDate(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d)) return dateStr;
+        return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+      }
+
+      /** ✅ init DataTable safely */
+      function initDataTable($table) {
+        if ($.fn.DataTable.isDataTable($table)) {
+          try { $table.DataTable().clear().destroy(); } catch (e) {}
+        }
+
+        $table.DataTable({
+          pageLength: 5,
+          order: [],
+          ordering: false,
+          destroy: true,
+          retrieve: true,
+          searching: true,
+          lengthChange: false,
+          info: false,
+          paging: true,
+          columnDefs: [{ targets: [1, 2], className: "dt-center" }],
+          language: { emptyTable: "No records yet" }
+        });
+      }
+
+      /** ✅ load summary (with caching) */
+      function loadSummary(forceRefresh = false) {
+        const cacheTime = Number(localStorage.getItem(CACHE_SUMMARY_TIME) || 0);
+        const isFresh = Date.now() - cacheTime < CACHE_LIFETIME;
+
+        if (!forceRefresh && isFresh && localStorage.getItem(CACHE_SUMMARY)) {
+          const summary = JSON.parse(localStorage.getItem(CACHE_SUMMARY));
+          console.log("📦 Loaded upsell summary from cache");
+          renderSummary(summary);
+          return;
+        }
+
+        console.log("🔄 Fetching upsell summary...");
+        google.script.run
+          .withSuccessHandler(summary => {
+            summary = summary || { total: 0, today: 0, month: 0 };
+            localStorage.setItem(CACHE_SUMMARY, JSON.stringify(summary));
+            localStorage.setItem(CACHE_SUMMARY_TIME, Date.now());
+            renderSummary(summary);
+          })
+          .withFailureHandler(err => console.error("getUpsellSummary failed", err))
+          .getUpsellSummary();
+      }
+
+      function renderSummary(summary) {
+        document.getElementById('total').textContent = summary.total;
+        document.getElementById('today').textContent = summary.today;
+        document.getElementById('month').textContent = summary.month;
+      }
+
+      /** ✅ load records (with caching) */
+      function loadRecords(forceRefresh = false) {
+        const cacheTime = Number(localStorage.getItem(CACHE_RECORDS_TIME) || 0);
+        const isFresh = Date.now() - cacheTime < CACHE_LIFETIME;
+
+        if (!forceRefresh && isFresh && localStorage.getItem(CACHE_RECORDS)) {
+          const table = JSON.parse(localStorage.getItem(CACHE_RECORDS));
+          console.log("📦 Loaded upsell records from cache");
+          renderRecords(table);
+          return;
+        }
+
+        console.log("🔄 Fetching upsell records...");
+        google.script.run
+          .withSuccessHandler(table => {
+            localStorage.setItem(CACHE_RECORDS, JSON.stringify(table));
+            localStorage.setItem(CACHE_RECORDS_TIME, Date.now());
+            renderRecords(table);
+          })
+          .withFailureHandler(err => {
+            console.error("❌ Error loading records:", err);
+            $("#recordsBody").html(
+              '<tr><td colspan="3" style="text-align:center;color:#dc2626">Error loading data</td></tr>'
+            );
+          })
+          .getUpsellRecords();
+      }
+
+      function renderRecords(table) {
+        const $table = $("#upsellTable");
+        const $tbody = $("#recordsBody");
+
+        if ($.fn.DataTable.isDataTable($table)) {
+          $table.DataTable().clear().destroy();
+        }
+
+        if (!Array.isArray(table) || table.length === 0) {
+          $tbody.html(`<tr><td colspan="3" style="text-align:center;color:#64748b">No records yet</td></tr>`);
+        } else {
+          const rowsHtml = table.map(r => `
+            <tr>
+              <td>${escapeHtml(r[0] ?? "")}</td>
+              <td style="text-align:center;">${escapeHtml(r[1] ?? "")}</td>
+              <td style="text-align:center;">${escapeHtml(r[2] ?? "")}</td>
+            </tr>
+          `).join('');
+          $tbody.html(rowsHtml);
+        }
+
+        if (Array.isArray(table) && table.length > 0) initDataTable($table);
+      }
+
+      /** ✅ save new entry and reset cache */
+      function saveUpsell() {
+        const data = {
+          clientName: document.getElementById('clientName').value.trim(),
+          screenshot: document.getElementById('screenshot').value.trim(),
+          upsellHours: document.getElementById('upsellHours').value.trim(),
+          totalHours: document.getElementById('totalHours').value.trim(),
+          orasanDate: document.getElementById('orasanDate').value.trim(),
+          reportedDate: document.getElementById('reportedDate').value.trim()
+        };
+
+        const errorMsg = document.getElementById('errorMsg');
+        if (!data.clientName || !data.upsellHours || !data.reportedDate) {
+          errorMsg.textContent = '⚠️ Please fill out all required fields.';
+          errorMsg.style.color = '#dc2626';
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(() => {
+            errorMsg.style.color = '#16a34a';
+            errorMsg.textContent = '✅ Record added successfully!';
+            ["clientName","screenshot","upsellHours","totalHours","orasanDate","reportedDate"].forEach(id => document.getElementById(id).value = "");
+            clearCache();
+            setTimeout(() => {
+              loadSummary(true);
+              loadRecords(true);
+            }, 600);
+          })
+          .withFailureHandler(err => {
+            errorMsg.style.color = '#dc2626';
+            errorMsg.textContent = '❌ ' + err.message;
+          })
+          .addUpsellEntry(data);
+      }
+
+      /** ✅ clear all records + clear cache */
+      function clearAllRecords() {
+        if (confirm('Are you sure you want to clear all upsell records?')) {
+          google.script.run
+            .withSuccessHandler(() => {
+              clearCache();
+              const table = $('#upsellTable').DataTable();
+              table.clear().draw();
+              document.getElementById('errorMsg').textContent = '✅ All records cleared.';
+              loadSummary(true);
+              loadRecords(true);
+            })
+            .withFailureHandler(err => {
+              document.getElementById('errorMsg').textContent = '❌ ' + err.message;
+            })
+            .clearAllRecords();
+        }
+      }
+
+      /** 🧹 clear cache function */
+      function clearCache() {
+        localStorage.removeItem(CACHE_RECORDS);
+        localStorage.removeItem(CACHE_RECORDS_TIME);
+        localStorage.removeItem(CACHE_SUMMARY);
+        localStorage.removeItem(CACHE_SUMMARY_TIME);
+        console.log("🧹 Cleared upsell cache");
+      }
+
+      /** on load */
+      document.addEventListener('DOMContentLoaded', () => {
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, "0");  
+        const year = now.getFullYear();
+        const exampleRange = `${month}/XX/${year}-${month}/XX/${year}`;
+        document.getElementById("orasanLabel").textContent = `Orasan Date (e.g. ${exampleRange})`;
+        document.getElementById("reportedLabel").textContent = `Reported Date (e.g. ${exampleRange})`;
+        loadSummary();
+        loadRecords();
+      });
+    </script>
+  </body>
+</html>

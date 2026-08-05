@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Material Icons -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+    <!-- jQuery (required for $) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <style>
+      body { font-family: system-ui, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #ffffff; color: #111111; } 
+      h3 { margin: 0 0 16px; font-weight: 600; color: #111111; } 
+      .row { display: flex; gap: 20px; align-items: stretch; justify-content: center; flex-wrap: wrap; } 
+      .card { flex: 1 1 120px; min-width: 120px; max-width: 160px; text-align: center; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 14px; padding: 16px 12px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; } 
+      .card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); border-color: #d1d5db; } 
+      .material-symbols-outlined { font-size: 36px; display: block; margin-bottom: 10px; color: #111111; } 
+      .label { font-size: 14px; font-weight: 500; color: #374151; } 
+      .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px 30px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); font-size: 14px; color: #333; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0.4s ease; z-index: 9999; border-left: 3px solid transparent; border-radius: 8px; text-align: center; } 
+      .popup.show { opacity: 1; visibility: visible; } 
+      .popup.failed { border-left-color: #f03a17; } 
+      .popup.wait {border-left: 3px solid #0d6efd;}
+      .popup.success { border-left-color: #16c60c; } 
+      .popup.warning { border-left-color: #fce100; } 
+      .popup .typ { font-weight: 600; display: block; margin-bottom: 4px; } 
+      .popup .msg { color: #666; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="popup" id="popup">
+      <span class="typ"></span>
+      <span class="msg"></span>
+    </div>
+
+    <div class="row">
+      <div class="card" onclick="syncClientSheetList()">
+        <span class="material-symbols-outlined">sync</span>
+        <div class="label">Sync Data</div>
+      </div>
+
+      <div class="card" onclick="openFormulaDialog()">
+        <span class="material-symbols-outlined">syringe</span>
+        <div class="label">Formula Inject</div>
+      </div>
+
+      <div class="card" onclick="comingSoon()">
+        <span class="material-symbols-outlined">indeterminate_question_box</span>
+        <div class="label">Upcoming</div>
+      </div>
+    </div>
+
+    <script>
+      function showPopup(type, message, duration = 3000) {
+        const $popup = $('#popup');
+        $popup.removeClass('failed success warning');
+        $popup.addClass(type.toLowerCase());
+        $popup.find('.typ').text(type);
+        $popup.find('.msg').text(message);
+        $popup.addClass('show');
+        setTimeout(() => {
+          $popup.removeClass('show');
+        }, duration);
+      }
+
+      function syncClientSheetList() {
+        google.script.run
+        .withSuccessHandler(() => {
+          const $popup = $('#popup');
+          $popup.removeClass('failed success warning').addClass("wait");
+          $popup.find('.typ').text("Wait");
+          $popup.find('.msg').text('🔄 Syncing data...');
+          $popup.addClass('show');
+
+          const now = Date.now();
+
+          // ✅ Update timestamps only to force background refresh
+          localStorage.setItem("clientList_time", 0);
+          localStorage.setItem("activeClients_time", 0);
+          localStorage.setItem("activeClientsData_time", 0);
+
+          // ✅ Reset cached statuses timestamps
+          ["ActivityToday","OutstandingAccounts","ActiveClients","TopPaid", "TopProjects"].forEach(key => {
+              localStorage.setItem("cache_" + key + "_time", 0);
+          });
+
+          // ✅ Reset chart data timestamps
+          ["daily","monthly","hourly", "yearly"].forEach(name => {
+              localStorage.setItem("chartDataTime_" + name, 0);
+          });
+
+          // ✅ Reset upsell timestamps
+          localStorage.setItem("upsellRecords_time", 0);
+          localStorage.setItem("upsellSummary_time", 0);
+
+          console.log("✅ Cache timestamps reset — background update will run if needed");
+
+          showPopup('Success', '✅ Client list updated successfully!');
+        })
+        .withFailureHandler(() => showPopup('Failed', '❌ Error.'))
+        .syncClientSheetList();
+    }
+
+    function openFormulaDialog() {
+      showPopup('Warning', '🧩 Opening formula dialog...');
+      google.script.run
+        .withSuccessHandler(() => showPopup('Success', '✅ Formula dialog opened.'))
+        .withFailureHandler(() => showPopup('Failed', '❌ Could not open formula dialog.'))
+        .openFormulaDialog();
+    }
+
+    function comingSoon() {
+      showPopup('Warning', '🚧 This feature is coming soon!');
+    }
+  </script>
+  
+  </body>
+</html>

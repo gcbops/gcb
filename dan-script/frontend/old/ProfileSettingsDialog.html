@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, Verdana, sans-serif; }
+    html, body { width: 100%; height: 100%; margin: 0; color: #333; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+    label { font-size: 13px; margin-bottom: 6px; color:#334155 }
+    input[type=text], input[type=number], select, textarea {
+      width: 100%; height: 38px; padding: 10px 12px; margin: 6px 0 14px 0;
+      border: 1px solid #e6e9ee; border-radius: 8px; font-size: 14px; outline: none;
+    }
+    form { width: 100%; max-width: 480px; border-radius: 12px; padding: 24px; padding-bottom: 10px; transition: all .3s ease; }
+    .actions { margin-top: 10px; }
+    button {
+      color: #334155; background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);
+      padding: 12px 16px; border-radius: 8px; font-weight:600; border: 0;
+      cursor:pointer; transition:all .36s cubic-bezier(.2,.9,.2,1);
+    }
+    button:hover { background: #334155; color:#e6e9f0; }
+    small {font-size:12px;color:#64748b;}
+    small a {color:#c5963c;}
+    #profilePreview {width: 125px; height: 125px}
+    .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background-image: linear-gradient(60deg, #29323c 0%, #485563 100%);
+      padding: 20px 30px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      font-size: 16px; color: #c5963c; opacity: 0; visibility: hidden;
+      transition: opacity 0.4s ease, visibility 0.4s ease; z-index: 9999;
+    } 
+    .popup.show { opacity: 1; visibility: visible; }
+
+    /* tabs */
+    .tabs { display: flex; gap: 8px; margin: 20px 0; }
+    .tab {
+      padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600;
+      background: #f1f5f9; color: #475569; transition: all .2s ease;
+    }
+    .tab.active { background: #334155; color: #fff; }
+    .tab:hover { background: #cbd5e1; }
+    .tab-content { display: none; width: 100%; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="popup" id="popup"></div>
+
+  <!-- tab buttons -->
+  <div class="tabs">
+    <div class="tab active" data-tab="general">General</div>
+    <div class="tab" data-tab="notifications">Notifications</div>
+  </div>
+
+  <!-- GENERAL TAB -->
+  <form id="profileForm" class="tab-content active" data-tab="general">
+    <div style="margin-bottom:14px; text-align: center">
+      <label>Profile Picture</label>
+      <div id="profilePreview" style="margin:6px 0; width: 100%;"></div>
+
+      <input type="text" id="profilePic" name="profilePic" placeholder="Paste image link here">
+      <small>💡 You can host your profile picture on 
+        <a href="https://gifyu.com/" target="_blank">gifyu.com</a> or any image hosting site, 
+        then paste the image link here.
+      </small>
+    </div>
+
+    <label>First Name</label>
+    <input type="text" id="firstName" name="firstName" placeholder="First Name">
+
+    <label>Last Name</label>
+    <input type="text" id="lastName" name="lastName" placeholder="Last Name">
+
+    <label>Display Name</label>
+    <input type="text" id="displayName" name="displayName" required placeholder="Display Name">
+
+    <label>Description / Role</label>
+    <input type="text" id="desc" name="desc" required placeholder="Description / Role">
+
+    <div class="actions">
+      <button type="submit">Save</button>
+    </div>
+  </form>
+
+  <!-- NOTIFICATIONS TAB -->
+  <form id="notifForm" class="tab-content" data-tab="notifications">
+    <label>Email Address</label>
+    <input type="text" id="notifEmail" name="notifEmail" placeholder="example@email.com">
+
+    <label>Discord Webhook</label>
+    <input type="text" id="notifDiscord" name="notifDiscord" placeholder="https://discord.com/api/webhooks/...">
+    <small>
+      💡 To get your Discord Webhook:
+      Go to your Discord server → Edit Channel → Integrations → Webhooks → Create Webhook → Copy Webhook URL.
+    </small>
+
+    <div class="actions">
+      <button type="submit">Save Notifications</button>
+    </div>
+  </form>
+
+  <script>
+    // --- popup ---
+    function showPopup(message, duration = 3000) {
+      const popup = document.getElementById('popup');
+      popup.textContent = message;
+      popup.classList.add('show');
+      setTimeout(() => popup.classList.remove('show'), duration);
+    }
+
+    // --- profile pic preview ---
+    function setProfilePic(url) {
+      const preview = document.getElementById("profilePreview");
+      const input = document.getElementById("profilePic");
+      input.value = url || "";
+      preview.innerHTML = "";
+      if (url && url.startsWith("http")) {
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = "Profile Picture Preview";
+        img.style.width = "125px";
+        img.style.height = "125px";
+        img.style.objectFit = "cover";
+        img.style.borderRadius = "8px";
+        img.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
+        preview.appendChild(img);
+      }
+    }
+
+    // --- load profile data ---
+    google.script.run.withSuccessHandler(data => {
+      setProfilePic(data.profilePic);
+      document.getElementById("firstName").value = data.firstName || "";
+      document.getElementById("lastName").value = data.lastName || "";
+      document.getElementById("displayName").value = data.displayName || "";
+      document.getElementById("desc").value = data.desc || "";
+      document.getElementById("notifEmail").value = data.notifEmail || "";
+      document.getElementById("notifDiscord").value = data.notifDiscord || "";
+    }).getProfileData();
+
+    // --- save profile form ---
+    document.getElementById("profileForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const formData = {
+        profilePic: document.getElementById("profilePic").value,
+        firstName: document.getElementById("firstName").value,
+        lastName: document.getElementById("lastName").value,
+        displayName: document.getElementById("displayName").value,
+        desc: document.getElementById("desc").value
+      };
+      google.script.run.withSuccessHandler(msg => {
+        showPopup(msg);
+        setProfilePic(formData.profilePic);
+      }).saveProfileData(formData);
+    });
+
+    // --- save notifications form ---
+    document.getElementById("notifForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const formData = {
+        notifEmail: document.getElementById("notifEmail").value,
+        notifDiscord: document.getElementById("notifDiscord").value
+      };
+      google.script.run.withSuccessHandler(msg => {
+        showPopup(msg);
+      }).saveNotificationData(formData);
+    });
+
+    // --- tab switcher ---
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.querySelector(`.tab-content[data-tab="${tab.dataset.tab}"]`).classList.add("active");
+      });
+    });
+
+    document.getElementById("profilePic").addEventListener("input", e => {
+      setProfilePic(e.target.value);
+    });
+  </script>
+</body>
+</html>

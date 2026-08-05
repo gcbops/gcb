@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <title>Hourly Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", loadChart);
+
+      const CACHE_KEY = "chartData_hourly";
+      const CACHE_TIME_KEY = "chartDataTime_hourly";
+      const ONE_DAY = 24 * 60 * 60 * 1000;
+      let chartInstance;
+
+      /** 📊 Load chart (with cache check) */
+      function loadChart() {
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        const cacheTime = Number(localStorage.getItem(CACHE_TIME_KEY) || 0);
+        const isFresh = Date.now() - cacheTime < ONE_DAY;
+
+        if (cachedData && isFresh) {
+          console.log("📦 Loaded hourly chart from cache");
+          drawChart(JSON.parse(cachedData));
+        } else {
+          console.log("🔄 Fetching new hourly chart data...");
+          google.script.run.withSuccessHandler((data) => {
+            if (Array.isArray(data) && data.length) {
+              localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+              localStorage.setItem(CACHE_TIME_KEY, Date.now());
+              console.log("✅ Cached new hourly chart data");
+            }
+            drawChart(data);
+          }).getHourlyChartData();
+        }
+      }
+
+      /** 🧠 Draw chart using Chart.js */
+      function drawChart(dataArray) {
+        const chartDiv = document.getElementById("chart_div");
+        if (!dataArray || !dataArray.length) {
+          chartDiv.innerHTML = "No data available.";
+          return;
+        }
+
+        const labels = dataArray.map(r => String(r[0] || ""));
+        const values = dataArray.map(r => Number(r[1]) || 0);
+
+        chartDiv.innerHTML = '<canvas id="chartCanvas"></canvas>';
+        const ctx = document.getElementById("chartCanvas").getContext("2d");
+
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [{
+              label: "Total",
+              data: values,
+              backgroundColor: "rgba(14,165,233,0.3)",
+              borderColor: "#0ea5e9",
+              borderWidth: 2,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                grid: { color: "transparent" },
+                ticks: { color: "#475569" },
+              },
+              y: {
+                grid: { color: "rgba(0,0,0,0.05)" },
+                border: { color: "#ccc" },
+                ticks: { color: "#475569" },
+              },
+            },
+            plugins: {
+              legend: { display: false },
+              title: {
+                display: true,
+                text: "Hourly History by Year",
+                color: "#334155",
+                font: { size: 18, weight: "600" },
+              },
+            },
+          },
+        });
+      }
+
+      /** 🔄 Update Sheet ID */
+      function updateSheetId() {
+        const newId = document.getElementById("sheetId").value.trim();
+        if (!newId) return alert("Please enter a Sheet ID.");
+        google.script.run.withSuccessHandler(msg => {
+          alert(msg);
+          clearCache();
+          loadChart();
+        }).updateSheetId(newId);
+      }
+
+      /** ➕ Add F Value */
+      function addFValue() {
+        const newValue = document.getElementById("fValue").value.trim();
+        if (!newValue) return alert("Please enter a value.");
+        google.script.run
+          .withSuccessHandler(result => {
+            alert(result.message + " (row: " + result.row + ", " + result.monthYear + ")");
+            document.getElementById("fValue").value = "";
+            clearCache();
+            loadChart();
+          })
+          .withFailureHandler(err => {
+            alert("Error: " + err.message);
+          })
+          .addFValue(newValue);
+      }
+
+      /** 🧹 Clear chart cache */
+      function clearCache() {
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem(CACHE_TIME_KEY);
+        console.log("🧹 Cleared hourly chart cache");
+      }
+    </script>
+
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; background:#f8fafc; padding:30px; color:#334155; }
+      .container { display: flex; flex-wrap: wrap; gap: 30px; }
+      .col { flex: 1; min-width: 320px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 20px; }
+
+      #chart_div { width: 100%; height: 400px; margin-bottom: 20px; }
+
+      h3 { margin-bottom: 10px; color:#0f172a }
+      input[type=text] {
+        width: 95%; padding: 10px 12px; border: 1px solid #e2e8f0;
+        border-radius: 8px; font-size: 14px; margin-bottom: 10px;
+      }
+      button {
+        background: #0ea5e9; color: white; border: 0; border-radius: 8px;
+        padding: 10px 16px; font-weight: 600; cursor: pointer;
+        transition: background .2s;
+      }
+      button:hover { background: #0284c7; }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="col">
+        <div id="chart_div">Loading chart...</div>
+      </div>
+
+      <div class="col">
+        <h3>Update Current Month Sheet ID</h3>
+        <input type="text" id="sheetId" placeholder="Enter new Sheet ID">
+        <button onclick="updateSheetId()">Submit</button>
+
+        <h3 style="margin-top:30px;">Add Current Month Total</h3>
+        <input type="text" id="fValue" placeholder="Enter Current Month Total">
+        <button onclick="addFValue()">Submit</button>
+      </div>
+    </div>
+  </body>
+</html>

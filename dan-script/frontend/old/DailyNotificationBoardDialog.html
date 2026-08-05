@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/2.3.4/css/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+  <style>
+    body { padding: 24px; font-family: system-ui, Verdana, sans-serif; }
+    h6 { text-align: center; text-transform: uppercase }
+    table { margin: 15px 0; }
+    thead th { border-color: #ccc !important; }
+    tbody td { border-bottom: none!important; }
+    thead th:nth-child(4) .dt-column-title, tbody td:nth-child(4) { text-align: center; }
+    tbody#dataTableBody tr td { padding-top: 18px; padding-bottom: 18px }
+
+    #containerexample {display: none}
+    #loadercontainer{ position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+
+    /* DataTable custom */
+    .dt-buttons { margin-bottom: 12px; }
+    .dt-paging { margin-top: 25px !important; }
+    .dt-paging-button button { background: #fff !important; border-color: #ccc !important; color: #c5963c }
+    .dt-paging-button.active button { background: #f9f9f9; color: #666 }
+    table tbody tr:hover td { background: #f9f9f9 !important; color: #c5963c!important; cursor: pointer }
+
+    /* Status badge */
+    td span { color: #fff; padding: 4px 8px; font-size: 8px; border-radius: 6px; font-weight: 600; }
+    td span.ACTIVE { background: #e8fee7; color: #16c60c}
+    td span.INACTIVE { background: #fde7e9; color: #e81224}
+
+    /* Highlighted rows */
+    .highlight { font-weight: bold; }
+    .highlight-row td:nth-child(1) { font-weight: bold; }
+    .highlight-row td { color: #896829; }
+    .highlight-row:hover td { color: #896829 !important; }
+    .highlight-row:nth-child(1) td { background: #e8d4b0 !important; }
+    .highlight-row:nth-child(2) td { background: #eddfc4 !important; }
+    .highlight-row:nth-child(3) td { background: #f3ead8 !important; }
+    .highlight-row td:first-child span { background: #fff; color: #c5963c; font-size:12px; margin-right: 5px; padding: 3px 7px; }
+
+    .modal-dialog { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .modal-content {border: none;}
+
+    .select2.select2-container { width: 100% !important; } 
+    .select2.select2-container .select2-selection { width: 100%; height: 38px; border: 1px solid #e6e9ee; border-radius: 8px; margin-top: 7px; border: 1px solid #e6e9ee; -webkit-border-radius: 3px; -moz-border-radius: 3px; border-radius: 3px; height: 38px; margin-bottom: 10px; outline: none !important; transition: all .15s ease-in-out; font-size: 12px; } 
+    .select2.select2-container .select2-selection .select2-selection__rendered { color: #333; line-height: 32px; padding-right: 33px; } 
+    .select2.select2-container .select2-selection .select2-selection__arrow { background: #fff; border-left: 1px solid #fff; -webkit-border-radius: 0 3px 3px 0; -moz-border-radius: 0 3px 3px 0; border-radius: 0 3px 3px 0; height: 32px; width: 33px; top: 8px; } 
+    .select2.select2-container.select2-container--open .select2-selection.select2-selection--single { background: #f8f8f8; } 
+    .select2.select2-container.select2-container--open .select2-selection.select2-selection--single .select2-selection__arrow { -webkit-border-radius: 0 3px 0 0; -moz-border-radius: 0 3px 0 0; border-radius: 0 3px 0 0; } 
+    .select2-container .select2-dropdown { background: #fff; border: none; font-size: 12px; margin-top: -10px; box-shadow: 0px 0px 50px 0px rgba(82, 63, 105, 0.15); } 
+    .select2-container .select2-dropdown .select2-search { margin: 3px; } 
+    .select2-container .select2-dropdown .select2-search input { outline: 1px solid #dbdfe9 !important; border: none; border-radius: 5px;  border-bottom: none !important; padding: 4px 6px !important; } 
+    .select2-container .select2-dropdown .select2-results { padding: 0; } 
+    .select2-container .select2-dropdown .select2-results ul { background: #fff; border: 1px solid white; }
+    .select2-container--default .select2-results__option--highlighted { background-color: #f9f9f9 !important; color: #c5963c !important; }
+    .select2-container--default .select2-results__option--selected { background-color: transparent; }
+    .select2-container .select2-dropdown .select2-results > .select2-results__options { max-height: 140px !important; overflow-y: auto !important; }
+
+    label { font-size: 13px; margin-bottom: 6px; color:#334155 }
+    input[type=text], input[type=number], select, textarea { width: 100%; height: 38px; padding: 10px 12px; margin: 6px 0 14px 0; border: 1px solid #e6e9ee; border-radius: 8px; font-size: 14px; outline: none; }
+    form { width: 100%; border-radius: 12px; padding: 24px; padding-bottom: 10px; transition: all .3s ease; }
+    .actions{ display:flex; gap:8px; align-items:center; margin-top:10px }
+    .actions button { margin-top: 10px; }
+    .hint{ font-size:12px; color:#64748b; margin-top:8px }
+    .blink { animation: blink 2s infinite; } 
+    @keyframes blink { 0%   { opacity: 1; } 50%  { opacity: 0; } 100% { opacity: 1; } }
+    button { color: #334155; background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%); padding: 12px 16px; border-radius: 8px; font-weight:600; border: 0; cursor:pointer; transition:all .36s cubic-bezier(.2,.9,.2,1); }
+    button:hover { background: #334155; color:#e6e9f0; }
+
+    .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); font-size: 14px; color: #333; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0.4s ease; z-index: 9999; } 
+    .popup.show { opacity: 1; visibility: visible; }
+    .popup.failed {border-left: 3px solid #f03a17;}
+    .popup.success {border-left: 3px solid #16c60c;}
+    .popup.wait {border-left: 3px solid #0d6efd;}
+    .popup.warning {border-left: 3px solid #fce100;}
+    .popup .typ {font-weight: 600;}
+    .popup .msg {color: #666; font-size: 13px;}
+  </style>
+</head>
+<body>
+  <h6><?= title ?></h6>
+
+  <div class="popup" id="popup"><span class="typ"></span><br><span class="msg"></span></div>
+
+  <div id="containerexample">
+    <table id="table" class="table nowrap" style="width:100%">
+      <thead>
+        <tr>
+          <? for (var h = 0; h < headerTexts.length; h++) { ?>
+            <th><?= headerTexts[h] ?></th>
+          <? } ?>
+        </tr>
+      </thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+
+  <div id="loadercontainer">
+  <div class="d-flex justify-content-center text-warning" id="loader">
+        <div class="spinner-border" role="status">
+            <span class="sr-only"></span>
+        </div>
+    </div>
+  </div>
+
+  <div id="myModal" class="modal fade" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" >
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="taskForm" class="reveal-form">
+          <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px">
+            <h3 style="margin:0;font-size:15px;color:#0f172a">Hours</h3>
+            <div style="flex:1"></div>
+            <button type="button" class="close" title="Close form">✕</button>
+          </div>
+
+          <input type="hidden" name="client" id="client" required>
+
+          <div class="field">
+            <label>Task:</label>
+            <select name="task" id="task" class="js-select2" required></select>
+          </div>
+
+          <div class="field">
+            <label>Type:</label>
+            <select name="type" id="type" class="js-select2" required>
+              <option value="DEV">Dev</option>
+              <option value="DESIGN">Design</option>
+              <option value="SEO">SEO</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Hours:</label>
+            <input type="number" step="0.5" name="hour" id="hour" placeholder="#" required>
+          </div>
+
+          <div class="actions">
+            <button type="submit">Add</button>
+            <div class="hint"></div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS libs -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.3.4/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const title = "<?= title ?>";
+      const status = "<?= status ?>";
+      const sheetName = "<?= sheetName ?>";
+ 
+      let dataTable;
+      let lastDataJSON = ""; // store last dataset for comparison
+
+      const tableOptions = {
+        layout: {
+          topStart: ['pageLength'],
+          topEnd: ['search'],
+          bottomStart: ['info'],
+          bottomEnd: ['paging'],
+        },
+        paging: true,
+        pageLength: 5,
+        lengthMenu: [ [5, 10, 25], [5, 10, 25] ],
+        initComplete: function () {
+          $('.dt-search input').focus();
+        }
+      };
+
+      function showPopup(type, message, duration = 3000) {
+        const $popup = $('#popup');
+        $popup.addClass(type.toLowerCase());
+        $popup.find('.msg').text(message);
+        $popup.find('.typ').text(type);
+        $popup.addClass('show');
+        setTimeout(() => {
+          $popup.removeClass('show');
+        }, duration);
+      }
+
+      function loadDialogData(status, sheetName) {
+        const cacheKey = "cache_" + status.replace(/\s+/g, "");
+        const cacheTimeKey = cacheKey + "_time";
+        const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+        const cacheTime = Number(localStorage.getItem(cacheTimeKey) || 0);
+        const ONE_DAY = 24 * 60 * 60 * 1000;
+
+        const fetchAndUpdateCache = (forceRender = false) => {
+          console.log(`🔄 Fetching data for ${status}...`);
+          google.script.run
+            .withSuccessHandler(function (data) {
+              if (Array.isArray(data)) {
+                const newJSON = JSON.stringify(data);
+                const oldJSON = localStorage.getItem(cacheKey) || "";
+
+                localStorage.setItem(cacheKey, newJSON);
+                localStorage.setItem(cacheTimeKey, Date.now());
+                console.log(`✅ Cached ${data.length} rows for ${status}`);
+
+                // if this is a fresh fetch or cache was cleared, re-render immediately
+                if (forceRender || newJSON !== oldJSON) {
+                  console.log("🖌 Rendering fresh data...");
+                  renderData(data);
+                }
+              } else {
+                console.warn("⚠️ No valid array data from server");
+              }
+            })
+            .withFailureHandler(err => console.error("❌ Failed to fetch:", err))
+            .getDialogTitle(status, sheetName);
+        };
+
+        // if cache exists, show immediately
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          console.log(`📦 Using cached data for ${status}`);
+          renderData(cached);
+
+          // background refresh if older than a day
+          const cacheExpired = (Date.now() - cacheTime) > ONE_DAY;
+          if (cacheExpired) fetchAndUpdateCache(true);
+        } else {
+          console.log(`🚀 No cache, fetching fresh for ${status}`);
+          // force render when data arrives (important!)
+          fetchAndUpdateCache(true);
+        }
+      }
+
+
+      loadDialogData(status, sheetName);
+
+      /** ---------------------------
+       *  RENDER DATA (for all reports)
+       *  --------------------------- */
+      function renderData(data) {
+        console.log("🔍 Data returned:", status, data?.length || 0);
+
+        if (!data || !Array.isArray(data)) {
+          console.error("❌ Invalid or empty data for", title);
+          document.getElementById("dataTableBody").innerHTML =
+            `<tr><td colspan="10">⚠️ No data found for this report.</td></tr>`;
+          return;
+        }
+
+        // Clear current body
+        const tbody = document.getElementById("dataTableBody");
+        tbody.innerHTML = "";
+
+        // Build table rows
+        data.forEach((row) => {
+          const tr = document.createElement("tr");
+          row.forEach((cell, colIndex) => {
+            const td = document.createElement("td");
+
+            if (colIndex === 3 && cell && title !== "Activity Today") {
+              const span = document.createElement("span");
+              span.className = cell;
+              span.textContent = cell;
+              td.appendChild(span);
+            } else {
+              td.textContent = cell || "";
+            }
+
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+
+        // Recreate DataTable
+        if ($.fn.DataTable.isDataTable("#table")) {
+          dataTable.destroy();
+        }
+
+        dataTable = $("#table")
+          .on("draw.dt", function () {
+            $("#containerexample").attr("id", "container");
+            $("#loadercontainer").hide();
+          })
+          .DataTable(tableOptions);
+
+        if (title === "Activity Today") {
+          const notDoneCount = countNotDoneRows(dataTable);
+          const specialCount = countSpecialRows(dataTable);
+          const $wrapper = $(dataTable.table().container()).closest('.dt-container');
+
+          function waitingFilter(settings, data, dataIndex) {
+            var col2 = data[1]; // column 2
+            var col6 = data[5]; // column 6
+            var allowedStatuses = ["Moved to PM", "For QA", "Complete", "Revisions Done"];
+            return allowedStatuses.includes(col2) && col6 === "-";
+          }
+
+          function resetCustomFilters() {
+            $.fn.dataTable.ext.search = [];
+            dataTable.search('').columns().search('').draw();
+          }
+
+          function dashFilter(settings, data, dataIndex) {
+            var col6 = data[5];
+            return col6 === "-";
+          }
+
+          function applyCustomFilters(customFunc) {
+            $.fn.dataTable.ext.search = [];
+            $.fn.dataTable.ext.search.push(customFunc);
+
+            dataTable.draw();
+          }
+
+          if ($wrapper.find('.realtime-label').length === 0) {
+            const $label = $('<div class="realtime-label">🟢 REALTIME</div>').css({
+              display: 'inline-block',
+              'font-weight': '600',
+              color: '#16a34a',
+              'margin-left': '10px',
+              padding: '4px 8px',
+              'border-radius': '6px',
+              background: '#f6fffa'
+            });
+
+            // Create red circle indicator div
+            const $notDoneDiv = $(`
+              <div class="not-done-div" id="dashFilter">
+                <span class="red-circle"></span>
+                <span class="not-done-text">PENDING: ${notDoneCount}</span>
+              </div>
+            `).css({
+              display: 'inline-flex',
+              'align-items': 'center',
+              'font-weight': '600',
+              'cursor': 'pointer',
+              color: '#dc2626',
+              'margin-left': '8px',
+              'font-size': '13px'
+            });
+
+            // Style for the red circle
+            const circleStyle = `
+              .red-circle {
+                width: 10px;
+                height: 10px;
+                background-color: #dc2626;
+                border-radius: 50%;
+                display: inline-block;
+                margin-right: 5px;
+              }
+            `;
+            $('<style>').text(circleStyle).appendTo('head');
+
+            const $len = $wrapper.find('.dt-length');
+            if ($len.length) {
+              $len.after($label);
+              $label.after($notDoneDiv);
+            } else {
+              $wrapper.prepend($label);
+              $label.after($notDoneDiv);
+            }
+            $(document).on('click', '#dashFilter', function() {
+              $wrapper.find('#resetFilterCustom').show();
+              applyCustomFilters(dashFilter);
+            });
+          } else {
+            // Update the count if label already exists
+            $wrapper.find('.not-done-text').text(`PENDING: ${notDoneCount}`);
+          }
+
+          if ($wrapper.find('.special-div').length === 0) {
+            const $specialDiv = $(`
+              <div class="special-div" id="waitingFilter">
+                <span class="orange-circle"></span>
+                <span class="special-count">WAITING: ${specialCount}</span>
+              </div>
+            `).css({
+              display: 'inline-flex',
+              'align-items': 'center',
+              'font-weight': '600',
+              'cursor': 'pointer',
+              color: '#ea580c', // orange text
+              'margin-left': '8px',
+              'font-size': '13px'
+            });
+
+            $('<style>').text(`
+              .orange-circle {
+                width: 10px;
+                height: 10px;
+                background-color: #ea580c;
+                border-radius: 50%;
+                display: inline-block;
+                margin-right: 5px;
+              }
+            `).appendTo('head');
+
+            $wrapper.find('.not-done-div').after($specialDiv);
+            $specialDiv.on('click', function() {
+              $wrapper.find('#resetFilterCustom').show();
+              applyCustomFilters(waitingFilter);
+            });
+          } else {
+            $wrapper.find('.special-count').text(`WAITING: ${specialCount}`);
+          }
+
+          if ($wrapper.find('#resetFilterCustom').length === 0) {
+            const $resetDiv = $(`
+              <div id="resetFilterCustom" style="
+                display: inline-flex;
+                align-items: center;
+                font-weight: 600;
+                color: #555;
+                display: none;
+                margin-left: 8px;
+                font-size: 11px;
+                cursor: pointer;
+              ">
+                RESET
+              </div>
+            `);
+
+            // insert after special div
+            $wrapper.find('.special-div').after($resetDiv);
+            $resetDiv.on('click', function() {
+              $wrapper.find('#resetFilterCustom').hide();
+              resetCustomFilters();
+            });
+          }
+
+        }
+
+
+        /** -----------------------------
+         *  Apply per-report custom logic
+         *  ----------------------------- */
+        if (title === "Top Paid Accounts") {
+          dataTable.order([1, "desc"]).draw();
+          addClassToDTColumn(1, "highlight");
+          markTopRows(3);
+        } else if (title === "Outstanding Accounts") {
+          dataTable.order([2, "desc"]).draw();
+          addClassToDTColumn(2, "highlight");
+          markTopRows(3);
+        } else if (title === "Active Clients") {
+          reorderByStatus("Active");
+        } else if (title === "Activity Today") {
+          // Start auto-refresh every 10 seconds
+          setInterval(loadActivity, 10000);
+
+          const $taskSelect = $('#task');
+          const $clientInput = $('#client');
+          const myModal = document.getElementById('myModal')
+          const myModalEl = new bootstrap.Modal(myModal);
+
+          myModal.addEventListener('shown.bs.modal', () => {
+            $('#hour').focus()
+          })
+          myModal.addEventListener('hidden.bs.modal', () => {
+            $('.dt-search input').focus();
+          })
+
+          /**
+           * Initialize Select2 safely
+           */
+          function initSelect2() {
+            if (!$taskSelect.length) return console.error('#task not found in DOM');
+
+            if ($taskSelect.hasClass('select2-hidden-accessible')) {
+              try { $taskSelect.select2('destroy'); } 
+              catch(e){ console.warn('Select2 destroy failed', e); }
+            }
+
+            $('.js-select2').not($taskSelect).select2({
+              dropdownParent: myModal,
+            }).on('select2:open', () => {
+              document.querySelector('.select2-container--open .select2-search__field')?.focus();
+            });
+
+            $taskSelect.select2({
+              width: '100%',
+              dropdownParent: myModal,
+              tags: true
+            });
+          }
+
+          /**
+           * Load tasks for a client
+           * @param {string} clientName
+           */
+          function loadTasks(clientName) {
+            if (!clientName) return;
+            
+            $taskSelect.html('<option>Loading...</option>');
+            if ($taskSelect.hasClass('select2-hidden-accessible')) {
+              $taskSelect.trigger('change.select2');
+            }
+
+            google.script.run
+              .withSuccessHandler((returned) => {
+
+                let tasks = Array.isArray(returned) ? returned : (() => {
+                  try { return JSON.parse(returned); } catch(e) { return returned; }
+                })();
+
+                // Reset select
+                initSelect2();
+                $taskSelect.empty();
+
+                if (Array.isArray(tasks) && tasks.length) {
+                  tasks.forEach(t => {
+                    const value = typeof t === 'object' ? (t.value || t.id || t.name) : t;
+                    const text  = typeof t === 'object' ? (t.label || t.name || value) : t;
+                    $taskSelect.append(new Option(text, value));
+                  });
+                } else {
+                  $taskSelect.append(new Option('No tasks found', ''));
+                }
+
+                initSelect2();
+              })
+              .withFailureHandler(err => {
+                console.error('Failed to load tasks', err);
+                showPopup("Failed", "❌ Failed to load the tasks!");
+              })
+              .getTaskOptions(clientName);
+          }
+
+          /**
+           * Open modal and load tasks when a row is clicked
+           */
+          let clickTimeout; // global debounce timer
+
+          $('#dataTableBody').on('click', 'tr', function () {
+            clearTimeout(clickTimeout); // reset previous timer
+            showPopup("Wait", "🔄 Opening the form now!");
+
+            clickTimeout = setTimeout(() => {
+              const rowData = dataTable.row(this).data();
+              const clientName = rowData?.[0].trim();
+              if (!clientName) return console.warn('No client name found on row');
+              $clientInput.val(clientName);
+
+              google.script.run
+                .withSuccessHandler((exists) => {
+                  if (exists) {
+                    myModalEl.show();
+                    loadTasks(clientName);
+                  } else {
+                    showPopup("Failed", "❌ Sheet " + clientName + " not found!");
+                  }
+                })
+                .sheetExists(clientName);
+            }, 1500); // ⏱ debounce delay (1.5 seconds)
+          });
+
+          /**
+           * Close modal
+           */
+          $('.close').on('click', function(e) {
+            if (e.target === this) myModalEl.hide();
+          });
+
+          const updateClientonP24 = clientName => {
+            if (!clientName) return;
+            google.script.run.selectClient({ client: clientName });
+          };
+
+          /**
+           * Submit task form
+           */
+          $('#taskForm').on('submit', function(e) {
+            e.preventDefault();
+            $('#taskForm').find(".hint").text("Saving ...").addClass("blink");
+            const data = {
+              client: $clientInput.val().trim(),
+              hour: $('#hour').val(),
+              type: $('#type').val(),
+              task: $taskSelect.val(),
+            };
+
+            google.script.run
+              .withSuccessHandler(() => {
+                updateClientonP24($clientInput.val().trim());
+                showPopup("Success", "✅ Hours have been successfully recorded! ");
+                $('#taskForm').find(".hint").text("").removeClass("blink");
+                $('#hour').val("");
+              })
+              .withFailureHandler(() => showPopup("Failed", "❌ Failed to add the hours! "))
+              .recordManualClientHoursFromForm(data);
+          });
+
+          initSelect2();
+
+        }
+      }
+
+      /** -----------------------------
+       *  HELPERS
+       *  ----------------------------- */
+      function reorderByStatus(status) {
+        dataTable.order([3, "asc"]).draw();
+        dataTable.column(3).search(status ? "^" + status + "$" : "", true, false).draw();
+      }
+
+      function addClassToDTColumn(colIndex, className) {
+        dataTable.column(colIndex).nodes().to$().addClass(className);
+      }
+
+      function markTopRows(rowCount, rowClass = "highlight-row") {
+        if(!$('#table tbody').find('.highlight-row').length) {
+          const rows = document.querySelectorAll("#table tbody tr");
+          rows.forEach((row, i) => {
+            if (i < rowCount) {
+              row.classList.add(rowClass);
+              const firstTd = row.querySelector("td");
+              if (firstTd) {
+                const span = document.createElement("span");
+                span.textContent = i + 1;
+                firstTd.prepend(span);
+              }
+            }
+          });
+        }
+      }
+
+      /** -----------------------------
+       *  AUTO-REFRESH (Activity Today only)
+       *  ----------------------------- */
+      function loadActivity() {
+        google.script.run
+          .withSuccessHandler(function(data) {
+            updateActivityTable(data);
+
+            const count = countNotDoneRows(dataTable);
+            $('.not-done-text').text(`PENDING: ${count}`);
+            const countSpecial = countSpecialRows(dataTable);
+            $('.special-count').text(`WAITING: ${countSpecial}`);
+          })
+          .getDailyActivityData();
+      }
+
+      function countNotDoneRows(table) {
+        return table
+          .column(5)
+          .data()
+          .filter(value => value === "-")
+          .length;
+      }
+
+      function countSpecialRows(table) {
+        const validStatuses = ["Moved to PM", "Revision Done", "Complete", "For QA"];
+        let count = 0;
+
+        table.rows().every(function() {
+          const row = this.data();
+          const status = row[1];
+          const col6 = row[5];
+          if (validStatuses.includes(status) && col6 === "-") count++;
+        });
+
+        return count;
+      }
+
+
+      function updateActivityTable(data) {
+        const newDataJSON = JSON.stringify(data);
+        if (newDataJSON === lastDataJSON) {
+          return;
+        }
+        lastDataJSON = newDataJSON;
+
+        dataTable.clear();
+        dataTable.rows.add(data);
+        dataTable.draw();
+      }
+    });
+  </script>
+
+</body>
+</html>

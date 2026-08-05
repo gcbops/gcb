@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: system-ui, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #ffffff; color: #111111; } 
+      h3 { margin: 0; font-size: 15px; color: #0f172a; }
+
+      label { font-size: 13px; margin-bottom: 6px; color:#334155 }
+      input[type=text], input[type=number], select, textarea { width: 100%; height: 38px; padding: 10px 12px; margin: 6px 0 14px 0; border: 1px solid #e6e9ee; border-radius: 8px; font-size: 14px; outline: none; }
+      form { width: 100%; border-radius: 12px; padding-bottom: 10px; transition: all .3s ease; }
+      .actions{ display:flex; gap:8px; align-items:center; margin-top:10px }
+      .actions button { margin-top: 10px; }
+      .hint{ font-size:12px; color:#64748b; margin-top:8px }
+      .blink { animation: blink 2s infinite; } 
+      @keyframes blink { 0%   { opacity: 1; } 50%  { opacity: 0; } 100% { opacity: 1; } }
+      button { color: #334155; background-image: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%); color:#334155; padding: 12px 16px; border-radius: 8px; font-weight:600; border: 0; cursor:pointer; transition:all .36s cubic-bezier(.2,.9,.2,1); }
+      button:hover { background: #334155; color:#e6e9f0; }
+      
+      textarea { width: 100%; min-height: 80px; max-height: 180px; resize: vertical; border: 1px solid #e6e9ee; border-radius: 8px; font-size: 14px; outline: none; box-sizing: border-box; }
+
+      .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); font-size: 14px; color: #333; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0.4s ease; z-index: 9999; } 
+      .popup.show { opacity: 1; visibility: visible; }
+      .popup.failed {border-left: 3px solid #f03a17;}
+      .popup.success {border-left: 3px solid #16c60c;}
+      .popup.warning {border-left: 3px solid #fce100;}
+      .popup .typ {font-weight: 600;}
+      .popup .msg {color: #666; font-size: 13px;}
+    </style>
+  </head>
+  <body>
+    <div class="popup" id="popup"><span class="typ"></span><br><span class="msg"></span></div>
+
+    <form id="formulaForm">
+      <h3>Add Formula to All Sheets</h3>
+
+      <label>Cell Reference:</label>
+      <input type="text" id="cellRef" placeholder="e.g. N18" required>
+
+      <label>Formula:</label>
+      <textarea id="formula" rows="5" placeholder="Enter your Google Sheets formula here"></textarea>
+
+      <div class="actions">
+        <button type="button" onclick="submitForm()">Apply Formula</button>
+        <div class="hint"></div>
+      </div>
+    </form>
+
+    <script>
+      function showPopup(type, message, duration = 3000) {
+        const $popup = $('#popup');
+        $popup.removeClass('failed success warning');
+        $popup.addClass(type.toLowerCase());
+        $popup.find('.msg').text(message);
+        $popup.find('.typ').text(type);
+        $popup.addClass('show');
+        setTimeout(() => $popup.removeClass('show'), duration);
+      }
+
+      function isValidCellRef(ref) {
+        // ✅ Matches valid A1-style cell references (A–Z, AA–ZZ + numbers)
+        return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
+      }
+
+      function isValidFormula(formula) {
+        // ✅ Must start with "=" and contain at least one letter or function-like pattern
+        return /^=\s*[A-Z]+\(/i.test(formula) || /^=.+[A-Z0-9]/i.test(formula);
+      }
+
+      function submitForm() {
+        const cellRef = document.getElementById('cellRef').value.trim();
+        const formula = document.getElementById('formula').value.trim();
+
+        if (!cellRef || !formula) {
+          showPopup("Warning", "⚠️ Please fill in both fields.");
+          return;
+        }
+
+        if (!isValidCellRef(cellRef)) {
+          showPopup("Warning", "⚠️ Invalid cell reference. Example: A1, N18, or AB25.");
+          return;
+        }
+
+        if (!isValidFormula(formula)) {
+          showPopup("Warning", "⚠️ Invalid formula. It should start with '=' and look like a Google Sheets formula.");
+          return;
+        }
+
+        $("#formulaForm").find(".hint")
+          .text("Injecting the formula to all client sheets ...")
+          .addClass("blink");
+
+        google.script.run
+          .withSuccessHandler(() => {
+            showPopup("Success", "✅ Formula applied successfully!");
+            $("#formulaForm").find(".hint").text("").removeClass("blink");
+          })
+          .withFailureHandler(() => {
+            showPopup("Failed", "❌ Failed to apply formula!");
+          })
+          .applyFormulaToSheets(cellRef, formula);
+      }
+  </script>
+
+  </body>
+</html>
