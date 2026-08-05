@@ -1,5 +1,3 @@
-<script>
-
 (() => {
   // src/routers.js
   var RouterModule = /* @__PURE__ */ (() => {
@@ -3483,6 +3481,3 @@
     }, 5e3);
   });
 })();
-
-
-</script>

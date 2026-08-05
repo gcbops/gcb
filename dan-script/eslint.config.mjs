@@ -20,12 +20,12 @@ export default defineConfig([
 
   {
     files: [
-      "src/scripts.js"
+      "src/**/*.js"
     ],
 
     languageOptions: {
       ecmaVersion: "latest",
-      sourceType: "script",
+      sourceType: "module",
 
       globals: {
 

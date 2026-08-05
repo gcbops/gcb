@@ -1,21 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 
-const files = [
-  {
-    source: "src/scripts.js",
-    output: "backend/js/scripts.html"
-  }
-];
+const source = "build/scripts.bundle.js";
+const output = "backend/js/scripts.html";
 
-files.forEach(file => {
+const js = fs.readFileSync(
+  path.resolve(source),
+  "utf8"
+);
 
-  const js = fs.readFileSync(
-    path.resolve(file.source),
-    "utf8"
-  );
-
-  const html =
+const html =
 `<script>
 
 ${js}
@@ -23,12 +17,10 @@ ${js}
 </script>
 `;
 
-  fs.writeFileSync(
-    path.resolve(file.output),
-    html,
-    "utf8"
-  );
+fs.writeFileSync(
+  path.resolve(output),
+  html,
+  "utf8"
+);
 
-  console.log(`✓ Generated ${file.output}`);
-
-});
+console.log(`✓ Generated ${output}`);
