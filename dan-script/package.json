@@ -1,0 +1,23 @@
+{
+  "name": "dan-script",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build/build-html.js",
+    "watch": "chokidar \"src/**/*.js\" -c \"npm run build\"",
+    "lint": "eslint src/scripts.js",
+    "lint:fix": "eslint src/scripts.js --fix",
+    "build:lint": "npm run lint && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "chokidar": "^5.0.0",
+    "chokidar-cli": "^3.0.0",
+    "eslint": "^10.8.0",
+    "globals": "^17.9.0"
+  }
+}

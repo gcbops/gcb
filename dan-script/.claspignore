@@ -1,0 +1,24 @@
+# Node
+node_modules/**
+
+# Build & development
+build/**
+src/**
+
+# Git
+.git/**
+.gitignore
+
+# VS Code
+.vscode/**
+
+# NPM
+package.json
+package-lock.json
+
+# ESLint
+eslint.config.mjs
+
+# Documentation
+README.md
+tree.txt
