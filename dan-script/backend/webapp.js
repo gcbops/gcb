@@ -106,7 +106,7 @@ function getPerformanceSummary(yearType) {
     labelRange = "AR20:AR23";
     valueRange = "AU20:AU23";
     growthCell = "AU24";
-  } else if (yearType === "prev") {
+  } else if (yearType === "previous") {
     labelRange = "AR20:AR23"; // labels same
     valueRange = "AT20:AT23";
     growthCell = "AT24";

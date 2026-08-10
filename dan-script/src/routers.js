@@ -94,7 +94,7 @@ const RouterModule = (() => {
 
     currentModule?.destroy?.();
 
-    ChartModule.destroyRealtimeChart();
+    ChartModule.destroyAllCharts();
 
     setCurrentPage(pageName);
 

@@ -1,314 +1,505 @@
 import { AppUtils } from "./utils.js";
 
 const ChartModule = (() => {
-  let chartInstances = {};
-  let animationFrames = {};
+  const CHART_CONFIG = {
+    daily: {
+      serverFunction: "getDailyChartData",
+      cacheKey: "chartData_daily",
+    },
 
-  function loadChart(type, animated = false, year = "all") {
-    const chartDiv = document.getElementById("chart_div_" + type);
-    if (!chartDiv) {return AppUtils.showError(`chart_div_${type} not found`);}
+    monthly: {
+      serverFunction: "getMonthlyChartData",
+      cacheKey: "chartData_monthly",
+    },
+
+    yearly: {
+      serverFunction: "getYearlyChartData",
+      cacheKey: (year) => `chartData_yearly_${year}`,
+    },
+
+    hourly: {
+      serverFunction: "getHourlyChartData",
+      cacheKey: "chartData_hourly",
+    },
+
+    monthly_prev: {
+      serverFunction: "getPrevYearMonthlyChartData",
+      cacheKey: "chartData_monthly_prev",
+    },
+  };
+
+  const chartInstances = {};
+  const animationFrames = {};
+
+  const REPORT_MONTHS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const MONTH_MAP = {
+    January: 1,
+    February: 2,
+    March: 3,
+    April: 4,
+    May: 5,
+    June: 6,
+    July: 7,
+    August: 8,
+    September: 9,
+    October: 10,
+    November: 11,
+    December: 12,
+  };
+
+  // --------------------------------------------------
+  // DATA LOADING
+  // --------------------------------------------------
+
+  function loadChart(chartType, animated = false, year = "all") {
+    const chartDiv = document.getElementById(`chart-${chartType}`);
+
+    if (!chartDiv) {
+      return AppUtils.showError(
+        `Chart container not found: chart-${chartType}`,
+      );
+    }
+
+    const config = CHART_CONFIG[chartType];
+
+    if (!config) {
+      return AppUtils.showError(
+        `No chart configuration found for: ${chartType}`,
+      );
+    }
 
     chartDiv.innerText = "Loading chart...";
 
-    const funcMap = {
-      daily: "getDailyChartData",
-      monthly: "getMonthlyChartData",
-      yearly: "getYearlyChartData",
-      monthly_prev: "getMonthlyChartData",
-      monthly_prev_combined: "getPrevYearMonthlyChartData",
-      hourly: "getHourlyChartData",
-    };
+    const cacheKey =
+      typeof config.cacheKey === "function"
+        ? config.cacheKey(year)
+        : config.cacheKey;
 
-    const func = funcMap[type];
-    if (!func) {return AppUtils.showError(`No Apps Script function mapped for type ${type}`);}
+    const args = chartType === "yearly" ? [year] : [];
+
+    AppUtils.cachedGScriptCall(
+      cacheKey,
+      config.serverFunction,
+      args,
+      (data) => {
+        if (!Array.isArray(data) || !data.length) {
+          chartDiv.innerText = "No data found.";
+          return;
+        }
+
+        drawChart(chartType, data, false, animated);
+      },
+    );
+  }
+
+  function loadChartData(chartType, callback) {
+    const config = CHART_CONFIG[chartType];
+
+    if (!config) {
+      AppUtils.showError(`Unknown chart type: ${chartType}`);
+      return;
+    }
+
+    if (typeof callback !== "function") {
+      console.warn(
+        `[ChartModule] Invalid callback for chart type: ${chartType}`,
+      );
+      return;
+    }
 
     const cacheKey =
-      func === "getYearlyChartData"
-        ? `chartData_${type}_${year}`
-        : `chartData_${type}`;
+      typeof config.cacheKey === "function"
+        ? config.cacheKey("all")
+        : config.cacheKey;
 
-    const args = func === "getYearlyChartData" ? [year] : [];
+    const args = chartType === "yearly" ? ["all"] : [];
 
-    AppUtils.cachedGScriptCall(cacheKey, func, args, (data) => {
-      if (!Array.isArray(data) || !data.length) {
-        chartDiv.innerText = "No data found.";
-        return;
-      }
-
-      drawChart(type, data, false, animated);
-    });
+    AppUtils.cachedGScriptCall(cacheKey, config.serverFunction, args, callback);
   }
 
   function loadPrevYearCombinedChart() {
-    const chartId = "monthly_prev_merged";
-    const prevCacheKey = "chartData_monthly_prev";
-    const currentCacheKey = "chartData_monthly";
+    const chartId = "monthly-prev-merged";
 
-    let prevData = AppUtils.cacheGet(prevCacheKey);
-    let currentData = AppUtils.cacheGet(currentCacheKey);
+    loadChartData("monthly_prev", (prevData) => {
+      if (!Array.isArray(prevData)) {
+        AppUtils.showError("Invalid previous year chart data.");
+        return;
+      }
 
-    if (prevData && currentData) {
-      drawChart(chartId, { prevYear: prevData, currentYear: currentData });
+      loadChartData("monthly", (currentData) => {
+        if (!Array.isArray(currentData)) {
+          AppUtils.showError("Invalid current year chart data.");
+          return;
+        }
+
+        drawChart(chartId, {
+          prevYear: prevData,
+          currentYear: currentData,
+        });
+      });
+    });
+  }
+
+  // --------------------------------------------------
+  // MAIN DRAW ROUTER
+  // --------------------------------------------------
+
+  function drawChart(type, data, debug = false, animated = false) {
+    const chartDiv = document.getElementById(`chart-${type}`);
+
+    if (!chartDiv) {
+      return AppUtils.showError(`chart-${type} not found`);
     }
 
-    if (!prevData) {fetchData("monthly_prev", prevCacheKey, (data) => {
-      prevData = data;
-      if (currentData) {drawChart(chartId, { prevYear: prevData, currentYear: currentData });}
-    });}
+    if (debug) {
+      console.log(`[ChartModule] Drawing ${type}`, data);
+    }
 
-    if (!currentData) {fetchData("monthly", currentCacheKey, (data) => {
-      currentData = data;
-      if (prevData) {drawChart(chartId, { prevYear: prevData, currentYear: currentData });}
-    });}
+    destroyChart(type);
 
-    function fetchData(type, cacheKey, cb) {
-      // console.log(`Fetching data for ${type}...`);
-      const funcName = type === "monthly_prev" ? "getPrevYearMonthlyChartData" : "getMonthlyChartData";
+    const canvas = createChartCanvas(chartDiv, type);
+    const ctx = canvas.getContext("2d");
 
-      google.script.run
-        .withSuccessHandler((data) => {
-          if (!Array.isArray(data) || !data.length) {return AppUtils.showError(`${type} returned empty or invalid data`);}
-          AppUtils.cacheSet(cacheKey, data);
-          cb(data);
-        })
-        .withFailureHandler((err) => AppUtils.showError(`Failed to fetch ${type}: ${err}`))[funcName]();
+    if (!ctx) {
+      return AppUtils.showError(`Unable to create chart context for ${type}`);
+    }
+
+    switch (type) {
+      case "yearly":
+        return drawYearlyChart(ctx, type, data);
+
+      case "hourly":
+        return drawHourlyChart(ctx, type, data);
+
+      case "monthly-prev-merged":
+        return drawMonthlyComparisonChart(ctx, type, data);
+
+      case "daily":
+      case "monthly":
+        return drawLineChart(ctx, type, data, animated);
+
+      default:
+        return AppUtils.showError(`Unknown chart type: ${type}`);
     }
   }
 
-  function drawChart(type, dataArray, debug = false, animated = false) {
-    const log = (...args) => debug && console.log(...args);
-    const warn = (...args) => debug && console.warn(...args);
-    const error = (...args) => debug && console.error(...args);
+  // --------------------------------------------------
+  // YEARLY
+  // --------------------------------------------------
 
-    log("drawChart called 👉", { type, dataArray });
-
-    const chartDiv = document.getElementById("chart_div_" + type);
-
-    if (!chartDiv) {
-      error(`chart_div_${type} not found`);
-      return AppUtils.showError(`chart_div_${type} not found`);
-    }
-
-    if (!dataArray || (Array.isArray(dataArray) && !dataArray.length)) {
-      warn("No data found for chart:", type);
-      chartDiv.innerText = "No data found.";
-      return;
-    }
-
-    chartDiv.innerHTML = `<canvas id="chartCanvas_${type}"></canvas>`;
-    const canvas = document.getElementById(`chartCanvas_${type}`);
-    const ctx = canvas.getContext("2d");
-
-    if (chartInstances[type]) {
-      log("Destroying existing chart instance:", type);
-      chartInstances[type].destroy();
-      delete chartInstances[type];
-    }
-
-    // ---------- Yearly bar chart ----------
-    if (type === "yearly") {
-      log("Rendering yearly bar chart");
-
-      const labels = dataArray.map(r => r[0]);
-      const paid = dataArray.map(r => Number(r?.[2]) || 0);
-      const owed = dataArray.map(r => Number(r?.[3]) || 0);
-      const net  = dataArray.map(r => Number(r?.[4]) || 0);
-
-      log("Yearly data parsed:", { labels, paid, owed, net });
-
-      const paidGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-      paidGradient.addColorStop(0, "rgba(14, 165, 233, 0.8)");
-      paidGradient.addColorStop(1, "rgba(14, 165, 233, 0.4)");
-
-      const owedGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-      owedGradient.addColorStop(0, "rgba(249, 115, 22, 0.8)");
-      owedGradient.addColorStop(1, "rgba(249, 115, 22, 0.4)");
-
-      const netGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-      netGradient.addColorStop(0, "rgba(16, 185, 129, 0.8)");
-      netGradient.addColorStop(1, "rgba(16, 185, 129, 0.4)");
-
-      chartInstances[type] = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [
-            { label: "Net Paid", data: paid, backgroundColor: paidGradient },
-            { label: "Net Owed", data: owed, backgroundColor: owedGradient },
-            { label: "Net Hrs", data: net, backgroundColor: netGradient },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: "top" },
-            tooltip: {
-              mode: "index",
-              intersect: false,
-              callbacks: {
-                label: (ctx) =>
-                  `${ctx.dataset.label}: ${ctx.formattedValue} hrs`,
-              },
-            },
-          },
-          interaction: { mode: "index", intersect: false },
-          scales: {
-            x: { grid: { display: false } },
-            y: { beginAtZero: true },
-          },
-        },
-      });
-      return;
-    }
-
-    // ---------- Hourly bar chart ----------
-    if (type === "hourly") {
-      log("Rendering hourly bar chart");
-
-      const labels = dataArray.map(r => String(r[0] || ""));
-      const values = dataArray.map(r => Number(r[1]) || 0);
-
-      const barGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-      barGradient.addColorStop(0, "rgba(14,165,233,0.8)");
-      barGradient.addColorStop(1, "rgba(14,165,233,0.3)");
-
-      chartInstances[type] = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Total",
-            data: values,
-            backgroundColor: barGradient,
-            borderColor: "#0ea5e9",
-            borderWidth: 2,
-            borderRadius: 6,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            title: {
-              display: true,
-              text: "Hourly History by Year",
-              color: "#334155",
-              font: { size: 18, weight: "600" },
-            },
-            tooltip: {
-              callbacks: {
-                label: ctx => `${ctx.formattedValue} hrs`,
-              },
-            },
-          },
-          scales: {
-            x: {
-              grid: { display: false },
-              ticks: { color: "#475569" },
-            },
-            y: {
-              beginAtZero: true,
-              grid: { color: "rgba(0,0,0,0.05)" },
-              ticks: { color: "#475569" },
-            },
-          },
-        },
-      });
-
-      return;
-    }
-
-    // ---------- Merged prev/current year monthly chart ----------
-    if (type === "monthly_prev_merged") {
-      log("Rendering merged monthly chart");
-
-      const months = Array.from({ length: 12 }, (_, i) => i + 1);
-      const monthMap = {
-        January: 1, February: 2, March: 3, April: 4,
-        May: 5, June: 6, July: 7, August: 8,
-        September: 9, October: 10, November: 11, December: 12,
-      };
-
-      function fillMonthlyData(data) {
-        return months.map(m => {
-          const entry = data.find(d => {
-            if (!d || d.length < 2) {return false;}
-            const monthName = d[0]?.split(" ")[0];
-            return monthMap[monthName] === m;
-          });
-          return entry ? Number(entry[1]) : 0;
-        });
-      }
-
-      const prev = fillMonthlyData(dataArray.prevYear || []);
-      const current = fillMonthlyData(dataArray.currentYear || []);
-
-      log("Monthly data parsed:", { prev, current });
-
-      const prevGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-      prevGradient.addColorStop(0, "rgba(249, 115, 22, 0.8)");
-      prevGradient.addColorStop(1, "rgba(249, 115, 22, 0.4)");
-
-      const currentGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-      currentGradient.addColorStop(0, "rgba(14, 165, 233, 0.8)");
-      currentGradient.addColorStop(1, "rgba(14, 165, 233, 0.4)");
-
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-      chartInstances[type] = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels: monthNames,
-          datasets: [
-            { label: "Previous Year", data: prev, backgroundColor: prevGradient },
-            { label: "Current Year", data: current, backgroundColor: currentGradient },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { position: "top" } },
-          interaction: { mode: "index", intersect: false },
-          scales: {
-            x: { grid: { display: false } },
-            y: { beginAtZero: true },
-          },
-        },
-      });
-      return;
-    }
-
-    // ---------- Daily / Monthly line chart ----------
-    log("Rendering line chart");
-
-    const labels = dataArray.map(r => r[0]);
-    const values = dataArray.map(r => Number(r[1] || 0));
-
-    log("Line chart data:", { labels, values });
-
-    const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-    gradient.addColorStop(0, "rgba(14, 165, 233, 0.5)");
-    gradient.addColorStop(1, "rgba(231, 246, 254, 0.2)");
+  function drawYearlyChart(ctx, type, data) {
+    const labels = data.map((row) => row?.[0] ?? "");
+    const paid = data.map((row) => Number(row?.[2]) || 0);
+    const owed = data.map((row) => Number(row?.[3]) || 0);
+    const net = data.map((row) => Number(row?.[4]) || 0);
 
     chartInstances[type] = new Chart(ctx, {
-      type: "line",
+      type: "bar",
+
       data: {
         labels,
-        datasets: [{
-          label: type === "monthly" ? "Monthly Data" : "Daily Data",
-          data: values,
-          borderColor: "#0ea5e9",
-          backgroundColor: gradient,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 0,
-        }],
+
+        datasets: [
+          {
+            label: "Net Paid",
+            data: paid,
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(14, 165, 233, 0.8)",
+              "rgba(14, 165, 233, 0.4)",
+            ),
+          },
+
+          {
+            label: "Net Owed",
+            data: owed,
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(249, 115, 22, 0.8)",
+              "rgba(249, 115, 22, 0.4)",
+            ),
+          },
+
+          {
+            label: "Net Hrs",
+            data: net,
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(16, 185, 129, 0.8)",
+              "rgba(16, 185, 129, 0.4)",
+            ),
+          },
+        ],
       },
+
       options: {
         responsive: true,
         maintainAspectRatio: false,
+
+        plugins: {
+          legend: {
+            position: "top",
+          },
+
+          tooltip: {
+            mode: "index",
+            intersect: false,
+
+            callbacks: {
+              label: (context) =>
+                `${context.dataset.label}: ${context.formattedValue} hrs`,
+            },
+          },
+        },
+
+        interaction: {
+          mode: "index",
+          intersect: false,
+        },
+
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+          },
+
+          y: {
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  // --------------------------------------------------
+  // HOURLY
+  // --------------------------------------------------
+
+  function drawHourlyChart(ctx, type, data) {
+    const labels = data.map((row) => String(row?.[0] || ""));
+    const values = data.map((row) => Number(row?.[1]) || 0);
+
+    chartInstances[type] = new Chart(ctx, {
+      type: "bar",
+
+      data: {
+        labels,
+
+        datasets: [
+          {
+            label: "Total",
+            data: values,
+
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(14, 165, 233, 0.8)",
+              "rgba(14, 165, 233, 0.4)",
+            ),
+
+            borderColor: "#0ea5e9",
+            borderWidth: 2,
+            borderRadius: 6,
+          },
+        ],
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        plugins: {
+          legend: {
+            display: false,
+          },
+
+          title: {
+            display: true,
+            text: "Hourly History by Year",
+            color: "#334155",
+            font: {
+              size: 18,
+              weight: "600",
+            },
+          },
+
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.formattedValue} hrs`,
+            },
+          },
+        },
+
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+
+            ticks: {
+              color: "#475569",
+            },
+          },
+
+          y: {
+            beginAtZero: true,
+
+            grid: {
+              color: "rgba(0,0,0,0.05)",
+            },
+
+            ticks: {
+              color: "#475569",
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // --------------------------------------------------
+  // MONTHLY COMPARISON
+  // --------------------------------------------------
+
+  function drawMonthlyComparisonChart(ctx, type, data) {
+    const prev = fillMonthlyData(data?.prevYear || []);
+    const current = fillMonthlyData(data?.currentYear || []);
+
+    chartInstances[type] = new Chart(ctx, {
+      type: "bar",
+
+      data: {
+        labels: REPORT_MONTHS,
+
+        datasets: [
+          {
+            label: "Previous Year",
+            data: prev,
+
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(249, 115, 22, 0.8)",
+              "rgba(249, 115, 22, 0.4)",
+            ),
+          },
+
+          {
+            label: "Current Year",
+            data: current,
+
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(14, 165, 233, 0.8)",
+              "rgba(14, 165, 233, 0.4)",
+            ),
+          },
+        ],
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        plugins: {
+          legend: {
+            position: "top",
+          },
+        },
+
+        interaction: {
+          mode: "index",
+          intersect: false,
+        },
+
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+          },
+
+          y: {
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  function fillMonthlyData(data) {
+    const values = Array(12).fill(0);
+
+    data.forEach((row) => {
+      if (!Array.isArray(row) || row.length < 2) {
+        return;
+      }
+
+      const monthName = String(row[0] || "").split(" ")[0];
+      const monthNumber = MONTH_MAP[monthName];
+
+      if (!monthNumber) {
+        return;
+      }
+
+      values[monthNumber - 1] = Number(row[1]) || 0;
+    });
+
+    return values;
+  }
+
+  // --------------------------------------------------
+  // DAILY / MONTHLY LINE
+  // --------------------------------------------------
+
+  function drawLineChart(ctx, type, data, animated = false) {
+    const labels = data.map((row) => row?.[0] ?? "");
+    const values = data.map((row) => Number(row?.[1]) || 0);
+
+    chartInstances[type] = new Chart(ctx, {
+      type: "line",
+
+      data: {
+        labels,
+
+        datasets: [
+          {
+            label: type === "monthly" ? "Monthly Data" : "Daily Data",
+            data: values,
+
+            borderColor: "#0ea5e9",
+
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(14, 165, 233, 0.5)",
+              "rgba(231, 246, 254, 0.2)",
+            ),
+
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+          },
+        ],
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        animation: animated ? undefined : false,
 
         ...(animated && {
           animations: {
@@ -317,100 +508,137 @@ const ChartModule = (() => {
               easing: "easeInOutQuart",
               from: 1,
               to: 0.4,
-              loop: true
-            }
-          }
+              loop: true,
+            },
+          },
         }),
 
         scales: {
-          x: { grid: { display: false }, ticks: { display: false }, border: { display: false } },
-          y: { grid: { display: false }, ticks: { display: false }, border: { display: false } },
+          x: {
+            grid: {
+              display: false,
+            },
+
+            ticks: {
+              display: false,
+            },
+
+            border: {
+              display: false,
+            },
+          },
+
+          y: {
+            grid: {
+              display: false,
+            },
+
+            ticks: {
+              display: false,
+            },
+
+            border: {
+              display: false,
+            },
+          },
         },
 
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
       },
     });
-
-    log("✅ Chart rendered:", type);
   }
+
+  // --------------------------------------------------
+  // REALTIME ANIMATED CHART
+  // --------------------------------------------------
 
   function drawRealtimeAnimatedChart() {
     const type = "sample_realtime_animated";
-    const chartDiv = document.getElementById("chart_div_" + type);
+    const chartDiv = document.getElementById(`chart-${type}`);
 
-    if (!chartDiv) {return;}
-
-    chartDiv.innerHTML = `<canvas id="chartCanvas_${type}"></canvas>`;
-
-    const ctx = document
-      .getElementById(`chartCanvas_${type}`)
-      .getContext("2d");
-
-
-    if (chartInstances[type]) {
-      chartInstances[type].destroy();
-      delete chartInstances[type];
+    if (!chartDiv) {
+      return;
     }
 
-    const realtimeData = {
-      datasets: [
-        {
-          label: "Dataset 1",
-          data: [],
-          borderColor: "#0ea5e9",
-          backgroundColor: "transparent",
-          borderDash: [8,4],
-          borderWidth: 3,
-          pointRadius: 0,
-          tension: 0.4
-        },
-        {
-          label: "Dataset 2",
-          data: [],
-          borderColor: "#f97316",
-          backgroundColor: "transparent",
-          borderWidth: 3,
-          pointRadius: 0,
-          tension: 0.4
-        }
-      ]
-    };
+    destroyRealtimeChart(type);
+
+    const canvas = createChartCanvas(chartDiv, type);
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      return;
+    }
 
     chartInstances[type] = new Chart(ctx, {
       type: "line",
-      data: realtimeData,
+
+      data: {
+        datasets: [
+          {
+            label: "Dataset 1",
+            data: [],
+            borderColor: "#0ea5e9",
+            backgroundColor: "transparent",
+            borderDash: [8, 4],
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.4,
+          },
+
+          {
+            label: "Dataset 2",
+            data: [],
+            borderColor: "#f97316",
+            backgroundColor: "transparent",
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.4,
+          },
+        ],
+      },
 
       options: {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
+
         interaction: {
           intersect: false,
-          mode: "nearest"
+          mode: "nearest",
         },
+
         plugins: {
           legend: {
-            display: false
-          }
+            display: false,
+          },
         },
+
         scales: {
           x: {
             type: "linear",
+
             ticks: {
-              display: false
+              display: false,
             },
+
             grid: {
-              display:false
-            }
+              display: false,
+            },
           },
+
           y: {
-            beginAtZero:false,
-            grid:{
-              display:false
-            }
-          }
-        }
-      }
+            beginAtZero: false,
+
+            grid: {
+              display: false,
+            },
+          },
+        },
+      },
     });
 
     let lastTime = 0;
@@ -420,16 +648,18 @@ const ChartModule = (() => {
     let target2 = 60;
 
     function animate(time) {
+      const chart = chartInstances[type];
 
-      if (!chartInstances[type]) {return;}
+      if (!chart) {
+        return;
+      }
 
-      // around 80fps
       if (time - lastTime > 80) {
-
         const now = Date.now();
+
         value1 += (target1 - value1) * 0.03;
         value2 += (target2 - value2) * 0.03;
-        // occasionally pick new targets
+
         if (Math.abs(value1 - target1) < 2) {
           target1 = Math.random() * 100;
         }
@@ -438,56 +668,109 @@ const ChartModule = (() => {
           target2 = Math.random() * 100;
         }
 
-        chartInstances[type].data.datasets[0].data.push({
+        chart.data.datasets[0].data.push({
           x: now,
-          y: value1
+          y: value1,
         });
 
-        chartInstances[type].data.datasets[1].data.push({
+        chart.data.datasets[1].data.push({
           x: now,
-          y: value2
+          y: value2,
         });
 
-        // keep only last 30 seconds
         const cutoff = now - 30000;
 
-        chartInstances[type].data.datasets.forEach(ds => {
-          ds.data = ds.data.filter(p => p.x >= cutoff);
+        chart.data.datasets.forEach((dataset) => {
+          dataset.data = dataset.data.filter((point) => point.x >= cutoff);
         });
 
-        chartInstances[type].options.scales.x.min = cutoff;
-        chartInstances[type].options.scales.x.max = now;
-        chartInstances[type].update("none");
+        chart.options.scales.x.min = cutoff;
+        chart.options.scales.x.max = now;
+
+        chart.update("none");
 
         lastTime = time;
       }
-      animationFrames[type] = requestAnimationFrame(animate);;
+
+      animationFrames[type] = requestAnimationFrame(animate);
     }
-    animationFrames[type] = requestAnimationFrame(animate);;
+
+    animationFrames[type] = requestAnimationFrame(animate);
   }
 
-  function destroyRealtimeChart() {
+  function destroyRealtimeChart(type = "sample_realtime_animated") {
+    if (animationFrames[type]) {
+      cancelAnimationFrame(animationFrames[type]);
+      delete animationFrames[type];
+    }
 
-      Object.keys(animationFrames).forEach(type => {
-          cancelAnimationFrame(animationFrames[type]);
+    destroyChart(type);
+  }
+
+  // --------------------------------------------------
+  // HELPERS
+  // --------------------------------------------------
+
+  function createGradient(ctx, startColor, endColor) {
+    if (!startColor || !endColor) {
+      console.warn("Invalid gradient colors:", {
+        startColor,
+        endColor,
       });
 
-      animationFrames = {};
+      return startColor || endColor || "rgba(14, 165, 233, 0.5)";
+    }
 
-      Object.keys(chartInstances).forEach(type => {
-          chartInstances[type].destroy();
-          delete chartInstances[type];
-      });
+    const height = ctx.canvas.height || 300;
 
-      chartInstances = {};
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
 
+    gradient.addColorStop(0, startColor);
+    gradient.addColorStop(1, endColor);
+
+    return gradient;
+  }
+
+  function createChartCanvas(chartDiv, type) {
+    const canvas = document.createElement("canvas");
+
+    canvas.id = `chartCanvas_${type}`;
+
+    chartDiv.replaceChildren(canvas);
+
+    return canvas;
+  }
+
+  function destroyChart(type) {
+    if (!chartInstances[type]) {
+      return;
+    }
+
+    chartInstances[type].destroy();
+
+    delete chartInstances[type];
+  }
+
+  function destroyAllCharts() {
+    Object.keys(animationFrames).forEach((type) => {
+      cancelAnimationFrame(animationFrames[type]);
+      delete animationFrames[type];
+    });
+
+    Object.keys(chartInstances).forEach((type) => {
+      destroyChart(type);
+    });
   }
 
   return {
     loadChart,
-    drawRealtimeAnimatedChart,
     loadPrevYearCombinedChart,
+
+    drawChart,
+
+    drawRealtimeAnimatedChart,
     destroyRealtimeChart,
+    destroyAllCharts,
   };
 })();
 
