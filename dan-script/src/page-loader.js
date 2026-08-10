@@ -49,6 +49,7 @@ const PageLoaderModule = (() => {
         if (typeof done === "function") {done();}
       });
     });
+    
   }
 
   return { loadPage };

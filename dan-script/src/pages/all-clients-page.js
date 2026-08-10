@@ -1,11 +1,11 @@
-import {
-  RouterModule,
-  AppUtils,
-  WidgetModule,
-  TableModule
-} from "../modules.js";
+import { RouterModule } from "../routers.js";
+import { AppUtils } from "../utils.js";
+import { TableModule } from "../tables.js";
+import { ClientRanking } from "../clients/client-ranking.js";
+import { ClientDirectory } from "../clients/client-directory.js";
+import { ProjectRankings } from "../projects/project-ranking.js";
 
-const allClientsPageModule = (() => {
+const allClientsPage = (() => {
   let bound = false;
 
   const init = () => {
@@ -69,7 +69,7 @@ const allClientsPageModule = (() => {
                   TableModule.loadClients();
                 }
 
-                WidgetModule.loadAllAndActiveClientsInTable("allClientsData");
+                ClientDirectory.loadClientDirectory("allClientsData");
 
                 $("#sheet_name").val("");
               }
@@ -80,12 +80,12 @@ const allClientsPageModule = (() => {
   };
 
   const loadData = () => {
-    WidgetModule.loadAllAndActiveClientsInTable("allClientsData");
-    WidgetModule.loadTopPaidList();
-    WidgetModule.loadTopProjectList();
+    ClientDirectory.loadClientDirectory("allClientsData");
+    ClientRanking.renderTopPaidClients();
+    ProjectRankings.renderTopProjects();
   };
 
   return { init, destroy };
 })();
 
-export { allClientsPageModule };
+export { allClientsPage };

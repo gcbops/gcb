@@ -558,7 +558,7 @@ function showDialogByStatus(status, title, h = 600, w = 900, customSheet) {
 }
 
 /** 🔍 Extract dialog data by config */
-function getDialogTitle(status, customSheet) {
+function getClientDataByStatus(status, customSheet) {
   const config = {
     "Outstanding Accounts": { range: "J2:M", sheet: "Paid & Owed Log" },
     "Active Clients":       { range: "J2:M", sheet: "Paid & Owed Log" },
@@ -584,7 +584,7 @@ const showActiveClients = () => showDialogByStatus("Active Clients", "Active Cli
 const showTopPaid = () => showDialogByStatus("Top Paid", "Top Paid");
 const showDailyActivity = () => showDialogByStatus("Activity Today", "Activity Today", 600, 950);
 
-function getTopPaidAccounts() {
+function getTopPaidClients() {
   const sheet = getSheetSafe("Paid & Owed Log");
   const data = sheet.getRange("J2:M" + sheet.getLastRow()).getValues();
   return data;

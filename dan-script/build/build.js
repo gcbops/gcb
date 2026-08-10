@@ -3,7 +3,7 @@ const esbuild = require("esbuild");
 esbuild.build({
   entryPoints: ["src/app.js"],
   bundle: true,
-  outfile: "build/scripts.bundle.js",
+  outfile: "dist/app.bundle.js",
   format: "iife",
   platform: "browser",
   target: "es2020",

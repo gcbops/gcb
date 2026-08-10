@@ -1,7 +1,5 @@
-import {
-  AppUtils,
-  WidgetModule,
-} from "./modules.js";
+import { HourSummary } from "./hours/hour-summary.js";
+import { AppUtils } from "./utils.js";
 
 const TableModule = (() => {
   let dataTable = null;
@@ -517,7 +515,7 @@ const TableModule = (() => {
 
           // reload relevant data
           google.script.run.pullClientProjects();
-          WidgetModule.loadGrindValues(true);
+          HourSummary.loadHourTotals(true);
 
           const clientVal = formData.client;
           AppUtils.cacheClear(`getClientHourLogData_${clientVal}`);
@@ -673,26 +671,36 @@ const TableModule = (() => {
   }
 
   function highlightLatestRow(elId, badgeColumn = 0) {
+    const $tbody = $(`#${elId}`);
 
-      const $row = $(`#${elId} tr:first`);
+    if (!$tbody.length) {
+      return;
+    }
 
-      if (!$row.length) {return;}
+    // Wait for the table DOM to finish updating.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const $row = $tbody.find("tr:first");
 
-      setTimeout(() => {
-          $row.find(".badge-new-report").remove();
-          $row.find("td").eq(badgeColumn).append(`
-              <span class="badge badge-pill badge-success badge-new-report ml-2">
-                  NEW
-              </span>
-          `);
-          $row.hide().fadeIn(500);
-          $row.addClass("table-success");
-      }, 5000);
+        if (!$row.length) {
+          return;
+        }
 
-      setTimeout(() => {
+        $row.find(".badge-new-report").remove();
+
+        $row.find("td").eq(badgeColumn).append(`
+          <span class="badge badge-pill badge-success badge-new-report ml-2">
+            NEW
+          </span>
+        `);
+
+        $row.hide().fadeIn(500).addClass("table-success");
+
+        setTimeout(() => {
           $row.removeClass("table-success");
-      }, 15000);
-
+        }, 15000);
+      });
+    });
   }
 
   function escapeHtml(text) {

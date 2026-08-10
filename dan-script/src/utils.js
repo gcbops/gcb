@@ -6,10 +6,10 @@ const AppUtils = (() => {
   const resetableCacheKeyForUpdatingHours = [
     "cache_ActiveClients",
     "cache_OutstandingAccounts",
-    "cache_TopPaid",
-    "cache_TopProjects",
-    "topCardMetrics",
-    "grindValues",
+    "topPaidClients",
+    "topProjects",
+    "hoursSummary",
+    "hourTotals",
     "chartData_daily",
     "chartData_monthly",
     "chartData_yearly",
@@ -149,6 +149,18 @@ const AppUtils = (() => {
   function playNotif() {
     const sound = new Audio("https://raw.githubusercontent.com/gcbops/gcb/main/slick-notification.ogg");
     sound.play().catch(() => { });
+  }
+
+  function getInitials(name) {
+    if (!name) {
+      return "";
+    }
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w[0].toUpperCase())
+      .join("")
+      .slice(0, 3);
   }
 
   function showDashboardToast(msg, type = "success") {
@@ -441,6 +453,7 @@ const AppUtils = (() => {
     // utils
     showError,
     playNotif,
+    getInitials,
     showDashboardToast,
     initSelect2,
     submitForm,

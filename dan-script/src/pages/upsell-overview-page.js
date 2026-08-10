@@ -1,9 +1,7 @@
-import {
-  AppUtils,
-  WidgetModule,
-} from "../modules.js";
+import { AppUtils } from "../utils.js";
+import { TableModule } from "../tables.js";
 
-const upsellOverviewPageModule = (() => {
+const upsellOverviewPage = (() => {
   let bound = false;
 
   const init = () => {
@@ -85,8 +83,8 @@ const upsellOverviewPageModule = (() => {
           AppUtils.cacheClear("upsellSummary_time");
 
           setTimeout(() => {
-            WidgetModule.loadUpsellSummary(true);
-            WidgetModule.loadUpsellRecords(true);
+            loadUpsellSummary(true);
+            loadUpsellRecords(true);
           }, 600);
         }
       });
@@ -95,11 +93,45 @@ const upsellOverviewPageModule = (() => {
   };
 
   const loadData = () => {
-    WidgetModule.loadUpsellSummary();
-    WidgetModule.loadUpsellRecords();
+    loadUpsellSummary();
+    loadUpsellRecords();
   };
+
+  function loadUpsellSummary(forceRefresh = false) {
+    AppUtils.cachedGScriptCall(
+      "upsellSummary",
+      "getUpsellSummary",
+      [],
+      function (summary) {
+        summary = summary || { total: 0, today: 0, month: 0 };
+        const totalEl = document.getElementById("total");
+        const todayEl = document.getElementById("today");
+        const monthEl = document.getElementById("month");
+        if (totalEl) {
+          totalEl.textContent = summary.total;
+        }
+        if (todayEl) {
+          todayEl.textContent = summary.today;
+        }
+        if (monthEl) {
+          monthEl.textContent = summary.month;
+        }
+      },
+    );
+  }
+
+  function loadUpsellRecords(forceRefresh = false) {
+    AppUtils.cachedGScriptCall(
+      "upsellRecords",
+      "getUpsellRecords",
+      [],
+      function (table) {
+        TableModule.renderUpsellRecords(table);
+      },
+    );
+  }
 
   return { init, destroy };
 })();
 
-export { upsellOverviewPageModule };
+export { upsellOverviewPage };

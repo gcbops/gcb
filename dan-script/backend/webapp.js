@@ -46,7 +46,7 @@ function include(filename) {
   throw new Error('Include file "' + filename + '" not found in any folder.');
 }
 
-function getTopCardMetrics() {
+function getHoursSummary() {
   const sheet = getLabSheet();
 
   const values = sheet.getRange("AW3:AW6").getValues().flat();
@@ -96,7 +96,7 @@ function getClientTableDataWithNickname(dt) {
   return results;
 }
 
-function getPercentagesOnLabSheet(yearType) {
+function getPerformanceSummary(yearType) {
   const sheet = getSheetSafe("Lab 3.0");
   if (!sheet) return null;
 
@@ -128,7 +128,7 @@ function getPercentagesOnLabSheet(yearType) {
   return { percentages, paidGrowth };
 }
 
-function getGrindValues() {
+function getHourTotals() {
   const sheet = getSheetSafe("Lab 3.0");
 
   const daily = sheet.getRange("AW7").getValue();
@@ -151,7 +151,7 @@ function getTargetPercents() {
   };
 }
 
-function getTargetPercentsCurrentYear() {
+function getCurrentYearTargetProgress() {
   const sheet = getSheetSafe("Lab 3.0");
   return {
     monthAvg: sheet.getRange("AU20").getValue(),
@@ -163,7 +163,7 @@ function getTargetPercentsCurrentYear() {
   };
 }
 
-function getTargetPercentsPreviousYear() {
+function getPreviousYearTargetProgress() {
   const sheet = getSheetSafe("Lab 3.0");
   return {
     monthAvg: sheet.getRange("AT20").getValue(),
@@ -195,7 +195,7 @@ function getClientHoursForOverview(clientName) {
   };
 }
 
-function getReportsPageData() {
+function getReportsOverview() {
 
   const ss = getSS();
   const recentLogs = getReportLogs(ss)
@@ -299,22 +299,24 @@ function getReportLogs(ss = getSS()) {
 
 }
 
-function getMonthlyReportsPageData() {
+function getMonthlyReportHistory() {
 
   const ss = getSS();
   return {
-    logs: getReportLogs(ss)
-      .filter(log => log.type === "Monthly")
+    reportLogs: getReportLogs(ss).filter(
+      (reportLog) => reportLog.type === "Monthly",
+    ),
   };
 
 }
 
-function getYearlyReportsPageData() {
+function getYearlyReportHistory() {
 
   const ss = getSS();
   return {
-    logs: getReportLogs(ss)
-      .filter(log => log.type === "Yearly")
+    reportLogs: getReportLogs(ss).filter(
+      (reportLog) => reportLog.type === "Yearly",
+    ),
   };
 
 }
@@ -446,7 +448,7 @@ function sendDiscordReport(report) {
 }
 
 /** Sends the latest report by email. */
-function sendLatestEmailReport(report) {
+function emailLatestReport(report) {
   return sendEmailReport(report);
 }
 
@@ -457,7 +459,7 @@ function sendRequestedEmailReport(reportId) {
 }
 
 /** Sends the latest report to Discord. */
-function sendLatestDiscordReport(report) {
+function sendLatestReportToDiscord(report) {
   return sendDiscordReport(report);
 }
 

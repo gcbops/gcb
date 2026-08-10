@@ -1,8 +1,6 @@
-import {
-  RouterModule,
-  ActionRouterModule,
-  PageModules
-} from "./modules.js";
+import { RouterModule } from "./routers.js";
+import { ActionRouterModule } from "./action-router.js";
+import { PageModules } from "./page-modules.js";
 
 // DOMContentLoaded
 

@@ -1,0 +1,3679 @@
+<script>
+
+(() => {
+  // src/utils.js
+  var AppUtils = (() => {
+    const ONE_DAY = 24 * 60 * 60 * 1e3;
+    const resetableCacheKeyForUpdatingHours = [
+      "cache_ActiveClients",
+      "cache_OutstandingAccounts",
+      "topPaidClients",
+      "topProjects",
+      "hoursSummary",
+      "hourTotals",
+      "chartData_daily",
+      "chartData_monthly",
+      "chartData_yearly",
+      "chartData_yearly_2025",
+      "chartData_yearly_all"
+    ];
+    function cacheSet(key, data) {
+      localStorage.setItem(key, JSON.stringify(data));
+      localStorage.setItem(key + "_time", Date.now());
+    }
+    function cacheGet(key) {
+      const cached = localStorage.getItem(key);
+      const time = Number(localStorage.getItem(key + "_time") || 0);
+      if (!cached || Date.now() - time > ONE_DAY) {
+        return null;
+      }
+      try {
+        return JSON.parse(cached);
+      } catch {
+        return null;
+      }
+    }
+    function cacheExpired(key) {
+      const time = Number(localStorage.getItem(key + "_time") || 0);
+      return Date.now() - time > ONE_DAY;
+    }
+    function cacheClear(key) {
+      localStorage.removeItem(key);
+      localStorage.removeItem(key + "_time");
+    }
+    function resetCacheKeys(keys = []) {
+      if (!Array.isArray(keys)) {
+        return;
+      }
+      keys.forEach((key) => {
+        if (localStorage.getItem(key)) {
+          localStorage.setItem(key + "_time", Date.now());
+        }
+      });
+    }
+    function clearEverything() {
+      localStorage.clear();
+    }
+    function safeRun(fn, delay = 5e3) {
+      return new Promise(
+        (res) => setTimeout(() => {
+          try {
+            fn();
+          } catch (e) {
+            showError(e);
+          }
+          res();
+        }, delay)
+      );
+    }
+    function cachedGScriptCall(cacheKey, gFuncName, args = [], callback, log = false, reset = false) {
+      const requestToken = RouterModule.getPageToken();
+      const safeCallback = (data) => {
+        if (requestToken !== RouterModule.getPageToken()) {
+          if (log) {
+            console.log(`[Cache] Ignored stale response: ${gFuncName}`);
+          }
+          return;
+        }
+        callback(data);
+      };
+      const cached = cacheGet(cacheKey);
+      if (cached) {
+        if (log) {
+          console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
+        }
+        safeCallback(cached);
+      }
+      let expired = !cached || cacheExpired(cacheKey);
+      if (reset) {
+        expired = reset;
+      }
+      if (log) {
+        console.log(`[Cache] Cache expired for key "${cacheKey}"?`, expired);
+      }
+      if (expired) {
+        if (log) {
+          console.log(`[Cache] Calling Google Script function "${gFuncName}" with args:`, args);
+        }
+        safeRun(() => {
+          google.script.run.withSuccessHandler((data) => {
+            if (log) {
+              console.log(`[Cache] Setting cache for key "${cacheKey}" with data:`, data);
+            }
+            cacheSet(cacheKey, data);
+            safeCallback(data);
+          }).withFailureHandler((err) => {
+            if (log) {
+              console.log(`[Cache] Google Script call failed for "${gFuncName}":`, err);
+            }
+            if (requestToken !== RouterModule.getPageToken()) {
+              return;
+            }
+            showError(err);
+            showDashboardToast("Something went wrong!", "error");
+          })[gFuncName](...args);
+        }, 0);
+      }
+    }
+    function showError(err) {
+      const fields = ["message", "error", "details"];
+      let msg = "";
+      if (typeof err === "string") {
+        msg = err.trim();
+      } else if (err) {
+        for (const field of fields) {
+          let value = err[field];
+          if (field === "message" && value && typeof value.message === "string") {
+            value = value.message;
+          }
+          if (typeof value === "string" && value.trim()) {
+            msg = value.trim();
+            break;
+          }
+        }
+        if (!msg && typeof err.toString === "function") {
+          const s = err.toString().trim();
+          if (s) {
+            msg = s;
+          }
+        }
+      }
+      if (!msg) {
+        msg = "Something went wrong!";
+      }
+      console.error("Error:", msg, err);
+      showDashboardToast(msg, "error");
+    }
+    function playNotif() {
+      const sound = new Audio("https://raw.githubusercontent.com/gcbops/gcb/main/slick-notification.ogg");
+      sound.play().catch(() => {
+      });
+    }
+    function getInitials(name) {
+      if (!name) {
+        return "";
+      }
+      return name.split(" ").filter(Boolean).map((w) => w[0].toUpperCase()).join("").slice(0, 3);
+    }
+    function showDashboardToast(msg, type = "success") {
+      if (typeof toastr === "undefined") {
+        return showError("Toastr not found");
+      }
+      toastr.options = {
+        closeButton: true,
+        progressBar: true,
+        positionClass: "toast-bottom-center",
+        timeOut: "4000"
+      };
+      toastr[type] ? toastr[type](msg) : toastr.info(msg);
+    }
+    function initSelect2(parent) {
+      const dropdownParent = parent || $(document.body);
+      function apply($el, options = {}) {
+        if ($el.hasClass("select2-hidden-accessible")) {
+          $el.select2("destroy");
+        }
+        $el.select2({ width: "100%", dropdownParent, ...options });
+      }
+      $(".js-select2").each(function() {
+        apply($(this));
+      });
+      $(".js-select2-dynamic").each(function() {
+        apply($(this), { tags: true });
+      });
+    }
+    function openDrawer(drawerSelector, options = {}) {
+      const {
+        contentClass = "",
+        onOpen = null,
+        onClose = null
+      } = options;
+      const $drawer = $(drawerSelector);
+      if (!$drawer.length) {
+        return;
+      }
+      const $content = $drawer.find(".drawer-content");
+      $drawer.addClass("drawer-open");
+      if (contentClass) {
+        $content.addClass(contentClass);
+      }
+      if (typeof onOpen === "function") {
+        onOpen($drawer, $content);
+      }
+      $drawer.off("click.AppUtilsDrawerClose").on("click.AppUtilsDrawerClose", ".drawer-close", (e) => {
+        e.preventDefault();
+        closeDrawer($drawer, $content, onClose);
+      });
+    }
+    function closeDrawer($drawer, $content, onClose) {
+      if (!$drawer.hasClass("drawer-open")) {
+        return;
+      }
+      $drawer.removeClass("drawer-open");
+      if (typeof onClose === "function") {
+        onClose($drawer, $content);
+      }
+    }
+    function submitForm({ gscriptFunc, data = {}, onSuccess, $btn }) {
+      if (!gscriptFunc) {
+        throw new Error("No Google Apps Script function provided");
+      }
+      if ($btn && $btn.length) {
+        $btn.prop("disabled", true);
+      }
+      google.script.run.withSuccessHandler(() => {
+        if ($btn && $btn.length) {
+          $btn.prop("disabled", false);
+        }
+        if (typeof onSuccess === "function") {
+          onSuccess();
+        }
+      }).withFailureHandler((err) => {
+        if ($btn && $btn.length) {
+          $btn.prop("disabled", false);
+        }
+        showError(err);
+        showDashboardToast("Something went wrong!", "error");
+      })[gscriptFunc](data);
+    }
+    function openModal(modalSelector, options = {}) {
+      const {
+        size = "",
+        placement = "center",
+        dialogClass = "",
+        contentClass = "",
+        header = "",
+        body = "",
+        footer = "",
+        backdrop = "static",
+        keyboard = true,
+        closable = true,
+        scrollable = false,
+        centered = false,
+        onOpen = null,
+        onClose = null
+      } = options;
+      const $modal = $(modalSelector);
+      if (!$modal.length) {
+        return;
+      }
+      const modalEl = $modal[0];
+      const $dialog = $modal.find(".modal-dialog");
+      const $content = $modal.find(".modal-content");
+      $modal.removeClass(
+        "modal-top modal-bottom modal-center modal-top-start modal-top-end modal-bottom-start modal-bottom-end"
+      );
+      $dialog.attr("class", "modal-dialog");
+      if (size) {
+        $dialog.addClass(`modal-${size}`);
+      }
+      if (scrollable) {
+        $dialog.addClass("modal-dialog-scrollable");
+      }
+      if (centered || placement === "center") {
+        $dialog.addClass("modal-dialog-centered");
+      }
+      if (dialogClass) {
+        $dialog.addClass(dialogClass);
+      }
+      switch (placement) {
+        case "top":
+          $modal.addClass("modal-top");
+          break;
+        case "bottom":
+          $modal.addClass("modal-bottom");
+          break;
+        case "top-start":
+          $modal.addClass("modal-top-start");
+          break;
+        case "top-end":
+          $modal.addClass("modal-top-end");
+          break;
+        case "bottom-start":
+          $modal.addClass("modal-bottom-start");
+          break;
+        case "bottom-end":
+          $modal.addClass("modal-bottom-end");
+          break;
+        case "center":
+        default:
+          $modal.addClass("modal-center");
+          break;
+      }
+      $content.attr("class", "modal-content");
+      if (contentClass) {
+        $content.addClass(contentClass);
+      }
+      $content.html(`
+      ${header ? `
+        <div class="modal-header">
+
+          ${header}
+
+          ${closable ? `
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close">
+              </button>
+            ` : ""}
+
+        </div>
+      ` : ""}
+
+      <div class="modal-body text-center">
+        ${body}
+      </div>
+
+      ${footer ? `
+        <div class="modal-footer justify-content-center">
+          ${footer}
+        </div>
+      ` : ""}
+    `);
+      if (modalEl._shownHandler) {
+        modalEl.removeEventListener(
+          "shown.bs.modal",
+          modalEl._shownHandler
+        );
+      }
+      if (modalEl._hiddenHandler) {
+        modalEl.removeEventListener(
+          "hidden.bs.modal",
+          modalEl._hiddenHandler
+        );
+      }
+      modalEl._shownHandler = () => {
+        if (typeof onOpen === "function") {
+          onOpen($modal, $dialog, $content);
+        }
+      };
+      modalEl._hiddenHandler = () => {
+        if (typeof onClose === "function") {
+          onClose($modal, $dialog, $content);
+        }
+        $content.empty();
+        bootstrap.Modal.getInstance(modalEl)?.dispose();
+      };
+      modalEl.addEventListener(
+        "shown.bs.modal",
+        modalEl._shownHandler,
+        { once: true }
+      );
+      modalEl.addEventListener(
+        "hidden.bs.modal",
+        modalEl._hiddenHandler,
+        { once: true }
+      );
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+        backdrop,
+        keyboard
+      });
+      modal.show();
+    }
+    function closeModal(modalSelector) {
+      const modalEl = document.querySelector(modalSelector);
+      if (!modalEl) {
+        return;
+      }
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
+    return {
+      // cache
+      resetableCacheKeyForUpdatingHours,
+      cacheSet,
+      cacheGet,
+      cacheClear,
+      clearEverything,
+      resetCacheKeys,
+      // gscript
+      cachedGScriptCall,
+      // utils
+      showError,
+      playNotif,
+      getInitials,
+      showDashboardToast,
+      initSelect2,
+      submitForm,
+      // drawer and modal helpers
+      openDrawer,
+      closeDrawer,
+      openModal,
+      closeModal
+    };
+  })();
+
+  // src/hours/hour-summary.js
+  var HourSummary = /* @__PURE__ */ (() => {
+    function loadHoursSummary(containerSelector) {
+      AppUtils.cachedGScriptCall(
+        "hoursSummary",
+        "getHoursSummary",
+        [],
+        (data) => {
+          if (!data) {
+            AppUtils.showDashboardToast("No metrics found", "error");
+            return;
+          }
+          renderHoursSummary(containerSelector, data);
+        }
+      );
+    }
+    function renderHoursSummary(containerSelector, data) {
+      const map = {
+        "Total Hours": data.totalHours,
+        "Paid Hours": data.totalPaid,
+        "Owed Hours": data.owedHours,
+        "Net Hours": data.netHours
+      };
+      document.querySelectorAll(`${containerSelector} .widget-content`).forEach((container) => {
+        const heading = container.querySelector(".widget-heading")?.innerText.trim();
+        const valueSpan = container.querySelector(".widget-numbers span");
+        if (map[heading] !== void 0 && valueSpan) {
+          valueSpan.textContent = map[heading];
+        }
+      });
+    }
+    function loadHourTotals(isRefresh) {
+      AppUtils.cachedGScriptCall(
+        "hourTotals",
+        "getHourTotals",
+        [],
+        (data) => {
+          if (!data) {
+            return;
+          }
+          const dailyEl = document.getElementById("daily-hour-total");
+          const monthlyEl = document.getElementById("monthly-hour-total");
+          const yearlyEl = document.getElementById("yearly-hour-total");
+          if (dailyEl) {
+            dailyEl.textContent = data.daily;
+          }
+          if (monthlyEl) {
+            monthlyEl.textContent = data.monthly;
+          }
+          if (yearlyEl) {
+            yearlyEl.textContent = data.yearly;
+          }
+        },
+        false,
+        isRefresh
+      );
+    }
+    return {
+      loadHoursSummary,
+      loadHourTotals
+    };
+  })();
+
+  // src/tables.js
+  var TableModule = /* @__PURE__ */ (() => {
+    let dataTable = null;
+    function loadClients(selectId = "#client", isForProject = false) {
+      const cacheKey = "allClientsData";
+      if (!$(selectId).length) {
+        return;
+      }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getClientTableDataWithNickname",
+        [],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showError("Client data missing or invalid", data);
+            return;
+          }
+          const options = data.map((c) => ({
+            id: c.name,
+            text: c.name
+          }));
+          const $sel = $(selectId);
+          $sel.empty();
+          $sel.append(new Option("Select Client", "", true, true));
+          $sel.select2({
+            data: options,
+            width: "100%",
+            placeholder: "Select Client",
+            allowClear: true
+          });
+          $sel.off("change.handleAddClient");
+          $sel.on("change.handleAddClient", function() {
+            const selectedName = $(this).val();
+            if (!isForProject) {
+              handleAddClient(selectedName, true);
+            } else {
+              handleAddClient(selectedName, true, true);
+            }
+          });
+        }
+      );
+    }
+    function initDataTable(title, tableId, debug = false) {
+      let tableOptions;
+      const log = (...args) => debug && console.log(...args);
+      const warn = (...args) => debug && console.warn(...args);
+      const error = (...args) => debug && console.error(...args);
+      const cleanTitle = title.toLowerCase().trim();
+      const MAIN_TABLES = [
+        "top paid accounts",
+        "activity today",
+        "outstanding accounts"
+      ];
+      const NUMERIC_SORT_TABLES = [
+        "top paid accounts",
+        "outstanding accounts"
+      ];
+      log("initDataTable called", { title, cleanTitle, tableId });
+      if (MAIN_TABLES.includes(cleanTitle)) {
+        log("Matched main tables config");
+        tableOptions = {
+          layout: {
+            topStart: ["pageLength"],
+            topEnd: ["search"],
+            bottomStart: ["info"],
+            bottomEnd: ["paging"]
+          },
+          paging: true,
+          pageLength: 5,
+          lengthMenu: [[5, 10, 25], [5, 10, 25]],
+          initComplete() {
+            log("DataTable initComplete");
+            $(".dt-search input").focus();
+          }
+        };
+        if (NUMERIC_SORT_TABLES.includes(cleanTitle)) {
+          tableOptions.columnDefs = [
+            { targets: [1, 2], type: "num-fmt" }
+          ];
+        }
+      } else if (cleanTitle === "upsell") {
+        log("Matched Upsell config");
+        tableOptions = {
+          pageLength: 5,
+          order: [],
+          ordering: false,
+          destroy: true,
+          retrieve: true,
+          searching: true,
+          lengthChange: false,
+          info: false,
+          paging: true,
+          columnDefs: [{ targets: [1, 2], className: "dt-center" }],
+          language: { emptyTable: "No records yet" },
+          dom: '<"bottom d-flex justify-content-between"f p>'
+        };
+      } else {
+        warn("No tableOptions matched for title:", title);
+        return;
+      }
+      const $table = $(tableId);
+      log("Table selector:", tableId, "found:", $table.length);
+      if (!$table.length) {
+        error("Table not found:", tableId);
+        return;
+      }
+      if ($.fn.DataTable.isDataTable($table)) {
+        log("Existing DataTable found, destroying");
+        try {
+          $table.DataTable().clear().destroy();
+          $table.empty();
+        } catch (e) {
+          error("Error destroying DataTable:", e);
+        }
+      }
+      if (window.activityInterval) {
+        clearInterval(window.activityInterval);
+        window.activityInterval = null;
+      }
+      if (cleanTitle === "activity today") {
+        log("Initializing Activity Today table");
+        dataTable = $table.DataTable({
+          ...tableOptions,
+          createdRow(row) {
+            log("Activity Today row created");
+            $(row).find("td:last").addClass("action-btn").html(buildActionButtons().html());
+          }
+        });
+        setupActivityTodayFilters();
+        setupTaskForm();
+        setupSheetViewButton();
+        window.activityInterval = setInterval(loadActivity, 1e4);
+      } else {
+        log("Initializing standard DataTable");
+        log("Final tableOptions:", tableOptions);
+        dataTable = $table.DataTable(tableOptions);
+      }
+      if (MAIN_TABLES.includes(cleanTitle)) {
+        log("Running extra table logic");
+        handleExtraTableLogic(title);
+      }
+      log("DataTable init finished");
+    }
+    function buildTableBody($tbody, data, title, debug = false) {
+      const log = (...args) => debug && console.log(...args);
+      log("[buildTableBody] start", {
+        title,
+        rows: Array.isArray(data) ? data.length : "invalid data"
+      });
+      if (!Array.isArray(data)) {
+        log("[buildTableBody] invalid data, aborting");
+        return;
+      }
+      $tbody.empty();
+      let skipped = 0;
+      let rendered = 0;
+      data.forEach((row, rowIndex) => {
+        const isEmptyRow = row.every(
+          (cell) => cell === "" || cell === null || cell === void 0 || typeof cell === "string" && cell.trim() === ""
+        );
+        if (isEmptyRow) {
+          skipped++;
+          log(`[Row ${rowIndex}] skipped empty row`, row);
+          return;
+        }
+        log(`[Row ${rowIndex}] rendering`, row);
+        const $tr = $("<tr></tr>");
+        row.forEach((cell, colIndex) => {
+          log(`  [Row ${rowIndex}][Col ${colIndex}] value:`, cell);
+          const $td = $("<td></td>");
+          if (colIndex === 3 && cell && title !== "Activity Today") {
+            log(`  \u2192 applying span class:`, cell);
+            $td.append(`<span class="${cell}">${cell}</span>`);
+          } else {
+            $td.text(cell || "");
+          }
+          $tr.append($td);
+        });
+        if (title === "Activity Today") {
+          log(`[Row ${rowIndex}] adding action buttons`);
+          $tr.append(buildActionButtons());
+        }
+        $tbody.append($tr);
+        rendered++;
+      });
+      log("[buildTableBody] done", {
+        renderedRows: rendered,
+        skippedRows: skipped
+      });
+    }
+    function buildActionButtons() {
+      return $("<td class='action-btn'></td>").append(`<button class="btn btn-sm add-client"><i class="pe-7s-cloud-upload"></i></button>`).append(`<button class="btn btn-sm view-client"><i class="pe-7s-look"></i></button>`).append(`<button class="btn btn-sm edit-client"><i class="pe-7s-note"></i></button>`);
+    }
+    function bindTableActions($tbody, data) {
+      $tbody.off("click").on("click", ".action-btn .btn", function(e) {
+        e.stopPropagation();
+        const $btn = $(this);
+        const $tr = $btn.closest("tr");
+        const row = dataTable.row($tr).data();
+        if (!row) {
+          return AppUtils.showError("No row data found");
+        }
+        const clientName = (row[0] || "").trim();
+        if (!clientName) {
+          return AppUtils.showError("No client name found");
+        }
+        if ($btn.hasClass("add-client")) {
+          return handleAddClient(clientName);
+        }
+        if ($btn.hasClass("view-client")) {
+          return handleViewClient(clientName);
+        }
+        if ($btn.hasClass("edit-client")) {
+          return handleEditClient(clientName);
+        }
+      });
+    }
+    function handleAddClient(clientName, manual = false, isForProject = false) {
+      if ($("#client").length && !manual) {
+        $("#client").val(clientName).trigger("change");
+      }
+      AppUtils.cachedGScriptCall(
+        `sheetExists_${clientName}`,
+        "sheetExists",
+        [clientName],
+        (exists) => {
+          if (exists) {
+            AppUtils.openDrawer("#drawerManualAdd");
+            if (!isForProject) {
+              loadTasks(clientName);
+            }
+          } else {
+            AppUtils.showDashboardToast("Sheet " + clientName + " not found!", "error");
+          }
+        }
+      );
+    }
+    function handleViewClient(clientName) {
+      $("#client-v--h").val(clientName);
+      AppUtils.showDashboardToast("Loading records ...", "info");
+      AppUtils.cachedGScriptCall(
+        `sheetExists_${clientName}`,
+        "sheetExists",
+        [clientName],
+        (exists) => {
+          if (exists) {
+            loadViewClientonDrawer(clientName);
+            loadClientHrsOverview(clientName);
+          } else {
+            AppUtils.showDashboardToast("Sheet " + clientName + " not found!", "error");
+          }
+        }
+      );
+    }
+    function handleEditClient(clientName) {
+      AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+      google.script.run.withSuccessHandler((url) => window.open(url, "_blank")).withFailureHandler(() => AppUtils.showDashboardToast("Sheet doesn't exist!", "error")).getClientSheetUrl(clientName);
+    }
+    function loadTasks(clientName) {
+      if (!clientName) {
+        return;
+      }
+      const $taskSelect = $("#task");
+      $taskSelect.html(`<option>Loading...</option>`).trigger("change");
+      AppUtils.cachedGScriptCall(
+        `getTaskOptions_${clientName}`,
+        "getTaskOptions",
+        [clientName],
+        (returned) => {
+          const tasks = Array.isArray(returned) ? returned : (() => {
+            try {
+              return JSON.parse(returned);
+            } catch {
+              return [];
+            }
+          })();
+          $taskSelect.empty();
+          if (tasks.length) {
+            tasks.forEach((t) => {
+              const value = typeof t === "object" ? t.value || t.id : t;
+              const text = typeof t === "object" ? t.label || t.name : t;
+              $taskSelect.append(new Option(text, value));
+            });
+          } else {
+            $taskSelect.append(new Option("No tasks found", ""));
+          }
+          AppUtils.initSelect2("#drawerManualAdd .drawer-content");
+        }
+      );
+    }
+    function loadViewClientonDrawer(clientName) {
+      const $tbodyClient = $("#client-dt tbody");
+      $tbodyClient.html(`<tr><td colspan="4" class="text-center">Loading new records ...</td></tr>`);
+      AppUtils.cachedGScriptCall(
+        `getClientHourLogData_${clientName}`,
+        "getClientHourLogData",
+        [clientName],
+        (data) => {
+          if (!data?.length) {
+            $tbodyClient.html(`<tr><td colspan="4" class="text-center">No records found</td></tr>`);
+            return;
+          }
+          $tbodyClient.empty();
+          data.sort((a, b) => new Date(b[3]) - new Date(a[3])).slice(0, 5).forEach((row) => {
+            $tbodyClient.append(`
+            <tr>
+              <td>${row[0] || ""}</td>
+              <td>${row[1] || ""}</td>
+              <td>${row[2] || ""}</td>
+              <td>${row[3] || ""}</td>
+            </tr>
+          `);
+          });
+        }
+      );
+    }
+    function loadClientHrsOverview(clientName) {
+      AppUtils.cachedGScriptCall(
+        `getClientHours_${clientName}`,
+        "getClientHoursForOverview",
+        [clientName],
+        (data) => {
+          if (data.error === "NOT_FOUND") {
+            AppUtils.showDashboardToast("Sheet not found!", "error");
+            return;
+          }
+          AppUtils.openDrawer("#drawerManualInfo");
+          $("#tt-hrs").text(data.totalHrs || 0);
+          $("#tt-whrs").text(data.weekHrs || 0);
+          $("#tt-mhrs").text(data.monthHrs || 0);
+          $("#tt-yhrs").text(data.yearHrs || 0);
+        }
+      );
+    }
+    function handleExtraTableLogic(title) {
+      if (title === "Top Paid Accounts") {
+        dataTable.order([1, "desc"]).draw();
+        addClassToDTColumn(1, "highlight");
+        addClassToDTColumn(3, "dt-center");
+        markTopRows(3, "#table");
+      } else if (title === "Outstanding Accounts") {
+        dataTable.order([2, "desc"]).draw();
+        addClassToDTColumn(2, "highlight");
+        addClassToDTColumn(3, "dt-center");
+        markTopRows(3, "#table");
+      } else if (title === "Active Clients") {
+        reorderByStatus("Active");
+      }
+    }
+    function setupActivityTodayFilters() {
+      const notDoneCount = countNotDoneRows(dataTable);
+      const specialCount = countSpecialRows(dataTable);
+      const $wrapper = $(".main-card");
+      function dashFilter(settings, data) {
+        return data[5] === "-";
+      }
+      function waitingFilter(settings, data) {
+        const allowed = ["Moved to PM", "For QA", "Complete", "Revisions Done"];
+        return allowed.includes(data[1]) && data[5] === "-";
+      }
+      function applyFilter(func) {
+        $.fn.dataTable.ext.search = [func];
+        dataTable.draw();
+      }
+      function resetFilters() {
+        $.fn.dataTable.ext.search = [];
+        dataTable.search("").columns().search("").draw();
+      }
+      if ($wrapper.find(".not-done-div").length) {
+        $wrapper.find(".not-done-text").text(notDoneCount);
+        $(document).on("click", "#dashFilter", () => {
+          const table = $("table#table");
+          if (!table.hasClass("gc-table-filtered")) {
+            $("#resetFilterCustom").show();
+            applyFilter(dashFilter);
+            table.addClass("gc-table-filtered");
+          } else {
+            resetFilters();
+            table.removeClass("gc-table-filtered");
+          }
+        });
+      }
+      if ($wrapper.find(".special-div").length) {
+        $wrapper.find(".special-count").text(specialCount);
+        $(document).on("click", "#waitingFilter", () => {
+          const table = $("table#table");
+          if (!table.hasClass("gc-table-filtered")) {
+            $("#resetFilterCustom").show();
+            applyFilter(waitingFilter);
+            table.addClass("gc-table-filtered");
+          } else {
+            resetFilters();
+            table.removeClass("gc-table-filtered");
+          }
+        });
+      }
+    }
+    function setupTaskForm() {
+      const $taskSelect = $("#task");
+      const $clientInput = $("#client");
+      const $selectClient = $("#selectClient-a-m");
+      const $taskform = $("#taskForm");
+      if (!$taskSelect.length || !$taskform.length || !$clientInput.length) {
+        return;
+      }
+      $selectClient.on("click", function(e) {
+        e.preventDefault();
+        const $drawer = $taskform.parents(".drawer-content");
+        const $firstGroup = $taskform.find(".form-group").first();
+        const $icon = $selectClient.find("i");
+        if ($drawer.hasClass("drawer-grid-4")) {
+          $drawer.removeClass("drawer-grid-4").addClass("drawer-grid-5");
+        } else {
+          $drawer.removeClass("drawer-grid-5").addClass("drawer-grid-4");
+        }
+        if ($firstGroup.length) {
+          $firstGroup.toggleClass("element-hidden");
+        }
+        if ($icon.hasClass("fa-plus")) {
+          $icon.removeClass("fa-plus").addClass("fa-minus");
+        } else {
+          $icon.removeClass("fa-minus").addClass("fa-plus");
+        }
+        AppUtils.openDrawer("#drawerManualAdd");
+      });
+      $taskform.off("submit").on("submit", function(e) {
+        e.preventDefault();
+        const $submitBtn = $(this).find('button[type="submit"]');
+        const formData = {
+          client: ($clientInput.val() || "").trim(),
+          hour: ($("#hour").val() || "").trim(),
+          type: ($("#type").val() || "").trim(),
+          task: ($taskSelect.val() || "").trim()
+        };
+        const hasEmpty = Object.values(formData).some((v) => v === "");
+        if (hasEmpty) {
+          AppUtils.showDashboardToast("Please fill out all required fields!", "error");
+          return;
+        }
+        AppUtils.showDashboardToast("Saving Record ...", "info");
+        AppUtils.submitForm({
+          gscriptFunc: "recordManualClientHoursFromForm",
+          data: formData,
+          $btn: $submitBtn,
+          onSuccess: () => {
+            AppUtils.showDashboardToast("Hours have been successfully recorded!", "success");
+            google.script.run.pullClientProjects();
+            HourSummary.loadHourTotals(true);
+            const clientVal = formData.client;
+            AppUtils.cacheClear(`getClientHourLogData_${clientVal}`);
+            AppUtils.cacheClear(`getClientHourLogData_${clientVal}_time`);
+            AppUtils.cacheClear(`getClientHours_${clientVal}`);
+            AppUtils.cacheClear(`getClientHours_${clientVal}_time`);
+            AppUtils.resetCacheKeys(AppUtils.resetableCacheKeyForUpdatingHours);
+            $("#hour").val("");
+          }
+        });
+        AppUtils.initSelect2("#drawerManualAdd .drawer-content");
+      });
+      AppUtils.initSelect2("#drawerManualAdd .drawer-content");
+    }
+    function setupSheetViewButton() {
+      $("#viewMySheet-v-h").on("click", function() {
+        let clientName = $("#client-v--h");
+        if (clientName.length) {
+          clientName = clientName.val();
+        }
+        AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+        google.script.run.withSuccessHandler((url) => window.open(url, "_blank")).withFailureHandler(() => AppUtils.showDashboardToast("Sheet doesn't exist!", "error")).getClientSheetUrl(clientName);
+      });
+    }
+    function loadActivity() {
+      google.script.run.withSuccessHandler((data) => {
+        updateActivityTable(data);
+        if ($(".not-done-text").length) {
+          $(".not-done-text").text(countNotDoneRows(dataTable));
+        }
+        if ($(".special-count").length) {
+          $(".special-count").text(countSpecialRows(dataTable));
+        }
+      }).getDailyActivityData();
+    }
+    function updateActivityTable(data) {
+      const newDataJSON = JSON.stringify(data);
+      const cached = AppUtils.cacheGet("cache_ActivityToday");
+      const cachedJSON = cached ? JSON.stringify(cached) : null;
+      if (cachedJSON && newDataJSON === cachedJSON) {
+        return;
+      }
+      AppUtils.cacheSet("cache_ActivityToday", data);
+      const tableData = data.map((row) => [...row, ""]);
+      dataTable.clear();
+      dataTable.rows.add(tableData);
+      dataTable.draw();
+      AppUtils.playNotif();
+    }
+    function renderData(data, sheetName, title, status) {
+      const $tbody = $("#dataTableBody");
+      if (!data || !Array.isArray(data)) {
+        AppUtils.showError(title);
+        if ($tbody.length) {
+          $tbody.html(`<tr><td colspan="10">No data found for this report.</td></tr>`);
+        }
+        return;
+      }
+      if ($tbody.length) {
+        buildTableBody($tbody, data, title);
+      }
+      if ($tbody.length) {
+        bindTableActions($tbody, data);
+      }
+      initDataTable(title, "#table");
+    }
+    function renderUpsellRecords(tableData) {
+      const $container = $("#upsellTable").parent();
+      if (!$container.length) {
+        return;
+      }
+      $container.html(`
+    <table id="upsellTable" class="display table nowrap">
+      <thead>
+        <tr>
+          <th>Client Name</th>
+          <th>Upsell Hours</th>
+          <th>Orasan Date</th>
+        </tr>
+      </thead>
+      <tbody id="recordsBody"></tbody>
+    </table>
+  `);
+      const $tbody = $("#recordsBody");
+      let html;
+      if (!Array.isArray(tableData) || tableData.length === 0) {
+        html = `<tr><td colspan="3" style="text-align:center;color:#64748b">No records yet</td></tr>`;
+      } else {
+        html = tableData.map((r) => `
+      <tr>
+        <td>${escapeHtml(r[0] ?? "")}</td>
+        <td style="text-align:center;">${escapeHtml(r[1] ?? "")}</td>
+        <td style="text-align:center;">${escapeHtml(r[2] ?? "")}</td>
+      </tr>
+    `).join("");
+      }
+      $tbody.html(html);
+      if (Array.isArray(tableData) && tableData.length > 0) {
+        initDataTable("Upsell", "#upsellTable");
+      }
+    }
+    function countNotDoneRows(table) {
+      try {
+        return table.column(5).data().filter((v) => v === "-").length;
+      } catch (e) {
+        AppUtils.showError("countNotDoneRows failed:", e);
+        return 0;
+      }
+    }
+    function reorderByStatus(status) {
+      dataTable.order([3, "asc"]).draw();
+      dataTable.column(3).search(status ? "^" + status + "$" : "", true, false).draw();
+    }
+    function addClassToDTColumn(colIndex, className) {
+      dataTable.column(colIndex).nodes().to$().addClass(className);
+    }
+    function markTopRows(rowCount, tableId, rowClass = "highlight-row") {
+      const $tbody = $(`${tableId} tbody`);
+      if (!$tbody.length) {
+        return;
+      }
+      if ($tbody.find(`.${rowClass}`).length) {
+        return;
+      }
+      $tbody.find("tr").each((i, row) => {
+        if (i >= rowCount) {
+          return;
+        }
+        row.classList.add(rowClass);
+        const firstTd = row.querySelector("td");
+        if (!firstTd) {
+          return;
+        }
+        if (firstTd.querySelector(".row-rank")) {
+          return;
+        }
+        const span = document.createElement("span");
+        span.className = "row-rank";
+        span.textContent = i + 1;
+        firstTd.prepend(span);
+      });
+    }
+    function highlightLatestRow(elId, badgeColumn = 0) {
+      const $tbody = $(`#${elId}`);
+      if (!$tbody.length) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const $row = $tbody.find("tr:first");
+          if (!$row.length) {
+            return;
+          }
+          $row.find(".badge-new-report").remove();
+          $row.find("td").eq(badgeColumn).append(`
+          <span class="badge badge-pill badge-success badge-new-report ml-2">
+            NEW
+          </span>
+        `);
+          $row.hide().fadeIn(500).addClass("table-success");
+          setTimeout(() => {
+            $row.removeClass("table-success");
+          }, 15e3);
+        });
+      });
+    }
+    function escapeHtml(text) {
+      if (text === null || text === void 0) {
+        return "";
+      }
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    function countSpecialRows(table) {
+      const validStatuses = ["Moved to PM", "Revision Done", "Complete", "For QA"];
+      let count = 0;
+      try {
+        table.rows().every(function() {
+          const row = this.data();
+          if (validStatuses.includes(row[1]) && row[5] === "-") {
+            count++;
+          }
+        });
+      } catch (e) {
+        AppUtils.showError("countSpecialRows failed:", e);
+      }
+      return count;
+    }
+    return {
+      loadClients,
+      loadTasks,
+      initDataTable,
+      renderData,
+      renderUpsellRecords,
+      setupTaskForm,
+      highlightLatestRow
+    };
+  })();
+
+  // src/clients/client-ranking.js
+  var ClientRanking = /* @__PURE__ */ (() => {
+    function renderTopPaidClients() {
+      renderClientRanking({
+        cacheKey: "topPaidClients",
+        listSelector: "#top-paid-clients",
+        avatarClass: "bg-malibu-beach",
+        sortFn: sortTopPaid,
+        rightContentFn: getTopPaidRightContent
+      });
+    }
+    function renderLowestPaidClients() {
+      renderClientRanking({
+        cacheKey: "lowestPaidClients",
+        listSelector: "#lowest-paid-clients",
+        avatarClass: "bg-love-kiss",
+        sortFn: sortLowestPaid,
+        rightContentFn: getLowestPaidRightContent
+      });
+    }
+    function renderClientRanking(config) {
+      AppUtils.cachedGScriptCall(
+        config.cacheKey,
+        "getTopPaidClients",
+        [],
+        (data) => {
+          if (!Array.isArray(data) || !data.length) {
+            return;
+          }
+          const ul = document.querySelector(config.listSelector);
+          if (!ul) {
+            return;
+          }
+          ul.innerHTML = "";
+          const sorted = config.sortFn([...data]);
+          renderRankingList(ul, sorted, config);
+        }
+      );
+    }
+    function renderRankingList(ul, clients, config) {
+      clients.forEach((client) => {
+        createRankingItem(ul, client, config);
+      });
+    }
+    function createRankingItem(ul, client, config) {
+      const [name, paid, owed] = client;
+      AppUtils.cachedGScriptCall(
+        `role_${name}`,
+        "getRoleFromSheet",
+        [name],
+        (role) => {
+          role = role || "";
+          const li = document.createElement("li");
+          li.className = "list-group-item";
+          li.innerHTML = `
+          <div class="widget-content p-0">
+            <div class="widget-content-wrapper">
+
+              <div class="widget-content-left mr-3">
+                <div
+                  class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
+                  text-white rounded-circle d-flex align-items-center justify-content-center"
+                  style="width:42px;height:42px;font-weight:600;">
+                  ${AppUtils.getInitials(name)}
+                </div>
+              </div>
+
+              <div class="widget-content-left">
+                <div class="widget-heading">${name}</div>
+                <div class="widget-subheading">${role}</div>
+              </div>
+
+              <div class="widget-content-right font-weight-bold">
+                ${config.rightContentFn(paid, owed)}
+              </div>
+
+            </div>
+          </div>
+        `;
+          ul.appendChild(li);
+        }
+      );
+    }
+    function sortTopPaid(data) {
+      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
+    }
+    function sortLowestPaid(data) {
+      return data.sort((a, b) => {
+        const paidDiff = (a[1] || 0) - (b[1] || 0);
+        if (paidDiff !== 0) {
+          return paidDiff;
+        }
+        return (b[2] || 0) - (a[2] || 0);
+      }).slice(0, 10);
+    }
+    function getTopPaidRightContent(paid, owed) {
+      if (owed === 0) {
+        return `
+        <div class="font-size-xs text-muted">
+          <small class="opacity-5 pr-1">$</small>
+          <span>${paid}</span>
+          <small class="text-warning pl-2">
+            <i class="fa fa-dot-circle"></i>
+          </small>
+        </div>
+      `;
+      }
+      return `
+      <div class="font-size-xs text-muted">
+        <span>${paid}</span>
+        <small class="text-success pl-2">
+          <i class="fa fa-angle-up"></i>
+        </small>
+      </div>
+
+      <div class="font-size-xs text-muted">
+        <span>${owed}</span>
+        <small class="text-danger pl-2">
+          <i class="fa fa-angle-down"></i>
+        </small>
+      </div>
+    `;
+    }
+    function getLowestPaidRightContent(paid, owed) {
+      let html = `
+      <div class="font-size-xs text-muted">
+        <span>${paid}</span>
+        <small class="text-danger pl-2">
+          <i class="fa fa-angle-down"></i>
+        </small>
+      </div>
+    `;
+      if (owed > 0) {
+        html += `
+        <div class="font-size-xs text-muted">
+          <span>${owed}</span>
+          <small class="text-warning pl-2">
+            <i class="fa fa-exclamation-circle"></i>
+          </small>
+        </div>
+      `;
+      }
+      return html;
+    }
+    return {
+      renderTopPaidClients,
+      renderLowestPaidClients
+    };
+  })();
+
+  // src/clients/client-directory.js
+  var ClientDirectory = /* @__PURE__ */ (() => {
+    function loadClientDirectory(source) {
+      bindClientDirectoryEvents();
+      const cached = fetchCachedClientDirectory(source);
+      if (cached) {
+        renderClientDirectory(cached);
+        refreshClientDirectory(source, cached);
+        return;
+      }
+      fetchClientDirectory(source);
+    }
+    function fetchCachedClientDirectory(source) {
+      const cached = AppUtils.cacheGet(source);
+      return Array.isArray(cached) && cached.length ? cached : null;
+    }
+    function fetchClientDirectory(source) {
+      AppUtils.cachedGScriptCall(
+        source,
+        "getClientTableDataWithNickname",
+        [source],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showDashboardToast("Something went wrong!", "error");
+            return;
+          }
+          renderClientDirectory(data);
+        }
+      );
+    }
+    function refreshClientDirectory(source, cached) {
+      AppUtils.cachedGScriptCall(
+        source,
+        "getClientTableDataWithNickname",
+        [source],
+        (fresh) => {
+          if (!Array.isArray(fresh)) {
+            return;
+          }
+          if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
+            renderClientDirectory(fresh);
+          }
+        }
+      );
+    }
+    function renderClientDirectory(data) {
+      const tbody = document.getElementById("dataBody");
+      if (!tbody) {
+        return;
+      }
+      tbody.innerHTML = "";
+      data.forEach((client, index) => {
+        tbody.appendChild(createClientDirectoryRow(client, index));
+      });
+    }
+    function createClientDirectoryRow(client, index) {
+      const row = document.createElement("tr");
+      const initials = AppUtils.getInitials(client.name);
+      row.innerHTML = `
+      <td class="text-center text-muted font-weight-bold">${index + 1}</td>
+
+      <td>
+        <div class="widget-content p-0">
+          <div class="widget-content-wrapper">
+            <div class="widget-content-left mr-3">
+              <div
+                class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
+                style="width:40px;height:40px;font-weight:600;"
+              >
+                ${initials}
+              </div>
+            </div>
+
+            <div class="widget-content-left flex2">
+              <div class="widget-heading">${client.name}</div>
+              <div class="widget-subheading opacity-7">${client.role || ""}</div>
+            </div>
+          </div>
+        </div>
+      </td>
+
+      <td class="text-center text-muted">${client.id || ""}</td>
+
+      <td class="text-center text-muted">${client.city || ""}</td>
+
+      <td class="text-center">
+        <div class="badge text-white ${getStatusColor(client.status)}">
+          ${client.status || ""}
+        </div>
+      </td>
+
+      <td class="text-center action-btn">
+        <i class="pe-7s-note open-client-btn"></i>
+      </td>
+    `;
+      return row;
+    }
+    function bindClientDirectoryEvents() {
+      const tbody = document.getElementById("dataBody");
+      if (!tbody || tbody.dataset.bound) {
+        return;
+      }
+      tbody.dataset.bound = "true";
+      tbody.addEventListener("click", handleClientDirectoryClick);
+    }
+    function handleClientDirectoryClick(e) {
+      const btn = e.target.closest(".open-client-btn");
+      if (!btn) {
+        return;
+      }
+      const row = btn.closest("tr");
+      if (!row) {
+        return;
+      }
+      const clientName = row.querySelector(".widget-heading")?.textContent;
+      AppUtils.showDashboardToast("Redirecting to sheet!", "info");
+      google.script.run.withSuccessHandler((url) => {
+        if (url && url.startsWith("http")) {
+          window.open(url, "_blank");
+        } else {
+          AppUtils.showError(url);
+        }
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+        AppUtils.showDashboardToast("Something went wrong!", "error");
+      }).goToPresentClient(clientName);
+    }
+    function getStatusColor(status) {
+      if (!status) {
+        return "btn-secondary";
+      }
+      status = status.toLowerCase();
+      if (status.includes("online") || status === "active") {
+        return "bg-grow-early";
+      }
+      if (status.includes("idle")) {
+        return "bg-sunny-morning";
+      }
+      if (status.includes("offline") || status === "inactive") {
+        return "bg-love-kiss";
+      }
+      return "btn-secondary";
+    }
+    return {
+      loadClientDirectory
+    };
+  })();
+
+  // src/projects/project-ranking.js
+  var ProjectRankings = /* @__PURE__ */ (() => {
+    function renderTopProjects() {
+      renderProjectRanking({
+        cacheKey: "topProjects",
+        method: "getTopProjects",
+        listSelector: "#top-projects",
+        avatarClass: "bg-malibu-beach",
+        sortFn: sortTopProjects,
+        iconClass: "fas fa-briefcase",
+        iconColor: "text-warning"
+      });
+    }
+    function renderLowestProjects() {
+      renderProjectRanking({
+        cacheKey: "lowestProjects",
+        method: "getTopProjects",
+        listSelector: "#lowest-projects",
+        avatarClass: "bg-love-kiss",
+        sortFn: sortLowestProjects,
+        iconClass: "fas fa-exclamation-circle",
+        iconColor: "text-danger"
+      });
+    }
+    function renderProjectRanking(config) {
+      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
+        if (!Array.isArray(data) || !data.length) {
+          return;
+        }
+        const list = document.querySelector(config.listSelector);
+        if (!list) {
+          return;
+        }
+        list.innerHTML = "";
+        renderProjectList(list, config.sortFn([...data]), config);
+      });
+    }
+    function renderProjectList(list, projects, config) {
+      projects.forEach((project) => {
+        list.appendChild(createProjectItem(project, config));
+      });
+    }
+    function createProjectItem(project, config) {
+      const [projectName, hours, client] = project;
+      const li = document.createElement("li");
+      li.className = "list-group-item";
+      li.innerHTML = `
+      <div class="widget-content p-0">
+        <div class="widget-content-wrapper">
+
+          <div class="widget-content-left mr-3">
+            <div
+              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
+              text-white rounded-circle d-flex align-items-center justify-content-center"
+              style="width:42px;height:42px;font-weight:600;">
+              ${AppUtils.getInitials(client)}
+            </div>
+          </div>
+
+          <div class="widget-content-left">
+            <div class="widget-heading">
+              ${projectName}
+            </div>
+
+            <div class="widget-subheading">
+              ${client}
+            </div>
+          </div>
+
+          <div class="widget-content-right font-weight-bold">
+            <div class="font-size-xs text-muted">
+              <span>${hours}</span>
+              <small class="${config.iconColor} pl-2">
+                <i class="${config.iconClass}"></i>
+              </small>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+      return li;
+    }
+    function sortTopProjects(data) {
+      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
+    }
+    function sortLowestProjects(data) {
+      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
+    }
+    return {
+      renderTopProjects,
+      renderLowestProjects
+    };
+  })();
+
+  // src/pages/all-clients-page.js
+  var allClientsPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off("click.allClients");
+      $(document).off("submit.allClients");
+    };
+    const bindActions = () => {
+      $(document).off("click.allClients", "#add-new-client-sheet").on("click.allClients", "#add-new-client-sheet", function() {
+        AppUtils.openDrawer("#drawerClientAdd");
+        const $addClientForm = $("#addClientForm");
+        $addClientForm.off("submit.allClients").on("submit.allClients", function(e) {
+          e.preventDefault();
+          const $submitBtn = $(this).find('button[type="submit"]');
+          const clientName = $("#sheet_name").val().trim();
+          if (!clientName) {
+            AppUtils.showDashboardToast("Client name is required!", "error");
+            return;
+          }
+          AppUtils.showDashboardToast("Creating new sheet ...", "info");
+          AppUtils.submitForm({
+            gscriptFunc: "createClientSheetFromDialog",
+            data: { name: clientName },
+            $btn: $submitBtn,
+            onSuccess: () => {
+              AppUtils.showDashboardToast("Sheet created successfully!", "success");
+              google.script.run.withFailureHandler(
+                () => AppUtils.showDashboardToast("Syncing error!", "error")
+              ).syncClientSheetList();
+              AppUtils.cacheClear("allClientsData");
+              if (RouterModule.getCurrentPage() === "addManualHours") {
+                TableModule.loadClients();
+              }
+              ClientDirectory.loadClientDirectory("allClientsData");
+              $("#sheet_name").val("");
+            }
+          });
+        });
+      });
+    };
+    const loadData = () => {
+      ClientDirectory.loadClientDirectory("allClientsData");
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    };
+    return { init, destroy };
+  })();
+
+  // src/pages/upsell-overview-page.js
+  var upsellOverviewPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $("#addtoSheet-upsell").off("click");
+      $("#upsellForm").off("submit");
+    };
+    const bindActions = () => {
+      $("#addtoSheet-upsell").on("click", function() {
+        AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+        google.script.run.withSuccessHandler(function(url) {
+          window.open(url, "_blank");
+        }).withFailureHandler((err) => {
+          AppUtils.showError(err);
+          AppUtils.showDashboardToast("Sheet doesn't exist!", "error");
+        }).getClientSheetUrl("Upsells");
+      });
+      $("#upsellForm").off("submit").on("submit", function(e) {
+        e.preventDefault();
+        const $submitBtn = $(this).find('button[type="submit"]');
+        const fields = [
+          "clientName",
+          "screenshot",
+          "upsellHours",
+          "totalHours",
+          "orasanDate",
+          "reportedDate"
+        ];
+        const required = ["clientName", "upsellHours", "reportedDate"];
+        const data = {};
+        fields.forEach((id) => {
+          const $el = $("#" + id);
+          data[id] = $el.length ? ($el.val() || "").trim() : "";
+        });
+        if (required.some((k) => data[k] === "")) {
+          AppUtils.showDashboardToast("Please fill out all required fields!", "error");
+          return;
+        }
+        AppUtils.showDashboardToast("Saving Record ...", "info");
+        AppUtils.submitForm({
+          gscriptFunc: "addUpsellEntry",
+          data,
+          $btn: $submitBtn,
+          onSuccess: () => {
+            AppUtils.showDashboardToast("Record added successfully!", "success");
+            fields.forEach((id) => {
+              const $el = $("#" + id);
+              if ($el.length) {
+                $el.val("");
+              }
+            });
+            AppUtils.cacheClear("upsellRecords");
+            AppUtils.cacheClear("upsellRecords_time");
+            AppUtils.cacheClear("upsellSummary");
+            AppUtils.cacheClear("upsellSummary_time");
+            setTimeout(() => {
+              loadUpsellSummary(true);
+              loadUpsellRecords(true);
+            }, 600);
+          }
+        });
+      });
+    };
+    const loadData = () => {
+      loadUpsellSummary();
+      loadUpsellRecords();
+    };
+    function loadUpsellSummary(forceRefresh = false) {
+      AppUtils.cachedGScriptCall(
+        "upsellSummary",
+        "getUpsellSummary",
+        [],
+        function(summary) {
+          summary = summary || { total: 0, today: 0, month: 0 };
+          const totalEl = document.getElementById("total");
+          const todayEl = document.getElementById("today");
+          const monthEl = document.getElementById("month");
+          if (totalEl) {
+            totalEl.textContent = summary.total;
+          }
+          if (todayEl) {
+            todayEl.textContent = summary.today;
+          }
+          if (monthEl) {
+            monthEl.textContent = summary.month;
+          }
+        }
+      );
+    }
+    function loadUpsellRecords(forceRefresh = false) {
+      AppUtils.cachedGScriptCall(
+        "upsellRecords",
+        "getUpsellRecords",
+        [],
+        function(table) {
+          TableModule.renderUpsellRecords(table);
+        }
+      );
+    }
+    return { init, destroy };
+  })();
+
+  // src/charts.js
+  var ChartModule = /* @__PURE__ */ (() => {
+    let chartInstances = {};
+    let animationFrames = {};
+    function loadChart(type, animated = false, year = "all") {
+      const chartDiv = document.getElementById("chart_div_" + type);
+      if (!chartDiv) {
+        return AppUtils.showError(`chart_div_${type} not found`);
+      }
+      chartDiv.innerText = "Loading chart...";
+      const funcMap = {
+        daily: "getDailyChartData",
+        monthly: "getMonthlyChartData",
+        yearly: "getYearlyChartData",
+        monthly_prev: "getMonthlyChartData",
+        monthly_prev_combined: "getPrevYearMonthlyChartData",
+        hourly: "getHourlyChartData"
+      };
+      const func = funcMap[type];
+      if (!func) {
+        return AppUtils.showError(`No Apps Script function mapped for type ${type}`);
+      }
+      const cacheKey = func === "getYearlyChartData" ? `chartData_${type}_${year}` : `chartData_${type}`;
+      const args = func === "getYearlyChartData" ? [year] : [];
+      AppUtils.cachedGScriptCall(cacheKey, func, args, (data) => {
+        if (!Array.isArray(data) || !data.length) {
+          chartDiv.innerText = "No data found.";
+          return;
+        }
+        drawChart(type, data, false, animated);
+      });
+    }
+    function loadPrevYearCombinedChart() {
+      const chartId = "monthly_prev_merged";
+      const prevCacheKey = "chartData_monthly_prev";
+      const currentCacheKey = "chartData_monthly";
+      let prevData = AppUtils.cacheGet(prevCacheKey);
+      let currentData = AppUtils.cacheGet(currentCacheKey);
+      if (prevData && currentData) {
+        drawChart(chartId, { prevYear: prevData, currentYear: currentData });
+      }
+      if (!prevData) {
+        fetchData("monthly_prev", prevCacheKey, (data) => {
+          prevData = data;
+          if (currentData) {
+            drawChart(chartId, { prevYear: prevData, currentYear: currentData });
+          }
+        });
+      }
+      if (!currentData) {
+        fetchData("monthly", currentCacheKey, (data) => {
+          currentData = data;
+          if (prevData) {
+            drawChart(chartId, { prevYear: prevData, currentYear: currentData });
+          }
+        });
+      }
+      function fetchData(type, cacheKey, cb) {
+        const funcName = type === "monthly_prev" ? "getPrevYearMonthlyChartData" : "getMonthlyChartData";
+        google.script.run.withSuccessHandler((data) => {
+          if (!Array.isArray(data) || !data.length) {
+            return AppUtils.showError(`${type} returned empty or invalid data`);
+          }
+          AppUtils.cacheSet(cacheKey, data);
+          cb(data);
+        }).withFailureHandler((err) => AppUtils.showError(`Failed to fetch ${type}: ${err}`))[funcName]();
+      }
+    }
+    function drawChart(type, dataArray, debug = false, animated = false) {
+      const log = (...args) => debug && console.log(...args);
+      const warn = (...args) => debug && console.warn(...args);
+      const error = (...args) => debug && console.error(...args);
+      log("drawChart called \u{1F449}", { type, dataArray });
+      const chartDiv = document.getElementById("chart_div_" + type);
+      if (!chartDiv) {
+        error(`chart_div_${type} not found`);
+        return AppUtils.showError(`chart_div_${type} not found`);
+      }
+      if (!dataArray || Array.isArray(dataArray) && !dataArray.length) {
+        warn("No data found for chart:", type);
+        chartDiv.innerText = "No data found.";
+        return;
+      }
+      chartDiv.innerHTML = `<canvas id="chartCanvas_${type}"></canvas>`;
+      const canvas = document.getElementById(`chartCanvas_${type}`);
+      const ctx = canvas.getContext("2d");
+      if (chartInstances[type]) {
+        log("Destroying existing chart instance:", type);
+        chartInstances[type].destroy();
+        delete chartInstances[type];
+      }
+      if (type === "yearly") {
+        log("Rendering yearly bar chart");
+        const labels2 = dataArray.map((r) => r[0]);
+        const paid = dataArray.map((r) => Number(r?.[2]) || 0);
+        const owed = dataArray.map((r) => Number(r?.[3]) || 0);
+        const net = dataArray.map((r) => Number(r?.[4]) || 0);
+        log("Yearly data parsed:", { labels: labels2, paid, owed, net });
+        const paidGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+        paidGradient.addColorStop(0, "rgba(14, 165, 233, 0.8)");
+        paidGradient.addColorStop(1, "rgba(14, 165, 233, 0.4)");
+        const owedGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+        owedGradient.addColorStop(0, "rgba(249, 115, 22, 0.8)");
+        owedGradient.addColorStop(1, "rgba(249, 115, 22, 0.4)");
+        const netGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+        netGradient.addColorStop(0, "rgba(16, 185, 129, 0.8)");
+        netGradient.addColorStop(1, "rgba(16, 185, 129, 0.4)");
+        chartInstances[type] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels2,
+            datasets: [
+              { label: "Net Paid", data: paid, backgroundColor: paidGradient },
+              { label: "Net Owed", data: owed, backgroundColor: owedGradient },
+              { label: "Net Hrs", data: net, backgroundColor: netGradient }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "top" },
+              tooltip: {
+                mode: "index",
+                intersect: false,
+                callbacks: {
+                  label: (ctx2) => `${ctx2.dataset.label}: ${ctx2.formattedValue} hrs`
+                }
+              }
+            },
+            interaction: { mode: "index", intersect: false },
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true }
+            }
+          }
+        });
+        return;
+      }
+      if (type === "hourly") {
+        log("Rendering hourly bar chart");
+        const labels2 = dataArray.map((r) => String(r[0] || ""));
+        const values2 = dataArray.map((r) => Number(r[1]) || 0);
+        const barGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+        barGradient.addColorStop(0, "rgba(14,165,233,0.8)");
+        barGradient.addColorStop(1, "rgba(14,165,233,0.3)");
+        chartInstances[type] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels2,
+            datasets: [{
+              label: "Total",
+              data: values2,
+              backgroundColor: barGradient,
+              borderColor: "#0ea5e9",
+              borderWidth: 2,
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              title: {
+                display: true,
+                text: "Hourly History by Year",
+                color: "#334155",
+                font: { size: 18, weight: "600" }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx2) => `${ctx2.formattedValue} hrs`
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { color: "#475569" }
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: "rgba(0,0,0,0.05)" },
+                ticks: { color: "#475569" }
+              }
+            }
+          }
+        });
+        return;
+      }
+      if (type === "monthly_prev_merged") {
+        let fillMonthlyData = function(data) {
+          return months.map((m) => {
+            const entry = data.find((d) => {
+              if (!d || d.length < 2) {
+                return false;
+              }
+              const monthName = d[0]?.split(" ")[0];
+              return monthMap[monthName] === m;
+            });
+            return entry ? Number(entry[1]) : 0;
+          });
+        };
+        log("Rendering merged monthly chart");
+        const months = Array.from({ length: 12 }, (_, i) => i + 1);
+        const monthMap = {
+          January: 1,
+          February: 2,
+          March: 3,
+          April: 4,
+          May: 5,
+          June: 6,
+          July: 7,
+          August: 8,
+          September: 9,
+          October: 10,
+          November: 11,
+          December: 12
+        };
+        const prev = fillMonthlyData(dataArray.prevYear || []);
+        const current = fillMonthlyData(dataArray.currentYear || []);
+        log("Monthly data parsed:", { prev, current });
+        const prevGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+        prevGradient.addColorStop(0, "rgba(249, 115, 22, 0.8)");
+        prevGradient.addColorStop(1, "rgba(249, 115, 22, 0.4)");
+        const currentGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+        currentGradient.addColorStop(0, "rgba(14, 165, 233, 0.8)");
+        currentGradient.addColorStop(1, "rgba(14, 165, 233, 0.4)");
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        chartInstances[type] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: monthNames,
+            datasets: [
+              { label: "Previous Year", data: prev, backgroundColor: prevGradient },
+              { label: "Current Year", data: current, backgroundColor: currentGradient }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "top" } },
+            interaction: { mode: "index", intersect: false },
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true }
+            }
+          }
+        });
+        return;
+      }
+      log("Rendering line chart");
+      const labels = dataArray.map((r) => r[0]);
+      const values = dataArray.map((r) => Number(r[1] || 0));
+      log("Line chart data:", { labels, values });
+      const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+      gradient.addColorStop(0, "rgba(14, 165, 233, 0.5)");
+      gradient.addColorStop(1, "rgba(231, 246, 254, 0.2)");
+      chartInstances[type] = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: type === "monthly" ? "Monthly Data" : "Daily Data",
+            data: values,
+            borderColor: "#0ea5e9",
+            backgroundColor: gradient,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          ...animated && {
+            animations: {
+              tension: {
+                duration: 1500,
+                easing: "easeInOutQuart",
+                from: 1,
+                to: 0.4,
+                loop: true
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { display: false }, border: { display: false } },
+            y: { grid: { display: false }, ticks: { display: false }, border: { display: false } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+      log("\u2705 Chart rendered:", type);
+    }
+    function drawRealtimeAnimatedChart() {
+      const type = "sample_realtime_animated";
+      const chartDiv = document.getElementById("chart_div_" + type);
+      if (!chartDiv) {
+        return;
+      }
+      chartDiv.innerHTML = `<canvas id="chartCanvas_${type}"></canvas>`;
+      const ctx = document.getElementById(`chartCanvas_${type}`).getContext("2d");
+      if (chartInstances[type]) {
+        chartInstances[type].destroy();
+        delete chartInstances[type];
+      }
+      const realtimeData = {
+        datasets: [
+          {
+            label: "Dataset 1",
+            data: [],
+            borderColor: "#0ea5e9",
+            backgroundColor: "transparent",
+            borderDash: [8, 4],
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.4
+          },
+          {
+            label: "Dataset 2",
+            data: [],
+            borderColor: "#f97316",
+            backgroundColor: "transparent",
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.4
+          }
+        ]
+      };
+      chartInstances[type] = new Chart(ctx, {
+        type: "line",
+        data: realtimeData,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: {
+            intersect: false,
+            mode: "nearest"
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              type: "linear",
+              ticks: {
+                display: false
+              },
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              beginAtZero: false,
+              grid: {
+                display: false
+              }
+            }
+          }
+        }
+      });
+      let lastTime = 0;
+      let value1 = 20;
+      let value2 = 60;
+      let target1 = 20;
+      let target2 = 60;
+      function animate(time) {
+        if (!chartInstances[type]) {
+          return;
+        }
+        if (time - lastTime > 80) {
+          const now = Date.now();
+          value1 += (target1 - value1) * 0.03;
+          value2 += (target2 - value2) * 0.03;
+          if (Math.abs(value1 - target1) < 2) {
+            target1 = Math.random() * 100;
+          }
+          if (Math.abs(value2 - target2) < 2) {
+            target2 = Math.random() * 100;
+          }
+          chartInstances[type].data.datasets[0].data.push({
+            x: now,
+            y: value1
+          });
+          chartInstances[type].data.datasets[1].data.push({
+            x: now,
+            y: value2
+          });
+          const cutoff = now - 3e4;
+          chartInstances[type].data.datasets.forEach((ds) => {
+            ds.data = ds.data.filter((p) => p.x >= cutoff);
+          });
+          chartInstances[type].options.scales.x.min = cutoff;
+          chartInstances[type].options.scales.x.max = now;
+          chartInstances[type].update("none");
+          lastTime = time;
+        }
+        animationFrames[type] = requestAnimationFrame(animate);
+        ;
+      }
+      animationFrames[type] = requestAnimationFrame(animate);
+      ;
+    }
+    function destroyRealtimeChart() {
+      Object.keys(animationFrames).forEach((type) => {
+        cancelAnimationFrame(animationFrames[type]);
+      });
+      animationFrames = {};
+      Object.keys(chartInstances).forEach((type) => {
+        chartInstances[type].destroy();
+        delete chartInstances[type];
+      });
+      chartInstances = {};
+    }
+    return {
+      loadChart,
+      drawRealtimeAnimatedChart,
+      loadPrevYearCombinedChart,
+      destroyRealtimeChart
+    };
+  })();
+
+  // src/pages/hourly-overview-page.js
+  var hourlyOverviewPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $("#addtoSheet-hourly").off("click");
+      $("#addMonthTotalForm").off("submit");
+    };
+    const bindActions = () => {
+      $("#addtoSheet-hourly").on("click", function() {
+        AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+        google.script.run.withSuccessHandler(function(url) {
+          window.open(url, "_blank");
+        }).withFailureHandler((err) => {
+          AppUtils.showError(err);
+          AppUtils.showDashboardToast("Sheet doesn't exist!", "error");
+        }).getClientSheetUrl("Hourly History");
+      });
+      $("#addMonthTotalForm").off("submit").on("submit", function(e) {
+        e.preventDefault();
+        const $fValue = $("#fValue");
+        const fValueVal = ($fValue.val() || "").trim();
+        const $submitBtn = $(this).find('button[type="submit"]');
+        if (!fValueVal) {
+          AppUtils.showDashboardToast("Please enter the number!", "error");
+          return;
+        }
+        AppUtils.showDashboardToast("Saving Currrent Month Total ...", "info");
+        AppUtils.submitForm({
+          gscriptFunc: "addCurrMthTotalHrly",
+          data: { fValue: fValueVal },
+          $btn: $submitBtn,
+          onSuccess: () => {
+            AppUtils.showDashboardToast("Successfully added Total!", "success");
+            $fValue.val("");
+          }
+        });
+      });
+    };
+    function loadTotalHourlyHours() {
+      google.script.run.withSuccessHandler(function(dt) {
+        const ttlw = $("#total-hourly-hours");
+        if (ttlw.length) {
+          ttlw.children("span").text(dt);
+        }
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+        AppUtils.showDashboardToast(
+          "Sheet or cell value doesn't exist!",
+          "error"
+        );
+      }).getDirectCellValueSafe("Hourly History", "B8");
+    }
+    const loadData = () => {
+      ChartModule.loadChart("hourly");
+      loadTotalHourlyHours();
+    };
+    return { init, destroy };
+  })();
+
+  // src/reports/history.js
+  var ReportHistory = /* @__PURE__ */ (() => {
+    function loadReportHistory(cacheKey, serverFunction, tableBodyId, callback = null, refresh = false) {
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        serverFunction,
+        [],
+        (data) => {
+          const reportLogs = data?.reportLogs || [];
+          renderReportHistory(tableBodyId, reportLogs);
+          if (typeof callback !== "function") {
+            return;
+          }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              callback(data);
+            });
+          });
+        },
+        false,
+        refresh
+      );
+    }
+    function renderReportHistory(tableBodyId, reportLogs) {
+      const tbody = $(`#${tableBodyId}`);
+      if (!tbody.length) {
+        return;
+      }
+      tbody.empty();
+      if (!Array.isArray(reportLogs) || !reportLogs.length) {
+        renderEmptyReportHistory(tbody);
+        return;
+      }
+      reportLogs.forEach((log, index) => {
+        tbody.append(createReportHistoryRow(log, index));
+      });
+    }
+    function renderEmptyReportHistory(tbody) {
+      tbody.html(`
+      <tr>
+        <td
+          colspan="4"
+          class="text-center text-muted py-4"
+        >
+          No reports generated yet.
+        </td>
+      </tr>
+    `);
+    }
+    function createReportHistoryRow(log, index) {
+      return `
+      <tr>
+        <td class="text-center">
+          <b>${index + 1}</b>
+        </td>
+
+        <td>
+          ${log.date || ""}
+        </td>
+
+        <td class="text-center">
+          <span class="badge bg-light text-info">
+            ${log.name || ""}
+          </span>
+        </td>
+
+        <td class="text-center">
+          <div class="btn-group btn-group-sm">
+
+            <button
+              class="btn btn-report-action btn-view-report"
+              data-url="${log.link || ""}"
+              title="View Report"
+            >
+              <i class="fa fa-eye"></i>
+            </button>
+
+            <button
+              class="btn btn-report-action btn-email-report"
+              data-id="${log.id || ""}"
+              title="Send Email"
+            >
+              <i class="fa fa-envelope"></i>
+            </button>
+
+            <button
+              class="btn btn-report-action btn-discord-report"
+              data-id="${log.id || ""}"
+              title="Send to Discord"
+            >
+              <i class="fab fa-discord"></i>
+            </button>
+
+          </div>
+        </td>
+      </tr>
+    `;
+    }
+    function loadCustomMonthlyReportsPageData(callback = null, refresh = false) {
+      loadReportHistory(
+        "monthlyReportsPageData",
+        "getMonthlyReportHistory",
+        "monthly-report-history",
+        callback,
+        refresh
+      );
+    }
+    function loadCustomYearlyReportsPageData(callback = null, refresh = false) {
+      loadReportHistory(
+        "yearlyReportsPageData",
+        "getYearlyReportHistory",
+        "yearly-report-history",
+        callback,
+        refresh
+      );
+    }
+    return {
+      loadCustomMonthlyReportsPageData,
+      loadCustomYearlyReportsPageData
+    };
+  })();
+
+  // src/reports/service.js
+  var ReportService = /* @__PURE__ */ (() => {
+    function getLatestReport() {
+      const data = AppUtils.cacheGet("reportsOverview");
+      if (!data || !data.logs?.length) {
+        AppUtils.showDashboardToast("No reports found.", "error");
+        return null;
+      }
+      return data.logs[0];
+    }
+    return { getLatestReport };
+  })();
+
+  // src/reports/actions.js
+  var ReportActions = /* @__PURE__ */ (() => {
+    function downloadLatestPDF(btn) {
+      const report = getLatestReport(btn);
+      if (!report) {
+        return;
+      }
+      window.open(report.link, "_blank");
+      btn.prop("disabled", false);
+    }
+    function emailLatestReport(btn) {
+      sendLatestReport({
+        btn,
+        reportMethod: "emailLatestReport",
+        loadingMessage: "Sending email...",
+        successMessage: "Latest report emailed!",
+        errorMessage: "Failed to send email."
+      });
+    }
+    function sendLatestReportToDiscord(btn) {
+      sendLatestReport({
+        btn,
+        reportMethod: "sendLatestReportToDiscord",
+        loadingMessage: "Sending Discord notification...",
+        successMessage: "Discord notification sent!",
+        errorMessage: "Failed to send Discord notification."
+      });
+    }
+    function sendLatestReport(config) {
+      const report = getLatestReport(config.btn);
+      if (!report) {
+        return;
+      }
+      AppUtils.showDashboardToast(config.loadingMessage, "info");
+      google.script.run.withSuccessHandler(() => {
+        handleReportSuccess(config.btn, config.successMessage);
+      }).withFailureHandler((err) => {
+        handleReportFailure(config.btn, err, config.errorMessage);
+      })[config.reportMethod](report);
+    }
+    function getLatestReport(btn) {
+      const report = ReportService.getLatestReport();
+      if (!report) {
+        btn.prop("disabled", false);
+        return null;
+      }
+      return report;
+    }
+    function handleReportSuccess(btn, message) {
+      btn.prop("disabled", false);
+      AppUtils.showDashboardToast(message, "success");
+    }
+    function handleReportFailure(btn, err, message) {
+      btn.prop("disabled", false);
+      AppUtils.showError(err);
+      AppUtils.showDashboardToast(message, "error");
+    }
+    return {
+      downloadLatestPDF,
+      emailLatestReport,
+      sendLatestReportToDiscord
+    };
+  })();
+
+  // src/reports/generator.js
+  var ReportGenerator = /* @__PURE__ */ (() => {
+    const REPORT_MAX_ATTEMPTS = 60;
+    const REPORT_CHECK_INTERVAL = 5e3;
+    const CONFIG = {
+      yearly: {
+        fields: ["#yearly-report-year"],
+        reportName: ({ year }) => `${year} Performance`,
+        updateArgs: ({ year }) => [null, year],
+        historyTableId: "yearly-report-history",
+        successMessage: "Annual report generated successfully!",
+        reloadHistory: (callback) => ReportHistory.loadCustomYearlyReportsPageData(callback, true)
+      },
+      monthly: {
+        fields: ["#monthly-report-month", "#monthly-report-year"],
+        reportName: ({ month, year }) => `${month} ${year}`,
+        updateArgs: ({ month, year }) => [month, year],
+        historyTableId: "monthly-report-history",
+        successMessage: "Monthly report generated successfully!",
+        reloadHistory: (callback) => ReportHistory.loadCustomMonthlyReportsPageData(callback, true)
+      }
+    };
+    function setGenerateState(type, btn, disabled) {
+      btn.prop("disabled", disabled);
+      CONFIG[type].fields.forEach((selector) => {
+        $(selector).prop("disabled", disabled);
+      });
+    }
+    function handleGenerateError(type, btn, err, message = "Something went wrong!") {
+      setGenerateState(type, btn, false);
+      if (err) {
+        console.error(err);
+        AppUtils.showError(err);
+      }
+      AppUtils.showDashboardToast(message, "error");
+    }
+    function prepareReportGeneration(type, btn, params) {
+      const cfg = CONFIG[type];
+      const reportName = cfg.reportName(params);
+      google.script.run.withFailureHandler((err) => {
+        setGenerateState(type, btn, false);
+        AppUtils.showError(err);
+      }).withSuccessHandler((result) => {
+        if (!result.exists) {
+          requestReportGeneration(cfg, type, btn, params);
+          return;
+        }
+        showExistsModal(cfg, type, btn, params, result.report);
+      }).checkExistingReport(type, reportName);
+    }
+    function showExistsModal(cfg, type, btn, params, report) {
+      const ns = `.${type}ReportModal`;
+      AppUtils.openModal("#app-modal", {
+        placement: "center",
+        header: "<div></div>",
+        body: `
+                <h5 class="modal-title">
+                    <strong>Report Already Exists</strong>
+                </h5>
+                <p>
+                    A report for <strong>${report.name}</strong> already exists.
+                </p>
+            `,
+        footer: `
+                <button class="btn btn-secondary btn-lg btn-cancel">
+                    Cancel
+                </button>
+                <button class="btn btn-info btn-lg btn-download">
+                    Download
+                </button>
+                <button class="btn btn-danger btn-lg btn-generate">
+                    Generate New
+                </button>
+            `,
+        onOpen($modal) {
+          $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
+            AppUtils.closeModal("#app-modal");
+          }).on(`click${ns}`, ".btn-download", () => {
+            window.open(report.link, "_blank");
+            AppUtils.closeModal("#app-modal");
+          }).on(`click${ns}`, ".btn-generate", () => {
+            AppUtils.closeModal("#app-modal");
+            setGenerateState(type, btn, true);
+            requestReportGeneration(cfg, type, btn, params);
+          });
+        },
+        onClose($modal) {
+          $modal.off(ns);
+          setGenerateState(type, btn, false);
+        }
+      });
+    }
+    function requestReportGeneration(cfg, type, btn, params) {
+      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err)).withSuccessHandler(() => checkReportReady(cfg, type, btn)).updateCustomReportPDF(type, ...cfg.updateArgs(params));
+    }
+    function checkReportReady(cfg, type, btn, attempts = 0) {
+      if (attempts === 0) {
+        AppUtils.showDashboardToast("Preparing report...", "info");
+      }
+      if (attempts >= REPORT_MAX_ATTEMPTS) {
+        setGenerateState(type, btn, false);
+        AppUtils.showDashboardToast("Timed out waiting for report.", "error");
+        return;
+      }
+      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err)).withSuccessHandler((ready) => {
+        if (!ready) {
+          setTimeout(() => {
+            checkReportReady(cfg, type, btn, attempts + 1);
+          }, REPORT_CHECK_INTERVAL);
+          return;
+        }
+        saveReport(type, btn, cfg);
+      }).isReportReady(type);
+    }
+    function saveReport(type, btn, cfg) {
+      google.script.run.withFailureHandler((err) => {
+        handleGenerateError(type, btn, err);
+      }).withSuccessHandler(() => {
+        setGenerateState(type, btn, false);
+        cfg.reloadHistory(() => {
+          TableModule.highlightLatestRow(cfg.historyTableId, 0);
+        });
+        AppUtils.showDashboardToast(cfg.successMessage, "success");
+      }).saveCustomReportPDF(type);
+    }
+    function generateMonthlyReport(month, year, btn) {
+      prepareReportGeneration("monthly", btn, { month, year });
+    }
+    function generateYearlyReport(year, btn) {
+      prepareReportGeneration("yearly", btn, { year });
+    }
+    return {
+      generateMonthlyReport,
+      generateYearlyReport,
+      setGenerateState
+    };
+  })();
+
+  // src/pages/reports-monthly-report-page.js
+  var reportsMonthlyReportPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off(".reportsMonthly");
+    };
+    const bindActions = () => {
+      $(document).off(".reportsMonthly").on("click.reportsMonthly", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
+        window.open(url, "_blank");
+      }).on("click.reportsMonthly", ".btn-email-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        google.script.run.withSuccessHandler(() => {
+          btn.prop("disabled", false);
+          AppUtils.showDashboardToast(
+            "Email sent successfully!",
+            "success"
+          );
+        }).withFailureHandler((err) => {
+          btn.prop("disabled", false);
+          AppUtils.showError(err);
+        }).sendRequestedEmailReport(
+          btn.data("id")
+        );
+      }).on("click.reportsMonthly", ".btn-discord-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        google.script.run.withSuccessHandler(() => {
+          btn.prop("disabled", false);
+          AppUtils.showDashboardToast(
+            "Discord notification sent!",
+            "success"
+          );
+        }).withFailureHandler((err) => {
+          btn.prop("disabled", false);
+          AppUtils.showError(err);
+        }).sendRequestedDiscordReport(
+          btn.data("id")
+        );
+      }).on("click.reportsMonthly", "#btn-generate-monthly-report", function() {
+        const btn = $(this);
+        const month = $("#monthly-report-month").val();
+        const year = $("#monthly-report-year").val();
+        const type = "monthly";
+        ReportGenerator.setGenerateState(type, btn, true);
+        AppUtils.showDashboardToast(
+          "Analyzing Request...",
+          "info"
+        );
+        google.script.run.withSuccessHandler((result) => {
+          if (!result.valid) {
+            ReportGenerator.setGenerateState(type, btn, false);
+            AppUtils.showDashboardToast(result.message, "warning");
+            return;
+          }
+          ReportGenerator.generateMonthlyReport(month, year, btn);
+        }).withFailureHandler((err) => {
+          ReportGenerator.setGenerateState(type, btn, false);
+          console.error(err);
+          AppUtils.showDashboardToast(
+            err.message || "Something went wrong.",
+            "error"
+          );
+        }).validateCustomMonthlyReport(month, year);
+      }).on("click.reportsMonthly", "#generate-yearly-report", () => {
+        const page = "reportsAnnualReport";
+        RouterModule.go(page, PageModules[page] || null);
+      }).on("click.reportsMonthly", "#download-latest-pdf", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.downloadLatestPDF(btn);
+        setTimeout(() => {
+          btn.prop("disabled", false);
+        }, 1e3);
+      }).on("click.reportsMonthly", "#email-latest-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.emailLatestReport(btn);
+      }).on("click.reportsMonthly", "#send-discord-notification", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.sendLatestReportToDiscord(btn);
+      });
+    };
+    const loadData = () => {
+      const today = /* @__PURE__ */ new Date();
+      const currentMonth = today.toLocaleString("default", {
+        month: "long"
+      });
+      const currentYear = today.getFullYear();
+      $("#monthly-report-month").val(currentMonth);
+      const $year = $("#monthly-report-year");
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(
+          `<option value="${year}">${year}</option>`
+        );
+      }
+      $year.val(currentYear);
+      ReportHistory.loadCustomMonthlyReportsPageData();
+    };
+    return { init, destroy };
+  })();
+
+  // src/pages/reports-annual-report-page.js
+  var reportsAnnualReportPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off(".reportsAnnual");
+    };
+    const bindActions = () => {
+      $(document).off(".reportsAnnual").on("click.reportsAnnual", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
+        window.open(url, "_blank");
+      }).on("click.reportsAnnual", ".btn-email-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        google.script.run.withSuccessHandler(() => {
+          btn.prop("disabled", false);
+          AppUtils.showDashboardToast(
+            "Email sent successfully!",
+            "success"
+          );
+        }).withFailureHandler((err) => {
+          btn.prop("disabled", false);
+          AppUtils.showError(err);
+        }).sendRequestedEmailReport(
+          btn.data("id")
+        );
+      }).on("click.reportsAnnual", ".btn-discord-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        google.script.run.withSuccessHandler(() => {
+          btn.prop("disabled", false);
+          AppUtils.showDashboardToast(
+            "Discord notification sent!",
+            "success"
+          );
+        }).withFailureHandler((err) => {
+          btn.prop("disabled", false);
+          AppUtils.showError(err);
+        }).sendRequestedDiscordReport(
+          btn.data("id")
+        );
+      }).on("click.reportsAnnual", "#btn-generate-yearly-report", function() {
+        const btn = $(this);
+        const year = $("#yearly-report-year").val();
+        const type = "yearly";
+        ReportGenerator.setGenerateState(type, btn, true);
+        AppUtils.showDashboardToast(
+          "Analyzing Request...",
+          "info"
+        );
+        google.script.run.withSuccessHandler((result) => {
+          if (!result.valid) {
+            ReportGenerator.setGenerateState(type, btn, false);
+            AppUtils.showDashboardToast(
+              result.message,
+              "warning"
+            );
+            return;
+          }
+          ReportGenerator.generateYearlyReport(year, btn);
+        }).withFailureHandler((err) => {
+          ReportGenerator.setGenerateState(type, btn, false);
+          console.error(err);
+          AppUtils.showDashboardToast(
+            err.message || "Something went wrong.",
+            "error"
+          );
+        }).validateCustomYearlyReport(year);
+      }).on("click.reportsAnnual", "#generate-yearly-report", () => {
+        const page = "reportsAnnualReport";
+        RouterModule.go(page, PageModules[page] || null);
+      }).on("click.reportsAnnual", "#download-latest-pdf", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.downloadLatestPDF(btn);
+        setTimeout(() => {
+          btn.prop("disabled", false);
+        }, 1e3);
+      }).on("click.reportsAnnual", "#email-latest-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.emailLatestReport(btn);
+      }).on("click.reportsAnnual", "#send-discord-notification", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.sendLatestReportToDiscord(btn);
+      });
+    };
+    const loadData = () => {
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      const $year = $("#yearly-report-year");
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(
+          `<option value="${year}">${year}</option>`
+        );
+      }
+      $year.val(currentYear);
+      ReportHistory.loadCustomYearlyReportsPageData();
+    };
+    return {
+      init,
+      destroy
+    };
+  })();
+
+  // src/pages/config-page.js
+  var settingsConfigurationPage = /* @__PURE__ */ (() => {
+    let initialized = false;
+    function init() {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest("#btnClearCache");
+        if (!btn) {
+          return;
+        }
+        e.preventDefault();
+        AppUtils.clearEverything();
+        AppUtils.showDashboardToast("Cache cleared!", "success");
+      });
+    }
+    return { init };
+  })();
+
+  // src/page-modules.js
+  var PageModules = {
+    allClients: allClientsPage,
+    upsellOverview: upsellOverviewPage,
+    hourlyOverview: hourlyOverviewPage,
+    reportsExportData: reportsExportDataPage,
+    reportsMonthlyReport: reportsMonthlyReportPage,
+    reportsAnnualReport: reportsAnnualReportPage,
+    settingsConfiguration: settingsConfigurationPage
+  };
+
+  // src/reports/overview.js
+  var ReportsOverview = /* @__PURE__ */ (() => {
+    function loadReportsOverview() {
+      AppUtils.cachedGScriptCall(
+        "reportsOverview",
+        "getReportsOverview",
+        [],
+        (data) => {
+          renderReportsOverview(data);
+        },
+        false,
+        true
+      );
+    }
+    function renderReportsOverview(data) {
+      if (!data) {
+        return;
+      }
+      renderReportLogs(data.logs || []);
+      renderReportStatus(data);
+      renderReportCounts(data.counts || {});
+    }
+    function renderReportLogs(logs) {
+      const tbody = $("#reportLogsTable");
+      if (!tbody.length) {
+        return;
+      }
+      tbody.empty();
+      logs.forEach((log, index) => {
+        tbody.append(createReportLogRow(log, index));
+      });
+    }
+    function createReportLogRow(log, index) {
+      const badgeClass = log.type === "Monthly" ? "bg-primary" : "bg-success";
+      return `
+      <tr>
+
+        <td class="text-center">
+          <b>${index + 1}</b>
+        </td>
+
+        <td>${log.date}</td>
+
+        <td class="text-center">
+          <span class="badge bg-light text-info">
+            ${log.name}
+          </span>
+        </td>
+
+        <td class="text-center">
+          <span class="badge text-white ${badgeClass}">
+            ${log.type}
+          </span>
+        </td>
+
+        <td class="text-center">
+          <div class="btn-group btn-group-sm">
+
+            <button
+              class="btn btn-report-action btn-view-report"
+              data-url="${log.link}"
+              title="View Report">
+              <i class="fa fa-eye"></i>
+            </button>
+
+            <button
+              class="btn btn-report-action btn-email-report"
+              data-id="${log.id}"
+              title="Send Email">
+              <i class="fa fa-envelope"></i>
+            </button>
+
+            <button
+              class="btn btn-report-action btn-discord-report"
+              data-id="${log.id}"
+              title="Send to Discord">
+              <i class="fab fa-discord"></i>
+            </button>
+
+          </div>
+        </td>
+
+      </tr>
+    `;
+    }
+    function renderReportStatus(data) {
+      $("#last-monthly-report").text(getLatestReportDate(data.logs, "Monthly"));
+      $("#last-yearly-report").text(getLatestReportDate(data.logs, "Yearly"));
+      $("#next-scheduled-report").text(data.nextScheduled || "-");
+      updateConnectionStatus("#drive-storage-status", data.driveStorage);
+      updateConnectionStatus("#discord-status", data.discord);
+      updateConnectionStatus("#email-status", data.email);
+    }
+    function renderReportCounts(counts) {
+      $("#monthly-reports-count").text(counts.monthly ?? 0);
+      $("#yearly-reports-count").text(counts.yearly ?? 0);
+      $("#pdf-generated-count").text(counts.pdfGenerated ?? 0);
+      updateConnectionStatus(
+        "#automation-status",
+        counts.automation,
+        "Active",
+        "Warning"
+      );
+    }
+    function getLatestReportDate(logs = [], type) {
+      const report = logs.find((log) => log.type === type);
+      return report ? report.date : "-";
+    }
+    function updateConnectionStatus(selector, connected, successText = "Connected", failureText = "Not Connected") {
+      $(selector).text(connected ? successText : failureText).toggleClass("text-success", connected).toggleClass("text-danger", !connected);
+    }
+    return {
+      loadReportsOverview
+    };
+  })();
+
+  // src/pages/reports-export-data-page.js
+  var reportsExportDataPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off(".reports");
+    };
+    const bindActions = () => {
+      $(document).off(".reports").on("click.reports", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
+        window.open(url, "_blank");
+      }).on("click.reports", ".btn-email-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        google.script.run.withSuccessHandler(() => {
+          btn.prop("disabled", false);
+          AppUtils.showDashboardToast(
+            "Email sent successfully!",
+            "success"
+          );
+        }).withFailureHandler((err) => {
+          btn.prop("disabled", false);
+          AppUtils.showError(err);
+        }).sendRequestedEmailReport(
+          btn.data("id")
+        );
+      }).on("click.reports", ".btn-discord-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        google.script.run.withSuccessHandler(() => {
+          btn.prop("disabled", false);
+          AppUtils.showDashboardToast(
+            "Discord notification sent!",
+            "success"
+          );
+        }).withFailureHandler((err) => {
+          btn.prop("disabled", false);
+          AppUtils.showError(err);
+        }).sendRequestedDiscordReport(
+          btn.data("id")
+        );
+      }).on("click.reports", "#generate-monthly-report", () => {
+        const page = "reportsMonthlyReport";
+        RouterModule.go(page, PageModules[page] || null);
+      }).on("click.reports", "#generate-yearly-report", () => {
+        const page = "reportsAnnualReport";
+        RouterModule.go(page, PageModules[page] || null);
+      }).on("click.reports", "#download-latest-pdf", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.downloadLatestPDF(btn);
+        setTimeout(() => {
+          btn.prop("disabled", false);
+        }, 1e3);
+      }).on("click.reports", "#email-latest-report", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.emailLatestReport(btn);
+      }).on("click.reports", "#send-discord-notification", function() {
+        const btn = $(this);
+        btn.prop("disabled", true);
+        ReportActions.sendLatestReportToDiscord(btn);
+      });
+    };
+    const loadData = () => {
+      ReportsOverview.loadReportsOverview();
+    };
+    return { init, destroy };
+  })();
+
+  // src/pages/active-clients-page.js
+  var activeClientsPage = /* @__PURE__ */ (() => {
+    function init() {
+      ClientDirectory.loadClientDirectory("activeClientsData");
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/clients/client-data-service.js
+  var ClientDataService = /* @__PURE__ */ (() => {
+    function renderClientDataByStatus(sourceSheet, title, category, debug = false) {
+      const log = (...args) => debug && console.log(...args);
+      const cacheKey = getCacheKey(category);
+      log("[renderClientDataByStatus] start", {
+        sourceSheet,
+        title,
+        category,
+        cacheKey
+      });
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getClientDataByStatus",
+        [category, sourceSheet],
+        (data) => {
+          handleClientDataResponse(data, sourceSheet, title, category, log);
+        }
+      );
+    }
+    function handleClientDataResponse(data, sourceSheet, title, category, log) {
+      log("[renderClientDataByStatus] callback data:", data);
+      if (!Array.isArray(data)) {
+        log("[renderClientDataByStatus] invalid data", data);
+        AppUtils.showError("\u26A0\uFE0F invalid dialog data");
+        return;
+      }
+      log("[renderClientDataByStatus] rendering table");
+      TableModule.renderData(data, sourceSheet, title, category);
+    }
+    function getCacheKey(category) {
+      return `cache_${category.replace(/\s+/g, "")}`;
+    }
+    return {
+      renderClientDataByStatus
+    };
+  })();
+
+  // src/pages/add-manual-hours-page.js
+  var addManualHoursPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHourTotals();
+      ClientDataService.renderClientDataByStatus("Client Tracker - Today", "Activity Today", "Activity Today");
+      TableModule.loadClients();
+    }
+    return { init };
+  })();
+
+  // src/projects/project-directory.js
+  var ProjectDirectory = /* @__PURE__ */ (() => {
+    function loadProjectDirectory(log = false) {
+      bindProjectDirectoryEvents();
+      const cacheKey = "allProjects";
+      const cached = fetchCachedProjects(cacheKey);
+      if (cached) {
+        renderProjectDirectory(cached, log);
+        refreshProjectDirectory(cacheKey, cached, log);
+        return;
+      }
+      fetchProjectDirectory(cacheKey, log);
+    }
+    function fetchCachedProjects(cacheKey) {
+      const cached = AppUtils.cacheGet(cacheKey);
+      return Array.isArray(cached) && cached.length ? cached : null;
+    }
+    function fetchProjectDirectory(cacheKey, log) {
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getProjects",
+        [],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showDashboardToast("Something went wrong!", "error");
+            return;
+          }
+          renderProjectDirectory(data, log);
+        },
+        log
+      );
+    }
+    function refreshProjectDirectory(cacheKey, cached, log) {
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getProjects",
+        [],
+        (fresh) => {
+          if (!Array.isArray(fresh)) {
+            return;
+          }
+          if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
+            renderProjectDirectory(fresh, log);
+          }
+        },
+        log
+      );
+    }
+    function renderProjectDirectory(data, log) {
+      const tbody = document.getElementById("dataBody");
+      if (!tbody) {
+        if (log) {
+          console.log("[ProjectDirectory] tbody not found");
+        }
+        return;
+      }
+      tbody.innerHTML = "";
+      data.forEach((project, index) => {
+        tbody.appendChild(createProjectDirectoryRow(project, index));
+      });
+      if (log) {
+        console.log("[ProjectDirectory] Rendered", data.length, "projects");
+      }
+    }
+    function createProjectDirectoryRow(project, index) {
+      const tr = document.createElement("tr");
+      const colA = project[0] || "";
+      const colB = project[1] || "";
+      const colC = project[2] || "";
+      tr.innerHTML = `
+      <td class="text-center text-muted font-weight-bold">
+        ${index + 1}
+      </td>
+
+      <td>${colA}</td>
+
+      <td class="text-center">
+        ${colB}
+      </td>
+
+      <td class="text-center">
+        ${colC}
+      </td>
+    `;
+      return tr;
+    }
+    function bindProjectDirectoryEvents() {
+      if (document.body.dataset.projectDirectoryBound) {
+        return;
+      }
+      document.body.dataset.projectDirectoryBound = "true";
+      $(document).on("click", "#add-new-project", handleAddProjectClick);
+    }
+    function handleAddProjectClick() {
+      AppUtils.openDrawer("#drawerManualAdd", {
+        contentClass: "drawer-grid-5"
+      });
+      $("#taskForm .form-group").first().removeClass("element-hidden");
+    }
+    return {
+      loadProjectDirectory
+    };
+  })();
+
+  // src/pages/all-manual-projects-page.js
+  var allManualProjectsPage = /* @__PURE__ */ (() => {
+    function init() {
+      ProjectDirectory.loadProjectDirectory();
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+      TableModule.setupTaskForm();
+      TableModule.loadClients("#client", true);
+    }
+    return { init };
+  })();
+
+  // src/pages/billing-owed-hours-page.js
+  var billingOwedHoursPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#billing-hours-summary");
+      ClientRanking.renderLowestPaidClients();
+      ProjectRankings.renderLowestProjects();
+    }
+    return { init };
+  })();
+
+  // src/pages/billing-paid-hours-page.js
+  var billingPaidHoursPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#billing-hours-summary");
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/pages/daily-overview-page.js
+  var dailyOverviewPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadChart("daily");
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/pages/growth-comparison-overview-page.js
+  var growthComparisonOverviewPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadPrevYearCombinedChart();
+      ChartModule.loadChart("yearly");
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/performance/performance-metrics.js
+  var PerformanceMetrics = /* @__PURE__ */ (() => {
+    const WIDGET_SUFFIX = {
+      current: "1",
+      previous: "2"
+    };
+    const COLORS = {
+      current: [
+        "bg-arielle-smile",
+        "bg-sunny-morning",
+        "bg-ripe-malin",
+        "bg-grow-early"
+      ],
+      previous: [
+        "bg-deep-blue",
+        "bg-tempting-azure",
+        "bg-ripe-malin",
+        "bg-grow-early"
+      ]
+    };
+    function loadPerformanceSummary(containerId, growthId, yearType) {
+      const container = document.getElementById(containerId);
+      const growthEl = document.getElementById(growthId);
+      if (!container) {
+        console.warn("[PerformanceMetrics] Container not found:", containerId);
+        return;
+      }
+      const suffix = WIDGET_SUFFIX[yearType];
+      if (!suffix) {
+        console.error("[PerformanceMetrics] Unknown year type:", yearType);
+        return;
+      }
+      const cacheKey = `performanceSummary_${yearType}`;
+      resetPerformanceSummary(container, growthEl);
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getPerformanceSummary",
+        [yearType],
+        (data) => {
+          if (!data || !Array.isArray(data.percentages)) {
+            console.warn("[PerformanceMetrics] Invalid data:", data);
+            setPerformanceError(container, growthEl);
+            return;
+          }
+          renderPerformanceSummary(
+            container,
+            growthEl,
+            suffix,
+            data,
+            COLORS[yearType]
+          );
+        }
+      );
+    }
+    function resetPerformanceSummary(container, growthEl) {
+      if (growthEl) {
+        growthEl.textContent = "Loading...";
+      }
+      container.querySelectorAll(".widget-numbers").forEach((el) => {
+        el.textContent = "0%";
+      });
+      container.querySelectorAll(".progress-bar").forEach((el) => {
+        el.style.width = "0%";
+        el.setAttribute("aria-valuenow", "0");
+      });
+    }
+    function setPerformanceError(container, growthEl) {
+      container.querySelectorAll(".widget-numbers").forEach((el) => {
+        el.textContent = "-";
+      });
+      if (growthEl) {
+        growthEl.textContent = "-";
+      }
+    }
+    function renderPerformanceSummary(container, growthEl, suffix, data, colors) {
+      const { percentages, paidGrowth } = data;
+      percentages.forEach(([label, value], index) => {
+        const number = index + 1;
+        const percentId = `percent-${number}-${suffix}`;
+        const labelId = `label-${number}-${suffix}`;
+        const progressId = `progress-${number}-${suffix}`;
+        const percentEl = document.getElementById(percentId);
+        const labelEl = document.getElementById(labelId);
+        const progressEl = document.getElementById(progressId);
+        const percent = parseFloat(value || 0).toFixed(1);
+        if (percentEl) {
+          percentEl.textContent = `${percent}%`;
+        }
+        if (labelEl) {
+          labelEl.textContent = index >= 2 ? label.split(" ").slice(1).join(" ") : label;
+        }
+        if (progressEl) {
+          const color = colors[index % colors.length];
+          progressEl.style.width = `${percent}%`;
+          progressEl.setAttribute("aria-valuenow", percent);
+          progressEl.className = `progress-bar ${color}`;
+        }
+      });
+      renderPaidGrowth(growthEl, paidGrowth);
+    }
+    function renderPaidGrowth(growthEl, paidGrowth) {
+      if (!growthEl) {
+        return;
+      }
+      const growthValue = parseFloat(paidGrowth || 0).toFixed(2);
+      let growthClass;
+      let growthIcon;
+      if (growthValue > 0) {
+        growthClass = "text-success";
+        growthIcon = '<i class="fa fa-angle-up"></i>';
+      } else if (growthValue < 0) {
+        growthClass = "text-danger";
+        growthIcon = '<i class="fa fa-angle-down"></i>';
+      } else {
+        growthClass = "text-warning";
+        growthIcon = '<i class="fa fa-dot-circle"></i>';
+      }
+      growthEl.classList.remove("text-success", "text-danger", "text-warning");
+      growthEl.classList.add(growthClass);
+      growthEl.innerHTML = `${growthIcon} ${growthValue}%`;
+    }
+    return {
+      loadPerformanceSummary
+    };
+  })();
+
+  // src/pages/home-page.js
+  var HomePage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadChart("daily");
+      ChartModule.loadChart("monthly");
+      ChartModule.loadChart("yearly", false, (/* @__PURE__ */ new Date()).getFullYear());
+      ChartModule.loadPrevYearCombinedChart();
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+      PerformanceMetrics.loadPerformanceSummary(
+        "current-performance-summary",
+        "current-paid-growth",
+        "current"
+      );
+      PerformanceMetrics.loadPerformanceSummary(
+        "previous-performance-summary",
+        "previous-paid-growth",
+        "previous"
+      );
+    }
+    return { init };
+  })();
+
+  // src/pages/monthly-overview-page.js
+  var monthlyOverviewPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadChart("monthly");
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/pages/outstanding-clients-page.js
+  var outstandingClientsPage = /* @__PURE__ */ (() => {
+    function init() {
+      ClientDataService.renderClientDataByStatus(
+        "Paid & Owed Log",
+        "Outstanding Accounts",
+        "Outstanding Accounts"
+      );
+      ClientRanking.renderLowestPaidClients();
+      ProjectRankings.renderLowestProjects();
+    }
+    return { init };
+  })();
+
+  // src/pages/performance-daily-page.js
+  var performanceDailyPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHourTotals();
+      ChartModule.loadChart("daily", true);
+    }
+    return { init };
+  })();
+
+  // src/hours/hour-target-progress.js
+  var HourTargetProgress = /* @__PURE__ */ (() => {
+    function loadTargetProgress(cacheKey, functionName, containerSuffix, enableProgressColors = false) {
+      AppUtils.cachedGScriptCall(cacheKey, functionName, [], (data) => {
+        if (!data) {
+          return;
+        }
+        renderTargetProgress(data, containerSuffix, enableProgressColors);
+      });
+    }
+    function renderTargetProgress(data, containerSuffix, enableProgressColors) {
+      Object.entries(data).forEach(([id, value]) => {
+        updateTargetBox(id, value, containerSuffix, enableProgressColors);
+      });
+    }
+    function updateTargetBox(id, value, containerSuffix, enableProgressColors) {
+      if (typeof value !== "number") {
+        return;
+      }
+      const box = document.querySelector(`#${id}-${containerSuffix}`);
+      if (!box) {
+        return;
+      }
+      const number = box.querySelector(".widget-numbers");
+      if (number) {
+        number.textContent = `${value.toFixed(2)}%`;
+      }
+      const progressBar = box.querySelector(".progress-bar");
+      if (!progressBar) {
+        return;
+      }
+      updateProgressBar(progressBar, value, enableProgressColors);
+    }
+    function updateProgressBar(progressBar, value, enableProgressColors) {
+      progressBar.style.width = `${value}%`;
+      progressBar.setAttribute("aria-valuenow", value);
+      if (!enableProgressColors) {
+        return;
+      }
+      progressBar.classList.remove(
+        "bg-success",
+        "bg-info",
+        "bg-warning",
+        "bg-danger"
+      );
+      progressBar.classList.add(getProgressColor(value));
+    }
+    function getProgressColor(value) {
+      if (value >= 100) {
+        return "bg-success";
+      }
+      if (value >= 75) {
+        return "bg-info";
+      }
+      if (value >= 50) {
+        return "bg-warning";
+      }
+      return "bg-danger";
+    }
+    return {
+      loadTargetProgress
+    };
+  })();
+
+  // src/pages/performance-target-page.js
+  var performanceTargetPage = /* @__PURE__ */ (() => {
+    function init() {
+      ChartModule.drawRealtimeAnimatedChart();
+      ChartModule.loadPrevYearCombinedChart();
+      HourTargetProgress.loadTargetProgress(
+        "targetPercentsCurrentYear",
+        "getCurrentYearTargetProgress",
+        "curr-target-hrs",
+        true
+      );
+      HourTargetProgress.loadTargetProgress(
+        "targetPercentsPreviousYear",
+        "getPreviousYearTargetProgress",
+        "prev-target-hrs",
+        true
+      );
+    }
+    return { init };
+  })();
+
+  // src/pages/performance-yearly-page.js
+  var performanceYearlyPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadChart("yearly");
+    }
+    return { init };
+  })();
+
+  // src/pages/top-clients-page.js
+  var topClientsPage = /* @__PURE__ */ (() => {
+    function init() {
+      ClientDataService.renderClientDataByStatus(
+        "Paid & Owed Log",
+        "Top Paid Accounts",
+        "Top Paid"
+      );
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/pages/yearly-overview-page.js
+  var yearlyOverviewPage = /* @__PURE__ */ (() => {
+    function init() {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadChart("yearly", false, (/* @__PURE__ */ new Date()).getFullYear());
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+    }
+    return { init };
+  })();
+
+  // src/navigation/navigation.js
+  var NavigationModule = /* @__PURE__ */ (() => {
+    function activate(pageName) {
+      $(".drawer").removeClass("drawer-open");
+      $(".app-sidebar__inner li a, .dropdown-quick-actions .dropdown-item").removeClass("mm-active").filter(`[data-page="${pageName}"]`).addClass("mm-active");
+    }
+    return {
+      activate
+    };
+  })();
+
+  // src/page-loader.js
+  var PageLoaderModule = /* @__PURE__ */ (() => {
+    const titles = {
+      activeClients: { title: "Active Clients", desc: "View all clients currently active.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
+      topClients: { title: "Top Clients", desc: "Check highest performing clients .", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
+      allClients: { title: "All Clients", desc: "See every client in one place.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
+      outstandingClients: { title: "Outstanding Clients", desc: "See clients with pending or unpaid items.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
+      addManualHours: { title: "Add Manual Hours", desc: "Log manual hours and track entries in real time.", icon: "pe-7s-hourglass icon-gradient bg-malibu-beach" },
+      upsellOverview: { title: "Upsell Entries", desc: "Log upsell hours and track entries in real time.", icon: "pe-7s-piggy icon-gradient bg-malibu-beach" },
+      dailyOverview: { title: "Daily Overview", desc: "See daily performance at a glance.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
+      growthComparisonOverview: { title: "Growth Comparison Overview", desc: "Track growth and spot trends quickly.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
+      monthlyOverview: { title: "Monthly Overview", desc: "See monthly performance at a glance.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
+      yearlyOverview: { title: "Yearly Overview", desc: "See yearly trends and progress at a glance.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
+      allManualProjects: { title: "Manual Projects", desc: "View all manual projects.", icon: "pe-7s-portfolio icon-gradient bg-malibu-beach" },
+      hourlyOverview: { title: "Hourly Overview", desc: "View hourly history.", icon: "pe-7s-portfolio icon-gradient bg-malibu-beach" },
+      billingPaidHours: { title: "Paid Hours Summary", desc: "Overview of hours that have already been billed and paid.", icon: "pe-7s-cash icon-gradient bg-malibu-beach" },
+      billingOwedHours: { title: "Owed Hours Summary", desc: "Overview of hours that are pending billing or payment.", icon: "pe-7s-cash icon-gradient bg-malibu-beach" },
+      performanceYearly: { title: "Yearly Performance", desc: "Track yearly results, growth trends, and overall performance progress.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
+      performanceDaily: { title: "Daily Performance", desc: "Monitor daily activities, completed tasks, and performance updates.", icon: "pe-7s-clock icon-gradient bg-mean-fruit" },
+      performanceTarget: { title: "Performance Targets", desc: "View goals, targets, achievements, and progress toward expected results.", icon: "pe-7s-target icon-gradient bg-sunny-morning" },
+      reportsExportData: { title: "Report Center", desc: "Generate and download reports.", icon: "pe-7s-download icon-gradient bg-sunny-morning" },
+      reportsMonthlyReport: { title: "Generate Monthly Report", desc: "Generate and manage monthly productivity reports.", icon: "pe-7s-download icon-gradient bg-sunny-morning" },
+      reportsAnnualReport: { title: "Generate Annual Report", desc: "Generate and manage annual productivity reports.", icon: "pe-7s-download icon-gradient bg-sunny-morning" },
+      settingsConfiguration: { title: "Settings", desc: "Control system configurations and customize platform behavior.", icon: "pe-7s-config icon-gradient bg-malibu-beach" }
+    };
+    function loadPage(pageName, done) {
+      const titleParams = titles[pageName] || {
+        title: "Lab Performance Dashboard",
+        desc: "Monitor all key metrics across clients, projects, and hours at a glance.",
+        icon: "pe-7s-graph2 icon-gradient bg-malibu-beach"
+      };
+      AppUtils.cachedGScriptCall("appPageTitle", "loadSubPage", ["appPageTitle"], (titleHtml) => {
+        const mainInner = document.getElementById("app-main__inner");
+        mainInner.innerHTML = titleHtml;
+        const pageTitle = document.getElementById("pageTitle");
+        if (pageTitle) {
+          pageTitle.textContent = titleParams.title;
+        }
+        const pageTitleDesc = document.getElementById("pageTitleDesc");
+        if (pageTitleDesc) {
+          pageTitleDesc.textContent = titleParams.desc;
+        }
+        const pageTitleIcon = document.getElementById("pageTitleIcon");
+        if (pageTitleIcon) {
+          pageTitleIcon.className = titleParams.icon;
+        }
+        AppUtils.cachedGScriptCall(`page_${pageName}`, "loadSubPage", [pageName], (pageHtml) => {
+          mainInner.innerHTML += pageHtml;
+          if (typeof done === "function") {
+            done();
+          }
+        });
+      });
+    }
+    return { loadPage };
+  })();
+
+  // src/routers.js
+  var RouterModule = /* @__PURE__ */ (() => {
+    let currentPage = "home";
+    let currentModule = null;
+    let pageToken = 0;
+    const getPageToken = () => pageToken;
+    const setCurrentPage = (page) => {
+      currentPage = page;
+      localStorage.setItem("currentPageGC", page);
+    };
+    const getCurrentPage = () => currentPage;
+    const init = () => {
+      currentPage = localStorage.getItem("currentPageGC") || "home";
+    };
+    const routes = {
+      home: HomePage,
+      addManualHours: addManualHoursPage,
+      dailyOverview: dailyOverviewPage,
+      monthlyOverview: monthlyOverviewPage,
+      yearlyOverview: yearlyOverviewPage,
+      growthComparisonOverview: growthComparisonOverviewPage,
+      topClients: topClientsPage,
+      activeClients: activeClientsPage,
+      outstandingClients: outstandingClientsPage,
+      allClients: allClientsPage,
+      upsellOverview: upsellOverviewPage,
+      allManualProjects: allManualProjectsPage,
+      hourlyOverview: hourlyOverviewPage,
+      settingsConfiguration: settingsConfigurationPage,
+      billingPaidHours: billingPaidHoursPage,
+      billingOwedHours: billingOwedHoursPage,
+      performanceYearly: performanceYearlyPage,
+      performanceDaily: performanceDailyPage,
+      performanceTarget: performanceTargetPage,
+      reportsExportData: reportsExportDataPage,
+      reportsMonthlyReport: reportsMonthlyReportPage,
+      reportsAnnualReport: reportsAnnualReportPage
+    };
+    function go(pageName) {
+      const page = routes[pageName] ?? routes.home;
+      pageToken++;
+      currentModule?.destroy?.();
+      ChartModule.destroyRealtimeChart();
+      setCurrentPage(pageName);
+      PageLoaderModule.loadPage(pageName, () => {
+        page.init?.(pageToken);
+        currentModule = page;
+        NavigationModule.activate(pageName);
+      });
+    }
+    return {
+      go,
+      init,
+      setCurrentPage,
+      getCurrentPage,
+      getPageToken
+    };
+  })();
+
+  // src/action-router.js
+  var ActionRouterModule = /* @__PURE__ */ (() => {
+    const init = () => {
+      const ignore = ($btn) => $btn.hasClass("mm-active") || $btn.is("[aria-expanded]") && $btn.next().prop("tagName") === "UL";
+      document.addEventListener(
+        "click",
+        (e) => {
+          const pageBtn = e.target.closest("[data-page]");
+          if (!pageBtn) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          const $btn = $(pageBtn);
+          if (ignore($btn)) {
+            return;
+          }
+          const page = $btn.data("page");
+          RouterModule.go(page, PageModules[page] || null);
+        },
+        true
+      );
+    };
+    return { init };
+  })();
+
+  // src/app.js
+  document.addEventListener("DOMContentLoaded", () => {
+    RouterModule.init();
+    const page = RouterModule.getCurrentPage();
+    RouterModule.go(page, PageModules[page] || null);
+    ActionRouterModule.init();
+    const sidebarEl = document.querySelector(".scrollbar-sidebar");
+    if (sidebarEl) {
+      new PerfectScrollbar(sidebarEl);
+    }
+    document.querySelectorAll(".scrollbar-container").forEach((el) => new PerfectScrollbar(el));
+    setTimeout(() => {
+      document.body.classList.add("loaded");
+      document.querySelectorAll(".drawer").forEach((drawer) => {
+        drawer.classList.add("reg");
+      });
+      const appContainer = document.querySelector(".app-container");
+      if (appContainer) {
+        appContainer.classList.remove("loading");
+        appContainer.classList.add("closed-sidebar");
+      }
+    }, 5e3);
+  });
+})();
+
+
+</script>

@@ -1,7 +1,5 @@
-import {
-  RouterModule,
-  PageModules,
-} from "./modules.js";
+import { RouterModule } from "./routers.js";
+import { PageModules } from "./page-modules.js";
 
 const ActionRouterModule = (() => {
 

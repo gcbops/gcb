@@ -1,10 +1,7 @@
-import {
-  AppUtils,
-  ChartModule,
-  WidgetModule,
-} from "../modules.js";
+import { AppUtils } from "../utils.js";
+import { ChartModule } from "../charts.js";
 
-const hourlyOverviewPageModule = (() => {
+const hourlyOverviewPage = (() => {
   let bound = false;
 
   const init = () => {
@@ -66,12 +63,30 @@ const hourlyOverviewPageModule = (() => {
 
   };
 
+  function loadTotalHourlyHours() {
+    google.script.run
+      .withSuccessHandler(function (dt) {
+        const ttlw = $("#total-hourly-hours");
+        if (ttlw.length) {
+          ttlw.children("span").text(dt);
+        }
+      })
+      .withFailureHandler((err) => {
+        AppUtils.showError(err);
+        AppUtils.showDashboardToast(
+          "Sheet or cell value doesn't exist!",
+          "error",
+        );
+      })
+      .getDirectCellValueSafe("Hourly History", "B8");
+  }
+
   const loadData = () => {
     ChartModule.loadChart("hourly");
-    WidgetModule.loadHourlyTotalCard();
+    loadTotalHourlyHours();
   };
 
   return { init, destroy };
 })();
 
-export { hourlyOverviewPageModule };
+export { hourlyOverviewPage };

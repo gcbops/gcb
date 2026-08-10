@@ -1,11 +1,10 @@
-import {
-  AppUtils,
-  RouterModule,
-  WidgetModule,
-  PageModules,
-} from "../modules.js";
+import { RouterModule } from "../routers.js";
+import { AppUtils } from "../utils.js";
+import { PageModules } from "../page-modules.js";
+import { ReportsOverview } from "../reports/overview.js";
+import { ReportActions } from "../reports/actions.js";
 
-const reportsExportDataPageModule = (() => {
+const reportsExportDataPage = (() => {
   let bound = false;
 
   const init = () => {
@@ -114,7 +113,7 @@ const reportsExportDataPageModule = (() => {
         const btn = $(this);
         btn.prop("disabled", true);
 
-        downloadLatestPDF();
+        ReportActions.downloadLatestPDF(btn);
 
         setTimeout(() => {
           btn.prop("disabled", false);
@@ -128,7 +127,7 @@ const reportsExportDataPageModule = (() => {
 
         btn.prop("disabled", true);
 
-        emailLatestReport(btn);
+        ReportActions.emailLatestReport(btn);
 
       })
 
@@ -138,83 +137,17 @@ const reportsExportDataPageModule = (() => {
 
         btn.prop("disabled", true);
 
-        sendLatestDiscord(btn);
+        ReportActions.sendLatestReportToDiscord(btn);
 
       });
 
   };
 
   const loadData = () => {
-    WidgetModule.loadReportsExportsPageData();
+    ReportsOverview.loadReportsOverview();
   };
-
-  function getLatestReport() {
-    const data = AppUtils.cacheGet("reportsPageData");
-    if (!data || !data.logs?.length) {
-      AppUtils.showDashboardToast("No reports found.", "error");
-      return null;
-    }
-    return data.logs[0];
-  }
-
-  function downloadLatestPDF(btn) {
-    const report = getLatestReport();
-    if (!report) {
-        btn.prop("disabled", false);
-        return;
-    }
-    window.open(report.link, "_blank");
-  }
-
-  function emailLatestReport(btn) {
-
-    const report = getLatestReport();
-    if (!report) {
-      btn.prop("disabled", false);
-      return;
-    }
-
-    AppUtils.showDashboardToast("Sending email...", "info");
-
-    google.script.run
-      .withSuccessHandler(() => {
-        btn.prop("disabled", false);
-        AppUtils.showDashboardToast("Latest report emailed!", "success");
-      })
-      .withFailureHandler(err => {
-        btn.prop("disabled", false);
-        AppUtils.showError(err);
-        AppUtils.showDashboardToast("Failed to send email.", "error");
-      })
-      .sendLatestEmailReport(report);
-
-  }
-
-  function sendLatestDiscord(btn) {
-
-    const report = getLatestReport();
-    if (!report) {
-      btn.prop("disabled", false);
-      return;
-    }
-
-    AppUtils.showDashboardToast("Sending Discord notification...", "info");
-
-    google.script.run
-      .withSuccessHandler(() => {
-        btn.prop("disabled", false);
-        AppUtils.showDashboardToast("Discord notification sent!", "success");
-      })
-      .withFailureHandler(err => {
-        btn.prop("disabled", false);
-        AppUtils.showError(err);
-        AppUtils.showDashboardToast("Failed to send Discord notification.", "error");
-      })
-      .sendLatestDiscordReport(report);
-
-  }
 
   return { init, destroy };
 })();
 
-export { reportsExportDataPageModule };
+export { reportsExportDataPage };

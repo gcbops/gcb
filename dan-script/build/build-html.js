@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
-const source = "build/scripts.bundle.js";
-const output = "backend/js/scripts.html";
+const source = "dist/app.bundle.js";
+const output = "backend/js/app.html";
 
 const js = fs.readFileSync(
   path.resolve(source),

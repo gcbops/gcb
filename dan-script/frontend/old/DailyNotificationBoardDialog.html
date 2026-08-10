@@ -219,7 +219,7 @@
               }
             })
             .withFailureHandler(err => console.error("❌ Failed to fetch:", err))
-            .getDialogTitle(status, sheetName);
+            .getClientDataByStatus(status, sheetName);
         };
 
         // if cache exists, show immediately

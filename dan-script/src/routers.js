@@ -1,188 +1,119 @@
-import {
-  ChartModule,
-  TableModule,
-  WidgetModule,
-  PageLoaderModule,
-} from "./modules.js";
+import { allClientsPage } from "./pages/all-clients-page.js";
+import { upsellOverviewPage } from "./pages/upsell-overview-page.js";
+import { hourlyOverviewPage } from "./pages/hourly-overview-page.js";
+import { reportsExportDataPage } from "./pages/reports-export-data-page.js";
+import { reportsMonthlyReportPage } from "./pages/reports-monthly-report-page.js";
+import { reportsAnnualReportPage } from "./pages/reports-annual-report-page.js";
+import { settingsConfigurationPage } from "./pages/config-page.js";
+import { activeClientsPage } from "./pages/active-clients-page.js";
+import { addManualHoursPage } from "./pages/add-manual-hours-page.js";
+import { allManualProjectsPage } from "./pages/all-manual-projects-page.js";
+import { billingOwedHoursPage } from "./pages/billing-owed-hours-page.js";
+import { billingPaidHoursPage } from "./pages/billing-paid-hours-page.js";
+import { dailyOverviewPage } from "./pages/daily-overview-page.js";
+import { growthComparisonOverviewPage } from "./pages/growth-comparison-overview-page.js";
+import { HomePage } from "./pages/home-page.js";
+import { monthlyOverviewPage } from "./pages/monthly-overview-page.js";
+import { outstandingClientsPage } from "./pages/outstanding-clients-page.js";
+import { performanceDailyPage } from "./pages/performance-daily-page.js";
+import { performanceTargetPage } from "./pages/performance-target-page.js";
+import { performanceYearlyPage } from "./pages/performance-yearly-page.js";
+import { topClientsPage } from "./pages/top-clients-page.js";
+import { yearlyOverviewPage } from "./pages/yearly-overview-page.js";
+import { NavigationModule } from "./navigation/navigation.js";
+import { ChartModule } from "./charts.js";
+import { PageLoaderModule } from "./page-loader.js";
 
 const RouterModule = (() => {
+  let currentPage = "home";
+  let currentModule = null;
+  let pageToken = 0;
+  const getPageToken = () => pageToken;
 
-    let currentPage = "home";
-    let currentModule = null;
-    let pageToken = 0;
-    const getPageToken = () => pageToken;
+  const setCurrentPage = (page) => {
+    currentPage = page;
+    localStorage.setItem("currentPageGC", page);
+  };
 
-    const setCurrentPage = (page) => {
-      currentPage = page;
-      localStorage.setItem("currentPageGC", page);
-    };
+  const getCurrentPage = () => currentPage;
 
-    const getCurrentPage = () => currentPage;
+  const init = () => {
+    currentPage = localStorage.getItem("currentPageGC") || "home";
+  };
 
-    const init = () => {
-      currentPage = localStorage.getItem("currentPageGC") || "home";
-    };
+  const routes = {
+    home: HomePage,
 
-    const routes = {
+    addManualHours: addManualHoursPage,
 
-        home() {
-          WidgetModule.loadTopCardMetrics();
-          ChartModule.loadChart("daily");
-          ChartModule.loadChart("monthly");
-          ChartModule.loadChart("yearly", false, new Date().getFullYear());
-          ChartModule.loadPrevYearCombinedChart();
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    dailyOverview: dailyOverviewPage,
 
-        addManualHours() {
-          WidgetModule.loadGrindValues();
-          WidgetModule.loadClientsDataByCategory("Client Tracker - Today", "Activity Today", "Activity Today");
-          TableModule.loadClients();
-        },
+    monthlyOverview: monthlyOverviewPage,
 
-        dailyOverview() {
-          WidgetModule.loadTopCardMetrics();
-          ChartModule.loadChart("daily");
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    yearlyOverview: yearlyOverviewPage,
 
-        monthlyOverview() {
-          WidgetModule.loadTopCardMetrics();
-          ChartModule.loadChart("monthly");
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    growthComparisonOverview: growthComparisonOverviewPage,
 
-        yearlyOverview() {
-          WidgetModule.loadTopCardMetrics();
-          ChartModule.loadChart("yearly", false, new Date().getFullYear());
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    topClients: topClientsPage,
 
-        growthComparisonOverview() {
-          WidgetModule.loadTopCardMetrics();
-          ChartModule.loadPrevYearCombinedChart();
-          ChartModule.loadChart("yearly");
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    activeClients: activeClientsPage,
 
-        topClients() {
-          WidgetModule.loadClientsDataByCategory("Paid & Owed Log", "Top Paid Accounts", "Top Paid");
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    outstandingClients: outstandingClientsPage,
 
-        activeClients() {
-          WidgetModule.loadAllAndActiveClientsInTable("activeClientsData");
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    allClients: allClientsPage,
 
-        outstandingClients() {
-          WidgetModule.loadClientsDataByCategory("Paid & Owed Log", "Outstanding Accounts", "Outstanding Accounts");
-          WidgetModule.loadWorstPaidList();
-          WidgetModule.loadWorstProjectList();
-        },
+    upsellOverview: upsellOverviewPage,
 
-        allClients() {},
+    allManualProjects: allManualProjectsPage,
 
-        upsellOverview() {},
+    hourlyOverview: hourlyOverviewPage,
 
-        allManualProjects() {
-          WidgetModule.loadAllManualProjects();
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-          TableModule.setupTaskForm();
-          TableModule.loadClients("#client", true);
-        },
+    settingsConfiguration: settingsConfigurationPage,
 
-        hourlyOverview() {},
+    billingPaidHours: billingPaidHoursPage,
 
-        settingsConfiguration() {},
+    billingOwedHours: billingOwedHoursPage,
 
-        billingPaidHours() {
-          WidgetModule.loadTopCardMetricsBilling();
-          WidgetModule.loadTopPaidList();
-          WidgetModule.loadTopProjectList();
-        },
+    performanceYearly: performanceYearlyPage,
 
-        billingOwedHours() {
-          WidgetModule.loadTopCardMetricsBilling();
-          WidgetModule.loadWorstPaidList();
-          WidgetModule.loadWorstProjectList();
-        },
+    performanceDaily: performanceDailyPage,
 
-        performanceYearly() {
-          WidgetModule.loadTopCardMetrics();
-          ChartModule.loadChart("yearly");
-        },
+    performanceTarget: performanceTargetPage,
 
-        performanceDaily() {
-          WidgetModule.loadGrindValues();
-          ChartModule.loadChart("daily", true);
-        },  
+    reportsExportData: reportsExportDataPage,
 
-        performanceTarget() {
-          ChartModule.drawRealtimeAnimatedChart();
-          ChartModule.loadPrevYearCombinedChart();
-          WidgetModule.loadTargetPercentsCards( "targetPercentsCurrentYear", "getTargetPercentsCurrentYear", "curr-target-hrs", true );
-          WidgetModule.loadTargetPercentsCards( "targetPercentsPreviousYear", "getTargetPercentsPreviousYear", "prev-target-hrs", true );
-        },
+    reportsMonthlyReport: reportsMonthlyReportPage,
 
-        reportsExportData() {},
+    reportsAnnualReport: reportsAnnualReportPage,
+  };
 
-        reportsMonthlyReport() {},
+  function go(pageName) {
+    const page = routes[pageName] ?? routes.home;
 
-        reportsAnnualReport() {},
+    pageToken++;
 
-    };
+    currentModule?.destroy?.();
 
-    function go(pageName, pageModule = null) {
-      if (!routes[pageName]) {pageName = "home";}
-      pageToken++;
-      const thisToken = pageToken;
+    ChartModule.destroyRealtimeChart();
 
-      if (currentModule && typeof currentModule.destroy === "function") {
-        currentModule.destroy();
-      }
+    setCurrentPage(pageName);
 
-      ChartModule.destroyRealtimeChart();
+    PageLoaderModule.loadPage(pageName, () => {
+      page.init?.(pageToken);
 
-      setCurrentPage(pageName);
+      currentModule = page;
 
-      PageLoaderModule.loadPage(pageName, () => {
+      NavigationModule.activate(pageName);
+    });
+  }
 
-        // run route logic
-        routes[pageName](thisToken);
-
-        // init new page module
-        if (pageModule && typeof pageModule.init === "function") {
-          pageModule.init();
-        }
-
-        currentModule = pageModule;
-
-        // UI cleanup
-        $(".drawer").removeClass("drawer-open");
-        $(".app-sidebar__inner li a, .dropdown-quick-actions .dropdown-item")
-          .removeClass("mm-active")
-          .filter(`[data-page="${pageName}"]`)
-          .addClass("mm-active");
-      });
-    }
-
-    return {
-      go,
-      init,
-      setCurrentPage,
-      getCurrentPage,
-      getPageToken
-    };
-
+  return {
+    go,
+    init,
+    setCurrentPage,
+    getCurrentPage,
+    getPageToken,
+  };
 })();
 
 export { RouterModule };

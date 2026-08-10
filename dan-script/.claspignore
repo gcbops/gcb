@@ -4,6 +4,7 @@ node_modules/**
 # Build & development
 build/**
 src/**
+dist/**
 
 # Git
 .git/**

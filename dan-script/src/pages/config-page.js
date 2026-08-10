@@ -1,6 +1,6 @@
 import { AppUtils } from "../utils.js";
 
-const ConfigPageModule = (() => {
+const settingsConfigurationPage = (() => {
 
   let initialized = false;
 
@@ -23,4 +23,4 @@ const ConfigPageModule = (() => {
 
 })();
 
-export { ConfigPageModule };
+export { settingsConfigurationPage };

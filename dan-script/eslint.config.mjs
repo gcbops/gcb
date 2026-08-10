@@ -3,93 +3,88 @@ import globals from "globals";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
-
   {
     ignores: [
       "node_modules/**",
       "backend/**",
       "frontend/**",
       "build/**",
+      "dist/**",
       ".git/**",
       ".clasp.json",
-      "package-lock.json"
-    ]
+      "package-lock.json",
+    ],
   },
 
   js.configs.recommended,
 
   {
-    files: [
-      "src/**/*.js"
-    ],
+    files: ["src/**/*.js"],
 
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
 
       globals: {
+        ...globals.browser,
 
-          ...globals.browser,
+        // Google Apps Script
+        google: "readonly",
+        google_script_host: "readonly",
 
-          // Google Apps Script
-          google: "readonly",
-          google_script_host: "readonly",
+        // jQuery
+        $: "readonly",
+        jQuery: "readonly",
 
-          // jQuery
-          $: "readonly",
-          jQuery: "readonly",
+        // Bootstrap
+        bootstrap: "readonly",
 
-          // Bootstrap
-          bootstrap: "readonly",
+        // Chart.js
+        Chart: "readonly",
 
-          // Chart.js
-          Chart: "readonly",
+        // Toastr
+        toastr: "readonly",
 
-          // Toastr
-          toastr: "readonly",
+        // DataTables
+        DataTable: "readonly",
 
-          // DataTables
-          DataTable: "readonly",
+        // Select2
+        select2: "readonly",
 
-          // Select2
-          select2: "readonly",
+        // Perfect Scrollbar
+        PerfectScrollbar: "readonly",
 
-          // Perfect Scrollbar
-          PerfectScrollbar: "readonly",
+        // MetisMenu
+        MetisMenu: "readonly",
 
-          // MetisMenu
-          MetisMenu: "readonly",
-
-          // Browser
-          localStorage: "readonly",
-          sessionStorage: "readonly",
-          navigator: "readonly",
-          MutationObserver: "readonly"
-      }
+        // Browser
+        localStorage: "readonly",
+        sessionStorage: "readonly",
+        navigator: "readonly",
+        MutationObserver: "readonly",
+      },
     },
 
     rules: {
+      curly: "error",
 
-        "curly": "error",
+      eqeqeq: "warn",
 
-        "eqeqeq": "warn",
+      "prefer-const": "warn",
 
-        "prefer-const": "warn",
+      "no-var": "warn",
 
-        "no-var": "warn",
+      "no-console": "off",
 
-        "no-console": "off",
+      semi: ["warn", "always"],
 
-        "semi": ["warn", "always"],
-
-        "no-unused-vars": [
-            "warn",
-            {
-                args: "none",
-                ignoreRestSiblings: true
-            }
-        ]
-    }
-  }
-
+      "no-unused-vars": [
+        "warn",
+        {
+          args: "none",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
 ]);
