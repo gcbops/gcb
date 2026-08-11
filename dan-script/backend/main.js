@@ -4,14 +4,32 @@
 
 
 const EXCLUDED_SHEETS = new Set([
-  "Lab 2.0", "Lab 3.0", "Client Names", "Client Sheet Copy Template",
-  "Monthly Hours Log", "Current Month Log", "Client Tracker - Today",
-  "Log - Yearly Summary", "Paid & Owed Log", "BLANK",
-  "Hourly Today", "Hourly History", "DailyNotifications_Log",
-  "MonthlyReport_Log", "Monthly Report PDF", "Reminders_Log", "Upsells",
-  "Projects", "Yearly Report PDF", "YearlyReport_Log", "Settings",
-  "Month Log Generator", "Monthly Report PDF Generator", "Year Log Generator",
-  "Yearly Report PDF Generator"
+  "Lab 2.0",
+  "Lab 3.0",
+  "Client Names",
+  "Client Sheet Copy Template",
+  "Monthly Hours Log",
+  "Current Month Log",
+  "Client Tracker - Today",
+  "Log - Yearly Summary",
+  "Paid & Owed Log",
+  "BLANK",
+  "Hourly Today",
+  "Hourly History",
+  "DailyNotifications_Log",
+  "MonthlyReport_Log",
+  "Monthly Report PDF",
+  "Reminders_Log",
+  "Upsells",
+  "Projects",
+  "Yearly Report PDF",
+  "YearlyReport_Log",
+  "Settings",
+  "Month Log Generator",
+  "Monthly Report PDF Generator",
+  "Year Log Generator",
+  "Yearly Report PDF Generator",
+  "Current Year Log",
 ]);
 
 /** 🔧 Basic Shortcuts */

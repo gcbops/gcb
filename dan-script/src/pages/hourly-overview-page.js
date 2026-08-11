@@ -31,7 +31,6 @@ const hourlyOverviewPage = (() => {
         })
         .withFailureHandler((err) => {
           AppUtils.showError(err);
-          AppUtils.showDashboardToast("Sheet doesn't exist!", "error");
         })
         .getClientSheetUrl("Hourly History");
     });
@@ -44,7 +43,7 @@ const hourlyOverviewPage = (() => {
       const $submitBtn = $(this).find('button[type="submit"]');
 
       if (!fValueVal) {
-        AppUtils.showDashboardToast("Please enter the number!", "error");
+        AppUtils.showError("Please enter the number!");
         return;
       }
 

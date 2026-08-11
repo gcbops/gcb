@@ -33,13 +33,13 @@ const RouterModule = (() => {
 
   const setCurrentPage = (page) => {
     currentPage = page;
-    localStorage.setItem("currentPageGC", page);
+    localStorage.setItem("gcb_currentPageGC", page);
   };
 
   const getCurrentPage = () => currentPage;
 
   const init = () => {
-    currentPage = localStorage.getItem("currentPageGC") || "home";
+    currentPage = localStorage.getItem("gcb_currentPageGC") || "home";
   };
 
   const routes = {

@@ -5,7 +5,7 @@ const ReportService = (() => {
     function getLatestReport() {
         const data = AppUtils.cacheGet("reportsOverview");
         if (!data || !data.logs?.length) {
-            AppUtils.showDashboardToast("No reports found.", "error");
+            AppUtils.showError("No reports found.");
             return null;
         }
         return data.logs[0];

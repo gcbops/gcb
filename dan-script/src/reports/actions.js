@@ -71,10 +71,7 @@ const ReportActions = (() => {
 
   function handleReportFailure(btn, err, message) {
     btn.prop("disabled", false);
-
     AppUtils.showError(err);
-
-    AppUtils.showDashboardToast(message, "error");
   }
 
   return {

@@ -1,14 +1,17 @@
 import { AppUtils } from "../utils";
 
 const ClientDirectory = (() => {
-  function loadClientDirectory(source) {
+  function loadClientDirectory(source = "allClientsData") {
     bindClientDirectoryEvents();
 
     const cached = fetchCachedClientDirectory(source);
 
     if (cached) {
+
       renderClientDirectory(cached);
+
       refreshClientDirectory(source, cached);
+
       return;
     }
 
@@ -18,29 +21,40 @@ const ClientDirectory = (() => {
   function fetchCachedClientDirectory(source) {
     const cached = AppUtils.cacheGet(source);
 
-    return Array.isArray(cached) && cached.length ? cached : null;
+    if (!Array.isArray(cached) || !cached.length) {
+      return null;
+    }
+
+    return cached;
   }
 
   function fetchClientDirectory(source) {
+
     AppUtils.cachedGScriptCall(
       source,
-      "getClientTableDataWithNickname",
+      "getClientDataWithNickname",
       [source],
       (data) => {
+
         if (!Array.isArray(data)) {
-          AppUtils.showDashboardToast("Something went wrong!", "error");
+          AppUtils.showDashboardToast(
+            "Something went wrong loading clients!",
+            "error",
+          );
           return;
         }
 
         renderClientDirectory(data);
       },
+      true,
     );
   }
 
   function refreshClientDirectory(source, cached) {
+
     AppUtils.cachedGScriptCall(
       source,
-      "getClientTableDataWithNickname",
+      "getClientDataWithNickname",
       [source],
       (fresh) => {
         if (!Array.isArray(fresh)) {
@@ -49,8 +63,9 @@ const ClientDirectory = (() => {
 
         if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
           renderClientDirectory(fresh);
-        }
+        } 
       },
+      true,
     );
   }
 
@@ -149,7 +164,6 @@ const ClientDirectory = (() => {
       })
       .withFailureHandler((err) => {
         AppUtils.showError(err);
-        AppUtils.showDashboardToast("Something went wrong!", "error");
       })
       .goToPresentClient(clientName);
   }

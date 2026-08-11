@@ -29,7 +29,7 @@ const ProjectDirectory = (() => {
       [],
       (data) => {
         if (!Array.isArray(data)) {
-          AppUtils.showDashboardToast("Something went wrong!", "error");
+          AppUtils.showError("Something went wrong!");
           return;
         }
 

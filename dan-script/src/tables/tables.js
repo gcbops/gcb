@@ -101,7 +101,7 @@ const TableModule = (() => {
     google.script.run
       .withSuccessHandler((url) => window.open(url, "_blank"))
       .withFailureHandler(() =>
-        AppUtils.showDashboardToast("Sheet doesn't exist!", "error"),
+        AppUtils.showError("Sheet doesn't exist!"),
       )
       .getClientSheetUrl(clientName);
   }
@@ -213,7 +213,7 @@ const TableModule = (() => {
       [clientName],
       (data) => {
         if (!data || data.error === "NOT_FOUND") {
-          AppUtils.showDashboardToast("Sheet not found!", "error");
+          AppUtils.showError("Sheet not found!");
           return;
         }
 

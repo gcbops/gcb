@@ -61,6 +61,24 @@ const ChartModule = (() => {
     December: 12,
   };
 
+  let tabEventsBound = false;
+
+  function bindTabEvents() {
+    if (tabEventsBound) {
+      return;
+    }
+
+    tabEventsBound = true;
+
+    $(document)
+      .off("shown.bs.tab.ChartModule")
+      .on("shown.bs.tab.ChartModule", '[data-bs-toggle="tab"]', () => {
+        requestAnimationFrame(() => {
+          resizeAllCharts();
+        });
+      });
+  }
+
   // --------------------------------------------------
   // DATA LOADING
   // --------------------------------------------------
@@ -96,6 +114,11 @@ const ChartModule = (() => {
       config.serverFunction,
       args,
       (data) => {
+
+        if (!document.body.contains(chartDiv)) {
+          return;
+        }
+
         if (!Array.isArray(data) || !data.length) {
           chartDiv.innerText = "No data found.";
           return;
@@ -120,6 +143,8 @@ const ChartModule = (() => {
       );
       return;
     }
+
+    bindTabEvents();
 
     const cacheKey =
       typeof config.cacheKey === "function"
@@ -195,6 +220,12 @@ const ChartModule = (() => {
       default:
         return AppUtils.showError(`Unknown chart type: ${type}`);
     }
+  }
+
+  function resizeAllCharts() {
+    Object.values(chartInstances).forEach((chart) => {
+      chart.resize();
+    });
   }
 
   // --------------------------------------------------
@@ -732,11 +763,28 @@ const ChartModule = (() => {
   }
 
   function createChartCanvas(chartDiv, type) {
+    if (!chartDiv) {
+      return null;
+    }
+
+    /*
+     * Remove any existing canvas/chart DOM.
+     */
+    chartDiv.replaceChildren();
+
     const canvas = document.createElement("canvas");
 
     canvas.id = `chartCanvas_${type}`;
+    canvas.setAttribute("aria-label", `${type} chart`);
 
-    chartDiv.replaceChildren(canvas);
+    /*
+     * Make sure Chart.js has a proper responsive container.
+     */
+    canvas.style.display = "block";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+
+    chartDiv.appendChild(canvas);
 
     return canvas;
   }
@@ -767,6 +815,7 @@ const ChartModule = (() => {
     loadPrevYearCombinedChart,
 
     drawChart,
+    resizeAllCharts,
 
     drawRealtimeAnimatedChart,
     destroyRealtimeChart,

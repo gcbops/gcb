@@ -3,7 +3,7 @@ import { AppUtils } from "../utils.js";
 
 const TableClientSelector = (() => {
   const CLIENTS_CACHE_KEY = "allClientsData";
-  const CLIENTS_SERVER_FUNCTION = "getClientTableDataWithNickname";
+  const CLIENTS_SERVER_FUNCTION = "getClientDataWithNickname";
 
   function initClientSelector(selectId = "#client", isForProject = false) {
     const $select = $(selectId);

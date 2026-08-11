@@ -13,6 +13,19 @@ const ActivityToday = (() => {
     "For QA",
   ];
 
+  const resetableCacheKeyForUpdatingHours = [
+    "cache_ActiveClients",
+    "cache_OutstandingAccounts",
+    "topPaidClients",
+    "topProjects",
+    "hoursSummary",
+    "hourTotals",
+    "chartData_daily",
+    "chartData_monthly",
+    "chartData_yearly",
+    "chartData_yearly_all",
+  ];
+
   let refreshTimer = null;
   let isRefreshing = false;
 
@@ -256,9 +269,23 @@ const ActivityToday = (() => {
 
     clearClientCaches(formData.client);
 
-    AppUtils.resetCacheKeys(AppUtils.resetableCacheKeyForUpdatingHours);
+    AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
+
+    resetYearlyChartCaches();
 
     $("#hour").val("");
+  }
+
+  function resetYearlyChartCaches(startYear = 2024) {
+    const currentYear = new Date().getFullYear();
+
+    const keys = [];
+
+    for (let year = startYear; year <= currentYear; year++) {
+      keys.push(`chartData_yearly_${year}`);
+    }
+
+    AppUtils.resetCacheKeys(keys);
   }
 
   function clearClientCaches(clientName) {
@@ -288,7 +315,7 @@ const ActivityToday = (() => {
     const clientName = String($("#client-view-hours").val() || "").trim();
 
     if (!clientName) {
-      AppUtils.showDashboardToast("Please select a client first.", "error");
+      AppUtils.showError("Please select a client first.");
 
       return;
     }
@@ -302,7 +329,7 @@ const ActivityToday = (() => {
         }
       })
       .withFailureHandler(() => {
-        AppUtils.showDashboardToast("Sheet doesn't exist!", "error");
+        AppUtils.showError("Sheet doesn't exist!");
       })
       .getClientSheetUrl(clientName);
   }

@@ -1,118 +1,278 @@
 import { RouterModule } from "./routers.js";
 
 const AppUtils = (() => {
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-
-  const resetableCacheKeyForUpdatingHours = [
-    "cache_ActiveClients",
-    "cache_OutstandingAccounts",
-    "topPaidClients",
-    "topProjects",
-    "hoursSummary",
-    "hourTotals",
-    "chartData_daily",
-    "chartData_monthly",
-    "chartData_yearly",
-    "chartData_yearly_2025",
-    "chartData_yearly_all"
-  ];
-
   // ---- CACHE ----
+
+  const APP_CACHE_PREFIX = "gcb_";
+  const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day
+  let notificationAudio = null;
+
+  /**
+   * Get the actual localStorage key used by the app.
+   *
+   * Example:
+   *   getStorageKey("chartData_daily")
+   *   -> "gcb_chartData_daily"
+   */
+  function getStorageKey(key) {
+    return `${APP_CACHE_PREFIX}${key}`;
+  }
+
+  /**
+   * Get the timestamp key for a cache item.
+   *
+   * Example:
+   *   gcb_chartData_daily
+   *   gcb_chartData_daily_time
+   */
+  function getCacheTimeKey(key) {
+    return `${getStorageKey(key)}_time`;
+  }
+
+  /**
+   * Save data to app cache.
+   */
   function cacheSet(key, data) {
-    localStorage.setItem(key, JSON.stringify(data));
-    localStorage.setItem(key + "_time", Date.now());
+    if (!key) {
+      return;
+    }
+
+    const storageKey = getStorageKey(key);
+    const timeKey = getCacheTimeKey(key);
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      localStorage.setItem(timeKey, String(Date.now()));
+    } catch (e) {
+      console.error("Cache set failed:", key, e);
+    }
   }
 
+  /**
+   * Get data from app cache.
+   *
+   * Returns:
+   *   data -> valid cached data
+   *   null -> missing, expired, or invalid cache
+   */
   function cacheGet(key) {
-    const cached = localStorage.getItem(key);
-    const time = Number(localStorage.getItem(key + "_time") || 0);
+    if (!key) {
+      return null;
+    }
 
-    if (!cached || Date.now() - time > ONE_DAY) {return null;}
+    const storageKey = getStorageKey(key);
+    const timeKey = getCacheTimeKey(key);
 
-    try { return JSON.parse(cached); }
-    catch { return null; }
+    const cached = localStorage.getItem(storageKey);
+    const time = Number(localStorage.getItem(timeKey) || 0);
+
+    if (!cached || !time) {
+      return null;
+    }
+
+    if (Date.now() - time > CACHE_TTL) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      console.warn(`Invalid cache data for "${key}"`, e);
+      return null;
+    }
   }
 
+  /**
+   * Check whether a cache item is expired.
+   */
   function cacheExpired(key) {
-    const time = Number(localStorage.getItem(key + "_time") || 0);
-    return Date.now() - time > ONE_DAY;
+    if (!key) {
+      return true;
+    }
+
+    const time = Number(localStorage.getItem(getCacheTimeKey(key)) || 0);
+
+    if (!time) {
+      return true;
+    }
+
+    return Date.now() - time > CACHE_TTL;
   }
 
+  /**
+   * Remove one cache item.
+   */
   function cacheClear(key) {
-    localStorage.removeItem(key);
-    localStorage.removeItem(key + "_time");
+    if (!key) {
+      return;
+    }
+
+    try {
+      localStorage.removeItem(getStorageKey(key));
+      localStorage.removeItem(getCacheTimeKey(key));
+    } catch (e) {
+      console.error("Cache clear failed:", key, e);
+    }
   }
 
+  /**
+   * Refresh the timestamp of selected cache keys.
+   *
+   * This forces the cache to be treated as fresh without
+   * changing the cached data.
+   */
   function resetCacheKeys(keys = []) {
-    if (!Array.isArray(keys)) {return;}
-    keys.forEach(key => {
-      if (localStorage.getItem(key)) {
-        localStorage.setItem(key + "_time", Date.now());
+    if (!Array.isArray(keys)) {
+      return;
+    }
+
+    keys.forEach((key) => {
+      if (!key) {
+        return;
+      }
+
+      const storageKey = getStorageKey(key);
+      const timeKey = getCacheTimeKey(key);
+
+      if (localStorage.getItem(storageKey)) {
+        localStorage.setItem(timeKey, String(Date.now()));
       }
     });
   }
 
-  function clearEverything() {
-    localStorage.clear();
+  /**
+   * Clear all cache belonging to this app.
+   *
+   * Only keys beginning with "gcb_" are removed.
+   */
+  function clearAppCache() {
+    const keysToRemove = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+
+      if (key && key.startsWith(APP_CACHE_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => {
+      localStorage.removeItem(key);
+    });
+
+    console.log(`App cache cleared: ${keysToRemove.length} item(s)`);
   }
 
   // ---- SAFERUN ----
-  function safeRun(fn, delay = 5000) {
-    return new Promise(res =>
+  function safeRun(fn, delay = 0) {
+    return new Promise((resolve) => {
       setTimeout(() => {
-        try { fn(); } catch (e) { showError(e); }
-        res();
-      }, delay)
-    );
+        try {
+          fn();
+        } catch (err) {
+          showError(err);
+        }
+
+        resolve();
+      }, delay);
+    });
   }
 
   // ---- GOOGLE SCRIPT CALL W/ CACHE ----
-  function cachedGScriptCall(cacheKey, gFuncName, args = [], callback, log = false, reset = false) {
+  function cachedGScriptCall(
+    cacheKey,
+    gFuncName,
+    args = [],
+    callback,
+    log = false,
+    reset = false,
+  ) {
 
     const requestToken = RouterModule.getPageToken();
 
     const safeCallback = (data) => {
-
-      // 🚫 old page response, ignore
+      // Ignore response from an old page
       if (requestToken !== RouterModule.getPageToken()) {
-        if (log) {console.log(`[Cache] Ignored stale response: ${gFuncName}`);}
+        if (log) {
+          console.log(`[Cache] Ignored stale response: ${gFuncName}`);
+        }
         return;
       }
 
-      callback(data);
+      if (typeof callback === "function") {
+        callback(data);
+      }
     };
-    
+
+    /*
+     * Get cached data.
+     *
+     * cacheGet() should already handle:
+     * - gcb_ prefix
+     * - expiration
+     * - JSON parsing
+     */
     const cached = cacheGet(cacheKey);
-    
-    if (cached) {
-      if (log) {console.log(`[Cache] Found data for key "${cacheKey}":`, cached);}
+
+    if (cached !== null) {
+      if (log) {
+        console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
+      }
+
       safeCallback(cached);
     }
 
-    let expired = !cached || cacheExpired(cacheKey);
+    /*
+     * Only call Apps Script when:
+     * - there is no cache
+     * - cache has expired
+     * - reset was requested
+     */
+    let shouldFetch = cached === null || cacheExpired(cacheKey);
 
-    if (reset) {expired = reset;}
-    if (log) {console.log(`[Cache] Cache expired for key "${cacheKey}"?`, expired);}
-
-    if (expired) {
-      if (log) {console.log(`[Cache] Calling Google Script function "${gFuncName}" with args:`, args);}
-      safeRun(() => {
-        google.script.run
-          .withSuccessHandler((data) => {
-            if (log) {console.log(`[Cache] Setting cache for key "${cacheKey}" with data:`, data);}
-            cacheSet(cacheKey, data);
-            safeCallback(data);
-          })
-          .withFailureHandler((err) => {
-            if (log) {console.log(`[Cache] Google Script call failed for "${gFuncName}":`, err);}
-            if (requestToken !== RouterModule.getPageToken()) {
-              return;
-            }
-            showError(err);
-            showDashboardToast("Something went wrong!", "error");
-          })[gFuncName](...args);
-      }, 0);
+    if (reset) {
+      shouldFetch = true;
     }
+
+    if (log) {
+      console.log(`[Cache] Should fetch "${cacheKey}"?`, shouldFetch);
+    }
+
+    if (!shouldFetch) {
+      return;
+    }
+
+    if (log) {
+      console.log(
+        `[Cache] Calling Google Script function "${gFuncName}" with args:`,
+        args,
+      );
+    }
+
+    safeRun(() => {
+      google.script.run
+        .withSuccessHandler((data) => {
+
+          cacheSet(cacheKey, data);
+      
+          safeCallback(data);
+        })
+        .withFailureHandler((err) => {
+          if (log) {
+            console.log(
+              `[Cache] Google Script call failed for "${gFuncName}":`,
+              err,
+            );
+          }
+
+          // Ignore errors from old pages
+          if (requestToken !== RouterModule.getPageToken()) {
+            return;
+          }
+
+          showError(err);
+        })[gFuncName](...args);
+    }, 0);
   }
 
   // ---- EXTRA UTILS ----
@@ -129,118 +289,242 @@ const AppUtils = (() => {
         if (field === "message" && value && typeof value.message === "string") {
           value = value.message;
         }
+
         if (typeof value === "string" && value.trim()) {
           msg = value.trim();
           break;
         }
       }
+
       if (!msg && typeof err.toString === "function") {
-        const s = err.toString().trim();
-        if (s) {msg = s;}
+        const stringValue = err.toString().trim();
+
+        if (stringValue && stringValue !== "[object Object]") {
+          msg = stringValue;
+        }
       }
     }
 
-    if (!msg) {msg = "Something went wrong!";}
+    if (!msg) {
+      msg = "Something went wrong!";
+    }
 
     console.error("Error:", msg, err);
-    showDashboardToast(msg, "error");
+
+    /*
+     * Don't call showDashboardToast() here if Toastr itself
+     * is unavailable, otherwise we can create a recursive
+     * showError() -> showDashboardToast() -> showError() loop.
+     */
+    if (typeof toastr !== "undefined") {
+      showDashboardToast(msg, "error");
+    }
   }
 
   function playNotif() {
-    const sound = new Audio("https://raw.githubusercontent.com/gcbops/gcb/main/slick-notification.ogg");
-    sound.play().catch(() => { });
+    try {
+      if (!notificationAudio) {
+        notificationAudio = new Audio(
+          "https://raw.githubusercontent.com/gcbops/gcb/main/slick-notification.ogg",
+        );
+
+        notificationAudio.preload = "auto";
+      }
+
+      notificationAudio.currentTime = 0;
+
+      const playPromise = notificationAudio.play();
+
+      if (playPromise?.catch) {
+        playPromise.catch(() => {
+          // Browser may block audio until user interaction.
+        });
+      }
+    } catch (err) {
+      console.warn("Notification sound could not be played:", err);
+    }
   }
 
   function getInitials(name) {
-    if (!name) {
+    if (typeof name !== "string") {
       return "";
     }
+
     return name
-      .split(" ")
+      .trim()
+      .split(/\s+/)
       .filter(Boolean)
-      .map((w) => w[0].toUpperCase())
+      .map((word) => word.charAt(0).toUpperCase())
       .join("")
       .slice(0, 3);
   }
 
   function showDashboardToast(msg, type = "success") {
-    if (typeof toastr === "undefined") {return showError("Toastr not found");}
+    if (typeof toastr === "undefined") {
+      console.warn("Toastr not found:", msg);
+      return;
+    }
+
+    const toastType = typeof toastr[type] === "function" ? type : "info";
+
     toastr.options = {
       closeButton: true,
       progressBar: true,
       positionClass: "toast-bottom-center",
-      timeOut: "4000"
+      timeOut: 4000,
     };
-    toastr[type] ? toastr[type](msg) : toastr.info(msg);
+
+    toastr[toastType](msg);
   }
 
-  function initSelect2(parent) {
-    const dropdownParent = parent || $(document.body);
+  function initSelect2(parent, options = {}) {
+    const $parent = parent ? $(parent) : $(document.body);
 
-    function apply($el, options = {}) {
+    if (!$parent.length) {
+      return;
+    }
+
+    function applySelect2($el, selectOptions = {}) {
+      if (!$el.length) {
+        return;
+      }
+
+      /*
+       * Prevent Select2 from being initialized twice.
+       */
       if ($el.hasClass("select2-hidden-accessible")) {
         $el.select2("destroy");
       }
-      $el.select2({ width: "100%", dropdownParent, ...options });
+
+      $el.select2({
+        width: "100%",
+        dropdownParent: $parent,
+        ...selectOptions,
+      });
     }
 
     $(".js-select2").each(function () {
-      apply($(this));
+      applySelect2($(this), options);
     });
 
     $(".js-select2-dynamic").each(function () {
-      apply($(this), { tags: true });
+      applySelect2($(this), {
+        tags: true,
+        ...options,
+      });
     });
   }
 
   function openDrawer(drawerSelector, options = {}) {
-    const {
-      contentClass = "",
-      onOpen = null,
-      onClose = null
-    } = options;
+    const { contentClass = "", onOpen = null, onClose = null } = options;
 
     const $drawer = $(drawerSelector);
-    if (!$drawer.length) {return;}
+
+    if (!$drawer.length) {
+      return;
+    }
 
     const $content = $drawer.find(".drawer-content");
 
+    /*
+     * Remove previous close handler first.
+     * This prevents duplicate handlers if openDrawer()
+     * is called multiple times.
+     */
+    $drawer.off("click.AppUtilsDrawerClose");
+
     $drawer.addClass("drawer-open");
-    if (contentClass) {$content.addClass(contentClass);}
 
-    if (typeof onOpen === "function") {onOpen($drawer, $content);}
+    if (contentClass) {
+      $content.addClass(contentClass);
+    }
 
-    $drawer.off("click.AppUtilsDrawerClose").on("click.AppUtilsDrawerClose", ".drawer-close", (e) => {
+    if (typeof onOpen === "function") {
+      onOpen($drawer, $content);
+    }
+
+    $drawer.on("click.AppUtilsDrawerClose", ".drawer-close", function (e) {
       e.preventDefault();
+
       closeDrawer($drawer, $content, onClose);
     });
   }
 
-  function closeDrawer($drawer, $content, onClose) {
-    if (!$drawer.hasClass("drawer-open")) {return;}
-    $drawer.removeClass("drawer-open");
-    if (typeof onClose === "function") {onClose($drawer, $content);}
+  function closeDrawer($drawer, $content = null, onClose = null) {
+    const $drawerElement = $drawer instanceof jQuery ? $drawer : $($drawer);
+
+    if (!$drawerElement.length) {
+      return;
+    }
+
+    const $contentElement = $content
+      ? $content instanceof jQuery
+        ? $content
+        : $($content)
+      : $drawerElement.find(".drawer-content");
+
+    /*
+     * Remove the namespaced handler so reopening the drawer
+     * doesn't stack handlers.
+     */
+    $drawerElement.off("click.AppUtilsDrawerClose");
+
+    if (!$drawerElement.hasClass("drawer-open")) {
+      return;
+    }
+
+    $drawerElement.removeClass("drawer-open");
+
+    if (typeof onClose === "function") {
+      onClose($drawerElement, $contentElement);
+    }
   }
 
-  function submitForm({ gscriptFunc, data = {}, onSuccess, $btn }) {
-    if (!gscriptFunc) {throw new Error("No Google Apps Script function provided");}
+  function submitForm({ gscriptFunc, data = {}, onSuccess, onError, $btn }) {
+    if (!gscriptFunc) {
+      showError("No Google Apps Script function provided");
+      return;
+    }
 
-    if ($btn && $btn.length) {$btn.prop("disabled", true);}
+    const $button = $btn?.length ? $btn : null;
 
-    google.script.run
-      .withSuccessHandler(() => {
-        if ($btn && $btn.length) {$btn.prop("disabled", false);}
-        if (typeof onSuccess === "function") {onSuccess();}
-      })
-      .withFailureHandler(err => {
-        if ($btn && $btn.length) {$btn.prop("disabled", false);}
-        showError(err);
-        showDashboardToast("Something went wrong!", "error");
-      })[gscriptFunc](data);
+    if ($button) {
+      $button.prop("disabled", true);
+    }
+
+    const restoreButton = () => {
+      if ($button) {
+        $button.prop("disabled", false);
+      }
+    };
+
+    try {
+      google.script.run
+        .withSuccessHandler((result) => {
+          restoreButton();
+
+          if (typeof onSuccess === "function") {
+            onSuccess(result);
+          }
+        })
+        .withFailureHandler((err) => {
+          restoreButton();
+
+          showError(err);
+
+          if (typeof onError === "function") {
+            onError(err);
+          } else {
+            showError("Something went wrong!");
+          }
+        })[gscriptFunc](data);
+    } catch (err) {
+      restoreButton();
+      showError(err);
+    }
   }
 
   function openModal(modalSelector, options = {}) {
-
     const {
       size = "",
       placement = "center",
@@ -255,48 +539,56 @@ const AppUtils = (() => {
       scrollable = false,
       centered = false,
       onOpen = null,
-      onClose = null
+      onClose = null,
     } = options;
 
     const $modal = $(modalSelector);
 
-    if (!$modal.length) {return;}
+    if (!$modal.length) {
+      return;
+    }
 
     const modalEl = $modal[0];
     const $dialog = $modal.find(".modal-dialog");
     const $content = $modal.find(".modal-content");
 
-    // Reset modal placement classes
+    /*
+     * Reset modal classes.
+     */
     $modal.removeClass(
-      "modal-top modal-bottom modal-center modal-top-start modal-top-end modal-bottom-start modal-bottom-end"
+      [
+        "modal-top",
+        "modal-bottom",
+        "modal-center",
+        "modal-top-start",
+        "modal-top-end",
+        "modal-bottom-start",
+        "modal-bottom-end",
+      ].join(" "),
     );
 
-    // Reset dialog classes
+    /*
+     * Reset dialog classes.
+     */
     $dialog.attr("class", "modal-dialog");
 
-    // Size
     if (size) {
       $dialog.addClass(`modal-${size}`);
     }
 
-    // Scrollable
     if (scrollable) {
       $dialog.addClass("modal-dialog-scrollable");
     }
 
-    // Centered
     if (centered || placement === "center") {
       $dialog.addClass("modal-dialog-centered");
     }
 
-    // Custom dialog class
     if (dialogClass) {
       $dialog.addClass(dialogClass);
     }
 
-    // Placement
     switch (placement) {
-
       case "top":
         $modal.addClass("modal-top");
         break;
@@ -325,10 +617,11 @@ const AppUtils = (() => {
       default:
         $modal.addClass("modal-center");
         break;
-
     }
 
-    // Reset content classes
+    /*
+     * Reset modal content classes.
+     */
     $content.attr("class", "modal-content");
 
     if (contentClass) {
@@ -336,115 +629,97 @@ const AppUtils = (() => {
     }
 
     $content.html(`
-      ${header ? `
-        <div class="modal-header">
+    ${
+      header
+        ? `
+      <div class="modal-header">
+        ${header}
 
-          ${header}
-
-          ${
-            closable
-              ? `
-              <button
-                type="button"
-                class="btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close">
-              </button>
-            `
-              : ""
-          }
-
-        </div>
-      ` : ""}
-
-      <div class="modal-body text-center">
-        ${body}
+        ${
+          closable
+            ? `
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close">
+          </button>
+        `
+            : ""
+        }
       </div>
-
-      ${footer ? `
-        <div class="modal-footer justify-content-center">
-          ${footer}
-        </div>
-      ` : ""}
-    `);
-
-    // Remove previous listeners
-    if (modalEl._shownHandler) {
-      modalEl.removeEventListener(
-        "shown.bs.modal",
-        modalEl._shownHandler
-      );
+    `
+        : ""
     }
 
-    if (modalEl._hiddenHandler) {
-      modalEl.removeEventListener(
-        "hidden.bs.modal",
-        modalEl._hiddenHandler
-      );
+    <div class="modal-body text-center">
+      ${body}
+    </div>
+
+    ${
+      footer
+        ? `
+      <div class="modal-footer justify-content-center">
+        ${footer}
+      </div>
+    `
+        : ""
     }
+  `);
 
-    modalEl._shownHandler = () => {
+    /*
+     * Clean up previous AppUtils handlers.
+     */
+    $modal.off(".AppUtilsModal");
 
+    $modal.one("shown.bs.modal.AppUtilsModal", function () {
       if (typeof onOpen === "function") {
         onOpen($modal, $dialog, $content);
       }
+    });
 
-    };
-
-    modalEl._hiddenHandler = () => {
-
+    $modal.one("hidden.bs.modal.AppUtilsModal", function () {
       if (typeof onClose === "function") {
         onClose($modal, $dialog, $content);
       }
 
       $content.empty();
 
-      bootstrap.Modal
-        .getInstance(modalEl)
-        ?.dispose();
+      const instance = bootstrap.Modal.getInstance(modalEl);
 
-    };
-
-    modalEl.addEventListener(
-      "shown.bs.modal",
-      modalEl._shownHandler,
-      { once: true }
-    );
-
-    modalEl.addEventListener(
-      "hidden.bs.modal",
-      modalEl._hiddenHandler,
-      { once: true }
-    );
+      if (instance) {
+        instance.dispose();
+      }
+    });
 
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
       backdrop,
-      keyboard
+      keyboard,
     });
 
     modal.show();
-
   }
 
   function closeModal(modalSelector) {
-
     const modalEl = document.querySelector(modalSelector);
 
-    if (!modalEl) {return;}
+    if (!modalEl) {
+      return;
+    }
 
-    bootstrap.Modal
-      .getOrCreateInstance(modalEl)
-      .hide();
+    const modal = bootstrap.Modal.getInstance(modalEl);
 
+    if (modal) {
+      modal.hide();
+    }
   }
 
   return {
     // cache
-    resetableCacheKeyForUpdatingHours,
     cacheSet,
     cacheGet,
     cacheClear,
-    clearEverything,
+    clearAppCache,
     resetCacheKeys,
 
     // gscript
@@ -462,8 +737,9 @@ const AppUtils = (() => {
     openDrawer,
     closeDrawer,
     openModal,
-    closeModal
+    closeModal,
   };
-})();
+}
+)();
 
 export { AppUtils };

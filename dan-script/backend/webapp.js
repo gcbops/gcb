@@ -59,39 +59,83 @@ function getHoursSummary() {
   };
 }
 
-function getClientTableDataWithNickname(dt) {
+function getClientDataWithNickname(dt) {
+  console.log("[GAS] getClientDataWithNickname START");
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+
   const logSheet = ss.getSheetByName("Paid & Owed Log");
-  let data;
-  if (dt === "activeClientsData") {
-    data = logSheet.getRange("O2:R" + logSheet.getLastRow()).getValues();
-  } else {
-    data = logSheet.getRange("J2:M" + logSheet.getLastRow()).getValues();
+  const clientNamesSheet = ss.getSheetByName("Client Names");
+
+  if (!logSheet) {
+    throw new Error('Sheet "Paid & Owed Log" not found.');
   }
-  
-  const results = [];
 
-  data.forEach(row => {
-    const [name, id, city, status] = row;
-    if (!name) return; 
+  if (!clientNamesSheet) {
+    throw new Error('Sheet "Client Names" not found.');
+  }
 
-    let role = "";
-    try {
-      const personSheet = ss.getSheetByName(name);
-      if (personSheet) role = personSheet.getRange("N17").getValue();
-    } catch (e) {
-      role = "";
-    }
+  const lastRow = logSheet.getLastRow();
 
-    // build object
-    results.push({
-      name,
-      id,
-      city,
-      status,
-      role
+  if (lastRow < 2) {
+    return [];
+  }
+
+  if (dt === "activeClientsData") {
+    data = logSheet.getRange(2, 15, lastRow - 1, 4).getValues();
+  } else {
+    data = logSheet.getRange(2, 10, lastRow - 1, 4).getValues();
+  }
+
+  const CLIENT_NAME_COLUMN = 1;
+  const NICKNAME_COLUMN = 8;
+
+  const clientNamesLastRow = clientNamesSheet.getLastRow();
+
+  const nicknameMap = new Map();
+
+  if (clientNamesLastRow >= 2) {
+    const clientNamesData = clientNamesSheet
+      .getRange(
+        2,
+        CLIENT_NAME_COLUMN,
+        clientNamesLastRow - 1,
+        NICKNAME_COLUMN - CLIENT_NAME_COLUMN + 1,
+      )
+      .getValues();
+
+    clientNamesData.forEach((row) => {
+      const name = String(row[0] ?? "").trim();
+
+      const nickname = String(
+        row[NICKNAME_COLUMN - CLIENT_NAME_COLUMN] ?? "",
+      ).trim();
+
+      if (!name) {
+        return;
+      }
+
+      nicknameMap.set(name.toLowerCase(), nickname);
     });
-  });
+  }
+
+  const results = data
+    .filter((row) => {
+      return row[0] !== "" && row[0] !== null && row[0] !== undefined;
+    })
+    .map((row) => {
+      const name = String(row[0] ?? "").trim();
+
+      const nickname = nicknameMap.get(name.toLowerCase()) || "";
+
+      return {
+        name,
+        id: row[1],
+        city: row[2],
+        status: row[3],
+        role: nickname,
+      };
+    });
 
   return results;
 }

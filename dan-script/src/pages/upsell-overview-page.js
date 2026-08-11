@@ -32,7 +32,6 @@ const upsellOverviewPage = (() => {
         })
         .withFailureHandler((err) => {
           AppUtils.showError(err);
-          AppUtils.showDashboardToast("Sheet doesn't exist!", "error");
         })
         .getClientSheetUrl("Upsells");
     });
@@ -60,7 +59,7 @@ const upsellOverviewPage = (() => {
       });
 
       if (required.some(k => data[k] === "")) {
-        AppUtils.showDashboardToast("Please fill out all required fields!", "error");
+        AppUtils.showError("Please fill out all required fields!");
         return;
       }
 
@@ -78,10 +77,7 @@ const upsellOverviewPage = (() => {
             if ($el.length) {$el.val("");}
           });
 
-          AppUtils.cacheClear("upsellRecords");
-          AppUtils.cacheClear("upsellRecords_time");
-          AppUtils.cacheClear("upsellSummary");
-          AppUtils.cacheClear("upsellSummary_time");
+         AppUtils.resetCacheKeys(["upsellRecords", "upsellSummary"]);
 
           setTimeout(() => {
             loadUpsellSummary(true);

@@ -26,6 +26,7 @@ const ActionRouterModule = (() => {
       },
       true
     );
+
   };
 
   return { init };

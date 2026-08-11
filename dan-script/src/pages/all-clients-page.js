@@ -44,7 +44,7 @@ const allClientsPage = (() => {
             const clientName = $("#sheet_name").val().trim();
 
             if (!clientName) {
-              AppUtils.showDashboardToast("Client name is required!", "error");
+              AppUtils.showError("Client name is required!");
               return;
             }
 
@@ -59,7 +59,7 @@ const allClientsPage = (() => {
 
                 google.script.run
                   .withFailureHandler(() =>
-                    AppUtils.showDashboardToast("Syncing error!", "error")
+                    AppUtils.showError("Syncing error!"),
                   )
                   .syncClientSheetList();
 

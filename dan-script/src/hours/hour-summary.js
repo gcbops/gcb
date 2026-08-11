@@ -8,7 +8,7 @@ const HourSummary = (() => {
         [],
         (data) => {
           if (!data) {
-            AppUtils.showDashboardToast("No metrics found", "error");
+            AppUtils.showError("No metrics found");
             return;
           }
 

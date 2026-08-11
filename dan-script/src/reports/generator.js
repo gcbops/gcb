@@ -45,7 +45,7 @@ const ReportGenerator = (() => {
       AppUtils.showError(err);
     }
 
-    AppUtils.showDashboardToast(message, "error");
+    AppUtils.showError(message);
   }
 
   function prepareReportGeneration(type, btn, params) {
@@ -136,7 +136,7 @@ const ReportGenerator = (() => {
     if (attempts >= REPORT_MAX_ATTEMPTS) {
       setGenerateState(type, btn, false);
 
-      AppUtils.showDashboardToast("Timed out waiting for report.", "error");
+      AppUtils.showError("Timed out waiting for report.");
 
       return;
     }
