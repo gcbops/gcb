@@ -20,10 +20,10 @@ import { performanceTargetPage } from "./pages/performance-target-page.js";
 import { performanceYearlyPage } from "./pages/performance-yearly-page.js";
 import { topClientsPage } from "./pages/top-clients-page.js";
 import { yearlyOverviewPage } from "./pages/yearly-overview-page.js";
-import { NavigationModule } from "./navigation/navigation.js";
 import { ChartModule } from "./charts.js";
 import { PageLoaderModule } from "./page-loader.js";
 import { DataTableModule } from "./tables/data-table.js";
+import { AppUI } from "./app-ui.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -39,7 +39,9 @@ const RouterModule = (() => {
   const getCurrentPage = () => currentPage;
 
   const init = () => {
-    currentPage = localStorage.getItem("gcb_currentPageGC") || "home";
+    const savedPage = localStorage.getItem("gcb_currentPageGC");
+
+    currentPage = routes[savedPage] ? savedPage : "home";
   };
 
   const routes = {
@@ -89,24 +91,31 @@ const RouterModule = (() => {
   };
 
   function go(pageName) {
-    const page = routes[pageName] ?? routes.home;
+    const resolvedPageName = routes[pageName] ? pageName : "home";
+    const page = routes[resolvedPageName];
 
     pageToken++;
 
     currentModule?.destroy?.();
+    currentModule = null;
 
     ChartModule.destroyAllCharts();
-
     DataTableModule.destroyAll();
 
-    setCurrentPage(pageName);
+    setCurrentPage(resolvedPageName);
 
-    PageLoaderModule.loadPage(pageName, () => {
-      page.init?.(pageToken);
+    const token = pageToken;
+
+    PageLoaderModule.loadPage(resolvedPageName, () => {
+      if (token !== pageToken) {
+        return;
+      }
+
+      page.init?.(token);
 
       currentModule = page;
 
-      NavigationModule.activate(pageName);
+      AppUI.activateNavigation(pageName);
     });
   }
 

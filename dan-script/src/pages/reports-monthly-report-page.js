@@ -1,6 +1,5 @@
 import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
-import { PageModules } from "../page-modules.js";
 import { ReportHistory } from "../reports/history.js";
 import { ReportActions } from "../reports/actions.js";
 import { ReportGenerator } from "../reports/generator.js";
@@ -142,7 +141,7 @@ const reportsMonthlyReportPage = (() => {
 
     .on("click.reportsMonthly", "#generate-yearly-report", () => {
       const page = "reportsAnnualReport";
-      RouterModule.go(page, PageModules[page] || null);
+      RouterModule.go(page);
     })
 
     .on("click.reportsMonthly", "#download-latest-pdf", function () {

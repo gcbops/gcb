@@ -2,7 +2,13 @@ import { AppUtils } from "./utils.js";
 
 const PageLoaderModule = (() => {
 
-  const titles = {
+  const DEFAULT_PAGE_META = {
+    title: "Lab Performance Dashboard",
+    desc: "Monitor all key metrics across clients, projects, and hours at a glance.",
+    icon: "pe-7s-graph2 icon-gradient bg-malibu-beach",
+  };
+  
+  const pageMeta = {
     activeClients: { title: "Active Clients", desc: "View all clients currently active.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
     topClients: { title: "Top Clients", desc: "Check highest performing clients .", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
     allClients: { title: "All Clients", desc: "See every client in one place.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
@@ -27,29 +33,58 @@ const PageLoaderModule = (() => {
   };
 
   function loadPage(pageName, done) {
-    const titleParams = titles[pageName] || {
-      title: "Lab Performance Dashboard",
-      desc: "Monitor all key metrics across clients, projects, and hours at a glance.",
-      icon: "pe-7s-graph2 icon-gradient bg-malibu-beach"
-    };
+    const meta = pageMeta[pageName] || DEFAULT_PAGE_META;
 
-    AppUtils.cachedGScriptCall('appPageTitle', 'loadSubPage', ['appPageTitle'], (titleHtml) => {
-      const mainInner = document.getElementById("app-main__inner");
-      mainInner.innerHTML = titleHtml;
+    AppUtils.cachedGScriptCall(
+      "appPageTitle",
+      "loadSubPage",
+      ["appPageTitle"],
+      (titleHtml) => {
+        const mainInner = document.getElementById("app-main__inner");
 
-      const pageTitle = document.getElementById("pageTitle");
-      if (pageTitle) {pageTitle.textContent = titleParams.title;}
-      const pageTitleDesc = document.getElementById("pageTitleDesc");
-      if (pageTitleDesc) {pageTitleDesc.textContent = titleParams.desc;}
-      const pageTitleIcon = document.getElementById("pageTitleIcon");
-      if (pageTitleIcon) {pageTitleIcon.className = titleParams.icon;}
+        if (!mainInner) {
+          AppUtils.showError("App main container not found.");
+          return;
+        }
 
-      AppUtils.cachedGScriptCall(`page_${pageName}`, 'loadSubPage', [pageName], (pageHtml) => {
-        mainInner.innerHTML += pageHtml;
-        if (typeof done === "function") {done();}
-      });
-    });
-    
+        mainInner.innerHTML = titleHtml;
+
+        updatePageHeader(meta);
+
+        AppUtils.cachedGScriptCall(
+          `page_${pageName}`,
+          "loadSubPage",
+          [pageName],
+          (pageHtml) => {
+            mainInner.insertAdjacentHTML("beforeend", pageHtml);
+
+            if (typeof done === "function") {
+              done();
+            }
+          },
+        );
+      },
+    );
+  }
+
+  function updatePageHeader(meta) {
+    const pageTitle = document.getElementById("pageTitle");
+
+    if (pageTitle) {
+      pageTitle.textContent = meta.title;
+    }
+
+    const pageTitleDesc = document.getElementById("pageTitleDesc");
+
+    if (pageTitleDesc) {
+      pageTitleDesc.textContent = meta.desc;
+    }
+
+    const pageTitleIcon = document.getElementById("pageTitleIcon");
+
+    if (pageTitleIcon) {
+      pageTitleIcon.className = meta.icon;
+    }
   }
 
   return { loadPage };

@@ -1,6 +1,5 @@
 import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
-import { PageModules } from "../page-modules.js";
 import { ReportsOverview } from "../reports/overview.js";
 import { ReportActions } from "../reports/actions.js";
 
@@ -100,12 +99,12 @@ const reportsExportDataPage = (() => {
 
       .on("click.reports", "#generate-monthly-report", () => {
         const page = "reportsMonthlyReport";
-        RouterModule.go(page, PageModules[page] || null);
+        RouterModule.go(page);
       })
 
       .on("click.reports", "#generate-yearly-report", () => {
         const page = "reportsAnnualReport";
-        RouterModule.go(page, PageModules[page] || null);
+        RouterModule.go(page);
       })
 
       .on("click.reports", "#download-latest-pdf", function () {
