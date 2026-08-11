@@ -1,5 +1,6 @@
 import { AppUtils } from "../utils.js";
-import { TableModule } from "../tables.js";
+import { TableModule } from "../tables/tables.js";
+import { DataTableModule } from "../tables/data-table.js";
 
 const upsellOverviewPage = (() => {
   let bound = false;
@@ -126,9 +127,79 @@ const upsellOverviewPage = (() => {
       "getUpsellRecords",
       [],
       function (table) {
-        TableModule.renderUpsellRecords(table);
+        renderUpsellTables(table);
       },
     );
+  }
+
+  function renderUpsellTables(tableData) {
+    const $container = $("#upsellTable").parent();
+
+    if (!$container.length) {
+      return;
+    }
+
+    $container.html(
+      `
+      <table
+        id="upsellTable"
+        class="display table nowrap">
+
+        <thead>
+          <tr>
+            <th>Client Name</th>
+            <th>Upsell Hours</th>
+            <th>Orasan Date</th>
+          </tr>
+        </thead>
+
+        <tbody id="recordsBody"></tbody>
+
+      </table>
+      `,
+    );
+
+    const $tbody = $("#recordsBody");
+
+    let html;
+
+    if (!Array.isArray(tableData) || tableData.length === 0) {
+      html = `
+        <tr>
+          <td colspan="3"
+              style="text-align:center;color:#64748b">
+            No records yet
+          </td>
+        </tr>
+        `;
+    } else {
+      html = tableData
+        .map(
+          (row) =>
+            `
+            <tr>
+              <td>
+                ${TableModule.escapeHtml(row[0] ?? "")}
+              </td>
+
+              <td style="text-align:center;">
+                ${TableModule.escapeHtml(row[1] ?? "")}
+              </td>
+
+              <td style="text-align:center;">
+                ${TableModule.escapeHtml(row[2] ?? "")}
+              </td>
+            </tr>
+            `,
+        )
+        .join("");
+    }
+
+    $tbody.html(html);
+
+    if (Array.isArray(tableData) && tableData.length > 0) {
+      DataTableModule.init("Upsell", "#upsellTable");
+    }
   }
 
   return { init, destroy };

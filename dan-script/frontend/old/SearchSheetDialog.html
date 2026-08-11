@@ -64,7 +64,7 @@
           <th>Action</th>
         </tr>
       </thead>
-      <tbody id="dataTableBody"></tbody>
+      <tbody id="data-table-body"></tbody>
     </table>
   </div>
 
@@ -99,7 +99,7 @@
 
       if (hasValidCache) {
         console.log("⏩ Using valid localStorage data instantly...");
-        loadRenderData(clientList, activeClients);
+        loadrenderClientData(clientList, activeClients);
 
         // ✅ Background refresh if cache expired
         if (cacheExpired) {
@@ -138,7 +138,7 @@
               localStorage.setItem("activeClients_time", Date.now());
             }
 
-            renderData(result);
+            renderClientData(result);
             loader.style.display = "none";
             tableContainer.style.display = "block";
           })
@@ -157,15 +157,15 @@
         }, duration);
       }
 
-      function loadRenderData(clientList, activeClients) {
+      function loadrenderClientData(clientList, activeClients) {
         tableContainer.style.display = "none";
-        renderData({ sheets: clientList, activeClients });
+        renderClientData({ sheets: clientList, activeClients });
         loader.style.display = "none";
         tableContainer.style.display = "block";
       }
 
-      function renderData({ sheets, activeClients }) {
-        const tbody = document.querySelector("#dataTableBody");
+      function renderClientData({ sheets, activeClients }) {
+        const tbody = document.querySelector("#data-table-body");
         tbody.innerHTML = "";
 
         if (!sheets || sheets.length === 0) {

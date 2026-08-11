@@ -1,6 +1,6 @@
 import { AppUtils } from "../utils";
 import { ReportHistory } from "./history";
-import { TableModule } from "../tables";
+import { TableModule } from "../tables/tables";
 
 const ReportGenerator = (() => {
 

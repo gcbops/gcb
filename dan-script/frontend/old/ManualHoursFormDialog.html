@@ -215,7 +215,7 @@
     /** --------------------------
      * Data Loaders
      * -------------------------- */
-    const loadTasks = clientName => {
+    const loadClientTasks = clientName => {
       if (!clientName) return;
       google.script.run
         .withSuccessHandler(tasks => {
@@ -349,7 +349,7 @@
 
       $userForm.find(".hint").text("Updating data ...").addClass("blink");
       tbody.innerHTML = "";
-      loadTasks(clientName);
+      loadClientTasks(clientName);
       updateClientonP24(clientName);
       loadRecentRecords(clientName);
     });
@@ -388,7 +388,7 @@
 
       function loadCardSelect(client) {
         if (formId === 'taskForm' && !$taskSelect.children().length && client) {
-          loadTasks(client);
+          loadClientTasks(client);
         }
 
         if (formId === 'userForm' && !$clientUser.children().length) {

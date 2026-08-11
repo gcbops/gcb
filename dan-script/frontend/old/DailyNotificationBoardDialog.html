@@ -16,7 +16,7 @@
     thead th { border-color: #ccc !important; }
     tbody td { border-bottom: none!important; }
     thead th:nth-child(4) .dt-column-title, tbody td:nth-child(4) { text-align: center; }
-    tbody#dataTableBody tr td { padding-top: 18px; padding-bottom: 18px }
+    tbody#data-table-body tr td { padding-top: 18px; padding-bottom: 18px }
 
     #containerexample {display: none}
     #loadercontainer{ position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); }
@@ -96,7 +96,7 @@
           <? } ?>
         </tr>
       </thead>
-      <tbody id="dataTableBody"></tbody>
+      <tbody id="data-table-body"></tbody>
     </table>
   </div>
 
@@ -212,7 +212,7 @@
                 // if this is a fresh fetch or cache was cleared, re-render immediately
                 if (forceRender || newJSON !== oldJSON) {
                   console.log("🖌 Rendering fresh data...");
-                  renderData(data);
+                  renderClientData(data);
                 }
               } else {
                 console.warn("⚠️ No valid array data from server");
@@ -225,7 +225,7 @@
         // if cache exists, show immediately
         if (cached && Array.isArray(cached) && cached.length > 0) {
           console.log(`📦 Using cached data for ${status}`);
-          renderData(cached);
+          renderClientData(cached);
 
           // background refresh if older than a day
           const cacheExpired = (Date.now() - cacheTime) > ONE_DAY;
@@ -243,18 +243,18 @@
       /** ---------------------------
        *  RENDER DATA (for all reports)
        *  --------------------------- */
-      function renderData(data) {
+      function renderClientData(data) {
         console.log("🔍 Data returned:", status, data?.length || 0);
 
         if (!data || !Array.isArray(data)) {
           console.error("❌ Invalid or empty data for", title);
-          document.getElementById("dataTableBody").innerHTML =
+          document.getElementById("data-table-body").innerHTML =
             `<tr><td colspan="10">⚠️ No data found for this report.</td></tr>`;
           return;
         }
 
         // Clear current body
-        const tbody = document.getElementById("dataTableBody");
+        const tbody = document.getElementById("data-table-body");
         tbody.innerHTML = "";
 
         // Build table rows
@@ -443,14 +443,14 @@
          *  ----------------------------- */
         if (title === "Top Paid Accounts") {
           dataTable.order([1, "desc"]).draw();
-          addClassToDTColumn(1, "highlight");
-          markTopRows(3);
+          addColumnClass(1, "highlight");
+          highlightTopRows(3);
         } else if (title === "Outstanding Accounts") {
           dataTable.order([2, "desc"]).draw();
-          addClassToDTColumn(2, "highlight");
-          markTopRows(3);
+          addColumnClass(2, "highlight");
+          highlightTopRows(3);
         } else if (title === "Active Clients") {
-          reorderByStatus("Active");
+          applyStatusFilter("Active");
         } else if (title === "Activity Today") {
           // Start auto-refresh every 10 seconds
           setInterval(loadActivity, 10000);
@@ -495,7 +495,7 @@
            * Load tasks for a client
            * @param {string} clientName
            */
-          function loadTasks(clientName) {
+          function loadClientTasks(clientName) {
             if (!clientName) return;
             
             $taskSelect.html('<option>Loading...</option>');
@@ -538,7 +538,7 @@
            */
           let clickTimeout; // global debounce timer
 
-          $('#dataTableBody').on('click', 'tr', function () {
+          $('#data-table-body').on('click', 'tr', function () {
             clearTimeout(clickTimeout); // reset previous timer
             showPopup("Wait", "🔄 Opening the form now!");
 
@@ -552,7 +552,7 @@
                 .withSuccessHandler((exists) => {
                   if (exists) {
                     myModalEl.show();
-                    loadTasks(clientName);
+                    loadClientTasks(clientName);
                   } else {
                     showPopup("Failed", "❌ Sheet " + clientName + " not found!");
                   }
@@ -605,16 +605,16 @@
       /** -----------------------------
        *  HELPERS
        *  ----------------------------- */
-      function reorderByStatus(status) {
+      function applyStatusFilter(status) {
         dataTable.order([3, "asc"]).draw();
         dataTable.column(3).search(status ? "^" + status + "$" : "", true, false).draw();
       }
 
-      function addClassToDTColumn(colIndex, className) {
+      function addColumnClass(colIndex, className) {
         dataTable.column(colIndex).nodes().to$().addClass(className);
       }
 
-      function markTopRows(rowCount, rowClass = "highlight-row") {
+      function highlightTopRows(rowCount, rowClass = "highlight-row") {
         if(!$('#table tbody').find('.highlight-row').length) {
           const rows = document.querySelectorAll("#table tbody tr");
           rows.forEach((row, i) => {

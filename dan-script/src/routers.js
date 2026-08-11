@@ -23,6 +23,7 @@ import { yearlyOverviewPage } from "./pages/yearly-overview-page.js";
 import { NavigationModule } from "./navigation/navigation.js";
 import { ChartModule } from "./charts.js";
 import { PageLoaderModule } from "./page-loader.js";
+import { DataTableModule } from "./tables/data-table.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -95,6 +96,8 @@ const RouterModule = (() => {
     currentModule?.destroy?.();
 
     ChartModule.destroyAllCharts();
+
+    DataTableModule.destroyAll();
 
     setCurrentPage(pageName);
 

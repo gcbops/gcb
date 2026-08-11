@@ -1,5 +1,5 @@
 import { AppUtils } from "../utils";
-import { TableModule } from "../tables";
+import { TableModule } from "../tables/tables";
 
 const ClientDataService = (() => {
   function renderClientDataByStatus(
@@ -40,7 +40,7 @@ const ClientDataService = (() => {
 
     log("[renderClientDataByStatus] rendering table");
 
-    TableModule.renderData(data, sourceSheet, title, category);
+    TableModule.renderClientData(data, title);
   }
 
   function getCacheKey(category) {

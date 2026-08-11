@@ -1,9 +1,9 @@
 import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
-import { TableModule } from "../tables.js";
 import { ClientRanking } from "../clients/client-ranking.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { ProjectRankings } from "../projects/project-ranking.js";
+import { TableClientSelector } from "../tables/client-selector.js";
 
 const allClientsPage = (() => {
   let bound = false;
@@ -66,7 +66,7 @@ const allClientsPage = (() => {
                 AppUtils.cacheClear("allClientsData");
 
                 if (RouterModule.getCurrentPage() === "addManualHours") {
-                  TableModule.loadClients();
+                  TableClientSelector.initClientSelector();
                 }
 
                 ClientDirectory.loadClientDirectory("allClientsData");
