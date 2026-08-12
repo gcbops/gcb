@@ -46,7 +46,6 @@ const ClientDirectory = (() => {
 
         renderClientDirectory(data);
       },
-      true,
     );
   }
 
@@ -63,9 +62,8 @@ const ClientDirectory = (() => {
 
         if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
           renderClientDirectory(fresh);
-        } 
+        }
       },
-      true,
     );
   }
 

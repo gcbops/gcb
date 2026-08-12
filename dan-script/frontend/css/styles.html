@@ -20,14 +20,61 @@
   .drawer-close { position: absolute; top: 10px; right: 15px; background: transparent; border: none; font-size: 20px; cursor: pointer; }
   .drawer-close:hover { color: #6d7ae0; font-weight: 900; }
   .drawer .card { background: rgba(255,255,255,0.6) !important; padding: 15px; }
-  .drawer-bottom .drawer-grid-4 .form-inline > .form-group:nth-child(-n+4) { width: calc(92% / 3); }
-  .drawer-bottom .drawer-grid-5 .form-inline > .form-group:nth-child(-n+4) { width: calc(91% / 4); }
-  .drawer-bottom .drawer-grid .form-inline > button:last-child { width: 6%; }
-  .drawer-bottom .drawer-grid-4 .form-inline .form-control { width: 89% }
-  .drawer-bottom .drawer-grid-5 .form-inline .form-control { width: 80% } 
-  .drawer .drawer-grid-4 .form-inline .select2.select2-container { width: 89% !important; }
-  .drawer .drawer-grid-5 .form-inline .select2.select2-container { width: 84% !important; }
-  .drawer-top { min-height: 350px; }
+
+  .drawer-bottom .drawer-grid-5 .form-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: 1%;
+    width: 100%;
+  }
+
+  .drawer-bottom .drawer-grid-5 .form-inline > .form-group {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-right: 0 !important;
+  }
+
+  .drawer-bottom .drawer-grid-5 .form-inline > button:last-child {
+    flex: 0 0 6%;
+  }
+
+  .drawer-bottom .drawer-grid-5 .form-inline .form-control {
+    width: 100%;
+  }
+
+  .drawer-bottom .drawer-grid-5 .form-inline .select2.select2-container {
+    width: 100% !important;
+  }
+
+  .drawer-bottom .drawer-grid-4 .form-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: 1%;
+    width: 100%;
+  }
+
+  .drawer-bottom .drawer-grid-4 .form-inline > .form-group {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-right: 0 !important;
+  }
+
+  .drawer-bottom .drawer-grid-4 .form-inline > button:last-child {
+    flex: 0 0 6%;
+  }
+
+  .drawer-bottom .drawer-grid-4 .form-inline .form-control {
+    width: 100%;
+  }
+
+  .drawer-bottom .drawer-grid-4 .form-inline .select2.select2-container {
+    width: 100% !important;
+  }
+
+  .drawer-top { 
+    min-height: 
+    350px; 
+  }
 
   .dataTable { margin: 15px 0; }
   .dataTable thead th { border-color: #ccc !important; }

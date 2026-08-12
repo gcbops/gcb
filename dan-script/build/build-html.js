@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const source = "dist/app.bundle.js";
-const output = "backend/js/app.html";
+const output = "frontend/js/app.html";
 
 const js = fs.readFileSync(
   path.resolve(source),

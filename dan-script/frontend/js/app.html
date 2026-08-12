@@ -668,8 +668,7 @@
             return;
           }
           renderClientDirectory(data);
-        },
-        true
+        }
       );
     }
     function refreshClientDirectory(source, cached) {
@@ -684,8 +683,7 @@
           if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
             renderClientDirectory(fresh);
           }
-        },
-        true
+        }
       );
     }
     function renderClientDirectory(data) {
