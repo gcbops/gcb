@@ -37,23 +37,8 @@ function include(name) {
   ).getContent();
 }
 
-function loadHtmlFile(file) {
-  const possiblePaths = [
-    file, // root
-    "backend/" + file, // backend folder
-    "frontend/" + file, // frontend folder
-    "frontend/old/" + file, // old frontend folder
-  ];
-
-  for (let path of possiblePaths) {
-    try {
-      return HtmlService.createTemplateFromFile(path);
-    } catch (e) {
-      // file not found, try next path
-    }
-  }
-
-  throw new Error(`HTML file "${file}" not found in any folder`);
+function loadHtmlFile(name) {
+  return HtmlService.createTemplateFromFile(resolveHtmlPath(name));
 }
 
 function showDialog(
