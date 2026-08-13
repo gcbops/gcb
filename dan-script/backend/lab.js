@@ -18,20 +18,6 @@ function getLabCell(cellRange) {
   }
 }
 
-function setLabCell(cellRange, value) {
-  const sheet = getLabSheet();
-
-  if (!sheet) {
-    return;
-  }
-
-  try {
-    sheet.getRange(cellRange).setValue(value);
-  } catch (err) {
-    logResponse(`setLabCell(${cellRange}) failed: ${err.message}`);
-  }
-}
-
 function selectClient(data) {
   const sheet = getLabSheet();
 

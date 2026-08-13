@@ -41,7 +41,7 @@ function applyFormulaToSheets(cellRef, formula) {
     ss.getSheets().forEach((sheet) => {
       const name = sheet.getName();
 
-      if (!CONFIG.EXCLUDED_SHEETS.has(name) || name === "BLANK") {
+      if (!CONFIG.SHEETS.EXCLUDED.has(name) || name === "BLANK") {
         sheet.getRange(cellRef).setFormula(formula);
       }
     });

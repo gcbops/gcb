@@ -83,19 +83,99 @@
 
   <!-- NOTIFICATIONS TAB -->
   <form id="notifForm" class="tab-content" data-tab="notifications">
-    <label>Email Address</label>
-    <input type="text" id="notifEmail" name="notifEmail" placeholder="example@email.com">
 
-    <label>Discord Webhook</label>
-    <input type="text" id="notifDiscord" name="notifDiscord" placeholder="https://discord.com/api/webhooks/...">
+    <!-- EMAIL -->
+    <label for="notifEmail">Notification Email</label>
+
+    <div class="secret-status" id="notifEmailStatus">
+      Not configured
+    </div>
+
+    <input
+      type="email"
+      id="notifEmail"
+      name="notifEmail"
+      placeholder="Enter notification email"
+      autocomplete="off"
+    >
+
     <small>
-      💡 To get your Discord Webhook:
-      Go to your Discord server → Edit Channel → Integrations → Webhooks → Create Webhook → Copy Webhook URL.
+      Leave blank to keep the current email.
     </small>
 
-    <div class="actions">
-      <button type="submit">Save Notifications</button>
+
+    <!-- DISCORD -->
+    <label for="notifDiscord">Discord Webhook</label>
+
+    <div class="secret-status" id="notifDiscordStatus">
+      Not configured
     </div>
+
+    <input
+      type="url"
+      id="notifDiscord"
+      name="notifDiscord"
+      placeholder="Enter a new Discord webhook"
+      autocomplete="new-password"
+    >
+
+    <small>
+      Leave blank to keep the current webhook.
+    </small>
+
+    <small>
+      💡 To get your Discord Webhook:
+      Go to your Discord server → Edit Channel → Integrations
+      → Webhooks → Create Webhook → Copy Webhook URL.
+    </small>
+
+
+    <!-- SPREADSHEET ID -->
+    <label for="spreadsheetId">Google Spreadsheet ID</label>
+
+    <div class="secret-status" id="spreadsheetIdStatus">
+      Not configured
+    </div>
+
+    <input
+      type="text"
+      id="spreadsheetId"
+      name="spreadsheetId"
+      placeholder="Enter a new Spreadsheet ID"
+      autocomplete="off"
+    >
+
+    <small>
+      Leave blank to keep the current Spreadsheet ID.
+    </small>
+
+    <!-- REPORT ID -->
+
+    <label for="reportFolderId">Report Folder ID</label>
+
+    <div class="secret-status" id="reportFolderIdStatus">
+      Not configured
+    </div>
+
+    <input
+      type="text"
+      id="reportFolderId"
+      name="reportFolderId"
+      placeholder="Enter a new Google Drive Folder ID"
+      autocomplete="off"
+    >
+
+    <small>
+      Leave blank to keep the current Report Folder ID.
+    </small>
+
+
+    <div class="actions">
+      <button type="submit">
+        Save Notifications
+      </button>
+    </div>
+
   </form>
 
   <script>
@@ -127,15 +207,43 @@
     }
 
     // --- load profile data ---
-    google.script.run.withSuccessHandler(data => {
+    google.script.run
+    .withSuccessHandler((data) => {
       setProfilePic(data.profilePic);
-      document.getElementById("firstName").value = data.firstName || "";
-      document.getElementById("lastName").value = data.lastName || "";
-      document.getElementById("displayName").value = data.displayName || "";
-      document.getElementById("desc").value = data.desc || "";
-      document.getElementById("notifEmail").value = data.notifEmail || "";
-      document.getElementById("notifDiscord").value = data.notifDiscord || "";
-    }).getProfileData();
+
+      document.getElementById("firstName").value =
+        data.firstName || "";
+
+      document.getElementById("lastName").value =
+        data.lastName || "";
+
+      document.getElementById("displayName").value =
+        data.displayName || "";
+
+      document.getElementById("desc").value =
+        data.desc || "";
+
+      document.getElementById("notifEmailStatus").textContent =
+        data.notifEmail?.configured
+          ? `✓ Configured — ${data.notifEmail.masked}`
+          : "Not configured";
+
+      document.getElementById("notifDiscordStatus").textContent =
+        data.notifDiscord?.configured
+          ? `✓ Configured — ${data.notifDiscord.masked}`
+          : "Not configured";
+
+      document.getElementById("spreadsheetIdStatus").textContent =
+        data.spreadsheetId?.configured
+          ? `✓ Configured — ${data.spreadsheetId.masked}`
+          : "Not configured";
+
+      document.getElementById("spreadsheetIdStatus").textContent =
+        data.spreadsheetId?.configured
+          ? `✓ Configured — ${data.spreadsheetId.masked}`
+          : "Not configured";
+    })
+    .getProfileData();
 
     // --- save profile form ---
     document.getElementById("profileForm").addEventListener("submit", e => {
@@ -154,15 +262,51 @@
     });
 
     // --- save notifications form ---
-    document.getElementById("notifForm").addEventListener("submit", e => {
+    document.getElementById("notifForm").addEventListener("submit", (e) => {
       e.preventDefault();
+
+      const notifEmail =
+        document.getElementById("notifEmail").value.trim();
+
+      const notifDiscord =
+        document.getElementById("notifDiscord").value.trim();
+
+      const spreadsheetId =
+        document.getElementById("spreadsheetId").value.trim();
+
+      const reportFolderId =
+        document.getElementById("reportFolderId").value.trim();
+
       const formData = {
-        notifEmail: document.getElementById("notifEmail").value,
-        notifDiscord: document.getElementById("notifDiscord").value
+        notifEmail,
+        notifDiscord,
+        spreadsheetId,
+        reportFolderId,
       };
-      google.script.run.withSuccessHandler(msg => {
-        showPopup(msg);
-      }).saveNotificationData(formData);
+
+      google.script.run
+        .withSuccessHandler((msg) => {
+          showPopup(msg);
+
+          // Clear inputs after successful save.
+          document.getElementById("notifEmail").value = "";
+          document.getElementById("notifDiscord").value = "";
+          document.getElementById("spreadsheetId").value = "";
+
+          // Reload masked status.
+          loadProfileData();
+        })
+        .withFailureHandler((err) => {
+          console.error(
+            "Failed to save notification settings:",
+            err,
+          );
+
+          showPopup(
+            err?.message || "Failed to save notification settings.",
+          );
+        })
+        .saveNotificationData(formData);
     });
 
     // --- tab switcher ---

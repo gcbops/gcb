@@ -5,59 +5,51 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function loadSubPage(name) {
-  const possiblePaths = [
-    name,
-    "backend/" + name,
-    "frontend/js/" + name,
-    "frontend/css/" + name,
-    "frontend/" + name,
-    "frontend/old/" + name,
-    "frontend/components/" + name,
-  ];
+function resolveHtmlPath(name) {
+  const attemptedPaths = [];
 
-  for (let path of possiblePaths) {
+  for (const folder of CONFIG.HTML.PATHS) {
+    const path = `${folder}${name}`;
+    attemptedPaths.push(path);
+
     try {
-      return HtmlService.createHtmlOutputFromFile(path).getContent();
-    } catch (e) {}
+      HtmlService.createHtmlOutputFromFile(path);
+      return path;
+    } catch (e) {
+      // Try next path.
+    }
   }
 
-  throw new Error('HTML file "' + name + '" not found in any folder.');
+  throw new Error(
+    `HTML file "${name}" not found. Tried:\n${attemptedPaths.join("\n")}`,
+  );
 }
 
-function include(filename) {
-  const possiblePaths = [
-    filename,
-    "backend/" + filename,
-    "frontend/js/" + filename,
-    "frontend/css/" + filename,
-    "frontend/" + filename,
-    "frontend/old/" + filename,
-    "frontend/components/" + filename,
-  ];
+function loadSubPage(name) {
+  return HtmlService.createHtmlOutputFromFile(
+    resolveHtmlPath(name),
+  ).getContent();
+}
 
-  for (let path of possiblePaths) {
-    try {
-      return HtmlService.createHtmlOutputFromFile(path).getContent();
-    } catch (e) {}
-  }
-
-  throw new Error('Include file "' + filename + '" not found in any folder.');
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(
+    resolveHtmlPath(name),
+  ).getContent();
 }
 
 function loadHtmlFile(file) {
   const possiblePaths = [
-    file,
-    `backend/${file}`,
-    `frontend/${file}`,
-    `frontend/old/${file}`,
+    file, // root
+    "backend/" + file, // backend folder
+    "frontend/" + file, // frontend folder
+    "frontend/old/" + file, // old frontend folder
   ];
 
-  for (const path of possiblePaths) {
+  for (let path of possiblePaths) {
     try {
       return HtmlService.createTemplateFromFile(path);
-    } catch (err) {
-      // Try next path.
+    } catch (e) {
+      // file not found, try next path
     }
   }
 
@@ -92,7 +84,7 @@ function showDialogByStatus(
   width = 900,
   customSheet,
 ) {
-  const config = DIALOG_STATUS_CONFIG[status];
+  const config = CONFIG.DIALOGS.STATUS[status];
 
   if (!config) {
     return logResponse("⚠️ Invalid status requested.");

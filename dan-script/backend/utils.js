@@ -56,3 +56,20 @@ function logWithTime(message) {
 
   logResponse(`[${timestamp}] ${message}`);
 }
+
+function maskSecret(value, visibleChars = 5) {
+  if (!value) {
+    return "";
+  }
+
+  const str = String(value);
+
+  if (str.length <= visibleChars) {
+    return "*".repeat(str.length);
+  }
+
+  return (
+    str.slice(0, visibleChars) +
+    "*".repeat(Math.min(str.length - visibleChars, 20))
+  );
+}

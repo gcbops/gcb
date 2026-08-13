@@ -66,16 +66,11 @@ function runYearlyReportNow() {
 }
 
 function getReportFolder() {
-  const sheet = getLabSheet();
-
-  if (!sheet) {
-    throw new Error("Lab 3.0 sheet not found.");
-  }
-
-  const folderId = String(sheet.getRange("BG3").getValue()).trim();
+  const folderId =
+    PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
 
   if (!folderId) {
-    throw new Error("Drive Folder ID (BG3) is empty.");
+    throw new Error("REPORT_FOLDER_ID is not configured.");
   }
 
   return DriveApp.getFolderById(folderId);
@@ -220,9 +215,7 @@ function saveReportPDF(config) {
     ]);
 
     if (config.latestLinkCell) {
-      getLabSheet()
-        ?.getRange(config.latestLinkCell)
-        .setValue(fileUrl);
+      getLabSheet()?.getRange(config.latestLinkCell).setValue(fileUrl);
     }
 
     const lab = getLabSheet();
@@ -824,8 +817,8 @@ function getReportsOverview() {
     driveStorage = false;
   }
 
-  const discord = Boolean(getLabValue("BF3", ""));
-  const email = Boolean(getLabValue("BF5", ""));
+  const discord = Boolean(getDiscordWebhook());
+  const email = Boolean(getNotificationEmail());
 
   const automationActive = driveStorage && discord && email;
 

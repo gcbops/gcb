@@ -2,7 +2,7 @@ function getClientSheetsList() {
   return getSpreadsheet()
     .getSheets()
     .map((sheet) => sheet.getName())
-    .filter((name) => !CONFIG.EXCLUDED_SHEETS.has(name))
+    .filter((name) => !CONFIG.SHEETS.EXCLUDED.has(name))
     .sort();
 }
 
@@ -24,6 +24,8 @@ function getClientSheetsListAndActive() {
 }
 
 function syncClientSheetList() {
+  requireAuthorizedUser();
+  
   const sheet = getSheetSafe("Client Names");
 
   if (!sheet) {
@@ -106,7 +108,7 @@ function goToPresentClient(sheetName) {
 }
 
 function getClientDataByStatus(status, customSheet) {
-  const config = DIALOG_STATUS_CONFIG[status];
+  const config = CONFIG.DIALOGS.STATUS[status];
 
   if (!config) {
     return [];

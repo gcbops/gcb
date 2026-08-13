@@ -75,27 +75,18 @@ function logNotification() {
 }
 
 function getDiscordWebhook() {
-  const sheet = getLabSheet();
-
-  if (!sheet) {
-    return "";
-  }
-
-  const webhook = sheet.getRange("BF3").getValue();
-
-  return webhook ? String(webhook).trim() : "";
+  return (
+    PropertiesService.getScriptProperties().getProperty(
+      "DISCORD_WEBHOOK_URL",
+    ) || ""
+  );
 }
 
 function getNotificationEmail() {
-  const sheet = getLabSheet();
-
-  if (!sheet) {
-    return "";
-  }
-
-  const email = sheet.getRange("BF5").getValue();
-
-  return email ? String(email).trim() : "";
+  return (
+    PropertiesService.getScriptProperties().getProperty("NOTIFICATION_EMAIL") ||
+    ""
+  );
 }
 
 function sendDailyReport() {

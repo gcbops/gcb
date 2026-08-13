@@ -34,10 +34,53 @@ function recordManualClientHours(clientName, task, hours, date = new Date()) {
 
 function recordManualClientHoursFromForm(formData) {
   try {
-    const clientSheet = getSheetSafe(formData.client);
+    /* ---------- Validate input ---------- */
+
+    if (!formData || typeof formData !== "object") {
+      throw new Error("Invalid form data.");
+    }
+
+    const client = String(formData.client ?? "").trim();
+    const type = String(formData.type ?? "").trim();
+    const task = String(formData.task ?? "").trim();
+    const hourValue = String(formData.hour ?? "").trim();
+
+    if (!client) {
+      throw new Error("Client is required.");
+    }
+
+    if (!type) {
+      throw new Error("Type is required.");
+    }
+
+    if (!task) {
+      throw new Error("Task is required.");
+    }
+
+    if (task.toLowerCase() === "loading...") {
+      throw new Error("Please select a valid task.");
+    }
+
+    if (!hourValue) {
+      throw new Error("Hours are required.");
+    }
+
+    const hours = Number(hourValue);
+
+    if (!Number.isFinite(hours)) {
+      throw new Error("Hours must be a valid number.");
+    }
+
+    if (hours <= 0) {
+      throw new Error("Hours must be greater than 0.");
+    }
+
+    /* ---------- Get client sheet ---------- */
+
+    const clientSheet = getSheetSafe(client);
 
     if (!clientSheet) {
-      return logResponse(`Sheet "${formData.client}" not found.`);
+      throw new Error(`Sheet "${client}" not found.`);
     }
 
     const startRow = 3;
@@ -49,40 +92,42 @@ function recordManualClientHoursFromForm(formData) {
 
     const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
 
+    /* ---------- Update existing entry ---------- */
+
     for (let i = 0; i < data.length; i++) {
       const [typeDev, taskProject, existingHours, entryDate] = data[i];
 
-      const sameType = normalizeText(typeDev) === normalizeText(formData.type);
+      const sameType = normalizeText(typeDev) === normalizeText(type);
 
-      const sameTask =
-        normalizeText(taskProject) === normalizeText(formData.task);
+      const sameTask = normalizeText(taskProject) === normalizeText(task);
 
       const sameDate = formatDateSafe(entryDate, "M/d/yyyy") === today;
 
       if (sameType && sameTask && sameDate) {
-        const newHours =
-          (Number(existingHours) || 0) + (Number(formData.hour) || 0);
+        const currentHours = Number(existingHours) || 0;
+        const newHours = currentHours + hours;
 
         clientSheet.getRange(startRow + i, 7).setValue(newHours);
 
-        return { success: true };
+        return {
+          success: true,
+          action: "updated",
+        };
       }
     }
+
+    /* ---------- Create new entry ---------- */
 
     const emptyRow = getFirstEmptyRow(clientSheet, 5, startRow);
 
     clientSheet
       .getRange(emptyRow, 5, 1, 4)
-      .setValues([
-        [
-          formData.type || "",
-          formData.task || "",
-          Number(formData.hour) || 0,
-          today,
-        ],
-      ]);
+      .setValues([[type, task, hours, today]]);
 
-    return { success: true };
+    return {
+      success: true,
+      action: "created",
+    };
   } catch (err) {
     throw new Error(err.message || String(err));
   }

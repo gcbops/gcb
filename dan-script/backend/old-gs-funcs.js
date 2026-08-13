@@ -180,8 +180,13 @@ function showProfileSettings() {
 }
 
 function getProfileData() {
-  const sheet = getLabSheet(); // use specific sheet if profile lives in Lab 3.0
-  if (!sheet) return {};
+  requireAuthorizedUser();
+
+  const sheet = getLabSheet();
+
+  if (!sheet) {
+    return {};
+  }
 
   const fields = {
     profilePic: "BE3",
@@ -189,19 +194,45 @@ function getProfileData() {
     lastName: "BE9",
     displayName: "BE11",
     desc: "BE13",
-    notifDiscord: "BF3",
-    notifEmail: "BF5",
   };
 
   const data = {};
+
   for (const [key, cell] of Object.entries(fields)) {
     data[key] = getCellValueSafe(sheet, cell);
   }
+
+  const notificationEmail = getNotificationEmail();
+  const discordWebhook = getDiscordWebhook();
+  const spreadsheetId = CONFIG.SPREADSHEET_ID;
+  const reportFolderId = PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
+
+  data.notifEmail = {
+    configured: Boolean(notificationEmail),
+    masked: maskSecret(notificationEmail),
+  };
+
+  data.notifDiscord = {
+    configured: Boolean(discordWebhook),
+    masked: maskSecret(discordWebhook),
+  };
+
+  data.spreadsheetId = {
+    configured: Boolean(spreadsheetId),
+    masked: maskSecret(spreadsheetId),
+  };
+
+  data.reportFolderId = {
+    configured: Boolean(reportFolderId),
+    masked: maskSecret(reportFolderId),
+  };
 
   return data;
 }
 
 function saveProfileData(data) {
+  requireAuthorizedUser();
+  
   const sheet = getLabSheet();
   if (!sheet) return "❌ Lab 3.0 sheet not found.";
 
@@ -221,16 +252,78 @@ function saveProfileData(data) {
 }
 
 function saveNotificationData(data) {
-  const sheet = getLabSheet();
-  if (!sheet) return "❌ Lab 3.0 sheet not found.";
+  requireAuthorizedUser();
 
-  const fields = {
-    notifDiscord: "BF3",
-    notifEmail: "BF5",
-  };
+  const properties = PropertiesService.getScriptProperties();
 
-  for (const [key, cell] of Object.entries(fields)) {
-    if (data[key] !== undefined) sheet.getRange(cell).setValue(data[key]);
+  const errors = [];
+
+  /*
+   * EMAIL
+   */
+  if (data.notifEmail) {
+    const email = String(data.notifEmail).trim();
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(email)) {
+      errors.push("Invalid notification email.");
+    } else {
+      properties.setProperty("NOTIFICATION_EMAIL", email);
+    }
+  }
+
+  /*
+   * DISCORD WEBHOOK
+   */
+  if (data.notifDiscord) {
+    const webhook = String(data.notifDiscord).trim();
+
+    const discordPattern =
+      /^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/.+$/;
+
+    if (!discordPattern.test(webhook)) {
+      errors.push("Invalid Discord webhook URL.");
+    } else {
+      properties.setProperty("DISCORD_WEBHOOK_URL", webhook);
+    }
+  }
+
+  /*
+   * SPREADSHEET ID
+   */
+  if (data.spreadsheetId) {
+    const spreadsheetId = String(data.spreadsheetId).trim();
+
+    /*
+     * Basic Google Spreadsheet ID validation.
+     * Google IDs are normally made from letters,
+     * numbers, hyphens and underscores.
+     */
+    const spreadsheetIdPattern = /^[a-zA-Z0-9_-]{20,}$/;
+
+    if (!spreadsheetIdPattern.test(spreadsheetId)) {
+      errors.push("Invalid Spreadsheet ID.");
+    } else {
+      properties.setProperty("SPREADSHEET_ID", spreadsheetId);
+    }
+  }
+
+  /*
+   * REPORT ID
+   */
+  if (data.reportFolderId) {
+    const reportFolderId = String(data.reportFolderId).trim();
+
+    if (!/^[a-zA-Z0-9_-]{10,}$/.test(reportFolderId)) {
+      errors.push("Invalid Report Folder ID.");
+    } else {
+      properties.setProperty("REPORT_FOLDER_ID", reportFolderId);
+    }
+  }
+
+  if (errors.length) {
+    throw new Error(errors.join("\n"));
   }
 
   return "✅ Notification settings saved!";
