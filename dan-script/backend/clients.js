@@ -25,7 +25,7 @@ function getClientSheetsListAndActive() {
 
 function syncClientSheetList() {
   requireAuthorizedUser();
-  
+
   const sheet = getSheetSafe("Client Names");
 
   if (!sheet) {
@@ -264,23 +264,4 @@ function getClientDataWithNickname(dt) {
         role: nicknameMap.get(normalizeText(name)) || "",
       };
     });
-}
-
-function getClientHoursForOverview(clientName) {
-  if (!isNonEmptyString(clientName)) {
-    return { error: "INVALID_CLIENT" };
-  }
-
-  const sheet = getSheetSafe(clientName);
-
-  if (!sheet) {
-    return { error: "NOT_FOUND" };
-  }
-
-  return {
-    totalHrs: sheet.getRange("B8").getValue(),
-    weekHrs: sheet.getRange("N18").getValue(),
-    monthHrs: sheet.getRange("N19").getValue(),
-    yearHrs: sheet.getRange("N20").getValue(),
-  };
 }

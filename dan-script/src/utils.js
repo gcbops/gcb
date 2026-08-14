@@ -384,34 +384,36 @@ const AppUtils = (() => {
       return;
     }
 
-    function applySelect2($el, selectOptions = {}) {
-      if (!$el.length) {
+    const $selects = $parent.is("select") ? $parent : $parent.find("select");
+
+    $selects.each(function () {
+      const $el = $(this);
+
+      if (!$el.hasClass("js-select2") && !$el.hasClass("js-select2-dynamic")) {
         return;
       }
 
-      /*
-       * Prevent Select2 from being initialized twice.
-       */
       if ($el.hasClass("select2-hidden-accessible")) {
         $el.select2("destroy");
       }
 
-      $el.select2({
+      const selectOptions = {
         width: "100%",
-        dropdownParent: $parent,
-        ...selectOptions,
-      });
-    }
-
-    $(".js-select2").each(function () {
-      applySelect2($(this), options);
-    });
-
-    $(".js-select2-dynamic").each(function () {
-      applySelect2($(this), {
-        tags: true,
         ...options,
-      });
+      };
+
+      if ($el.hasClass("js-select2-dynamic")) {
+        selectOptions.tags = true;
+      }
+
+      /*
+       * Use the actual modal element as dropdown parent.
+       */
+      if ($parent.is(".modal")) {
+        selectOptions.dropdownParent = $parent;
+      }
+
+      $el.select2(selectOptions);
     });
   }
 

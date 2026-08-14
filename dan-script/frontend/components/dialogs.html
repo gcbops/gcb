@@ -1,0 +1,163 @@
+<div class="drawer drawer-top" id="drawerManualInfo">
+  <div class="drawer-content p-3">
+    <button class="drawer-close" aria-label="Close">✕</button>
+    <div class="row">
+      <div class="col-md-6">
+        <div class="main-card card shadow-none">
+          <div class="card-body pt-0 pb-0">
+            <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px">
+              <h5 class="card-title">Recent Records</h5>
+              <div style="flex: 1"></div>
+              <button type="button" class="btn btn-primary" id="viewMySheet-v-h">View Sheet</button>
+            </div>
+            <input type="hidden" name="client-view-hours" id="client-view-hours" />
+            <table class="mb-0 table" id="client-hours-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Project</th>
+                  <th>Hours</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="main-card card shadow-none">
+          <div class="card-body pt-0 pb-0">
+            <h5 class="card-title">Overview</h5>
+            <ul class="list-group">
+              <li class="list-group-item">
+                <div class="widget-content p-0">
+                  <div class="widget-content-outer">
+                    <div class="widget-content-wrapper">
+                      <div class="widget-content-left">
+                        <div class="widget-heading">Total Hours</div>
+                      </div>
+                      <div class="widget-content-right">
+                        <div class="widget-numbers text-primary" id="total-hours">0</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </li>
+              <li class="list-group-item">
+                <div class="widget-content p-0">
+                  <div class="widget-content-outer">
+                    <div class="widget-content-wrapper">
+                      <div class="widget-content-left">
+                        <div class="widget-heading">Current Week Hour</div>
+                      </div>
+                      <div class="widget-content-right">
+                        <div class="widget-numbers text-primary" id="weekly-hours">0</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </li>
+              <li class="list-group-item">
+                <div class="widget-content p-0">
+                  <div class="widget-content-outer">
+                    <div class="widget-content-wrapper">
+                      <div class="widget-content-left">
+                        <div class="widget-heading">Current Month Hour</div>
+                      </div>
+                      <div class="widget-content-right">
+                        <div class="widget-numbers text-primary" id="monthly-hours">0</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </li>
+              <li class="list-group-item">
+                <div class="widget-content p-0">
+                  <div class="widget-content-outer">
+                    <div class="widget-content-wrapper">
+                      <div class="widget-content-left">
+                        <div class="widget-heading">Current Year Hour</div>
+                      </div>
+                      <div class="widget-content-right">
+                        <div class="widget-numbers text-primary" id="yearly-hours">0</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer drawer-bottom" id="drawerManualAdd">
+  <div class="drawer-content drawer-grid drawer-grid-4 p-3">
+    <button class="drawer-close" aria-label="Close">✕</button>
+    <div class="main-card card shadow-none">
+      <div class="card-body pt-0 pb-0">
+        <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom: 10px;">
+          <h5 class="card-title">Add manual Hours</h5>
+          <div style="flex:1"></div>
+          <button id="submit-new-hours" type="submit" class="btn btn-primary">Add</button>
+        </div>
+        <form id="taskForm" class="form-inline">
+          <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group element-hidden">
+            <label for="client" class="mr-sm-2">Client</label>
+            <select name="client" id="client" class="js-select2 form-control" required=""></select>
+          </div>
+          <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
+            <label for="task" class="mr-sm-2">Task</label>
+            <select name="task" id="task" class="js-select2-dynamic form-control" required=""></select>
+          </div>
+          <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
+            <label for="type" class="mr-sm-2">Type</label>
+            <select name="type" id="type" class="js-select2 form-control" required="">
+              <option value="DEV">Dev</option>
+              <option value="DESIGN">Design</option>
+              <option value="SEO">SEO</option>
+            </select>
+          </div>
+          <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
+            <label for="hour" class="mr-sm-2">Hour</label>
+            <input type="number" step="0.5" name="hour" id="hour" placeholder="#" class="form-control" required="" />
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer drawer-bottom drawer-boxed drawer-sm" id="drawerClientAdd">
+  <div class="drawer-content p-3">
+    <button class="drawer-close" aria-label="Close">✕</button>
+    <div class="main-card card shadow-none">
+      <div class="card-body pt-0 pb-0">
+        <h5 class="card-title">Add Client Sheet</h5>
+        <form id="addClientForm" class="form-inline">
+          <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
+            <label for="sheet_name" class="mr-sm-2">Sheet Name</label>
+            <input type="text" name="sheet_name" id="sheet_name" class="form-control" required="" />
+          </div>
+          <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="app-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body"></div>
+      <div class="modal-footer"></div>
+    </div>
+  </div>
+</div>

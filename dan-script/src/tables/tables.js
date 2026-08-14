@@ -1,6 +1,7 @@
 import { DataTableModule } from "./data-table.js";
 import { TableRenderer } from "./table-renderer.js";
 import { AppUtils } from "../utils.js";
+import { TodayHoursEditor } from "./today-hours-editor.js";
 
 const TableModule = (() => {
 
@@ -33,6 +34,10 @@ const TableModule = (() => {
 
         if ($btn.hasClass("add-client")) {
           return addClient(clientName);
+        }
+
+        if ($btn.hasClass("edit-today-hours")) {
+          return TodayHoursEditor.open(clientName);
         }
 
         if ($btn.hasClass("view-client")) {

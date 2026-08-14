@@ -126,7 +126,8 @@ const DataTableModule = (() => {
           className: "action-btn",
           orderable: false,
           searchable: false,
-          render: () => ActivityToday.buildActionButtons().html(),
+          render: (_data, _type, row) =>
+            ActivityToday.buildActionButtons(row).html(),
         },
       ];
     }

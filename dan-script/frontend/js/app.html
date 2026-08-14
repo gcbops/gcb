@@ -235,27 +235,26 @@
       if (!$parent.length) {
         return;
       }
-      function applySelect2($el, selectOptions = {}) {
-        if (!$el.length) {
+      const $selects = $parent.is("select") ? $parent : $parent.find("select");
+      $selects.each(function() {
+        const $el = $(this);
+        if (!$el.hasClass("js-select2") && !$el.hasClass("js-select2-dynamic")) {
           return;
         }
         if ($el.hasClass("select2-hidden-accessible")) {
           $el.select2("destroy");
         }
-        $el.select2({
+        const selectOptions = {
           width: "100%",
-          dropdownParent: $parent,
-          ...selectOptions
-        });
-      }
-      $(".js-select2").each(function() {
-        applySelect2($(this), options);
-      });
-      $(".js-select2-dynamic").each(function() {
-        applySelect2($(this), {
-          tags: true,
           ...options
-        });
+        };
+        if ($el.hasClass("js-select2-dynamic")) {
+          selectOptions.tags = true;
+        }
+        if ($parent.is(".modal")) {
+          selectOptions.dropdownParent = $parent;
+        }
+        $el.select2(selectOptions);
       });
     }
     function openDrawer(drawerSelector, options = {}) {
@@ -1079,6 +1078,7 @@
       }
       setupClientSelector($selectClient, $taskForm);
       $taskForm.off("submit.activityToday").on("submit.activityToday", handleTaskSubmit);
+      $("#submit-new-hours").off("click.activityToday").on("click.activityToday", handleTaskSubmit);
       AppUtils.initSelect2("#drawerManualAdd .drawer-content");
     }
     function setupClientSelector($selectClient, $taskForm) {
@@ -1092,14 +1092,21 @@
         const $icon = $selectClient.find("i");
         $drawer.toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5")).toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
         $firstGroup.toggleClass("element-hidden");
-        $icon.toggleClass("fa-plus", $icon.hasClass("fa-minus")).toggleClass("fa-minus", $icon.hasClass("fa-plus"));
+        $icon.toggleClass("fa-plus", function() {
+          return $(this).hasClass("fa-minus");
+        }).toggleClass("fa-minus", function() {
+          return $(this).hasClass("fa-plus");
+        });
         AppUtils.openDrawer("#drawerManualAdd");
       });
     }
     function handleTaskSubmit(event) {
       event.preventDefault();
       const $form = $(this);
-      const $submitBtn = $form.find('button[type="submit"]');
+      let $submitBtn = $form.find('button[type="submit"]');
+      if (!$submitBtn.length) {
+        $submitBtn = $("#submit-new-hours");
+      }
       const formData = {
         client: String($("#client").val() || "").trim(),
         hour: String($("#hour").val() || "").trim(),
@@ -1172,31 +1179,42 @@
         AppUtils.showError("Sheet doesn't exist!");
       }).getClientSheetUrl(clientName);
     }
-    function buildActionButtons() {
+    function buildActionButtons(row = []) {
+      const hours = parseHoursValue(row[4]);
+      const canEdit = hours > 0;
       return $(`
-      <div class="btn-group btn-group-sm">
-        <button
-          type="button"
-          class="btn add-client"
-          title="Add Client">
-          <i class="pe-7s-cloud-upload"></i>
-        </button>
+    <div class="btn-group btn-group-sm">
+      <button
+        type="button"
+        class="btn add-client"
+        title="Add Client">
+        <i class="pe-7s-plus"></i>
+      </button>
 
-        <button
-          type="button"
-          class="btn view-client"
-          title="View Client">
-          <i class="pe-7s-look"></i>
-        </button>
+      ${canEdit ? `
+            <button
+              type="button"
+              class="btn edit-today-hours"
+              title="Edit Today's Hours">
+              <i class="pe-7s-note"></i>
+            </button>
+          ` : ""}
 
-        <button
-          type="button"
-          class="btn edit-client"
-          title="Edit Client">
-          <i class="pe-7s-note"></i>
-        </button>
-      </div>
-    `);
+      <button
+        type="button"
+        class="btn view-client"
+        title="View Client">
+        <i class="pe-7s-look"></i>
+      </button>
+
+      <button
+        type="button"
+        class="btn edit-client"
+        title="Edit Client">
+        <i class="pe-7s-note2"></i>
+      </button>
+    </div>
+  `);
     }
     function startRefresh(dataTable) {
       stopRefresh();
@@ -1269,6 +1287,27 @@
           (value, columnIndex) => value === cachedRow[columnIndex]
         );
       });
+    }
+    function parseHoursValue(value) {
+      if (value === null || value === void 0 || value === "") {
+        return 0;
+      }
+      if (typeof value === "number") {
+        return value;
+      }
+      const text = String(value).trim();
+      if (text.includes(":")) {
+        const parts = text.split(":").map(Number);
+        if (parts.length === 3 && parts.every(Number.isFinite)) {
+          const [hours, minutes, seconds] = parts;
+          return hours + minutes / 60 + seconds / 3600;
+        }
+        if (parts.length === 2 && parts.every(Number.isFinite)) {
+          const [hours, minutes] = parts;
+          return hours + minutes / 60;
+        }
+      }
+      return Number(text) || 0;
     }
     return {
       setupFilters,
@@ -1369,7 +1408,7 @@
             className: "action-btn",
             orderable: false,
             searchable: false,
-            render: () => ActivityToday.buildActionButtons().html()
+            render: (_data, _type, row) => ActivityToday.buildActionButtons(row).html()
           }
         ];
       }
@@ -1555,6 +1594,310 @@
     };
   })();
 
+  // src/tables/today-hours-editor.js
+  var TodayHoursEditor = /* @__PURE__ */ (() => {
+    const MODAL_ID = "#app-modal";
+    const RECORDS_ID = "#todayHoursRecords";
+    const CLIENT_ID = "#editTodayClient";
+    const CACHE_PREFIX = "todayManualHours_";
+    function open(clientName) {
+      clientName = String(clientName || "").trim();
+      if (!clientName) {
+        AppUtils.showDashboardToast("Client is required.", "error");
+        return;
+      }
+      const ns = ".todayHoursEditor";
+      AppUtils.openModal(MODAL_ID, {
+        size: "xl",
+        placement: "center",
+        header: `
+        <strong>Edit Today's Hours</strong>
+      `,
+        body: `
+        <input
+          type="hidden"
+          id="${CLIENT_ID.replace("#", "")}"
+          value="${escapeHtml(clientName)}"
+        >
+
+        <div id="${RECORDS_ID.replace("#", "")}">
+          <div class="text-center text-muted py-3">
+            Loading today's records...
+          </div>
+        </div>
+      `,
+        footer: `
+        <button
+          type="button"
+          class="btn btn-secondary btn-cancel">
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-primary btn-save">
+          Save Changes
+        </button>
+      `,
+        onOpen($modal) {
+          $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
+            AppUtils.closeModal(MODAL_ID);
+          }).on(`click${ns}`, ".btn-save", () => {
+            save($modal);
+          }).on(`click${ns}`, ".btn-delete-today-hours", function() {
+            markForDelete($(this));
+          });
+          load(clientName, $modal);
+        },
+        onClose($modal) {
+          $modal.off(ns);
+        }
+      });
+    }
+    function load(clientName, $modal) {
+      AppUtils.cachedGScriptCall(
+        `${CACHE_PREFIX}${clientName}`,
+        "getTodayClientHours",
+        [clientName],
+        (response) => {
+          if (!response?.success) {
+            $modal.find(RECORDS_ID).html(`
+            <div class="text-center text-danger py-3">
+              ${escapeHtml(
+              response?.message || "Unable to load today's records."
+            )}
+            </div>
+          `);
+            return;
+          }
+          loadTaskOptions(clientName, $modal, response.records || []);
+        },
+        false,
+        false
+      );
+    }
+    function loadTaskOptions(clientName, $modal, records) {
+      AppUtils.cachedGScriptCall(
+        `getTaskOptions_${clientName}`,
+        "getTaskOptions",
+        [clientName],
+        (returned) => {
+          const tasks = Array.isArray(returned) ? returned : (() => {
+            try {
+              return JSON.parse(returned);
+            } catch {
+              return [];
+            }
+          })();
+          render(records, tasks, $modal);
+        }
+      );
+    }
+    function render(records, tasks, $modal) {
+      const $container = $modal.find(RECORDS_ID);
+      $container.empty();
+      if (!Array.isArray(records) || !records.length) {
+        $container.html(`
+      <div class="text-center text-muted py-3">
+        No records added today.
+      </div>
+    `);
+        return;
+      }
+      records.forEach((record) => {
+        const rowNumber = Number(record.row);
+        if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+          return;
+        }
+        const taskOptions = buildTaskOptions(tasks, record.task);
+        const $row = $(`
+      <div
+        class="today-hours-record border rounded p-3 mb-3"
+        data-row="${rowNumber}"
+        data-action="update"
+      >
+        <div class="row">
+
+          <div class="col-md-4 mb-2">
+            <label>Type</label>
+
+            <select
+              class="form-control js-select2 today-hours-type"
+              required
+            >
+              <option value="DEV">Dev</option>
+              <option value="DESIGN">Design</option>
+              <option value="SEO">SEO</option>
+            </select>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label>Task / Project</label>
+
+            <select
+              class="form-control today-hours-task js-select2-dynamic"
+              required
+            >
+              ${taskOptions}
+            </select>
+          </div>
+
+          <div class="col-md-2 mb-2">
+            <label>Hours</label>
+
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              class="form-control today-hours-hours"
+            >
+          </div>
+
+          <div class="col-md-2 mb-2 d-flex align-items-end">
+            <button
+              type="button"
+              class="btn btn-outline-danger btn-block btn-delete-today-hours"
+            >
+              Delete
+            </button>
+          </div>
+
+        </div>
+
+        <div class="small text-muted">
+          Date: ${escapeHtml(record.date || "")}
+        </div>
+      </div>
+    `);
+        $row.find(".today-hours-type").val(record.type || "");
+        $row.find(".today-hours-task").val(record.task || "");
+        $row.find(".today-hours-hours").val(record.hours ?? "");
+        $container.append($row);
+      });
+      AppUtils.initSelect2($modal);
+      $container.find(".today-hours-type").each(function() {
+        $(this).trigger("change");
+      });
+      $container.find(".today-hours-task").each(function() {
+        $(this).trigger("change");
+      });
+    }
+    function buildTaskOptions(tasks, selectedTask) {
+      const options = [`<option value="" disabled>Select Task</option>`];
+      tasks.forEach((task) => {
+        const value = typeof task === "object" ? task.value || task.id || "" : task;
+        const text = typeof task === "object" ? task.label || task.name || value : task;
+        if (!value) {
+          return;
+        }
+        const selected = String(value) === String(selectedTask) ? " selected" : "";
+        options.push(`
+      <option
+        value="${escapeHtml(value)}"
+        ${selected}>
+        ${escapeHtml(text)}
+      </option>
+    `);
+      });
+      return options.join("");
+    }
+    function markForDelete($button) {
+      const $row = $button.closest(".today-hours-record");
+      if (!$row.length) {
+        return;
+      }
+      $row.attr("data-action", "delete").addClass("record-marked-delete");
+      $row.find("input, select").prop("disabled", true);
+      $button.text("Deleted").removeClass("btn-outline-danger").addClass("btn-secondary");
+    }
+    function save($modal) {
+      const clientName = String($modal.find(CLIENT_ID).val() || "").trim();
+      if (!clientName) {
+        AppUtils.showDashboardToast("Client is required.", "error");
+        return;
+      }
+      const records = [];
+      let hasValidationError = false;
+      $modal.find(".today-hours-record").each(function() {
+        const $row = $(this);
+        const rowNumber = Number($row.attr("data-row"));
+        if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+          AppUtils.showDashboardToast("Invalid record row.", "error");
+          hasValidationError = true;
+          return false;
+        }
+        const action = $row.attr("data-action") === "delete" ? "delete" : "update";
+        if (action === "delete") {
+          records.push({
+            row: rowNumber,
+            action: "delete"
+          });
+          return;
+        }
+        const type = String($row.find(".today-hours-type").val() || "").trim();
+        const task = String($row.find(".today-hours-task").val() || "").trim();
+        const hoursValue = $row.find(".today-hours-hours").val();
+        const hours = Number(hoursValue);
+        if (!type) {
+          AppUtils.showDashboardToast("Type is required.", "error");
+          hasValidationError = true;
+          return false;
+        }
+        if (!task || task.toLowerCase() === "loading...") {
+          AppUtils.showDashboardToast("Please enter a valid task.", "error");
+          hasValidationError = true;
+          return false;
+        }
+        if (hoursValue === "" || !Number.isFinite(hours) || hours < 0) {
+          AppUtils.showDashboardToast("Please enter valid hours.", "error");
+          hasValidationError = true;
+          return false;
+        }
+        records.push({
+          row: rowNumber,
+          action: "update",
+          type,
+          task,
+          hours
+        });
+      });
+      if (hasValidationError) {
+        return;
+      }
+      if (!records.length) {
+        AppUtils.showDashboardToast("No changes to save.", "info");
+        return;
+      }
+      AppUtils.showDashboardToast("Saving changes...", "info");
+      const $saveButton = $modal.find(".btn-save");
+      AppUtils.submitForm({
+        gscriptFunc: "saveEditedTodayClientHours",
+        data: {
+          client: clientName,
+          records
+        },
+        $btn: $saveButton,
+        onSuccess: (response) => {
+          AppUtils.cacheClear(`${CACHE_PREFIX}${clientName}`);
+          AppUtils.cacheClear(`getClientHourLogData_${clientName}`);
+          AppUtils.cacheClear(`getClientHours_${clientName}`);
+          AppUtils.resetCacheKeys(AppUtils.resetableCacheKeyForUpdatingHours);
+          AppUtils.showDashboardToast(
+            "Today's hours updated successfully!",
+            "success"
+          );
+          AppUtils.closeModal(MODAL_ID);
+        }
+      });
+    }
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    return {
+      open
+    };
+  })();
+
   // src/tables/tables.js
   var TableModule = /* @__PURE__ */ (() => {
     function bindTableActions($tbody, tableId = "#table") {
@@ -1576,6 +1919,9 @@
         }
         if ($btn.hasClass("add-client")) {
           return addClient(clientName);
+        }
+        if ($btn.hasClass("edit-today-hours")) {
+          return TodayHoursEditor.open(clientName);
         }
         if ($btn.hasClass("view-client")) {
           return viewClient(clientName);
@@ -2160,7 +2506,6 @@
           `No chart configuration found for: ${chartType}`
         );
       }
-      chartDiv.innerText = "Loading chart...";
       const cacheKey = typeof config.cacheKey === "function" ? config.cacheKey(year) : config.cacheKey;
       const args = chartType === "yearly" ? [year] : [];
       AppUtils.cachedGScriptCall(
@@ -2309,11 +2654,24 @@
           scales: {
             x: {
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
               }
             },
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              grid: {
+                color: "rgba(0,0,0,0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
+              }
             }
           }
         }
@@ -2366,19 +2724,23 @@
           scales: {
             x: {
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
               },
               ticks: {
-                color: "#475569"
+                font: {
+                  size: 10
+                }
               }
             },
             y: {
               beginAtZero: true,
               grid: {
-                color: "rgba(0,0,0,0.05)"
+                color: "rgba(0,0,0,0.04)"
               },
               ticks: {
-                color: "#475569"
+                font: {
+                  size: 10
+                }
               }
             }
           }
@@ -2428,11 +2790,24 @@
           scales: {
             x: {
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
               }
             },
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              grid: {
+                color: "rgba(0,0,0,0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
+              }
             }
           }
         }
@@ -2472,7 +2847,7 @@
               ),
               fill: true,
               tension: 0.4,
-              pointRadius: 0
+              pointRadius: 2
             }
           ]
         },
@@ -2494,10 +2869,12 @@
           scales: {
             x: {
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
               },
               ticks: {
-                display: false
+                font: {
+                  size: 10
+                }
               },
               border: {
                 display: false
@@ -2505,10 +2882,12 @@
             },
             y: {
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
               },
               ticks: {
-                display: false
+                font: {
+                  size: 10
+                }
               },
               border: {
                 display: false
@@ -2546,7 +2925,7 @@
               backgroundColor: "transparent",
               borderDash: [8, 4],
               borderWidth: 3,
-              pointRadius: 0,
+              pointRadius: 2,
               tension: 0.4
             },
             {
@@ -2555,7 +2934,7 @@
               borderColor: "#f97316",
               backgroundColor: "transparent",
               borderWidth: 3,
-              pointRadius: 0,
+              pointRadius: 2,
               tension: 0.4
             }
           ]
@@ -2577,16 +2956,23 @@
             x: {
               type: "linear",
               ticks: {
-                display: false
+                font: {
+                  size: 10
+                }
               },
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
               }
             },
             y: {
               beginAtZero: false,
               grid: {
-                display: false
+                color: "rgba(0,0,0,0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
               }
             }
           }
@@ -4123,9 +4509,9 @@
     function loadPage(pageName, done) {
       const meta = pageMeta[pageName] || DEFAULT_PAGE_META;
       AppUtils.cachedGScriptCall(
-        "appPageTitle",
-        "loadSubPage",
-        ["appPageTitle"],
+        "app-page-title",
+        "loadHtmlComponent",
+        ["app-page-title"],
         (titleHtml) => {
           const mainInner = document.getElementById("app-main__inner");
           if (!mainInner) {
@@ -4136,7 +4522,7 @@
           updatePageHeader(meta);
           AppUtils.cachedGScriptCall(
             `page_${pageName}`,
-            "loadSubPage",
+            "loadHtmlComponent",
             [pageName],
             (pageHtml) => {
               mainInner.insertAdjacentHTML("beforeend", pageHtml);
@@ -4207,21 +4593,89 @@
     };
   })();
 
+  // src/app-shell.js
+  var AppShellModule = /* @__PURE__ */ (() => {
+    let initialized = false;
+    function loadComponent(cacheKey, fileName) {
+      return new Promise((resolve, reject) => {
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "loadHtmlComponent",
+          [fileName],
+          (html) => resolve(html)
+        );
+      });
+    }
+    function findTarget(id, className) {
+      return document.getElementById(id) || document.querySelector(`.${className}`);
+    }
+    function insertAfter(html, element) {
+      if (!element) {
+        throw new Error("Target element not found.");
+      }
+      element.insertAdjacentHTML("afterend", html);
+    }
+    async function init() {
+      if (initialized) {
+        console.warn("\u26A0\uFE0F AppShellModule already initialized.");
+        return true;
+      }
+      initialized = true;
+      try {
+        const loaderHtml = await loadComponent("app-loader", "loader");
+        document.body.insertAdjacentHTML("afterbegin", loaderHtml);
+        const headerTarget = findTarget("app-header", "app-header");
+        if (!headerTarget) {
+          throw new Error('App header target "#app-header" not found.');
+        }
+        const headerHtml = await loadComponent("app-header", "app-header");
+        headerTarget.innerHTML = headerHtml;
+        const sidebarTarget = findTarget("app-sidebar", "app-sidebar");
+        if (!sidebarTarget) {
+          throw new Error('App sidebar target "#app-sidebar" not found.');
+        }
+        const sidebarHtml = await loadComponent("app-sidebar", "app-sidebar");
+        sidebarTarget.innerHTML = sidebarHtml;
+        const footerTarget = findTarget("app-footer", "app-footer");
+        if (!footerTarget) {
+          throw new Error('App footer target "#app-footer" not found.');
+        }
+        const footerHtml = await loadComponent("app-footer", "app-footer");
+        footerTarget.innerHTML = footerHtml;
+        const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
+        const appContainer = document.getElementById("app-container") || document.querySelector(".app-container");
+        if (appContainer) {
+          insertAfter(dialogsHtml, appContainer);
+        } else {
+          document.body.insertAdjacentHTML("beforeend", dialogsHtml);
+        }
+        return true;
+      } catch (error) {
+        console.error("\u274C AppShellModule initialization failed:", error);
+        initialized = false;
+        AppUtils.showError(
+          `Failed to initialize application: ${error?.message || error}`
+        );
+        return false;
+      }
+    }
+    return {
+      init
+    };
+  })();
+
   // src/routers.js
   var RouterModule = /* @__PURE__ */ (() => {
     let currentPage = "home";
     let currentModule = null;
     let pageToken = 0;
+    let initialized = false;
     const getPageToken = () => pageToken;
     const setCurrentPage = (page) => {
       currentPage = page;
       localStorage.setItem("gcb_currentPageGC", page);
     };
     const getCurrentPage = () => currentPage;
-    const init = () => {
-      const savedPage = localStorage.getItem("gcb_currentPageGC");
-      currentPage = routes[savedPage] ? savedPage : "home";
-    };
     const routes = {
       home: HomePage,
       addManualHours: addManualHoursPage,
@@ -4246,6 +4700,23 @@
       reportsMonthlyReport: reportsMonthlyReportPage,
       reportsAnnualReport: reportsAnnualReportPage
     };
+    const init = async () => {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
+      const shellReady = await AppShellModule.init();
+      if (!shellReady) {
+        console.error(
+          "\u274C Router initialization stopped because AppShellModule failed."
+        );
+        initialized = false;
+        return;
+      }
+      const savedPage = localStorage.getItem("gcb_currentPageGC");
+      currentPage = routes[savedPage] ? savedPage : "home";
+      go(currentPage);
+    };
     function go(pageName) {
       const resolvedPageName = routes[pageName] ? pageName : "home";
       const page = routes[resolvedPageName];
@@ -4262,7 +4733,7 @@
         }
         page.init?.(token);
         currentModule = page;
-        AppUI.activateNavigation(pageName);
+        AppUI.activateNavigation(resolvedPageName);
       });
     }
     return {

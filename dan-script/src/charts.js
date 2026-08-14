@@ -100,7 +100,7 @@ const ChartModule = (() => {
       );
     }
 
-    chartDiv.innerText = "Loading chart...";
+    // chartDiv.innerText = "Loading chart...";
 
     const cacheKey =
       typeof config.cacheKey === "function"
@@ -305,12 +305,25 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
+            },
+            ticks: {
+              font: {
+                size: 10,
+              },
             },
           },
 
           y: {
             beginAtZero: true,
+            grid: {
+              color: "rgba(0,0,0,0.04)",
+            },
+            ticks: {
+              font: {
+                size: 10,
+              },
+            },
           },
         },
       },
@@ -378,11 +391,13 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
             },
 
             ticks: {
-              color: "#475569",
+              font: {
+                size: 10,
+              },
             },
           },
 
@@ -390,11 +405,13 @@ const ChartModule = (() => {
             beginAtZero: true,
 
             grid: {
-              color: "rgba(0,0,0,0.05)",
+              color: "rgba(0,0,0,0.04)",
             },
 
             ticks: {
-              color: "#475569",
+              font: {
+                size: 10,
+              },
             },
           },
         },
@@ -459,12 +476,25 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
+            },
+            ticks: {
+              font: {
+                size: 10,
+              },
             },
           },
 
           y: {
             beginAtZero: true,
+            grid: {
+              color: "rgba(0,0,0,0.04)",
+            },
+            ticks: {
+              font: {
+                size: 10,
+              },
+            },
           },
         },
       },
@@ -521,7 +551,7 @@ const ChartModule = (() => {
 
             fill: true,
             tension: 0.4,
-            pointRadius: 0,
+            pointRadius: 2,
           },
         ],
       },
@@ -547,11 +577,13 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
             },
 
             ticks: {
-              display: false,
+              font: {
+                size: 10,
+              },
             },
 
             border: {
@@ -561,11 +593,13 @@ const ChartModule = (() => {
 
           y: {
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
             },
 
             ticks: {
-              display: false,
+              font: {
+                size: 10,
+              },
             },
 
             border: {
@@ -616,7 +650,7 @@ const ChartModule = (() => {
             backgroundColor: "transparent",
             borderDash: [8, 4],
             borderWidth: 3,
-            pointRadius: 0,
+            pointRadius: 2,
             tension: 0.4,
           },
 
@@ -626,7 +660,7 @@ const ChartModule = (() => {
             borderColor: "#f97316",
             backgroundColor: "transparent",
             borderWidth: 3,
-            pointRadius: 0,
+            pointRadius: 2,
             tension: 0.4,
           },
         ],
@@ -653,11 +687,13 @@ const ChartModule = (() => {
             type: "linear",
 
             ticks: {
-              display: false,
+              font: {
+                size: 10,
+              },
             },
 
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
             },
           },
 
@@ -665,7 +701,13 @@ const ChartModule = (() => {
             beginAtZero: false,
 
             grid: {
-              display: false,
+              color: "rgba(0,0,0,0.04)",
+            },
+
+            ticks: {
+              font: {
+                size: 10,
+              },
             },
           },
         },

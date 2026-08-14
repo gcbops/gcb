@@ -36,9 +36,9 @@ const PageLoaderModule = (() => {
     const meta = pageMeta[pageName] || DEFAULT_PAGE_META;
 
     AppUtils.cachedGScriptCall(
-      "appPageTitle",
-      "loadSubPage",
-      ["appPageTitle"],
+      "app-page-title",
+      "loadHtmlComponent",
+      ["app-page-title"],
       (titleHtml) => {
         const mainInner = document.getElementById("app-main__inner");
 
@@ -53,7 +53,7 @@ const PageLoaderModule = (() => {
 
         AppUtils.cachedGScriptCall(
           `page_${pageName}`,
-          "loadSubPage",
+          "loadHtmlComponent",
           [pageName],
           (pageHtml) => {
             mainInner.insertAdjacentHTML("beforeend", pageHtml);

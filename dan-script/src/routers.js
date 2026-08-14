@@ -24,11 +24,14 @@ import { ChartModule } from "./charts.js";
 import { PageLoaderModule } from "./page-loader.js";
 import { DataTableModule } from "./tables/data-table.js";
 import { AppUI } from "./app-ui.js";
+import { AppShellModule } from "./app-shell.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
   let currentModule = null;
   let pageToken = 0;
+  let initialized = false;
+
   const getPageToken = () => pageToken;
 
   const setCurrentPage = (page) => {
@@ -37,12 +40,6 @@ const RouterModule = (() => {
   };
 
   const getCurrentPage = () => currentPage;
-
-  const init = () => {
-    const savedPage = localStorage.getItem("gcb_currentPageGC");
-
-    currentPage = routes[savedPage] ? savedPage : "home";
-  };
 
   const routes = {
     home: HomePage,
@@ -90,23 +87,90 @@ const RouterModule = (() => {
     reportsAnnualReport: reportsAnnualReportPage,
   };
 
+  /**
+   * Initialize router + application shell.
+   *
+   * Runs once when the application starts.
+   */
+  const init = async () => {
+    if (initialized) {
+      return;
+    }
+
+    initialized = true;
+
+    /*
+     * Load the permanent application shell first.
+     *
+     * This loads:
+     * - loader
+     * - app-header
+     * - app-sidebar
+     * - app-footer
+     * - dialogs
+     */
+    const shellReady = await AppShellModule.init();
+
+    if (!shellReady) {
+      console.error(
+        "❌ Router initialization stopped because AppShellModule failed.",
+      );
+
+      initialized = false;
+      return;
+    }
+
+    /*
+     * Restore the last page.
+     */
+    const savedPage = localStorage.getItem("gcb_currentPageGC");
+    
+    currentPage = routes[savedPage] ? savedPage : "home";
+
+    /*
+     * Load the initial page.
+     */
+    go(currentPage);
+  };
+
+  /**
+   * Navigate to a page.
+   */
   function go(pageName) {
     const resolvedPageName = routes[pageName] ? pageName : "home";
+
     const page = routes[resolvedPageName];
 
     pageToken++;
 
+    /*
+     * Destroy previous page module.
+     */
     currentModule?.destroy?.();
     currentModule = null;
 
+    /*
+     * Cleanup shared UI.
+     */
     ChartModule.destroyAllCharts();
     DataTableModule.destroyAll();
 
+    /*
+     * Store current page.
+     */
     setCurrentPage(resolvedPageName);
 
     const token = pageToken;
 
+    /*
+     * Load only the page.
+     *
+     * AppShellModule is NOT involved here.
+     */
     PageLoaderModule.loadPage(resolvedPageName, () => {
+      /*
+       * Ignore stale page callbacks.
+       */
       if (token !== pageToken) {
         return;
       }
@@ -115,7 +179,7 @@ const RouterModule = (() => {
 
       currentModule = page;
 
-      AppUI.activateNavigation(pageName);
+      AppUI.activateNavigation(resolvedPageName);
     });
   }
 

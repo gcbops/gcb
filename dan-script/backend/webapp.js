@@ -25,7 +25,7 @@ function resolveHtmlPath(name) {
   );
 }
 
-function loadSubPage(name) {
+function loadHtmlComponent(name) {
   return HtmlService.createHtmlOutputFromFile(
     resolveHtmlPath(name),
   ).getContent();

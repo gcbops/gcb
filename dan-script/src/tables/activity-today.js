@@ -191,6 +191,10 @@ const ActivityToday = (() => {
       .off("submit.activityToday")
       .on("submit.activityToday", handleTaskSubmit);
 
+    $("#submit-new-hours")
+      .off("click.activityToday")
+      .on("click.activityToday", handleTaskSubmit);
+
     AppUtils.initSelect2("#drawerManualAdd .drawer-content");
   }
 
@@ -215,8 +219,12 @@ const ActivityToday = (() => {
         $firstGroup.toggleClass("element-hidden");
 
         $icon
-          .toggleClass("fa-plus", $icon.hasClass("fa-minus"))
-          .toggleClass("fa-minus", $icon.hasClass("fa-plus"));
+          .toggleClass("fa-plus", function () {
+            return $(this).hasClass("fa-minus");
+          })
+          .toggleClass("fa-minus", function () {
+            return $(this).hasClass("fa-plus");
+          });
 
         AppUtils.openDrawer("#drawerManualAdd");
       });
@@ -226,7 +234,11 @@ const ActivityToday = (() => {
     event.preventDefault();
 
     const $form = $(this);
-    const $submitBtn = $form.find('button[type="submit"]');
+    let $submitBtn = $form.find('button[type="submit"]');
+
+    if (!$submitBtn.length) {
+      $submitBtn = $("#submit-new-hours");
+    }
 
     const formData = {
       client: String($("#client").val() || "").trim(),
@@ -338,31 +350,47 @@ const ActivityToday = (() => {
    * ACTION BUTTONS
    * --------------------------------------------------------- */
 
-  function buildActionButtons() {
+  function buildActionButtons(row = []) {
+    const hours = parseHoursValue(row[4]);
+    const canEdit = hours > 0;
+
     return $(`
-      <div class="btn-group btn-group-sm">
-        <button
-          type="button"
-          class="btn add-client"
-          title="Add Client">
-          <i class="pe-7s-cloud-upload"></i>
-        </button>
+    <div class="btn-group btn-group-sm">
+      <button
+        type="button"
+        class="btn add-client"
+        title="Add Client">
+        <i class="pe-7s-plus"></i>
+      </button>
 
-        <button
-          type="button"
-          class="btn view-client"
-          title="View Client">
-          <i class="pe-7s-look"></i>
-        </button>
+      ${
+        canEdit
+          ? `
+            <button
+              type="button"
+              class="btn edit-today-hours"
+              title="Edit Today's Hours">
+              <i class="pe-7s-note"></i>
+            </button>
+          `
+          : ""
+      }
 
-        <button
-          type="button"
-          class="btn edit-client"
-          title="Edit Client">
-          <i class="pe-7s-note"></i>
-        </button>
-      </div>
-    `);
+      <button
+        type="button"
+        class="btn view-client"
+        title="View Client">
+        <i class="pe-7s-look"></i>
+      </button>
+
+      <button
+        type="button"
+        class="btn edit-client"
+        title="Edit Client">
+        <i class="pe-7s-note2"></i>
+      </button>
+    </div>
+  `);
   }
 
   /* ---------------------------------------------------------
@@ -474,6 +502,38 @@ const ActivityToday = (() => {
         (value, columnIndex) => value === cachedRow[columnIndex],
       );
     });
+  }
+
+  function parseHoursValue(value) {
+    if (value === null || value === undefined || value === "") {
+      return 0;
+    }
+
+    // Numeric value
+    if (typeof value === "number") {
+      return value;
+    }
+
+    const text = String(value).trim();
+
+    // Handle H:MM:SS
+    if (text.includes(":")) {
+      const parts = text.split(":").map(Number);
+
+      if (parts.length === 3 && parts.every(Number.isFinite)) {
+        const [hours, minutes, seconds] = parts;
+
+        return hours + minutes / 60 + seconds / 3600;
+      }
+
+      if (parts.length === 2 && parts.every(Number.isFinite)) {
+        const [hours, minutes] = parts;
+
+        return hours + minutes / 60;
+      }
+    }
+
+    return Number(text) || 0;
   }
 
   return {
