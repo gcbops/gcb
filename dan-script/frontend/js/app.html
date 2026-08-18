@@ -292,18 +292,26 @@
         onClose($drawerElement, $contentElement);
       }
     }
-    function submitForm({ gscriptFunc, data = {}, onSuccess, onError, $btn }) {
+    function submitForm({
+      gscriptFunc,
+      data = {},
+      onSuccess,
+      onError,
+      $btn,
+      loadingText = "Saving..."
+    }) {
       if (!gscriptFunc) {
         showError("No Google Apps Script function provided");
         return;
       }
       const $button = $btn?.length ? $btn : null;
+      let loading = null;
       if ($button) {
-        $button.prop("disabled", true);
+        loading = AppUtils.setButtonLoading($button[0], loadingText);
       }
       const restoreButton = () => {
-        if ($button) {
-          $button.prop("disabled", false);
+        if (loading) {
+          loading.restore();
         }
       };
       try {
@@ -325,6 +333,21 @@
         restoreButton();
         showError(err);
       }
+    }
+    function setButtonLoading(btn, loadingText) {
+      const $btn = $(btn);
+      const textToRestore = $btn.text().trim();
+      const cogSvg = `
+    ${loadingText}
+    <svg class="cog-icon ms-2" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+      <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84a.484.484 0 00-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 00-.59.22L2.09 8.83a.488.488 0 00.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.488.488 0 00-.12.61l1.92 3.32c.12.21.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.488.488 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+    </svg>
+  `;
+      $btn.prop("disabled", true).html(cogSvg);
+      function restore() {
+        $btn.prop("disabled", false).text(textToRestore);
+      }
+      return { restore };
     }
     function openModal(modalSelector, options = {}) {
       const {
@@ -476,6 +499,7 @@
       showDashboardToast,
       initSelect2,
       submitForm,
+      setButtonLoading,
       // drawer and modal helpers
       openDrawer,
       closeDrawer,
@@ -1431,26 +1455,39 @@
       return instances[tableId] || null;
     }
     function destroy(tableId) {
-      const instance = instances[tableId];
+      if (!tableId) {
+        return;
+      }
       if (tableId === "#activity-today") {
         ActivityToday.stopRefresh();
       }
-      if (instance) {
-        try {
-          instance.destroy();
-        } catch (e) {
-          console.warn("Failed to destroy DataTable:", tableId, e);
-        }
+      const instance = instances[tableId];
+      const $table = $(tableId);
+      if (!instance && (!$table.length || !$.fn.DataTable.isDataTable($table[0]))) {
         delete instances[tableId];
         return;
       }
-      const $table = $(tableId);
-      if ($table.length && $.fn.DataTable.isDataTable($table)) {
+      if (!$table.length) {
+        delete instances[tableId];
+        return;
+      }
+      if (instance) {
         try {
-          $table.DataTable().destroy();
-        } catch (e) {
-          console.warn("Failed to destroy existing DataTable:", tableId, e);
+          instance.destroy(true);
+        } catch (error) {
+          console.warn("Failed to destroy DataTable:", tableId, error);
+        } finally {
+          delete instances[tableId];
         }
+        return;
+      }
+      if (!$.fn.DataTable.isDataTable($table[0])) {
+        return;
+      }
+      try {
+        $table.DataTable().destroy(true);
+      } catch (error) {
+        console.warn("Failed to destroy existing DataTable:", tableId, error);
       }
     }
     function destroyAll() {
@@ -2274,11 +2311,11 @@
         return;
       }
       bound = false;
-      $("#addtoSheet-upsell").off("click");
-      $("#upsellForm").off("submit");
+      $("#addtoSheet-upsell").off(".upsellOverview");
+      $("#upsellForm").off(".upsellOverview");
     };
     const bindActions = () => {
-      $("#addtoSheet-upsell").on("click", function() {
+      $("#addtoSheet-upsell").off("click.upsellOverview").on("click.upsellOverview", function() {
         AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
         google.script.run.withSuccessHandler(function(url) {
           window.open(url, "_blank");
@@ -2286,7 +2323,7 @@
           AppUtils.showError(err);
         }).getClientSheetUrl("Upsells");
       });
-      $("#upsellForm").off("submit").on("submit", function(e) {
+      $("#upsellForm").off("submit.upsellOverview").on("submit.upsellOverview", function(e) {
         e.preventDefault();
         const $submitBtn = $(this).find('button[type="submit"]');
         const fields = [
@@ -2313,7 +2350,10 @@
           data,
           $btn: $submitBtn,
           onSuccess: () => {
-            AppUtils.showDashboardToast("Record added successfully!", "success");
+            AppUtils.showDashboardToast(
+              "Record added successfully!",
+              "success"
+            );
             fields.forEach((id) => {
               const $el = $("#" + id);
               if ($el.length) {
@@ -2366,63 +2406,45 @@
       );
     }
     function renderUpsellTables(tableData) {
-      const $container = $("#upsellTable").parent();
-      if (!$container.length) {
+      const $table = $("#upsellTable");
+      const $tbody = $("#recordsBody");
+      if (!$table.length || !$tbody.length) {
         return;
       }
-      $container.html(
-        `
-      <table
-        id="upsellTable"
-        class="display table nowrap">
-
-        <thead>
-          <tr>
-            <th>Client Name</th>
-            <th>Upsell Hours</th>
-            <th>Orasan Date</th>
-          </tr>
-        </thead>
-
-        <tbody id="recordsBody"></tbody>
-
-      </table>
-      `
-      );
-      const $tbody = $("#recordsBody");
       let html;
       if (!Array.isArray(tableData) || tableData.length === 0) {
         html = `
-        <tr>
-          <td colspan="3"
-              style="text-align:center;color:#64748b">
-            No records yet
-          </td>
-        </tr>
-        `;
+      <tr>
+        <td colspan="3" style="text-align:center;color:#64748b">
+          No records yet
+        </td>
+      </tr>
+    `;
       } else {
         html = tableData.map(
           (row) => `
-            <tr>
-              <td>
-                ${TableModule.escapeHtml(row[0] ?? "")}
-              </td>
-
-              <td style="text-align:center;">
-                ${TableModule.escapeHtml(row[1] ?? "")}
-              </td>
-
-              <td style="text-align:center;">
-                ${TableModule.escapeHtml(row[2] ?? "")}
-              </td>
-            </tr>
-            `
+          <tr>
+            <td>${escapeHtml(row[0] ?? "")}</td>
+            <td style="text-align:center;">
+              ${escapeHtml(row[1] ?? "")}
+            </td>
+            <td style="text-align:center;">
+              ${escapeHtml(row[2] ?? "")}
+            </td>
+          </tr>
+        `
         ).join("");
       }
       $tbody.html(html);
       if (Array.isArray(tableData) && tableData.length > 0) {
         DataTableModule.init("Upsell", "#upsellTable");
       }
+    }
+    function escapeHtml(text) {
+      if (text === null || text === void 0) {
+        return "";
+      }
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
     return { init, destroy };
   })();
@@ -3282,26 +3304,33 @@
 
   // src/reports/actions.js
   var ReportActions = /* @__PURE__ */ (() => {
-    function downloadLatestPDF(btn) {
+    function downloadLatestPDF(btn, loading) {
       const report = getLatestReport(btn);
       if (!report) {
+        if (loading) {
+          loading.restore();
+        }
         return;
       }
       window.open(report.link, "_blank");
-      btn.prop("disabled", false);
+      if (loading) {
+        loading.restore();
+      }
     }
-    function emailLatestReport(btn) {
+    function emailLatestReport(btn, loading) {
       sendLatestReport({
         btn,
+        loading,
         reportMethod: "emailLatestReport",
         loadingMessage: "Sending email...",
         successMessage: "Latest report emailed!",
         errorMessage: "Failed to send email."
       });
     }
-    function sendLatestReportToDiscord(btn) {
+    function sendLatestReportToDiscord(btn, loading) {
       sendLatestReport({
         btn,
+        loading,
         reportMethod: "sendLatestReportToDiscord",
         loadingMessage: "Sending Discord notification...",
         successMessage: "Discord notification sent!",
@@ -3311,29 +3340,39 @@
     function sendLatestReport(config) {
       const report = getLatestReport(config.btn);
       if (!report) {
+        if (config.loading) {
+          config.loading.restore();
+        }
         return;
       }
-      AppUtils.showDashboardToast(config.loadingMessage, "info");
       google.script.run.withSuccessHandler(() => {
-        handleReportSuccess(config.btn, config.successMessage);
+        handleReportSuccess(config.btn, config.successMessage, config.loading);
       }).withFailureHandler((err) => {
-        handleReportFailure(config.btn, err, config.errorMessage);
+        handleReportFailure(
+          config.btn,
+          err,
+          config.errorMessage,
+          config.loading
+        );
       })[config.reportMethod](report);
     }
     function getLatestReport(btn) {
       const report = ReportService.getLatestReport();
       if (!report) {
-        btn.prop("disabled", false);
         return null;
       }
       return report;
     }
-    function handleReportSuccess(btn, message) {
-      btn.prop("disabled", false);
+    function handleReportSuccess(btn, message, loading) {
+      if (loading) {
+        loading.restore();
+      }
       AppUtils.showDashboardToast(message, "success");
     }
-    function handleReportFailure(btn, err, message) {
-      btn.prop("disabled", false);
+    function handleReportFailure(btn, err, message, loading) {
+      if (loading) {
+        loading.restore();
+      }
       AppUtils.showError(err);
     }
     return {
@@ -3367,34 +3406,27 @@
         window.open(url, "_blank");
       }).on("click.reports", ".btn-email-report", function() {
         const btn = $(this);
-        btn.prop("disabled", true);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
         google.script.run.withSuccessHandler(() => {
-          btn.prop("disabled", false);
-          AppUtils.showDashboardToast(
-            "Email sent successfully!",
-            "success"
-          );
+          AppUtils.showDashboardToast("Email sent successfully!", "success");
+          loading.restore();
         }).withFailureHandler((err) => {
-          btn.prop("disabled", false);
           AppUtils.showError(err);
-        }).sendRequestedEmailReport(
-          btn.data("id")
-        );
+          loading.restore();
+        }).sendRequestedEmailReport(btn.data("id"));
       }).on("click.reports", ".btn-discord-report", function() {
         const btn = $(this);
-        btn.prop("disabled", true);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
         google.script.run.withSuccessHandler(() => {
-          btn.prop("disabled", false);
           AppUtils.showDashboardToast(
             "Discord notification sent!",
             "success"
           );
+          loading.restore();
         }).withFailureHandler((err) => {
-          btn.prop("disabled", false);
           AppUtils.showError(err);
-        }).sendRequestedDiscordReport(
-          btn.data("id")
-        );
+          loading.restore();
+        }).sendRequestedDiscordReport(btn.data("id"));
       }).on("click.reports", "#generate-monthly-report", () => {
         const page = "reportsMonthlyReport";
         RouterModule.go(page);
@@ -3403,19 +3435,16 @@
         RouterModule.go(page);
       }).on("click.reports", "#download-latest-pdf", function() {
         const btn = $(this);
-        btn.prop("disabled", true);
-        ReportActions.downloadLatestPDF(btn);
-        setTimeout(() => {
-          btn.prop("disabled", false);
-        }, 1e3);
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        ReportActions.downloadLatestPDF(btn, loading);
       }).on("click.reports", "#email-latest-report", function() {
         const btn = $(this);
-        btn.prop("disabled", true);
-        ReportActions.emailLatestReport(btn);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
+        ReportActions.emailLatestReport(btn, loading);
       }).on("click.reports", "#send-discord-notification", function() {
         const btn = $(this);
-        btn.prop("disabled", true);
-        ReportActions.sendLatestReportToDiscord(btn);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
+        ReportActions.sendLatestReportToDiscord(btn, loading);
       });
     };
     const loadData = () => {
@@ -3921,38 +3950,146 @@
   // src/pages/config-page.js
   var settingsConfigurationPage = /* @__PURE__ */ (() => {
     let initialized = false;
+    const loadedTabs = /* @__PURE__ */ new Set();
+    const tabHandlers = {
+      "#tab-content-2": loadIntegrationStatus,
+      "#tab-content-3": loadAppearanceSettings
+    };
+    function clearCache(btn) {
+      const loading = AppUtils.setButtonLoading(btn, "Clearing cache...");
+      AppUtils.clearAppCache();
+      AppUtils.showDashboardToast("App cache cleared successfully!", "success");
+      loading.restore();
+    }
+    function syncClientSheets(btn) {
+      const loading = AppUtils.setButtonLoading(btn, "Syncing client lists...");
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast(
+          "Client list synced successfully!",
+          "success"
+        );
+        loading.restore();
+      }).withFailureHandler((err) => {
+        console.error("syncClientSheetList failed:", err);
+        AppUtils.showDashboardToast(
+          "Client list sync failed. Please try again.",
+          "error"
+        );
+        loading.restore();
+      }).syncClientSheetList();
+    }
+    function loadIntegrationStatus() {
+      google.script.run.withSuccessHandler((data) => {
+        const fields = {
+          notifEmailStatus: data.notifEmail,
+          notifDiscordStatus: data.notifDiscord,
+          spreadsheetIdStatus: data.spreadsheetId,
+          reportFolderIdStatus: data.reportFolderId
+        };
+        Object.entries(fields).forEach(([id, config]) => {
+          const element = document.getElementById(id);
+          if (!element) {
+            return;
+          }
+          const configured = Boolean(config?.configured);
+          element.classList.toggle("is-inactive", !configured);
+          element.textContent = configured ? `\u2713 Configured \u2014 ${config.masked}` : "Not configured";
+        });
+      }).withFailureHandler((err) => {
+        console.error("getConfigStatus failed:", err);
+        AppUtils.showDashboardToast(
+          "Failed to load integration settings.",
+          "error"
+        );
+      }).getIntegrationStatus();
+    }
+    function loadAppearanceSettings() {
+    }
+    function handleClick(e) {
+      const btn = e.target.closest("#btnClearCache, #btnSyncClient");
+      if (!btn) {
+        return;
+      }
+      e.preventDefault();
+      if (btn.id === "btnClearCache") {
+        clearCache(btn);
+        return;
+      }
+      if (btn.id === "btnSyncClient") {
+        syncClientSheets(btn);
+      }
+    }
+    function handleTabShown(e) {
+      const tab = e.target;
+      const target = tab.getAttribute("href");
+      if (!target) {
+        return;
+      }
+      const handler = tabHandlers[target];
+      if (!handler || loadedTabs.has(target)) {
+        return;
+      }
+      loadedTabs.add(target);
+      handler();
+    }
+    function handleSubmit(e) {
+      if (e.target.id !== "settingsIntegrationForm") {
+        return;
+      }
+      e.preventDefault();
+      const form = e.target;
+      const $btn = $(form).find('button[type="submit"], input[type="submit"]');
+      saveIntegrationSettings(form, $btn);
+    }
+    function saveIntegrationSettings(form, $btn) {
+      const data = {
+        notifEmail: form.notifEmail.value.trim(),
+        notifDiscord: form.notifDiscord.value.trim(),
+        spreadsheetId: form.spreadsheetId.value.trim(),
+        reportFolderId: form.reportFolderId.value.trim()
+      };
+      AppUtils.submitForm({
+        gscriptFunc: "saveIntegrationSettings",
+        data,
+        $btn,
+        loadingText: "Saving integration settings...",
+        onSuccess: (result) => {
+          AppUtils.showDashboardToast(
+            result?.message || "Integration settings saved successfully!",
+            "success"
+          );
+          loadIntegrationStatus();
+        },
+        onError: (err) => {
+          console.error("saveIntegrationSettings failed:", err);
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to save integration settings.",
+            "error"
+          );
+        }
+      });
+    }
     function init() {
       if (initialized) {
         return;
       }
       initialized = true;
-      document.addEventListener("click", (e) => {
-        const btn = e.target.closest("#btnClearCache");
-        if (!btn) {
-          return;
-        }
-        AppUtils.showDashboardToast(
-          "Syncing data in progress!",
-          "info"
-        );
-        e.preventDefault();
-        AppUtils.clearAppCache();
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast(
-            "Cache cleared and client sheet list synced!",
-            "success"
-          );
-        }).withFailureHandler((err) => {
-          console.error("syncClientSheetList failed:", err);
-          AppUtils.showDashboardToast(
-            "Cache cleared, but client sheet sync failed.",
-            "error"
-          );
-        }).syncClientSheetList();
-      });
+      document.addEventListener("click", handleClick);
+      document.addEventListener("shown.bs.tab", handleTabShown);
+      document.addEventListener("submit", handleSubmit);
+    }
+    function destroy() {
+      if (!initialized) {
+        return;
+      }
+      initialized = false;
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("shown.bs.tab", handleTabShown);
+      document.removeEventListener("submit", handleSubmit);
     }
     return {
-      init
+      init,
+      destroy
     };
   })();
 
@@ -4484,27 +4621,116 @@
       icon: "pe-7s-graph2 icon-gradient bg-malibu-beach"
     };
     const pageMeta = {
-      activeClients: { title: "Active Clients", desc: "View all clients currently active.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
-      topClients: { title: "Top Clients", desc: "Check highest performing clients .", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
-      allClients: { title: "All Clients", desc: "See every client in one place.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
-      outstandingClients: { title: "Outstanding Clients", desc: "See clients with pending or unpaid items.", icon: "pe-7s-users icon-gradient bg-malibu-beach" },
-      addManualHours: { title: "Add Manual Hours", desc: "Log manual hours and track entries in real time.", icon: "pe-7s-hourglass icon-gradient bg-malibu-beach" },
-      upsellOverview: { title: "Upsell Entries", desc: "Log upsell hours and track entries in real time.", icon: "pe-7s-piggy icon-gradient bg-malibu-beach" },
-      dailyOverview: { title: "Daily Overview", desc: "See daily performance at a glance.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
-      growthComparisonOverview: { title: "Growth Comparison Overview", desc: "Track growth and spot trends quickly.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
-      monthlyOverview: { title: "Monthly Overview", desc: "See monthly performance at a glance.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
-      yearlyOverview: { title: "Yearly Overview", desc: "See yearly trends and progress at a glance.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
-      allManualProjects: { title: "Manual Projects", desc: "View all manual projects.", icon: "pe-7s-portfolio icon-gradient bg-malibu-beach" },
-      hourlyOverview: { title: "Hourly Overview", desc: "View hourly history.", icon: "pe-7s-portfolio icon-gradient bg-malibu-beach" },
-      billingPaidHours: { title: "Paid Hours Summary", desc: "Overview of hours that have already been billed and paid.", icon: "pe-7s-cash icon-gradient bg-malibu-beach" },
-      billingOwedHours: { title: "Owed Hours Summary", desc: "Overview of hours that are pending billing or payment.", icon: "pe-7s-cash icon-gradient bg-malibu-beach" },
-      performanceYearly: { title: "Yearly Performance", desc: "Track yearly results, growth trends, and overall performance progress.", icon: "pe-7s-graph3 icon-gradient bg-malibu-beach" },
-      performanceDaily: { title: "Daily Performance", desc: "Monitor daily activities, completed tasks, and performance updates.", icon: "pe-7s-clock icon-gradient bg-mean-fruit" },
-      performanceTarget: { title: "Performance Targets", desc: "View goals, targets, achievements, and progress toward expected results.", icon: "pe-7s-target icon-gradient bg-sunny-morning" },
-      reportsExportData: { title: "Report Center", desc: "Generate and download reports.", icon: "pe-7s-download icon-gradient bg-sunny-morning" },
-      reportsMonthlyReport: { title: "Generate Monthly Report", desc: "Generate and manage monthly productivity reports.", icon: "pe-7s-download icon-gradient bg-sunny-morning" },
-      reportsAnnualReport: { title: "Generate Annual Report", desc: "Generate and manage annual productivity reports.", icon: "pe-7s-download icon-gradient bg-sunny-morning" },
-      settingsConfiguration: { title: "Settings", desc: "Control system configurations and customize platform behavior.", icon: "pe-7s-config icon-gradient bg-malibu-beach" }
+      activeClients: {
+        title: "Active Clients",
+        desc: "View all clients currently active.",
+        icon: "pe-7s-users icon-gradient bg-malibu-beach"
+      },
+      topClients: {
+        title: "Top Clients",
+        desc: "Check highest performing clients .",
+        icon: "pe-7s-users icon-gradient bg-malibu-beach"
+      },
+      allClients: {
+        title: "All Clients",
+        desc: "See every client in one place.",
+        icon: "pe-7s-users icon-gradient bg-malibu-beach"
+      },
+      outstandingClients: {
+        title: "Outstanding Clients",
+        desc: "See clients with pending or unpaid items.",
+        icon: "pe-7s-users icon-gradient bg-malibu-beach"
+      },
+      addManualHours: {
+        title: "Add Manual Hours",
+        desc: "Log manual hours and track entries in real time.",
+        icon: "pe-7s-hourglass icon-gradient bg-malibu-beach"
+      },
+      upsellOverview: {
+        title: "Upsell Entries",
+        desc: "Log upsell hours and track entries in real time.",
+        icon: "pe-7s-piggy icon-gradient bg-malibu-beach"
+      },
+      dailyOverview: {
+        title: "Daily Overview",
+        desc: "See daily performance at a glance.",
+        icon: "pe-7s-graph3 icon-gradient bg-malibu-beach"
+      },
+      growthComparisonOverview: {
+        title: "Growth Comparison Overview",
+        desc: "Track growth and spot trends quickly.",
+        icon: "pe-7s-graph3 icon-gradient bg-malibu-beach"
+      },
+      monthlyOverview: {
+        title: "Monthly Overview",
+        desc: "See monthly performance at a glance.",
+        icon: "pe-7s-graph3 icon-gradient bg-malibu-beach"
+      },
+      yearlyOverview: {
+        title: "Yearly Overview",
+        desc: "See yearly trends and progress at a glance.",
+        icon: "pe-7s-graph3 icon-gradient bg-malibu-beach"
+      },
+      allManualProjects: {
+        title: "Manual Projects",
+        desc: "View all manual projects.",
+        icon: "pe-7s-portfolio icon-gradient bg-malibu-beach"
+      },
+      hourlyOverview: {
+        title: "Hourly Overview",
+        desc: "View hourly history.",
+        icon: "pe-7s-portfolio icon-gradient bg-malibu-beach"
+      },
+      billingPaidHours: {
+        title: "Paid Hours Summary",
+        desc: "Overview of hours that have already been billed and paid.",
+        icon: "pe-7s-cash icon-gradient bg-malibu-beach"
+      },
+      billingOwedHours: {
+        title: "Owed Hours Summary",
+        desc: "Overview of hours that are pending billing or payment.",
+        icon: "pe-7s-cash icon-gradient bg-malibu-beach"
+      },
+      performanceYearly: {
+        title: "Yearly Performance",
+        desc: "Track yearly results, growth trends, and overall performance progress.",
+        icon: "pe-7s-graph3 icon-gradient bg-malibu-beach"
+      },
+      performanceDaily: {
+        title: "Daily Performance",
+        desc: "Monitor daily activities, completed tasks, and performance updates.",
+        icon: "pe-7s-clock icon-gradient bg-mean-fruit"
+      },
+      performanceTarget: {
+        title: "Performance Targets",
+        desc: "View goals, targets, achievements, and progress toward expected results.",
+        icon: "pe-7s-target icon-gradient bg-sunny-morning"
+      },
+      reportsExportData: {
+        title: "Report Center",
+        desc: "Generate and download reports.",
+        icon: "pe-7s-download icon-gradient bg-sunny-morning"
+      },
+      reportsMonthlyReport: {
+        title: "Generate Monthly Report",
+        desc: "Generate and manage monthly productivity reports.",
+        icon: "pe-7s-download icon-gradient bg-sunny-morning"
+      },
+      reportsAnnualReport: {
+        title: "Generate Annual Report",
+        desc: "Generate and manage annual productivity reports.",
+        icon: "pe-7s-download icon-gradient bg-sunny-morning"
+      },
+      settingsConfiguration: {
+        title: "Settings",
+        desc: "Control system configurations and customize platform behavior.",
+        icon: "pe-7s-config icon-gradient bg-malibu-beach"
+      },
+      integrationsConfiguration: {
+        title: "Integrations",
+        desc: "Set up and verify connections to external services used by the platform.",
+        icon: "pe-7s-config icon-gradient bg-malibu-beach"
+      }
     };
     function loadPage(pageName, done) {
       const meta = pageMeta[pageName] || DEFAULT_PAGE_META;
@@ -4563,15 +4789,22 @@
     }
     function initPerfectScrollbars() {
       if (typeof PerfectScrollbar === "undefined") {
-        console.warn("[AppUI] PerfectScrollbar not found.");
+        console.warn("[AppUI] PerfectScrollbar library not loaded.");
         return;
       }
-      const sidebarEl = document.querySelector(".scrollbar-sidebar");
-      if (sidebarEl) {
-        new PerfectScrollbar(sidebarEl);
-      }
-      document.querySelectorAll(".scrollbar-container").forEach((el) => {
-        new PerfectScrollbar(el);
+      const elements = [
+        document.querySelector(".scrollbar-sidebar"),
+        ...document.querySelectorAll(".scrollbar-container")
+      ].filter(Boolean);
+      elements.forEach((element) => {
+        if (element._perfectScrollbar) {
+          return;
+        }
+        try {
+          element._perfectScrollbar = new PerfectScrollbar(element);
+        } catch (error) {
+          console.warn("[AppUI] PerfectScrollbar failed:", element, error);
+        }
       });
     }
     function initLoadingState() {
@@ -4596,71 +4829,336 @@
   // src/app-shell.js
   var AppShellModule = /* @__PURE__ */ (() => {
     let initialized = false;
+    let initializing = null;
     function loadComponent(cacheKey, fileName) {
       return new Promise((resolve, reject) => {
         AppUtils.cachedGScriptCall(
           cacheKey,
           "loadHtmlComponent",
           [fileName],
-          (html) => resolve(html)
+          (html) => resolve(html),
+          false
         );
       });
     }
-    function findTarget(id, className) {
-      return document.getElementById(id) || document.querySelector(`.${className}`);
-    }
-    function insertAfter(html, element) {
-      if (!element) {
-        throw new Error("Target element not found.");
-      }
-      element.insertAdjacentHTML("afterend", html);
+    function waitForElement(selector, timeout = 5e3) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(selector);
+        if (existing) {
+          resolve(existing);
+          return;
+        }
+        const observer = new MutationObserver(() => {
+          const element = document.querySelector(selector);
+          if (!element) {
+            return;
+          }
+          observer.disconnect();
+          clearTimeout(timeoutId);
+          resolve(element);
+        });
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+        const timeoutId = setTimeout(() => {
+          observer.disconnect();
+          reject(
+            new Error(`Element "${selector}" was not found within ${timeout}ms.`)
+          );
+        }, timeout);
+      });
     }
     async function init() {
       if (initialized) {
-        console.warn("\u26A0\uFE0F AppShellModule already initialized.");
         return true;
       }
-      initialized = true;
-      try {
-        const loaderHtml = await loadComponent("app-loader", "loader");
-        document.body.insertAdjacentHTML("afterbegin", loaderHtml);
-        const headerTarget = findTarget("app-header", "app-header");
-        if (!headerTarget) {
-          throw new Error('App header target "#app-header" not found.');
-        }
-        const headerHtml = await loadComponent("app-header", "app-header");
-        headerTarget.innerHTML = headerHtml;
-        const sidebarTarget = findTarget("app-sidebar", "app-sidebar");
-        if (!sidebarTarget) {
-          throw new Error('App sidebar target "#app-sidebar" not found.');
-        }
-        const sidebarHtml = await loadComponent("app-sidebar", "app-sidebar");
-        sidebarTarget.innerHTML = sidebarHtml;
-        const footerTarget = findTarget("app-footer", "app-footer");
-        if (!footerTarget) {
-          throw new Error('App footer target "#app-footer" not found.');
-        }
-        const footerHtml = await loadComponent("app-footer", "app-footer");
-        footerTarget.innerHTML = footerHtml;
-        const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
-        const appContainer = document.getElementById("app-container") || document.querySelector(".app-container");
-        if (appContainer) {
-          insertAfter(dialogsHtml, appContainer);
-        } else {
-          document.body.insertAdjacentHTML("beforeend", dialogsHtml);
-        }
-        return true;
-      } catch (error) {
-        console.error("\u274C AppShellModule initialization failed:", error);
-        initialized = false;
-        AppUtils.showError(
-          `Failed to initialize application: ${error?.message || error}`
-        );
-        return false;
+      if (initializing) {
+        return initializing;
       }
+      initializing = (async () => {
+        try {
+          const appContainer = await waitForElement("#app-container");
+          try {
+            const loaderHtml = await loadComponent("app-loader", "loader");
+            if (loaderHtml) {
+              document.body.insertAdjacentHTML("afterbegin", loaderHtml);
+            }
+          } catch (error) {
+            console.warn("[AppShell] Loader failed:", error);
+          }
+          try {
+            const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
+            if (dialogsHtml) {
+              appContainer.insertAdjacentHTML("afterend", dialogsHtml);
+            }
+          } catch (error) {
+            console.warn("[AppShell] Dialogs failed:", error);
+          }
+          initialized = true;
+          return true;
+        } catch (error) {
+          console.error("[AppShell] Initialization failed:", error);
+          initialized = false;
+          AppUtils.showError(
+            `Failed to initialize application: ${error?.message || error}`
+          );
+          return false;
+        } finally {
+          initializing = null;
+        }
+      })();
+      return initializing;
     }
     return {
-      init
+      init,
+      waitForElement
+    };
+  })();
+
+  // src/pages/integration-page.js
+  var integrationsConfigurationPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const MODAL_ID = "#app-modal";
+    const INTEGRATIONS = {
+      gmail: {
+        title: "Gmail",
+        description: "Configure the email address used by the application for notifications.",
+        field: {
+          name: "notifEmail",
+          label: "Notification Email",
+          type: "email",
+          placeholder: "Enter notification email"
+        },
+        logo: "https://s13.gifyu.com/images/bnmHx.png"
+      },
+      discord: {
+        title: "Discord",
+        description: "Send application notifications and updates to a Discord channel.",
+        field: {
+          name: "notifDiscord",
+          label: "Discord Webhook",
+          type: "url",
+          placeholder: "Enter Discord webhook URL"
+        },
+        logo: "https://s13.gifyu.com/images/bnmHv.png"
+      },
+      sheets: {
+        title: "Google Sheets",
+        description: "Connect the application to your Google Spreadsheet.",
+        field: {
+          name: "spreadsheetId",
+          label: "Google Spreadsheet ID",
+          type: "text",
+          placeholder: "Enter Google Spreadsheet ID"
+        },
+        logo: "https://s13.gifyu.com/images/bnmHH.png"
+      },
+      drive: {
+        title: "Google Drive",
+        description: "Configure the Google Drive folder used to store generated reports.",
+        field: {
+          name: "reportFolderId",
+          label: "Report Folder ID",
+          type: "text",
+          placeholder: "Enter Google Drive folder ID"
+        },
+        logo: "https://s13.gifyu.com/images/bnmHK.png"
+      }
+    };
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off("click.integrationPage", "[data-integration-configure]");
+    };
+    const bindActions = () => {
+      $(document).off("click.integrationPage").on(
+        "click.integrationPage",
+        "[data-integration-configure]",
+        handleConfigure
+      );
+    };
+    const handleConfigure = (e) => {
+      e.preventDefault();
+      const integration = $(e.currentTarget).data("integration");
+      if (!integration) {
+        return;
+      }
+      openIntegrationModal(integration);
+    };
+    const loadData = () => {
+      google.script.run.withSuccessHandler(updateIntegrationStatus).withFailureHandler((err) => {
+        console.error("getIntegrationStatus failed:", err);
+        AppUtils.showDashboardToast(
+          "Failed to load integration status.",
+          "error"
+        );
+      }).getIntegrationStatus();
+    };
+    function getIntegrationConfig(integration) {
+      return INTEGRATIONS[integration] || null;
+    }
+    function getIntegrationLogo(integration) {
+      const config = getIntegrationConfig(integration);
+      return config?.logo || "";
+    }
+    function updateIntegrationStatus(data) {
+      if (!data || typeof data !== "object") {
+        return;
+      }
+      Object.entries(data).forEach(([integration, config]) => {
+        const statusEl = document.getElementById(
+          `${integration}IntegrationStatus`
+        );
+        if (!statusEl) {
+          return;
+        }
+        const configured = Boolean(config?.configured);
+        statusEl.classList.toggle("is-inactive", !configured);
+        statusEl.textContent = configured ? `\u2713 Configured${config.masked ? ` \u2014 ${config.masked}` : ""}` : "Not configured";
+      });
+    }
+    function openIntegrationModal(integration) {
+      const config = getIntegrationConfig(integration);
+      if (!config) {
+        return;
+      }
+      const ns = `.integrationConfig-${integration}`;
+      AppUtils.openModal(MODAL_ID, {
+        size: "md",
+        placement: "center",
+        header: buildHeaderHtml(integration, config),
+        body: buildBodyHtml(config),
+        footer: buildFooterHtml(),
+        onOpen($modal) {
+          $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
+            AppUtils.closeModal(MODAL_ID);
+          }).on(`click${ns}`, ".btn-save", () => {
+            const $btn = $(this);
+            saveIntegration(integration, $modal, $btn);
+          });
+          loadIntegrationConfigStatus(integration, $modal);
+        },
+        onClose($modal) {
+          $modal.off(ns);
+        }
+      });
+    }
+    function buildHeaderHtml(integration, config) {
+      const logoSrc = getIntegrationLogo(integration);
+      const title = escapeHtml(config.title);
+      return `
+      <div class="integration-modal-header">
+        <div class="integration-modal-logo">
+          <img src="${logoSrc}" alt="${title}">
+        </div>
+        <div><strong>${title}</strong></div>
+      </div>
+    `;
+    }
+    function buildBodyHtml(config) {
+      const description = escapeHtml(config.description);
+      const fieldLabel = escapeHtml(config.field.label);
+      const fieldType = config.field.type;
+      const fieldName = escapeHtml(config.field.name);
+      const placeholder = escapeHtml(config.field.placeholder || "");
+      return `
+      <div class="integration-modal-description mb-4">
+        ${description}
+      </div>
+      <form id="integrationConfigForm">
+        <div class="position-relative form-group">
+          <label for="integrationConfigValue">${fieldLabel}</label>
+          <input
+            type="${fieldType}"
+            id="integrationConfigValue"
+            name="${fieldName}"
+            class="form-control"
+            placeholder="${placeholder}"
+            autocomplete="off"
+          >
+          <small id="integrationConfigHelp" class="form-text text-muted">
+            Leave blank to keep the current configuration.
+          </small>
+        </div>
+      </form>
+    `;
+    }
+    function buildFooterHtml() {
+      return `
+      <button type="button" class="btn btn-secondary btn-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary btn-save">Save Changes</button>
+    `;
+    }
+    function loadIntegrationConfigStatus(integration, $modal) {
+      const $input = $modal.find("#integrationConfigValue");
+      const $help = $modal.find("#integrationConfigHelp");
+      google.script.run.withSuccessHandler((data) => {
+        if (!data?.configured) {
+          $input.attr("placeholder", "Not configured");
+          $help.removeClass("is-configured").text(
+            "No configuration has been saved yet. Enter a value to configure this integration."
+          );
+          return;
+        }
+        $input.attr("placeholder", `Current: ${data.masked}`);
+        $help.addClass("is-configured").text(
+          "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration."
+        );
+      }).withFailureHandler((err) => {
+        console.error("getIntegrationConfigStatus failed:", err);
+        $input.attr("placeholder", "Unable to check current configuration");
+        $help.removeClass("is-configured").text("Unable to check the current configuration.");
+      }).getIntegrationConfigStatus(integration);
+    }
+    function saveIntegration(integration, $modal, $btn) {
+      const $input = $modal.find("#integrationConfigValue");
+      const value = $input.val().trim();
+      if (!value) {
+        AppUtils.showDashboardToast("Please enter a value.", "error");
+        return;
+      }
+      const loading = AppUtils.setButtonLoading($btn[0], "Saving...");
+      const config = getIntegrationConfig(integration);
+      const title = config?.title || "Integration";
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast(
+          `${title} configuration saved successfully!`,
+          "success"
+        );
+        AppUtils.closeModal(MODAL_ID);
+        if (typeof loadData === "function") {
+          loadData();
+        }
+        loading.restore();
+      }).withFailureHandler((err) => {
+        console.error("saveIntegration failed:", err);
+        AppUtils.showDashboardToast(
+          err?.message || "Failed to save integration configuration.",
+          "error"
+        );
+        loading.restore();
+      }).saveIntegration(integration, value);
+    }
+    function escapeHtml(text) {
+      if (text === null || text === void 0) {
+        return "";
+      }
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    return {
+      init,
+      destroy
     };
   })();
 
@@ -4670,12 +5168,8 @@
     let currentModule = null;
     let pageToken = 0;
     let initialized = false;
-    const getPageToken = () => pageToken;
-    const setCurrentPage = (page) => {
-      currentPage = page;
-      localStorage.setItem("gcb_currentPageGC", page);
-    };
-    const getCurrentPage = () => currentPage;
+    let initializing = null;
+    let pendingPage = null;
     const routes = {
       home: HomePage,
       addManualHours: addManualHoursPage,
@@ -4698,35 +5192,80 @@
       performanceTarget: performanceTargetPage,
       reportsExportData: reportsExportDataPage,
       reportsMonthlyReport: reportsMonthlyReportPage,
-      reportsAnnualReport: reportsAnnualReportPage
+      reportsAnnualReport: reportsAnnualReportPage,
+      integrationsConfiguration: integrationsConfigurationPage
     };
-    const init = async () => {
+    const getPageToken = () => pageToken;
+    function isValidRoute(pageName) {
+      return typeof pageName === "string" && !!routes[pageName];
+    }
+    function setCurrentPage(pageName) {
+      currentPage = pageName;
+      localStorage.setItem("gcb_currentPageGC", pageName);
+    }
+    function getCurrentPage() {
+      return currentPage;
+    }
+    async function init() {
       if (initialized) {
-        return;
+        return true;
       }
-      initialized = true;
-      const shellReady = await AppShellModule.init();
-      if (!shellReady) {
-        console.error(
-          "\u274C Router initialization stopped because AppShellModule failed."
-        );
-        initialized = false;
-        return;
+      if (initializing) {
+        return initializing;
       }
-      const savedPage = localStorage.getItem("gcb_currentPageGC");
-      currentPage = routes[savedPage] ? savedPage : "home";
-      go(currentPage);
-    };
+      initializing = (async () => {
+        try {
+          const shellReady = await AppShellModule.init();
+          if (!shellReady) {
+            throw new Error("AppShellModule failed to initialize.");
+          }
+          AppUI.init();
+          const savedPage = localStorage.getItem("gcb_currentPageGC");
+          const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
+          const initialPage = isValidRoute(pendingPage) ? pendingPage : restoredPage;
+          pendingPage = null;
+          initialized = true;
+          go(initialPage);
+          return true;
+        } catch (error) {
+          console.error("[RouterModule] Initialization failed:", error);
+          initialized = false;
+          AppUtils.showError(
+            `Application initialization failed: ${error?.message || error}`
+          );
+          return false;
+        } finally {
+          initializing = null;
+        }
+      })();
+      return initializing;
+    }
     function go(pageName) {
-      const resolvedPageName = routes[pageName] ? pageName : "home";
+      if (!initialized) {
+        if (pageName === "home") {
+          return;
+        }
+        if (isValidRoute(pageName)) {
+          pendingPage = pageName;
+        }
+        return;
+      }
+      const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
       const page = routes[resolvedPageName];
+      if (!page) {
+        console.error(`[RouterModule] Route "${resolvedPageName}" not found.`);
+        return;
+      }
+      if (resolvedPageName === currentPage && currentModule) {
+        return;
+      }
       pageToken++;
+      const token = pageToken;
+      DataTableModule.destroyAll();
+      ChartModule.destroyAllCharts();
       currentModule?.destroy?.();
       currentModule = null;
-      ChartModule.destroyAllCharts();
-      DataTableModule.destroyAll();
       setCurrentPage(resolvedPageName);
-      const token = pageToken;
       PageLoaderModule.loadPage(resolvedPageName, () => {
         if (token !== pageToken) {
           return;

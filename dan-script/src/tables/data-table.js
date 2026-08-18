@@ -168,31 +168,54 @@ const DataTableModule = (() => {
   }
 
   function destroy(tableId) {
-    const instance = instances[tableId];
+    if (!tableId) {
+      return;
+    }
 
     if (tableId === "#activity-today") {
       ActivityToday.stopRefresh();
     }
 
-    if (instance) {
-      try {
-        instance.destroy();
-      } catch (e) {
-        console.warn("Failed to destroy DataTable:", tableId, e);
-      }
+    const instance = instances[tableId];
+    const $table = $(tableId);
 
+    // If there's no instance and no table element, nothing to do
+    if (
+      !instance &&
+      (!$table.length || !$.fn.DataTable.isDataTable($table[0]))
+    ) {
       delete instances[tableId];
       return;
     }
 
-    const $table = $(tableId);
+    // If table element is gone, just clean up our reference
+    if (!$table.length) {
+      delete instances[tableId];
+      return;
+    }
 
-    if ($table.length && $.fn.DataTable.isDataTable($table)) {
+    // Try to destroy the DataTable safely
+    if (instance) {
       try {
-        $table.DataTable().destroy();
-      } catch (e) {
-        console.warn("Failed to destroy existing DataTable:", tableId, e);
+        // true => remove DataTables-added DOM, don't try to restore original
+        instance.destroy(true);
+      } catch (error) {
+        console.warn("Failed to destroy DataTable:", tableId, error);
+      } finally {
+        delete instances[tableId];
       }
+      return;
+    }
+
+    // Fallback: untracked DataTable on this element
+    if (!$.fn.DataTable.isDataTable($table[0])) {
+      return;
+    }
+
+    try {
+      $table.DataTable().destroy(true);
+    } catch (error) {
+      console.warn("Failed to destroy existing DataTable:", tableId, error);
     }
   }
 

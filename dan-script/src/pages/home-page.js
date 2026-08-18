@@ -29,3 +29,48 @@ const HomePage = (() => {
 })();
 
 export { HomePage };
+
+/*
+
+const Page = (() => {
+  let bound = false;
+
+  const init = () => {
+    if (bound) {
+      return;
+    }
+
+    bound = true;
+
+    bindActions();
+    loadData();
+  };
+
+  const destroy = () => {
+    if (!bound) {
+      return;
+    }
+
+    bound = false;
+
+    $(document).off("");
+  };
+
+  const bindActions = () => {
+    $(document)
+      .off("")
+      .on("", "", (e) => {
+      });
+  };
+
+  const loadData = () => {};
+
+  return {
+    init,
+    destroy,
+  };
+})();
+
+export { Page };
+
+*/

@@ -7,6 +7,12 @@
     <li class="nav-item" role="presentation">
         <a role="tab" class="nav-link" id="tab-2" data-bs-toggle="tab" href="#tab-content-2" aria-selected="false"
             tabindex="-1">
+            <span>Integration</span>
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a role="tab" class="nav-link" id="tab-3" data-bs-toggle="tab" href="#tab-content-3" aria-selected="false"
+            tabindex="-1">
             <span>Appearance</span>
         </a>
     </li>
@@ -17,8 +23,14 @@
         <div class="row">
             <div class="col-md-4">
                 <div class="mb-3 text-end card card-body">
-                    <h5 class="card-title">Sync Data</h5>
-                    <button class="btn btn-outline-danger" id="btnClearCache">Sync Now</button>
+                    <h5 class="card-title">Clear Cache</h5>
+                    <button class="btn btn-outline-danger" id="btnClearCache">Refresh Now</button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mb-3 text-end card card-body">
+                    <h5 class="card-title">Sync Client List</h5>
+                    <button class="btn btn-outline-danger" id="btnSyncClient">Sync Now</button>
                 </div>
             </div>
             <div class="col-md-4">
@@ -27,15 +39,144 @@
                     <button class="btn btn-outline-focus">Save Mode</button>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="mb-3 text-end card card-body">
-                    <h5 class="card-title">Upcoming</h5>
-                    <button class="btn btn-outline-focus">View Updates</button>
-                </div>
-            </div>
         </div>
     </div>
-    <div class="tab-pane tabs-animation fade" id="tab-content-2" role="tabpanel" aria-labelledby="tab-2">
+    <div
+        class="tab-pane tabs-animation fade"
+        id="tab-content-2"
+        role="tabpanel"
+        aria-labelledby="tab-2"
+    >
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <div class="card-title">Integration Settings</div>
+                <form id="settingsIntegrationForm">
+
+                    <!-- NOTIFICATION EMAIL -->
+                    <div class="position-relative form-group mb-3">
+                        <label for="notifEmail">
+                            Notification Email
+                        </label>
+
+                        <div
+                            class="secret-status mb-2"
+                            id="notifEmailStatus"
+                        >
+                            Not configured. Enter an email address below to configure notifications.
+                        </div>
+
+                        <input
+                            name="notifEmail"
+                            id="notifEmail"
+                            placeholder="Enter notification email"
+                            type="email"
+                            class="form-control"
+                            autocomplete="off"
+                        >
+
+                        <small class="form-text text-muted">
+                            Leave blank to keep the current email.
+                        </small>
+                    </div>
+
+                    <!-- DISCORD WEBHOOK -->
+                    <div class="position-relative form-group mb-3">
+                        <label for="notifDiscord">
+                            Discord Webhook
+                        </label>
+
+                        <div
+                            class="secret-status mb-2"
+                            id="notifDiscordStatus"
+                        >
+                            Not configured. Create a Discord webhook and enter the URL below.
+                        </div>
+
+                        <input
+                            name="notifDiscord"
+                            id="notifDiscord"
+                            placeholder="Enter Discord webhook URL"
+                            type="url"
+                            class="form-control"
+                            autocomplete="new-password"
+                        >
+
+                        <small class="form-text text-muted">
+                            In Discord, go to your server → Edit Channel →
+                            Integrations → Webhooks → Create Webhook →
+                            Copy Webhook URL.
+                        </small>
+                    </div>
+
+                    <!-- GOOGLE SPREADSHEET -->
+                    <div class="position-relative form-group mb-3">
+                        <label for="spreadsheetId">
+                            Google Spreadsheet
+                        </label>
+
+                        <div
+                            class="secret-status mb-2"
+                            id="spreadsheetIdStatus"
+                        >
+                            Not configured. Enter the Google Spreadsheet ID below.
+                        </div>
+
+                        <input
+                            name="spreadsheetId"
+                            id="spreadsheetId"
+                            placeholder="Enter Spreadsheet ID"
+                            type="text"
+                            class="form-control"
+                            autocomplete="off"
+                        >
+
+                        <small class="form-text text-muted">
+                            Leave blank to keep the current Spreadsheet ID.
+                        </small>
+                    </div>
+
+                    <!-- REPORT FOLDER -->
+                    <div class="position-relative form-group mb-3">
+                        <label for="reportFolderId">
+                            Report Folder
+                        </label>
+
+                        <div
+                            class="secret-status mb-2"
+                            id="reportFolderIdStatus"
+                        >
+                            Not configured. Enter the Google Drive folder ID below.
+                        </div>
+
+                        <input
+                            name="reportFolderId"
+                            id="reportFolderId"
+                            placeholder="Enter Google Drive Folder ID"
+                            type="text"
+                            class="form-control"
+                            autocomplete="off"
+                        >
+
+                        <small class="form-text text-muted">
+                            Leave blank to keep the current Report Folder ID.
+                        </small>
+                    </div>
+
+                    <div class="text-end mt-3">
+                        <button
+                            type="submit"
+                            class="mt-1 btn btn-primary"
+                        >
+                            Save Integration Settings
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+
+    </div>
+    <div class="tab-pane tabs-animation fade" id="tab-content-3" role="tabpanel" aria-labelledby="tab-3">
         <div class="row">
             <div class="col-md-4">
                 <div class="card-shadow-primary border mb-3 card card-body border-primary">

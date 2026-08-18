@@ -209,19 +209,6 @@
     // --- load profile data ---
     google.script.run
     .withSuccessHandler((data) => {
-      setProfilePic(data.profilePic);
-
-      document.getElementById("firstName").value =
-        data.firstName || "";
-
-      document.getElementById("lastName").value =
-        data.lastName || "";
-
-      document.getElementById("displayName").value =
-        data.displayName || "";
-
-      document.getElementById("desc").value =
-        data.desc || "";
 
       document.getElementById("notifEmailStatus").textContent =
         data.notifEmail?.configured

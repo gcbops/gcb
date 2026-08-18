@@ -22,7 +22,6 @@ const reportsExportDataPage = (() => {
   };
 
   const bindActions = () => {
-
     $(document)
       .off(".reports")
 
@@ -32,69 +31,38 @@ const reportsExportDataPage = (() => {
       })
 
       .on("click.reports", ".btn-email-report", function () {
+        const btn = $(this);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
 
-          const btn = $(this);
-
-          btn.prop("disabled", true);
-
-          google.script.run
-
-              .withSuccessHandler(() => {
-
-                  btn.prop("disabled", false);
-
-                  AppUtils.showDashboardToast(
-                      "Email sent successfully!",
-                      "success"
-                  );
-
-              })
-
-              .withFailureHandler(err => {
-
-                  btn.prop("disabled", false);
-
-                  AppUtils.showError(err);
-
-              })
-
-              .sendRequestedEmailReport(
-                  btn.data("id")
-              );
-
+        google.script.run
+          .withSuccessHandler(() => {
+            AppUtils.showDashboardToast("Email sent successfully!", "success");
+            loading.restore();
+          })
+          .withFailureHandler((err) => {
+            AppUtils.showError(err);
+            loading.restore();
+          })
+          .sendRequestedEmailReport(btn.data("id"));
       })
 
       .on("click.reports", ".btn-discord-report", function () {
+        const btn = $(this);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
 
-          const btn = $(this);
-
-          btn.prop("disabled", true);
-
-          google.script.run
-
-              .withSuccessHandler(() => {
-
-                  btn.prop("disabled", false);
-
-                  AppUtils.showDashboardToast(
-                      "Discord notification sent!",
-                      "success"
-                  );
-
-              })
-
-              .withFailureHandler(err => {
-
-                  btn.prop("disabled", false);
-
-                  AppUtils.showError(err);
-
-              })
-
-              .sendRequestedDiscordReport(
-                  btn.data("id")
-              );
-
+        google.script.run
+          .withSuccessHandler(() => {
+            AppUtils.showDashboardToast(
+              "Discord notification sent!",
+              "success",
+            );
+            loading.restore();
+          })
+          .withFailureHandler((err) => {
+            AppUtils.showError(err);
+            loading.restore();
+          })
+          .sendRequestedDiscordReport(btn.data("id"));
       })
 
       .on("click.reports", "#generate-monthly-report", () => {
@@ -108,38 +76,25 @@ const reportsExportDataPage = (() => {
       })
 
       .on("click.reports", "#download-latest-pdf", function () {
-
         const btn = $(this);
-        btn.prop("disabled", true);
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
 
-        ReportActions.downloadLatestPDF(btn);
-
-        setTimeout(() => {
-          btn.prop("disabled", false);
-        }, 1000);
-
+        ReportActions.downloadLatestPDF(btn, loading);
       })
 
       .on("click.reports", "#email-latest-report", function () {
-
         const btn = $(this);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
 
-        btn.prop("disabled", true);
-
-        ReportActions.emailLatestReport(btn);
-
+        ReportActions.emailLatestReport(btn, loading);
       })
 
       .on("click.reports", "#send-discord-notification", function () {
-
         const btn = $(this);
+        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
 
-        btn.prop("disabled", true);
-
-        ReportActions.sendLatestReportToDiscord(btn);
-
+        ReportActions.sendLatestReportToDiscord(btn, loading);
       });
-
   };
 
   const loadData = () => {

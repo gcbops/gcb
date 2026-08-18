@@ -482,7 +482,14 @@ const AppUtils = (() => {
     }
   }
 
-  function submitForm({ gscriptFunc, data = {}, onSuccess, onError, $btn }) {
+  function submitForm({
+    gscriptFunc,
+    data = {},
+    onSuccess,
+    onError,
+    $btn,
+    loadingText = "Saving...",
+  }) {
     if (!gscriptFunc) {
       showError("No Google Apps Script function provided");
       return;
@@ -490,13 +497,15 @@ const AppUtils = (() => {
 
     const $button = $btn?.length ? $btn : null;
 
+    let loading = null;
+
     if ($button) {
-      $button.prop("disabled", true);
+      loading = AppUtils.setButtonLoading($button[0], loadingText);
     }
 
     const restoreButton = () => {
-      if ($button) {
-        $button.prop("disabled", false);
+      if (loading) {
+        loading.restore();
       }
     };
 
@@ -524,6 +533,26 @@ const AppUtils = (() => {
       restoreButton();
       showError(err);
     }
+  }
+
+  function setButtonLoading(btn, loadingText) {
+    const $btn = $(btn);
+    const textToRestore = $btn.text().trim();
+
+    const cogSvg = `
+    ${loadingText}
+    <svg class="cog-icon ms-2" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+      <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84a.484.484 0 00-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 00-.59.22L2.09 8.83a.488.488 0 00.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.488.488 0 00-.12.61l1.92 3.32c.12.21.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.488.488 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+    </svg>
+  `;
+
+    $btn.prop("disabled", true).html(cogSvg);
+
+    function restore() {
+      $btn.prop("disabled", false).text(textToRestore);
+    }
+
+    return { restore };
   }
 
   function openModal(modalSelector, options = {}) {
@@ -734,6 +763,7 @@ const AppUtils = (() => {
     showDashboardToast,
     initSelect2,
     submitForm,
+    setButtonLoading,
 
     // drawer and modal helpers
     openDrawer,

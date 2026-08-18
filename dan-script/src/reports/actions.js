@@ -2,21 +2,23 @@ import { ReportService } from "./service";
 import { AppUtils } from "../utils";
 
 const ReportActions = (() => {
-  function downloadLatestPDF(btn) {
+  function downloadLatestPDF(btn, loading) {
     const report = getLatestReport(btn);
 
     if (!report) {
+      if (loading) {loading.restore();}
       return;
     }
 
     window.open(report.link, "_blank");
 
-    btn.prop("disabled", false);
+    if (loading) {loading.restore();}
   }
 
-  function emailLatestReport(btn) {
+  function emailLatestReport(btn, loading) {
     sendLatestReport({
       btn,
+      loading,
       reportMethod: "emailLatestReport",
       loadingMessage: "Sending email...",
       successMessage: "Latest report emailed!",
@@ -24,9 +26,10 @@ const ReportActions = (() => {
     });
   }
 
-  function sendLatestReportToDiscord(btn) {
+  function sendLatestReportToDiscord(btn, loading) {
     sendLatestReport({
       btn,
+      loading,
       reportMethod: "sendLatestReportToDiscord",
       loadingMessage: "Sending Discord notification...",
       successMessage: "Discord notification sent!",
@@ -38,17 +41,26 @@ const ReportActions = (() => {
     const report = getLatestReport(config.btn);
 
     if (!report) {
+      if (config.loading) {
+        config.loading.restore();
+      }
       return;
     }
 
-    AppUtils.showDashboardToast(config.loadingMessage, "info");
+    // No need for a separate "Sending..." toast if button shows loading state
+    // but you can keep it if you want.
 
     google.script.run
       .withSuccessHandler(() => {
-        handleReportSuccess(config.btn, config.successMessage);
+        handleReportSuccess(config.btn, config.successMessage, config.loading);
       })
       .withFailureHandler((err) => {
-        handleReportFailure(config.btn, err, config.errorMessage);
+        handleReportFailure(
+          config.btn,
+          err,
+          config.errorMessage,
+          config.loading,
+        );
       })[config.reportMethod](report);
   }
 
@@ -56,21 +68,24 @@ const ReportActions = (() => {
     const report = ReportService.getLatestReport();
 
     if (!report) {
-      btn.prop("disabled", false);
+      // Button re-enable is now handled by loading.restore()
       return null;
     }
 
     return report;
   }
 
-  function handleReportSuccess(btn, message) {
-    btn.prop("disabled", false);
-
+  function handleReportSuccess(btn, message, loading) {
+    if (loading) {
+      loading.restore();
+    }
     AppUtils.showDashboardToast(message, "success");
   }
 
-  function handleReportFailure(btn, err, message) {
-    btn.prop("disabled", false);
+  function handleReportFailure(btn, err, message, loading) {
+    if (loading) {
+      loading.restore();
+    }
     AppUtils.showError(err);
   }
 

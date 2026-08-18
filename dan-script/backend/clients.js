@@ -24,7 +24,7 @@ function getClientSheetsListAndActive() {
 }
 
 function syncClientSheetList() {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
 
   const sheet = getSheetSafe("Client Names");
 

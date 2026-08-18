@@ -1,5 +1,4 @@
 import { AppUtils } from "../utils.js";
-import { TableModule } from "../tables/tables.js";
 import { DataTableModule } from "../tables/data-table.js";
 
 const upsellOverviewPage = (() => {
@@ -17,75 +16,84 @@ const upsellOverviewPage = (() => {
     if (!bound) {return;}
     bound = false;
 
-    $("#addtoSheet-upsell").off("click");
-    $("#upsellForm").off("submit");
+    $("#addtoSheet-upsell").off(".upsellOverview");
+    $("#upsellForm").off(".upsellOverview");
   };
 
   const bindActions = () => {
 
-    $("#addtoSheet-upsell").on("click", function () {
-      AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+    $("#addtoSheet-upsell")
+      .off("click.upsellOverview")
+      .on("click.upsellOverview", function () {
+        AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
 
-      google.script.run
-        .withSuccessHandler(function (url) {
-          window.open(url, "_blank");
-        })
-        .withFailureHandler((err) => {
-          AppUtils.showError(err);
-        })
-        .getClientSheetUrl("Upsells");
-    });
-
-    $("#upsellForm").off("submit").on("submit", function(e) {
-      e.preventDefault();
-
-      const $submitBtn = $(this).find('button[type="submit"]');
-
-      const fields = [
-        "clientName",
-        "screenshot",
-        "upsellHours",
-        "totalHours",
-        "orasanDate",
-        "reportedDate"
-      ];
-
-      const required = ["clientName", "upsellHours", "reportedDate"];
-      const data = {};
-
-      fields.forEach(id => {
-        const $el = $("#" + id);
-        data[id] = $el.length ? ($el.val() || "").trim() : "";
+        google.script.run
+          .withSuccessHandler(function (url) {
+            window.open(url, "_blank");
+          })
+          .withFailureHandler((err) => {
+            AppUtils.showError(err);
+          })
+          .getClientSheetUrl("Upsells");
       });
 
-      if (required.some(k => data[k] === "")) {
-        AppUtils.showError("Please fill out all required fields!");
-        return;
-      }
+    $("#upsellForm")
+      .off("submit.upsellOverview")
+      .on("submit.upsellOverview", function (e) {
+        e.preventDefault();
 
-      AppUtils.showDashboardToast("Saving Record ...", "info");
+        const $submitBtn = $(this).find('button[type="submit"]');
 
-      AppUtils.submitForm({
-        gscriptFunc: "addUpsellEntry",
-        data: data,
-        $btn: $submitBtn,
-        onSuccess: () => {
-          AppUtils.showDashboardToast("Record added successfully!", "success");
+        const fields = [
+          "clientName",
+          "screenshot",
+          "upsellHours",
+          "totalHours",
+          "orasanDate",
+          "reportedDate",
+        ];
 
-          fields.forEach(id => {
-            const $el = $("#" + id);
-            if ($el.length) {$el.val("");}
-          });
+        const required = ["clientName", "upsellHours", "reportedDate"];
+        const data = {};
 
-         AppUtils.resetCacheKeys(["upsellRecords", "upsellSummary"]);
+        fields.forEach((id) => {
+          const $el = $("#" + id);
+          data[id] = $el.length ? ($el.val() || "").trim() : "";
+        });
 
-          setTimeout(() => {
-            loadUpsellSummary(true);
-            loadUpsellRecords(true);
-          }, 600);
+        if (required.some((k) => data[k] === "")) {
+          AppUtils.showError("Please fill out all required fields!");
+          return;
         }
+
+        AppUtils.showDashboardToast("Saving Record ...", "info");
+
+        AppUtils.submitForm({
+          gscriptFunc: "addUpsellEntry",
+          data: data,
+          $btn: $submitBtn,
+          onSuccess: () => {
+            AppUtils.showDashboardToast(
+              "Record added successfully!",
+              "success",
+            );
+
+            fields.forEach((id) => {
+              const $el = $("#" + id);
+              if ($el.length) {
+                $el.val("");
+              }
+            });
+
+            AppUtils.resetCacheKeys(["upsellRecords", "upsellSummary"]);
+
+            setTimeout(() => {
+              loadUpsellSummary(true);
+              loadUpsellRecords(true);
+            }, 600);
+          },
+        });
       });
-    });
 
   };
 
@@ -129,64 +137,37 @@ const upsellOverviewPage = (() => {
   }
 
   function renderUpsellTables(tableData) {
-    const $container = $("#upsellTable").parent();
+    const $table = $("#upsellTable");
+    const $tbody = $("#recordsBody");
 
-    if (!$container.length) {
+    if (!$table.length || !$tbody.length) {
       return;
     }
-
-    $container.html(
-      `
-      <table
-        id="upsellTable"
-        class="display table nowrap">
-
-        <thead>
-          <tr>
-            <th>Client Name</th>
-            <th>Upsell Hours</th>
-            <th>Orasan Date</th>
-          </tr>
-        </thead>
-
-        <tbody id="recordsBody"></tbody>
-
-      </table>
-      `,
-    );
-
-    const $tbody = $("#recordsBody");
 
     let html;
 
     if (!Array.isArray(tableData) || tableData.length === 0) {
       html = `
-        <tr>
-          <td colspan="3"
-              style="text-align:center;color:#64748b">
-            No records yet
-          </td>
-        </tr>
-        `;
+      <tr>
+        <td colspan="3" style="text-align:center;color:#64748b">
+          No records yet
+        </td>
+      </tr>
+    `;
     } else {
       html = tableData
         .map(
-          (row) =>
-            `
-            <tr>
-              <td>
-                ${TableModule.escapeHtml(row[0] ?? "")}
-              </td>
-
-              <td style="text-align:center;">
-                ${TableModule.escapeHtml(row[1] ?? "")}
-              </td>
-
-              <td style="text-align:center;">
-                ${TableModule.escapeHtml(row[2] ?? "")}
-              </td>
-            </tr>
-            `,
+          (row) => `
+          <tr>
+            <td>${escapeHtml(row[0] ?? "")}</td>
+            <td style="text-align:center;">
+              ${escapeHtml(row[1] ?? "")}
+            </td>
+            <td style="text-align:center;">
+              ${escapeHtml(row[2] ?? "")}
+            </td>
+          </tr>
+        `,
         )
         .join("");
     }
@@ -196,6 +177,19 @@ const upsellOverviewPage = (() => {
     if (Array.isArray(tableData) && tableData.length > 0) {
       DataTableModule.init("Upsell", "#upsellTable");
     }
+  }
+
+  function escapeHtml(text) {
+    if (text === null || text === undefined) {
+      return "";
+    }
+
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   return { init, destroy };

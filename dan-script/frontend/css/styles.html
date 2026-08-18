@@ -535,4 +535,201 @@ textarea {
   filter: invert(1) grayscale(100%) brightness(200%);
 }
 
+
+.integration-grid {
+    row-gap: 1.5rem;
+}
+
+.integration-card {
+    height: 100%;
+    margin-bottom: 0;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.integration-card:hover {
+    transform: translateY(-2px);
+}
+
+.integration-card .card-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 190px;
+    padding: 1.25rem;
+}
+
+.integration-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex: 1;
+}
+
+.integration-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 56px;
+    width: 56px;
+    height: 56px;
+    padding: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.integration-logo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.integration-logo-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 28px;
+}
+
+.integration-info {
+    min-width: 0;
+}
+
+.integration-title {
+    margin-bottom: 0.35rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.integration-description {
+    margin-bottom: 0;
+    color: #6c757d;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.integration-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.integration-status, .secret-status {
+    color: #3ac47d;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.integration-status.is-inactive {
+    color: #adb5bd;
+}
+
+.secret-status.is-inactive {
+  color: #c0392b;
+}
+
+.integration-card-coming {
+    border-style: dashed;
+}
+
+@media (max-width: 767.98px) {
+    .integration-card .card-body {
+        min-height: 0;
+    }
+}
+
+/* =========================================================
+   Integration Configuration Modal
+   ========================================================= */
+
+.integration-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.integration-modal-logo {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.integration-modal-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.integration-modal-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.integration-modal-description {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #f8f9fa;
+  color: #6c757d;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.integration-modal-form-group {
+  margin-bottom: 0;
+}
+
+.integration-modal-form-group label {
+  display: block;
+  margin-bottom: 7px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.integration-modal-form-group .form-control {
+  min-height: 42px;
+}
+
+.integration-modal-form-help {
+  display: block;
+  margin-top: 7px;
+  color: #6c757d;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.integration-modal-form-help.is-configured {
+  color: #3ac47d;
+}
+
+
+.cog-icon {
+  display: inline-block;
+  color: #ffffffd9;
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 </style>

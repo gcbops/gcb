@@ -25,21 +25,22 @@ import { PageLoaderModule } from "./page-loader.js";
 import { DataTableModule } from "./tables/data-table.js";
 import { AppUI } from "./app-ui.js";
 import { AppShellModule } from "./app-shell.js";
+import { AppUtils } from "./utils.js";
+import { integrationsConfigurationPage } from "./pages/integration-page.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
   let currentModule = null;
   let pageToken = 0;
+
   let initialized = false;
+  let initializing = null;
 
-  const getPageToken = () => pageToken;
-
-  const setCurrentPage = (page) => {
-    currentPage = page;
-    localStorage.setItem("gcb_currentPageGC", page);
-  };
-
-  const getCurrentPage = () => currentPage;
+  /*
+   * Navigation requested before the router finished
+   * initializing.
+   */
+  let pendingPage = null;
 
   const routes = {
     home: HomePage,
@@ -47,19 +48,13 @@ const RouterModule = (() => {
     addManualHours: addManualHoursPage,
 
     dailyOverview: dailyOverviewPage,
-
     monthlyOverview: monthlyOverviewPage,
-
     yearlyOverview: yearlyOverviewPage,
-
     growthComparisonOverview: growthComparisonOverviewPage,
 
     topClients: topClientsPage,
-
     activeClients: activeClientsPage,
-
     outstandingClients: outstandingClientsPage,
-
     allClients: allClientsPage,
 
     upsellOverview: upsellOverviewPage,
@@ -71,114 +66,225 @@ const RouterModule = (() => {
     settingsConfiguration: settingsConfigurationPage,
 
     billingPaidHours: billingPaidHoursPage,
-
     billingOwedHours: billingOwedHoursPage,
 
     performanceYearly: performanceYearlyPage,
-
     performanceDaily: performanceDailyPage,
-
     performanceTarget: performanceTargetPage,
 
     reportsExportData: reportsExportDataPage,
-
     reportsMonthlyReport: reportsMonthlyReportPage,
-
     reportsAnnualReport: reportsAnnualReportPage,
+
+    integrationsConfiguration: integrationsConfigurationPage,
   };
+
+  const getPageToken = () => pageToken;
+
+  function isValidRoute(pageName) {
+    return typeof pageName === "string" && !!routes[pageName];
+  }
+
+  function setCurrentPage(pageName) {
+    currentPage = pageName;
+
+    localStorage.setItem("gcb_currentPageGC", pageName);
+  }
+
+  function getCurrentPage() {
+    return currentPage;
+  }
 
   /**
-   * Initialize router + application shell.
-   *
-   * Runs once when the application starts.
+   * Initialize router and application shell.
    */
-  const init = async () => {
+  async function init() {
     if (initialized) {
-      return;
+      return true;
     }
 
-    initialized = true;
-
-    /*
-     * Load the permanent application shell first.
-     *
-     * This loads:
-     * - loader
-     * - app-header
-     * - app-sidebar
-     * - app-footer
-     * - dialogs
-     */
-    const shellReady = await AppShellModule.init();
-
-    if (!shellReady) {
-      console.error(
-        "❌ Router initialization stopped because AppShellModule failed.",
-      );
-
-      initialized = false;
-      return;
+    if (initializing) {
+      return initializing;
     }
 
-    /*
-     * Restore the last page.
-     */
-    const savedPage = localStorage.getItem("gcb_currentPageGC");
-    
-    currentPage = routes[savedPage] ? savedPage : "home";
+    initializing = (async () => {
+      try {
+        /*
+         * ------------------------------------------------
+         * 1. Initialize application shell
+         * ------------------------------------------------
+         */
+        const shellReady = await AppShellModule.init();
 
-    /*
-     * Load the initial page.
-     */
-    go(currentPage);
-  };
+        if (!shellReady) {
+          throw new Error("AppShellModule failed to initialize.");
+        }
+
+        /*
+         * ------------------------------------------------
+         * 2. Initialize shared UI
+         * ------------------------------------------------
+         */
+        AppUI.init();
+
+        /*
+         * ------------------------------------------------
+         * 3. Restore previous page
+         * ------------------------------------------------
+         */
+        const savedPage = localStorage.getItem("gcb_currentPageGC");
+
+        const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
+
+        /*
+         * Only use pendingPage if it is a valid route.
+         *
+         * Otherwise restore the page from localStorage.
+         */
+        const initialPage = isValidRoute(pendingPage)
+          ? pendingPage
+          : restoredPage;
+
+        /*
+         * Clear pending navigation before
+         * marking the router ready.
+         */
+        pendingPage = null;
+
+        /*
+         * ------------------------------------------------
+         * 4. Router is now ready
+         * ------------------------------------------------
+         */
+        initialized = true;
+
+        /*
+         * ------------------------------------------------
+         * 5. Load initial page
+         * ------------------------------------------------
+         */
+        go(initialPage);
+
+        return true;
+      } catch (error) {
+        console.error("[RouterModule] Initialization failed:", error);
+
+        initialized = false;
+
+        AppUtils.showError(
+          `Application initialization failed: ${error?.message || error}`,
+        );
+
+        return false;
+      } finally {
+        initializing = null;
+      }
+    })();
+
+    return initializing;
+  }
 
   /**
    * Navigate to a page.
    */
   function go(pageName) {
-    const resolvedPageName = routes[pageName] ? pageName : "home";
+    /*
+     * ------------------------------------------------
+     * Router is not ready yet.
+     *
+     * Remember the requested page instead of
+     * immediately trying to navigate.
+     * ------------------------------------------------
+     */
+    if (!initialized) {
+      /*
+       * Do not allow the default "home" navigation
+       * to override a page restored from localStorage.
+       */
+      if (pageName === "home") {
+        return;
+      }
+
+      if (isValidRoute(pageName)) {
+        pendingPage = pageName;
+      }
+
+      return;
+    }
+
+    /*
+     * ------------------------------------------------
+     * Resolve route
+     * ------------------------------------------------
+     */
+    const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
 
     const page = routes[resolvedPageName];
 
+    if (!page) {
+      console.error(`[RouterModule] Route "${resolvedPageName}" not found.`);
+
+      return;
+    }
+
+    /*
+     * Don't reload the same page unnecessarily.
+     */
+    if (resolvedPageName === currentPage && currentModule) {
+      return;
+    }
+
+    /*
+     * ------------------------------------------------
+     * Invalidate previous async callbacks
+     * ------------------------------------------------
+     */
     pageToken++;
-
-    /*
-     * Destroy previous page module.
-     */
-    currentModule?.destroy?.();
-    currentModule = null;
-
-    /*
-     * Cleanup shared UI.
-     */
-    ChartModule.destroyAllCharts();
-    DataTableModule.destroyAll();
-
-    /*
-     * Store current page.
-     */
-    setCurrentPage(resolvedPageName);
 
     const token = pageToken;
 
     /*
-     * Load only the page.
-     *
-     * AppShellModule is NOT involved here.
+     * ------------------------------------------------
+     * Cleanup BEFORE replacing page DOM
+     * ------------------------------------------------
+     */
+
+    DataTableModule.destroyAll();
+    ChartModule.destroyAllCharts();
+
+    currentModule?.destroy?.();
+    currentModule = null;
+
+    /*
+     * ------------------------------------------------
+     * Store current page
+     * ------------------------------------------------
+     */
+    setCurrentPage(resolvedPageName);
+
+    /*
+     * ------------------------------------------------
+     * Load page
+     * ------------------------------------------------
      */
     PageLoaderModule.loadPage(resolvedPageName, () => {
       /*
-       * Ignore stale page callbacks.
+       * Ignore stale callbacks.
        */
       if (token !== pageToken) {
         return;
       }
 
+      /*
+       * Initialize page.
+       */
       page.init?.(token);
 
       currentModule = page;
 
+      /*
+       * Update navigation.
+       */
       AppUI.activateNavigation(resolvedPageName);
     });
   }

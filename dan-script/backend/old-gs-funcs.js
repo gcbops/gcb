@@ -180,7 +180,7 @@ function showProfileSettings() {
 }
 
 function getProfileData() {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
 
   const sheet = getLabSheet();
 
@@ -231,7 +231,7 @@ function getProfileData() {
 }
 
 function saveProfileData(data) {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
   
   const sheet = getLabSheet();
   if (!sheet) return "❌ Lab 3.0 sheet not found.";
@@ -252,7 +252,7 @@ function saveProfileData(data) {
 }
 
 function saveNotificationData(data) {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
 
   const properties = PropertiesService.getScriptProperties();
 

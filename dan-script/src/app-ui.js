@@ -15,18 +15,26 @@ const AppUI = (() => {
 
   function initPerfectScrollbars() {
     if (typeof PerfectScrollbar === "undefined") {
-      console.warn("[AppUI] PerfectScrollbar not found.");
+      console.warn("[AppUI] PerfectScrollbar library not loaded.");
+
       return;
     }
 
-    const sidebarEl = document.querySelector(".scrollbar-sidebar");
+    const elements = [
+      document.querySelector(".scrollbar-sidebar"),
+      ...document.querySelectorAll(".scrollbar-container"),
+    ].filter(Boolean);
 
-    if (sidebarEl) {
-      new PerfectScrollbar(sidebarEl);
-    }
+    elements.forEach((element) => {
+      if (element._perfectScrollbar) {
+        return;
+      }
 
-    document.querySelectorAll(".scrollbar-container").forEach((el) => {
-      new PerfectScrollbar(el);
+      try {
+        element._perfectScrollbar = new PerfectScrollbar(element);
+      } catch (error) {
+        console.warn("[AppUI] PerfectScrollbar failed:", element, error);
+      }
     });
   }
 
