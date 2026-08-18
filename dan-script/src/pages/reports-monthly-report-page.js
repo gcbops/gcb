@@ -36,29 +36,16 @@ const reportsMonthlyReportPage = (() => {
 
         const btn = $(this);
 
-        btn.prop("disabled", true);
-
         google.script.run
-
             .withSuccessHandler(() => {
-
-                btn.prop("disabled", false);
-
                 AppUtils.showDashboardToast(
                     "Email sent successfully!",
                     "success"
                 );
-
             })
-
             .withFailureHandler(err => {
-
-                btn.prop("disabled", false);
-
                 AppUtils.showError(err);
-
             })
-
             .sendRequestedEmailReport(
                 btn.data("id")
             );
@@ -69,64 +56,52 @@ const reportsMonthlyReportPage = (() => {
 
         const btn = $(this);
 
-        btn.prop("disabled", true);
-
         google.script.run
-
             .withSuccessHandler(() => {
-
-                btn.prop("disabled", false);
-
                 AppUtils.showDashboardToast(
                     "Discord notification sent!",
                     "success"
                 );
-
             })
-
             .withFailureHandler(err => {
-
-                btn.prop("disabled", false);
-
                 AppUtils.showError(err);
-
             })
-
             .sendRequestedDiscordReport(
                 btn.data("id")
             );
-
     })
 
     .on("click.reportsMonthly", "#btn-generate-monthly-report", function () {
 
       const btn = $(this);
-      const month = $("#monthly-report-month").val();
-      const year = $("#monthly-report-year").val();
+      const selectMonth = $("#monthly-report-month");
+      const selectYear = $("#monthly-report-year");
+      const month = selectMonth.val();
+      const year = selectYear.val();
       const type = "monthly";
+      selectMonth.prop("disabled", true);
+      selectYear.prop("disabled", true);
 
-      ReportGenerator.setGenerateState(type, btn, true);
-
-      AppUtils.showDashboardToast(
-          "Analyzing Request...",
-          "info"
+      const loading = AppUtils.setButtonLoading(
+        btn[0],
+        "Analyzing Report Request...",
       );
 
       google.script.run
       .withSuccessHandler(result => {
 
         if (!result.valid) {
-          ReportGenerator.setGenerateState(type, btn, false);
+          ReportGenerator.setGenerateState(type, false, loading);
 
           AppUtils.showDashboardToast(result.message, "warning");
           return;
         }
 
-        ReportGenerator.generateMonthlyReport(month, year, btn);
+        ReportGenerator.generateMonthlyReport(month, year, btn, loading);
 
       })
       .withFailureHandler(err => {
-        ReportGenerator.setGenerateState(type, btn, false);
+        ReportGenerator.setGenerateState(type, false, loading);
 
         console.error(err);
 
@@ -147,33 +122,27 @@ const reportsMonthlyReportPage = (() => {
     .on("click.reportsMonthly", "#download-latest-pdf", function () {
 
       const btn = $(this);
-      btn.prop("disabled", true);
+      const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
 
-      ReportActions.downloadLatestPDF(btn);
-
-      setTimeout(() => {
-        btn.prop("disabled", false);
-      }, 1000);
+      ReportActions.downloadLatestPDF(btn, loading);
 
     })
 
     .on("click.reportsMonthly", "#email-latest-report", function () {
 
       const btn = $(this);
+      const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
 
-      btn.prop("disabled", true);
-
-      ReportActions.emailLatestReport(btn);
+      ReportActions.emailLatestReport(btn, loading);
 
     })
 
     .on("click.reportsMonthly", "#send-discord-notification", function () {
 
       const btn = $(this);
+      const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
 
-      btn.prop("disabled", true);
-
-      ReportActions.sendLatestReportToDiscord(btn);
+      ReportActions.sendLatestReportToDiscord(btn, loading);
 
     });
 

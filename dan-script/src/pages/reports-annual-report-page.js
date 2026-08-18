@@ -35,89 +35,58 @@ const reportsAnnualReportPage = (() => {
           .off(".reportsAnnual")
 
           .on("click.reportsAnnual", ".btn-view-report", (e) => {
-
-              const url = $(e.currentTarget).data("url");
-              window.open(url, "_blank");
-
+            const url = $(e.currentTarget).data("url");
+            window.open(url, "_blank");
           })
 
           .on("click.reportsAnnual", ".btn-email-report", function () {
+            const btn = $(this);
 
-              const btn = $(this);
-
-              btn.prop("disabled", true);
-
-              google.script.run
-
-                  .withSuccessHandler(() => {
-
-                      btn.prop("disabled", false);
-
-                      AppUtils.showDashboardToast(
-                          "Email sent successfully!",
-                          "success"
-                      );
-
-                  })
-
-                  .withFailureHandler(err => {
-
-                      btn.prop("disabled", false);
-
-                      AppUtils.showError(err);
-
-                  })
-
-                  .sendRequestedEmailReport(
-                      btn.data("id")
-                  );
-
+            google.script.run
+            .withSuccessHandler(() => {
+                AppUtils.showDashboardToast(
+                    "Email sent successfully!",
+                    "success"
+                );
+            })
+            .withFailureHandler(err => {
+                AppUtils.showError(err);
+            })
+            .sendRequestedEmailReport(
+                btn.data("id")
+            );
           })
 
           .on("click.reportsAnnual", ".btn-discord-report", function () {
+            const btn = $(this);
 
-              const btn = $(this);
+            google.script.run
+                .withSuccessHandler(() => {
+                    AppUtils.showDashboardToast(
+                        "Discord notification sent!",
+                        "success"
+                    );
+                })
 
-              btn.prop("disabled", true);
-
-              google.script.run
-
-                  .withSuccessHandler(() => {
-
-                      btn.prop("disabled", false);
-
-                      AppUtils.showDashboardToast(
-                          "Discord notification sent!",
-                          "success"
-                      );
-
-                  })
-
-                  .withFailureHandler(err => {
-
-                      btn.prop("disabled", false);
-
-                      AppUtils.showError(err);
-
-                  })
-
-                  .sendRequestedDiscordReport(
-                      btn.data("id")
-                  );
-
+                .withFailureHandler(err => {
+                    AppUtils.showError(err);
+                })
+                .sendRequestedDiscordReport(
+                    btn.data("id")
+                );
           })
 
           .on("click.reportsAnnual", "#btn-generate-yearly-report", function () {
 
               const btn = $(this);
-              const year = $("#yearly-report-year").val();
+              const selectYear = $("#yearly-report-year");
               const type = "yearly";
+              const year = selectYear.val();
+              selectYear.prop("disabled", true);
 
-              ReportGenerator.setGenerateState(type, btn, true);
-
-              AppUtils.showDashboardToast(
-                  "Analyzing Request...",
-                  "info"
+              const loading = AppUtils.setButtonLoading(
+                btn[0],
+                "Analyzing Report Request...",
               );
 
               google.script.run
@@ -125,7 +94,7 @@ const reportsAnnualReportPage = (() => {
 
                       if (!result.valid) {
 
-                          ReportGenerator.setGenerateState(type, btn, false);
+                          ReportGenerator.setGenerateState(type, false, loading);
 
                           AppUtils.showDashboardToast(
                               result.message,
@@ -136,12 +105,12 @@ const reportsAnnualReportPage = (() => {
 
                       }
 
-                      ReportGenerator.generateYearlyReport(year, btn);
+                      ReportGenerator.generateYearlyReport(year, btn, loading);
 
                   })
                   .withFailureHandler(err => {
 
-                      ReportGenerator.setGenerateState(type, btn, false);
+                      ReportGenerator.setGenerateState(type, false, loading);
 
                       console.error(err);
 
@@ -163,33 +132,33 @@ const reportsAnnualReportPage = (() => {
           .on("click.reportsAnnual", "#download-latest-pdf", function () {
 
             const btn = $(this);
-            btn.prop("disabled", true);
+            const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
 
-            ReportActions.downloadLatestPDF(btn);
-
-            setTimeout(() => {
-              btn.prop("disabled", false);
-            }, 1000);
+            ReportActions.downloadLatestPDF(btn, loading);
 
           })
 
           .on("click.reportsAnnual", "#email-latest-report", function () {
 
             const btn = $(this);
+            const loading = AppUtils.setButtonLoading(
+              btn[0],
+              "Sending email...",
+            );
 
-            btn.prop("disabled", true);
-
-            ReportActions.emailLatestReport(btn);
+            ReportActions.emailLatestReport(btn, loading);
 
           })
 
           .on("click.reportsAnnual", "#send-discord-notification", function () {
 
             const btn = $(this);
+            const loading = AppUtils.setButtonLoading(
+              btn[0],
+              "Sending Discord...",
+            );
 
-            btn.prop("disabled", true);
-
-            ReportActions.sendLatestReportToDiscord(btn);
+            ReportActions.sendLatestReportToDiscord(btn, loading);
 
           });
 

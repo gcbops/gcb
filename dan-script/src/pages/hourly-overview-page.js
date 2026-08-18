@@ -23,14 +23,17 @@ const hourlyOverviewPage = (() => {
   const bindActions = () => {
 
     $("#addtoSheet-hourly").on("click", function () {
-      AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+      const btn = $(this);
+      const loading = AppUtils.setButtonLoading(btn[0], "Redirecting to the sheet...");
 
       google.script.run
         .withSuccessHandler(function (url) {
+          loading.restore();
           window.open(url, "_blank");
         })
         .withFailureHandler((err) => {
           AppUtils.showError(err);
+          loading.restore();
         })
         .getClientSheetUrl("Hourly History");
     });
@@ -47,16 +50,15 @@ const hourlyOverviewPage = (() => {
         return;
       }
 
-      AppUtils.showDashboardToast("Saving Currrent Month Total ...", "info");
-
       AppUtils.submitForm({
         gscriptFunc: "addCurrMthTotalHrly",
         data: { fValue: fValueVal },
         $btn: $submitBtn,
+        loadingText: "Saving ...",
         onSuccess: () => {
           AppUtils.showDashboardToast("Successfully added Total!", "success");
           $fValue.val("");
-        }
+        },
       });
     });
 

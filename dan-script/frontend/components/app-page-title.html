@@ -1,4 +1,4 @@
-<div class="app-page-title">
+<!-- <div class="app-page-title">
     <div class="page-title-wrapper">
         <div class="page-title-heading">
         <div class="page-title-icon">
@@ -32,4 +32,72 @@
           </div>
         </div>    
     </div>
-</div> 
+</div>  -->
+
+<div class="app-page-title">
+  <div class="page-title-wrapper">
+    <div class="page-title-heading">
+      <div class="page-title-icon">
+        <i id="pageTitleIcon" class="pe-7s-car icon-gradient bg-mean-fruit"></i>
+      </div>
+      <div id="pageTitleText">
+        <span id="pageTitle">Dashboard</span>
+        <div id="pageTitleDesc" class="page-title-subheading">Go Crayons</div>
+      </div>
+    </div>
+    <div class="page-title-actions">
+      <button
+        type="button"
+        class="btn-shadow me-3 btn btn-dark"
+        data-page="addManualHours"
+      >
+        <i class="fa fa-star"></i>
+      </button>
+      <div class="d-inline-block dropdown">
+        <button
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-haspopup="true"
+          aria-expanded="false"
+          class="btn-shadow dropdown-toggle btn btn-info"
+        >
+          <span class="btn-icon-wrapper pe-2 opacity-7"><i class="fa fa-business-time fa-w-20"></i> </span>Quick Actions
+        </button>
+        <div tabindex="-1" role="menu" aria-hidden="true" class="dropdown-menu dropdown-menu-right">
+          <ul class="nav flex-column">
+            <li class="nav-item">
+              <a data-page="allClients" class="nav-link">
+                <i class="pe-7s-add-user me-2"></i> <span>Add Project</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="addManualHours" class="nav-link">
+                <i class="pe-7s-plus me-2"></i> <span>Add Hours</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="growthComparisonOverview" class="nav-link">
+                <i class="pe-7s-graph2 me-2"></i> <span>Performance</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="performanceTarget" class="nav-link">
+                <i class="pe-7s-rocket me-2"></i> <span>Targets</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="reportsExportData" class="nav-link">
+                <i class="pe-7s-graph3 me-2"></i> <span>Reports</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="settingsConfiguration" class="nav-link">
+                <i class="pe-7s-settings me-2"></i> <span>Settings</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -526,8 +526,6 @@ function sendReport(config) {
         <p>Generated on ${formatted}</p>
 
         <br>
-
-        <p>– Your Automation Bot 🤖</p>
       `,
     });
 

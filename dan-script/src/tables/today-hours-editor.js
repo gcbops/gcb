@@ -356,8 +356,6 @@ const TodayHoursEditor = (() => {
       return;
     }
 
-    AppUtils.showDashboardToast("Saving changes...", "info");
-
     const $saveButton = $modal.find(".btn-save");
 
     AppUtils.submitForm({
@@ -369,6 +367,7 @@ const TodayHoursEditor = (() => {
       },
 
       $btn: $saveButton,
+      loadingText: "Saving changes...",
 
       onSuccess: (response) => {
         /*

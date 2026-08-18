@@ -25,14 +25,20 @@ const upsellOverviewPage = (() => {
     $("#addtoSheet-upsell")
       .off("click.upsellOverview")
       .on("click.upsellOverview", function () {
-        AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+        const btn = $(this);
+        const loading = AppUtils.setButtonLoading(
+          btn[0],
+          "Redirecting to the sheet...",
+        );
 
         google.script.run
           .withSuccessHandler(function (url) {
+            loading.restore();
             window.open(url, "_blank");
           })
           .withFailureHandler((err) => {
             AppUtils.showError(err);
+            loading.restore();
           })
           .getClientSheetUrl("Upsells");
       });
@@ -66,12 +72,11 @@ const upsellOverviewPage = (() => {
           return;
         }
 
-        AppUtils.showDashboardToast("Saving Record ...", "info");
-
         AppUtils.submitForm({
           gscriptFunc: "addUpsellEntry",
           data: data,
           $btn: $submitBtn,
+          loadingText: "Saving upsell...",
           onSuccess: () => {
             AppUtils.showDashboardToast(
               "Record added successfully!",

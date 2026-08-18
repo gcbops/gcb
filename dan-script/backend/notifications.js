@@ -237,8 +237,6 @@ function sendEmailReport(report) {
       </p>
 
       <br>
-
-      <p>— Your Automation Bot 🤖</p>
     `,
   });
 

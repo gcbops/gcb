@@ -4,7 +4,7 @@ import { TableModule } from "../tables/tables";
 
 const ReportGenerator = (() => {
 
-  const REPORT_MAX_ATTEMPTS = 60;
+  const REPORT_MAX_ATTEMPTS = 30;
   const REPORT_CHECK_INTERVAL = 5000;
 
   const CONFIG = {
@@ -29,16 +29,18 @@ const ReportGenerator = (() => {
     },
   };
 
-  function setGenerateState(type, btn, disabled) {
-    btn.prop("disabled", disabled);
-
+  function setGenerateState(type, disabled, loading) {
     CONFIG[type].fields.forEach((selector) => {
       $(selector).prop("disabled", disabled);
     });
+
+    if (loading) {
+      loading.restore();
+    }
   }
 
-  function handleGenerateError(type, btn, err, message = "Something went wrong!") {
-    setGenerateState(type, btn, false);
+  function handleGenerateError(type, btn, err, message = "Something went wrong!", loading) {
+    setGenerateState(type, false, loading);
 
     if (err) {
       console.error(err);
@@ -48,27 +50,28 @@ const ReportGenerator = (() => {
     AppUtils.showError(message);
   }
 
-  function prepareReportGeneration(type, btn, params) {
+  function prepareReportGeneration(type, btn, params, loading) {
     const cfg = CONFIG[type];
     const reportName = cfg.reportName(params);
 
     google.script.run
       .withFailureHandler((err) => {
-        setGenerateState(type, btn, false);
+        setGenerateState(type, false, loading);
         AppUtils.showError(err);
       })
       .withSuccessHandler((result) => {
         if (!result.exists) {
-          requestReportGeneration(cfg, type, btn, params);
+          loading.setText("Generating Report...");
+          requestReportGeneration(cfg, type, btn, params, loading);
           return;
         }
 
-        showExistsModal(cfg, type, btn, params, result.report);
+        showExistsModal(cfg, type, btn, params, result.report, loading);
       })
       .checkExistingReport(type, reportName);
   }
 
-  function showExistsModal(cfg, type, btn, params, report) {
+  function showExistsModal(cfg, type, btn, params, report, loading) {
     const ns = `.${type}ReportModal`;
 
     AppUtils.openModal("#app-modal", {
@@ -102,68 +105,69 @@ const ReportGenerator = (() => {
           .off(ns)
           .on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal("#app-modal");
+            if (loading) {
+              setGenerateState(type, false, loading);
+            }
           })
           .on(`click${ns}`, ".btn-download", () => {
             window.open(report.link, "_blank");
             AppUtils.closeModal("#app-modal");
+            if (loading) {
+              setGenerateState(type, false, loading);
+            }
           })
           .on(`click${ns}`, ".btn-generate", () => {
+            if (loading) {
+              loading.setText("Generating Annual Report...");
+            }
+            requestReportGeneration(cfg, type, btn, params, loading);
             AppUtils.closeModal("#app-modal");
-            requestReportGeneration(cfg, type, btn, params);
-            setGenerateState(type, btn, true);
           });
       },
 
       onClose($modal) {
         $modal.off(ns);
-        setGenerateState(type, btn, false);
       },
     });
   }
 
-  function requestReportGeneration(cfg, type, btn, params) {
+  function requestReportGeneration(cfg, type, btn, params, loading) {
     google.script.run
-      .withFailureHandler((err) => handleGenerateError(type, btn, err))
-      .withSuccessHandler(() => checkReportReady(cfg, type, btn))
+      .withFailureHandler((err) => handleGenerateError(type, btn, err, loading))
+      .withSuccessHandler(() => checkReportReady(cfg, type, btn, "", loading))
       .updateCustomReportPDF(type, ...cfg.updateArgs(params));
   }
 
-  function checkReportReady(cfg, type, btn, attempts = 0) {
-    if (attempts === 0) {
-      AppUtils.showDashboardToast("Preparing report...", "info");
-    }
-
+  function checkReportReady(cfg, type, btn, attempts = 0, loading) {
+  
     if (attempts >= REPORT_MAX_ATTEMPTS) {
-      setGenerateState(type, btn, false);
-
+      setGenerateState(type, false, loading);
       AppUtils.showError("Timed out waiting for report.");
-
       return;
     }
 
     google.script.run
-      .withFailureHandler((err) => handleGenerateError(type, btn, err))
+      .withFailureHandler((err) => handleGenerateError(type, btn, err, loading))
       .withSuccessHandler((ready) => {
         if (!ready) {
           setTimeout(() => {
-            checkReportReady(cfg, type, btn, attempts + 1);
+            checkReportReady(cfg, type, btn, attempts + 1, loading);
           }, REPORT_CHECK_INTERVAL);
-
           return;
         }
 
-        saveReport(type, btn, cfg);
+        saveReport(type, btn, cfg, loading);
       })
       .isReportReady(type);
   }
 
-  function saveReport(type, btn, cfg) {
+  function saveReport(type, btn, cfg, loading) {
     google.script.run
       .withFailureHandler((err) => {
-        handleGenerateError(type, btn, err);
+        handleGenerateError(type, btn, err, loading);
       })
       .withSuccessHandler(() => {
-        setGenerateState(type, btn, false);
+        setGenerateState(type, false, loading);
 
         cfg.reloadHistory(() => {
           TableModule.highlightLatestRow(cfg.historyTableId, 0);
@@ -174,12 +178,12 @@ const ReportGenerator = (() => {
       .saveCustomReportPDF(type);
   }
 
-  function generateMonthlyReport(month, year, btn) {
-    prepareReportGeneration("monthly", btn, { month, year });
+  function generateMonthlyReport(month, year, btn, loading) {
+    prepareReportGeneration("monthly", btn, { month, year }, loading);
   }
 
-  function generateYearlyReport(year, btn) {
-    prepareReportGeneration("yearly", btn, { year });
+  function generateYearlyReport(year, btn, loading) {
+    prepareReportGeneration("yearly", btn, { year }, loading);
   }
 
   return {

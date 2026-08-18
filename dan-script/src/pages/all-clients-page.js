@@ -48,14 +48,16 @@ const allClientsPage = (() => {
               return;
             }
 
-            AppUtils.showDashboardToast("Creating new sheet ...", "info");
-
             AppUtils.submitForm({
               gscriptFunc: "createClientSheetFromDialog",
               data: { name: clientName },
               $btn: $submitBtn,
+              loadingText: "Creating new client sheet...",
               onSuccess: () => {
-                AppUtils.showDashboardToast("Sheet created successfully!", "success");
+                AppUtils.showDashboardToast(
+                  "Sheet created successfully!",
+                  "success",
+                );
 
                 google.script.run
                   .withFailureHandler(() =>
@@ -72,7 +74,7 @@ const allClientsPage = (() => {
                 ClientDirectory.loadClientDirectory("allClientsData");
 
                 $("#sheet_name").val("");
-              }
+              },
             });
           });
 

@@ -256,12 +256,11 @@ const ActivityToday = (() => {
       return;
     }
 
-    AppUtils.showDashboardToast("Saving Record ...", "info");
-
     AppUtils.submitForm({
       gscriptFunc: "recordManualClientHoursFromForm",
       data: formData,
       $btn: $submitBtn,
+      loadingText: "Saving ...",
 
       onSuccess: () => {
         handleTaskSaveSuccess(formData);

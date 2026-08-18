@@ -122,15 +122,18 @@ const integrationsConfigurationPage = (() => {
   }
 
   function updateIntegrationStatus(data) {
+
     if (!data || typeof data !== "object") {
+      console.warn("Invalid integration status:", data);
       return;
     }
 
     Object.entries(data).forEach(([integration, config]) => {
-      const statusEl = document.getElementById(
-        `${integration}IntegrationStatus`,
-      );
+      const statusId = `${integration}IntegrationStatus`;
+      const statusEl = document.getElementById(statusId);
+
       if (!statusEl) {
+        console.warn(`Status element not found: #${statusId}`);
         return;
       }
 
@@ -166,8 +169,9 @@ const integrationsConfigurationPage = (() => {
           .on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
           })
-          .on(`click${ns}`, ".btn-save", () => {
-            const $btn = $(this);
+          .on(`click${ns}`, ".btn-save", (e) => {
+            const $btn = $modal.find(".btn-save");
+
             saveIntegration(integration, $modal, $btn);
           });
 
@@ -286,14 +290,14 @@ const integrationsConfigurationPage = (() => {
           "success",
         );
 
+        loading.restore();
+        
         AppUtils.closeModal(MODAL_ID);
 
         // Assuming loadData() is in outer scope; if not, expose it or pass it in.
         if (typeof loadData === "function") {
           loadData();
         }
-
-        loading.restore();
       })
       .withFailureHandler((err) => {
         console.error("saveIntegration failed:", err);

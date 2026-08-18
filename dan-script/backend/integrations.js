@@ -1,11 +1,15 @@
 function getIntegrationStatus() {
   // requireAuthorizedUser();
 
-  const notificationEmail = getNotificationEmail();
-  const discordWebhook = getDiscordWebhook();
-  const spreadsheetId = CONFIG.SPREADSHEET_ID;
-  const reportFolderId =
-    PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
+  const properties = PropertiesService.getScriptProperties();
+
+  const notificationEmail = properties.getProperty("NOTIFICATION_EMAIL");
+
+  const discordWebhook = properties.getProperty("DISCORD_WEBHOOK_URL");
+
+  const spreadsheetId = properties.getProperty("SPREADSHEET_ID");
+
+  const reportFolderId = properties.getProperty("REPORT_FOLDER_ID");
 
   return {
     notifEmail: {
@@ -92,7 +96,7 @@ function saveIntegration(integration, value) {
       validateDiscordWebhook(cleanValue);
 
       PropertiesService.getScriptProperties().setProperty(
-        "DISCORD_WEBHOOK",
+        "DISCORD_WEBHOOK_URL",
         cleanValue,
       );
 
@@ -121,6 +125,12 @@ function saveIntegration(integration, value) {
     default:
       throw new Error(`Integration "${integration}" is not supported yet.`);
   }
+
+  /*
+   * Create/remove scheduled triggers
+   * based on the current configuration.
+   */
+  reconcileScheduledTriggers();
 
   return {
     success: true,
@@ -237,6 +247,12 @@ function saveIntegrationSettings(data) {
   if (reportFolderId) {
     properties.setProperty("REPORT_FOLDER_ID", reportFolderId);
   }
+
+  /*
+   * Create/remove scheduled triggers
+   * based on the current configuration.
+   */
+  reconcileScheduledTriggers();
 
   return {
     success: true,

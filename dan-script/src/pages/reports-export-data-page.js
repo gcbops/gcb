@@ -32,23 +32,19 @@ const reportsExportDataPage = (() => {
 
       .on("click.reports", ".btn-email-report", function () {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
 
         google.script.run
           .withSuccessHandler(() => {
             AppUtils.showDashboardToast("Email sent successfully!", "success");
-            loading.restore();
           })
           .withFailureHandler((err) => {
             AppUtils.showError(err);
-            loading.restore();
           })
           .sendRequestedEmailReport(btn.data("id"));
       })
 
       .on("click.reports", ".btn-discord-report", function () {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
 
         google.script.run
           .withSuccessHandler(() => {
@@ -56,11 +52,9 @@ const reportsExportDataPage = (() => {
               "Discord notification sent!",
               "success",
             );
-            loading.restore();
           })
           .withFailureHandler((err) => {
             AppUtils.showError(err);
-            loading.restore();
           })
           .sendRequestedDiscordReport(btn.data("id"));
       })
