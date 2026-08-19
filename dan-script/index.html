@@ -37,15 +37,11 @@
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-    integrity="sha384-DyZ88mC6Up2uqS4h/KRgHuoeGwBcD4Ng9SiP4dIRy0EXTlnuz47vAwmeGwVChigm" 
-    crossorigin="anonymous"
   />
 
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/pixeden-stroke-7-icon@1.2.3/pe-icon-7-stroke/dist/pe-icon-7-stroke.min.css"
-    integrity="sha384-QO3q5aGTRnmH03/iTaNFG3QJNEe3gKxdepuswWX27YhDTDVZzrLDAHnNkw6i1sQv" 
-    crossorigin="anonymous"
   />
 
   <!-- Plugins -->
@@ -53,22 +49,16 @@
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css"
-    integrity="sha384-R334r6kryDNB/GWs2kfB6blAOyWPCxjdHSww/mo7fel+o5TM/AOobJ0QpGRXSDh4" 
-    crossorigin="anonymous"
   />
 
   <link
     rel="stylesheet"
     href="https://cdn.datatables.net/2.3.4/css/dataTables.bootstrap5.min.css"
-    integrity="sha384-zmMNeKbOwzvUmxN8Z/VoYM+i+cwyC14+U9lq4+ZL0Ro7p1GMoh8uq8/HvIBgnh9+" 
-    crossorigin="anonymous"
   />
 
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
-    integrity="sha384-OXVF05DQEe311p6ohU11NwlnX08FzMCsyoXzGOaL+83dKAb3qS17yZJxESl8YrJQ" 
-    crossorigin="anonymous"
   />
 
   <!-- Application CSS -->
@@ -85,10 +75,9 @@
        Application Shell
   ========================== -->
 
-  <!-- <div id="app-container" class="app-container loading app-theme-white body-tabs-shadow fixed-sidebar fixed-header"> -->
-  <div id="app-container" class="app-container loading app-theme-white body-tabs-shadow fixed-sidebar fixed-header closed-sidebar">
+  <!-- <div id="app-container" class="app-container loading app-theme-white body-tabs-shadow fixed-sidebar fixed-header">
 
-    <!-- <div class="app-header header-shadow">
+    <div class="app-header header-shadow">
       <div class="app-header__logo">
           <div class="logo-src" data-page="home"></div>
           <div class="header__pane ml-auto">
@@ -193,143 +182,9 @@
               </div>       
           </div>
       </div>
-    </div>     -->
-
-    <div class="app-header header-shadow">
-      <div class="app-header__logo">
-        <div class="logo-src" data-page="home"></div>
-        <div class="header__pane ms-auto">
-          <div>
-            <button
-              type="button"
-              class="hamburger close-sidebar-btn hamburger--elastic"
-              data-class="closed-sidebar"
-            >
-              <span class="hamburger-box"
-                ><span class="hamburger-inner"></span
-              ></span>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="app-header__mobile-menu">
-        <div>
-          <button
-            type="button"
-            class="hamburger hamburger--elastic mobile-toggle-nav"
-          >
-            <span class="hamburger-box"><span class="hamburger-inner"></span></span>
-          </button>
-        </div>
-      </div>
-      <div class="app-header__menu">
-        <span
-          ><button
-            type="button"
-            class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav"
-          >
-            <span class="btn-icon-wrapper"
-              ><i class="fa fa-ellipsis-v fa-w-6"></i
-            ></span></button
-        ></span>
-      </div>
-      <div class="app-header__content">
-        <div class="app-header-left">
-          <div class="search-wrapper">
-            <div class="input-holder">
-              <input class="search-input" placeholder="Type to search" />
-              <button class="search-icon"><span></span></button>
-            </div>
-            <button class="btn-close"></button>
-          </div>
-          <ul class="header-menu nav">
-            <li class="nav-item">
-              <a data-page="home" class="nav-link">
-                <i class="nav-link-icon fa fa-chart-line"></i>
-                Overview
-              </a>
-            </li>
-            <li class="nav-item">
-              <a data-page="growthComparisonOverview" class="nav-link">
-                <i class="nav-link-icon fa fa-database"></i>
-                Statistics
-              </a>
-            </li>
-            <li class="nav-item">
-              <a data-page="allManualProjects" class="nav-link">
-                <i class="nav-link-icon fa fa-briefcase"></i>
-                Projects
-              </a>
-            </li>
-            <li class="nav-item">
-              <a data-page="allClients" class="nav-link">
-                <i class="nav-link-icon fa fa-user-friends"></i>
-                Clients
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div class="app-header-right">
-          <div class="header-btn-lg pe-0">
-            <div class="widget-content p-0">
-              <div class="widget-content-wrapper">
-                <div class="widget-content-left">
-                  <div class="btn-group">
-                    <a
-                      data-bs-toggle="dropdown"
-                      aria-haspopup="true"
-                      aria-expanded="false"
-                      class="p-0 btn"
-                      ><img
-                        width="42"
-                        class="rounded-circle"
-                        src="https://s12.gifyu.com/images/b3woD.png"
-                        alt="" />
-                      <i class="fa fa-angle-down ms-2 opacity-8"></i
-                    ></a>
-                    <div
-                      tabindex="-1"
-                      role="menu"
-                      aria-hidden="true"
-                      class="dropdown-menu dropdown-menu-right"
-                    >
-                      <button type="button" tabindex="0" class="dropdown-item">
-                        User Account
-                      </button>
-                      <button type="button" tabindex="0" class="dropdown-item">
-                        Settings
-                      </button>
-                      <h6 tabindex="-1" class="dropdown-header">Header</h6>
-                      <button type="button" tabindex="0" class="dropdown-item">
-                        Actions
-                      </button>
-                      <div tabindex="-1" class="dropdown-divider"></div>
-                      <button type="button" tabindex="0" class="dropdown-item">
-                        Dividers
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="widget-content-left ms-3 header-user-info">
-                  <div class="widget-heading">Dan Maxwel Vocal</div>
-                  <div class="widget-subheading">Web Dev Project Manager</div>
-                </div>
-                <div class="widget-content-right header-user-info ms-3">
-                  <button
-                    type="button"
-                    class="btn-shadow p-1 btn btn-primary btn-sm show-toastr-example"
-                  >
-                    <i class="fa text-white fa-calendar pe-1 ps-1"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
-    <!-- <div class="app-main">
+    <div class="app-main">
       <div class="app-sidebar sidebar-shadow">
           <div class="app-header__logo">
               <div class="logo-src" data-page="home"></div>
@@ -511,7 +366,145 @@
             </div>
           </div>
       </div>
-    </div> -->
+    </div>
+    
+  </div> -->
+
+  <div id="app-container" class="app-container loading app-theme-white body-tabs-shadow fixed-sidebar fixed-header closed-sidebar">
+
+    <div class="app-header header-shadow">
+      <div class="app-header__logo">
+        <div class="logo-src" data-page="home"></div>
+        <div class="header__pane ms-auto">
+          <div>
+            <button
+              type="button"
+              class="hamburger close-sidebar-btn hamburger--elastic"
+              data-class="closed-sidebar"
+            >
+              <span class="hamburger-box"
+                ><span class="hamburger-inner"></span
+              ></span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="app-header__mobile-menu">
+        <div>
+          <button
+            type="button"
+            class="hamburger hamburger--elastic mobile-toggle-nav"
+          >
+            <span class="hamburger-box"><span class="hamburger-inner"></span></span>
+          </button>
+        </div>
+      </div>
+      <div class="app-header__menu">
+        <span
+          ><button
+            type="button"
+            class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav"
+          >
+            <span class="btn-icon-wrapper"
+              ><i class="fa fa-ellipsis-v fa-w-6"></i
+            ></span></button
+        ></span>
+      </div>
+      <div class="app-header__content">
+        <div class="app-header-left">
+          <div class="search-wrapper">
+            <div class="input-holder">
+              <input class="search-input" placeholder="Type to search" />
+              <button class="search-icon"><span></span></button>
+            </div>
+            <button class="btn-close"></button>
+          </div>
+          <ul class="header-menu nav">
+            <li class="nav-item">
+              <a data-page="home" class="nav-link">
+                <i class="nav-link-icon fa fa-chart-line"></i>
+                Overview
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="growthComparisonOverview" class="nav-link">
+                <i class="nav-link-icon fa fa-database"></i>
+                Statistics
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="allManualProjects" class="nav-link">
+                <i class="nav-link-icon fa fa-briefcase"></i>
+                Projects
+              </a>
+            </li>
+            <li class="nav-item">
+              <a data-page="allClients" class="nav-link">
+                <i class="nav-link-icon fa fa-user-friends"></i>
+                Clients
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div class="app-header-right">
+          <div class="header-btn-lg pe-0">
+            <div class="widget-content p-0">
+              <div class="widget-content-wrapper">
+                <div class="widget-content-left">
+                  <div class="btn-group">
+                    <a
+                      data-bs-toggle="dropdown"
+                      aria-haspopup="true"
+                      aria-expanded="false"
+                      class="p-0 btn"
+                      ><img
+                        width="42"
+                        class="rounded-circle"
+                        src="https://s12.gifyu.com/images/b3woD.png"
+                        alt="" />
+                      <i class="fa fa-angle-down ms-2 opacity-8"></i
+                    ></a>
+                    <div
+                      tabindex="-1"
+                      role="menu"
+                      aria-hidden="true"
+                      class="dropdown-menu dropdown-menu-right"
+                    >
+                      <button type="button" tabindex="0" class="dropdown-item">
+                        User Account
+                      </button>
+                      <button type="button" tabindex="0" class="dropdown-item">
+                        Settings
+                      </button>
+                      <h6 tabindex="-1" class="dropdown-header">Header</h6>
+                      <button type="button" tabindex="0" class="dropdown-item">
+                        Actions
+                      </button>
+                      <div tabindex="-1" class="dropdown-divider"></div>
+                      <button type="button" tabindex="0" class="dropdown-item">
+                        Dividers
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="widget-content-left ms-3 header-user-info">
+                  <div class="widget-heading">Dan Maxwel Vocal</div>
+                  <div class="widget-subheading">Web Dev Project Manager</div>
+                </div>
+                <div class="widget-content-right header-user-info ms-3">
+                  <button
+                    type="button"
+                    class="btn-shadow p-1 btn btn-primary btn-sm show-toastr-example"
+                  >
+                    <i class="fa text-white fa-calendar pe-1 ps-1"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="app-main">
       <div class="app-sidebar sidebar-shadow">
@@ -557,7 +550,7 @@
         <div class="scrollbar-sidebar ps">
           <div class="app-sidebar__inner">
             <ul class="vertical-nav-menu metismenu">
-                <!-- Dashboard -->
+
                 <li class="app-sidebar__heading">Dashboards</li>
                 <li>
                     <a data-page="home">
@@ -566,7 +559,6 @@
                     </a>
                 </li>
 
-                <!-- Analytics -->
                 <li class="app-sidebar__heading">Analytics</li>
                 <li>
                     <a href="#">
@@ -596,7 +588,6 @@
                     </ul>
                 </li>
 
-                <!-- Projects -->
                 <li class="app-sidebar__heading">Projects</li>
                 <li>
                     <a href="#">
@@ -610,7 +601,6 @@
                     </ul>
                 </li>
 
-                <!-- Billing -->
                 <li class="app-sidebar__heading">Billing & Payments</li>
                 <li>
                     <a href="#">
@@ -624,7 +614,6 @@
                     </ul>
                 </li>
 
-                <!-- Performance -->
                 <li class="app-sidebar__heading">Performance</li>
                 <li>
                     <a href="#">
@@ -639,7 +628,6 @@
                     </ul>
                 </li>
 
-                <!-- Reports -->
                 <li class="app-sidebar__heading">Reports</li>
                 <li>
                     <a href="#">
@@ -654,7 +642,6 @@
                     </ul>
                 </li>
 
-                <!-- System / Settings -->
                 <li class="app-sidebar__heading">System</li>
                 <li>
                     <a data-page="settingsConfiguration"><i class="metismenu-icon pe-7s-config"></i>Settings</a>
@@ -743,66 +730,42 @@
   ========================== -->
   
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/perfect-scrollbar/1.5.5/perfect-scrollbar.min.js" 
-    integrity="sha384-CspyH8p7PBmZC/5ZFkLih7r5ZGgX7LgEZ/B0ntTJOs3D9QyRadtCOpcl+MkUhTur" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdnjs.cloudflare.com/ajax/libs/perfect-scrollbar/1.5.5/perfect-scrollbar.min.js">
   </script>
   
   <script 
-    src="https://cdn.jsdelivr.net/npm/metismenu" 
-    integrity="sha384-o4M0/C6f1q10wQYFKjTk0rIvgDTW1H9q51HBjc27E00pbHmQdbCw+ivOl2hVQXIN" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdn.jsdelivr.net/npm/metismenu">
   </script>
   
   <?!= include('dashboardpack-js'); ?>
-  <?!= include('dashboardpack-demo-js'); ?>
+  <!-- <?!= include('dashboardpack-demo-js'); ?> -->
 
   <!-- =========================
        Application Libraries
   ========================== -->
 
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" 
-    integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" 
-    crossorigin="anonymous" 
-    referrerpolicy="no-referrer">
+    src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js">
   </script>
 
   <script 
-    src="https://cdn.jsdelivr.net/npm/chart.js" 
-    integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdn.jsdelivr.net/npm/chart.js">
   </script>
 
   <script 
-    src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js" 
-    integrity="sha384-n+4gDsCQ+x0o5YCJeYqFY1Yl+qgW41qmMAilIyF/bJwIUeTK00QB845/VijT5pQq" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
   </script>
 
   <script 
-    src="https://cdn.datatables.net/2.3.4/js/dataTables.bootstrap5.min.js" 
-    integrity="sha384-G85lmdZCo2WkHaZ8U1ZceHekzKcg37sFrs4St2+u/r2UtfvSDQmQrkMsEx4Cgv/W" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdn.datatables.net/2.3.4/js/dataTables.bootstrap5.min.js">
   </script>
 
   <script 
-    src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" 
-    integrity="sha384-d3UHjPdzJkZuk5H3qKYMLRyWLAQBJbby2yr2Q58hXXtAGF8RSNO9jpLDlKKPv5v3" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js">
   </script>
 
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js" 
-    integrity="sha384-Si3HKTyQYGU+NC4aAF3ThcOSvK+ZQiyEKlYyfjiIFKMqsnCmfHjGa1VK1kYP9UdS" 
-    crossorigin="anonymous"
-    referrerpolicy="no-referrer">
+    src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js">
   </script>
 
 
