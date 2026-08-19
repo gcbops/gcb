@@ -118,7 +118,10 @@ const TableModule = (() => {
 
     const $taskSelect = $("#task");
 
-    $taskSelect.html(`<option>Loading...</option>`).trigger("change");
+    $taskSelect
+      .html(`<option value="">Loading...</option>`)
+      .val("")
+      .trigger("change");
 
     AppUtils.cachedGScriptCall(
       `getTaskOptions_${clientName}`,
@@ -151,7 +154,9 @@ const TableModule = (() => {
           $taskSelect.append(new Option("No tasks found", ""));
         }
 
-        AppUtils.initSelect2("#drawerManualAdd .drawer-content");
+        $taskSelect
+          .val($taskSelect.find("option:eq(1)").val())
+          .trigger("change");
       },
     );
   }

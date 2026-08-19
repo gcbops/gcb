@@ -27,6 +27,7 @@ import { AppUI } from "./app-ui.js";
 import { AppShellModule } from "./app-shell.js";
 import { AppUtils } from "./utils.js";
 import { integrationsConfigurationPage } from "./pages/integration-page.js";
+import { externalSheetsManagerPage } from "./pages/external-sheets-manager-page.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -46,6 +47,7 @@ const RouterModule = (() => {
     home: HomePage,
 
     addManualHours: addManualHoursPage,
+    externalSheetsManager: externalSheetsManagerPage,
 
     dailyOverview: dailyOverviewPage,
     monthlyOverview: monthlyOverviewPage,

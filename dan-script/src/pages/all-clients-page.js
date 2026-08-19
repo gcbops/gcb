@@ -49,7 +49,7 @@ const allClientsPage = (() => {
             }
 
             AppUtils.submitForm({
-              gscriptFunc: "createClientSheetFromDialog",
+              gscriptFunc: "createClientSheet",
               data: { name: clientName },
               $btn: $submitBtn,
               loadingText: "Creating new client sheet...",

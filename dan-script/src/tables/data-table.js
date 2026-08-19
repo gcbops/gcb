@@ -49,6 +49,8 @@ const DataTableModule = (() => {
 
     if (MAIN_TABLES.includes(cleanTitle)) {
       tableOptions = {
+        responsive: true,
+        
         layout: {
           topStart: ["pageLength"],
           topEnd: ["search"],
@@ -83,6 +85,8 @@ const DataTableModule = (() => {
     } else if (cleanTitle === "upsell") {
       /* ---------- UPSELL ---------- */
       tableOptions = {
+        responsive: true,
+
         pageLength: 5,
 
         order: [],

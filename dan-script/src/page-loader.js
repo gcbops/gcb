@@ -34,6 +34,11 @@ const PageLoaderModule = (() => {
       desc: "Log manual hours and track entries in real time.",
       icon: "pe-7s-hourglass icon-gradient bg-malibu-beach",
     },
+    externalSheetsManager: {
+      title: "External Sheets Manager",
+      desc: "Manage and sync external Google Sheets used by the system.",
+      icon: "pe-7s-folder icon-gradient bg-malibu-beach",
+    },
     upsellOverview: {
       title: "Upsell Entries",
       desc: "Log upsell hours and track entries in real time.",

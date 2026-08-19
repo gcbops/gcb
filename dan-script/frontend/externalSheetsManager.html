@@ -1,0 +1,116 @@
+<div class="row" id="hours-summary">
+    <div class="col-md-6 col-xl-3">
+        <div class="card mb-3 widget-content bg-midnight-bloom">
+            <div class="widget-content-wrapper text-white">
+                <div class="widget-content-left">
+                    <div class="widget-heading">Total Hours</div>
+                    <div class="widget-subheading">Cumulative Tracked Hours</div>
+                </div>
+                <div class="widget-content-right">
+                    <div class="widget-numbers text-white"><span></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card mb-3 widget-content bg-happy-itmeo">
+            <div class="widget-content-wrapper text-white">
+                <div class="widget-content-left">
+                    <div class="widget-heading">Paid Hours</div>
+                    <div class="widget-subheading">Client Paid Hours</div>
+                </div>
+                <div class="widget-content-right">
+                    <div class="widget-numbers text-white"><span></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card mb-3 widget-content bg-night-sky">
+            <div class="widget-content-wrapper text-white">
+                <div class="widget-content-left">
+                    <div class="widget-heading">Owed Hours</div>
+                    <div class="widget-subheading">Outstanding Work Hours</div>
+                </div>
+                <div class="widget-content-right">
+                    <div class="widget-numbers text-white"><span></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card mb-3 widget-content bg-malibu-beach">
+            <div class="widget-content-wrapper text-white">
+                <div class="widget-content-left">
+                    <div class="widget-heading">Net Hours</div>
+                    <div class="widget-subheading">Net Tracked Hours</div>
+                </div>
+                <div class="widget-content-right">
+                    <div class="widget-numbers text-white"><span></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+  <div class="col-lg-12">
+
+    <div class="main-card mb-3 card">
+      <div class="card-body">
+
+        <div class="d-flex align-items-start mb-3">
+
+          <h5 class="card-title mb-0">
+            External Sheets
+          </h5>
+
+          <div class="ms-auto">
+            <button
+                type="button"
+                class="btn btn-secondary me-2"
+                id="sync-external-sheets"
+            >
+                <i class="fa fa-sync me-1"></i>
+                Sync
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="add-external-sheet"
+            >
+              <i class="fa fa-plus me-1"></i>
+              Add External Sheet
+            </button>
+          </div>
+
+        </div>
+
+        <div id="dt-container" class="mt-4">
+
+          <table
+            id="externalSheetsTable"
+            class="table table-hover table-striped nowrap"
+            style="width:100%"
+          >
+
+            <thead>
+              <tr>
+                <th>Client Name</th>
+                <th>Total Hours</th>
+                <th>Projects</th>
+                <th class="text-center">Status</th>
+                <th class="text-center">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody></tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>

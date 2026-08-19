@@ -265,3 +265,33 @@ function getClientDataWithNickname(dt) {
       };
     });
 }
+
+function createClientSheet(input) {
+  if (!input || !isNonEmptyString(input.name)) {
+    throw new Error("Client name cannot be empty.");
+  }
+
+  const sheetName = input.name.trim();
+
+  if (sheetExists(sheetName)) {
+    throw new Error(`Sheet "${sheetName}" already exists.`);
+  }
+
+  const template = getSheetSafe("BLANK");
+
+  if (!template) {
+    throw new Error('Template sheet "BLANK" not found.');
+  }
+
+  const ss = getSpreadsheet();
+  const newSheet = template.copyTo(ss);
+
+  newSheet.setName(sheetName);
+
+  SpreadsheetApp.flush();
+
+  newSheet.getRange("E1").setValue(sheetName);
+
+  ss.setActiveSheet(newSheet);
+  ss.moveActiveSheet(1);
+}

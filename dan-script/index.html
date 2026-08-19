@@ -34,14 +34,20 @@
 
   <!-- Icons -->
 
+  <!-- Plugins -->
+
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+    integrity="sha384-DyZ88mC6Up2uqS4h/KRgHuoeGwBcD4Ng9SiP4dIRy0EXTlnuz47vAwmeGwVChigm" 
+    crossorigin="anonymous"
   />
 
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/pixeden-stroke-7-icon@1.2.3/pe-icon-7-stroke/dist/pe-icon-7-stroke.min.css"
+    integrity="sha384-QO3q5aGTRnmH03/iTaNFG3QJNEe3gKxdepuswWX27YhDTDVZzrLDAHnNkw6i1sQv" 
+    crossorigin="anonymous"
   />
 
   <!-- Plugins -->
@@ -49,16 +55,25 @@
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css"
+    integrity="sha384-R334r6kryDNB/GWs2kfB6blAOyWPCxjdHSww/mo7fel+o5TM/AOobJ0QpGRXSDh4" 
+    crossorigin="anonymous"
   />
 
   <link
     rel="stylesheet"
     href="https://cdn.datatables.net/2.3.4/css/dataTables.bootstrap5.min.css"
+    integrity="sha384-zmMNeKbOwzvUmxN8Z/VoYM+i+cwyC14+U9lq4+ZL0Ro7p1GMoh8uq8/HvIBgnh9+" 
+    crossorigin="anonymous"
   />
+  <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/3.0.2/css/dataTables.bootstrap5.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/responsive/4.0.2/css/responsive.bootstrap5.min.css"> -->
 
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+    integrity="sha384-OXVF05DQEe311p6ohU11NwlnX08FzMCsyoXzGOaL+83dKAb3qS17yZJxESl8YrJQ" 
+    crossorigin="anonymous"
   />
 
   <!-- Application CSS -->
@@ -583,6 +598,7 @@
                     <li><a data-page="allClients"><i class="metismenu-icon"></i>All Clients</a></li>
                     <li><a data-page="topClients"><i class="metismenu-icon"></i>Top Clients</a></li>
                     <li><a data-page="activeClients"><i class="metismenu-icon"></i>Active Clients</a></li>
+                    <li><a data-page="externalSheetsManager"><i class="metismenu-icon"></i>Other Clients</a></li>
                     <li><a data-page="upsellOverview"><i class="metismenu-icon"></i>Upsell</a></li>
                     <li><a data-page="outstandingClients"><i class="metismenu-icon"></i>Outstanding</a></li>
                     </ul>
@@ -730,14 +746,20 @@
   ========================== -->
   
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/perfect-scrollbar/1.5.5/perfect-scrollbar.min.js">
+    src="https://cdnjs.cloudflare.com/ajax/libs/perfect-scrollbar/1.5.5/perfect-scrollbar.min.js" 
+    integrity="sha384-CspyH8p7PBmZC/5ZFkLih7r5ZGgX7LgEZ/B0ntTJOs3D9QyRadtCOpcl+MkUhTur" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
   </script>
   
   <script 
-    src="https://cdn.jsdelivr.net/npm/metismenu">
+    src="https://cdn.jsdelivr.net/npm/metismenu" 
+    integrity="sha384-o4M0/C6f1q10wQYFKjTk0rIvgDTW1H9q51HBjc27E00pbHmQdbCw+ivOl2hVQXIN" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
   </script>
   
-  <?!= include('dashboardpack-js'); ?>
+  <?!= include('dashboardpack-js-backup'); ?>
   <!-- <?!= include('dashboardpack-demo-js'); ?> -->
 
   <!-- =========================
@@ -745,27 +767,51 @@
   ========================== -->
 
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js">
+    src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" 
+    integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" 
+    crossorigin="anonymous" 
+    referrerpolicy="no-referrer">
   </script>
 
   <script 
-    src="https://cdn.jsdelivr.net/npm/chart.js">
+    src="https://cdn.jsdelivr.net/npm/chart.js" 
+    integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
   </script>
 
   <script 
-    src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+    src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js" 
+    integrity="sha384-n+4gDsCQ+x0o5YCJeYqFY1Yl+qgW41qmMAilIyF/bJwIUeTK00QB845/VijT5pQq" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
   </script>
 
   <script 
-    src="https://cdn.datatables.net/2.3.4/js/dataTables.bootstrap5.min.js">
+    src="https://cdn.datatables.net/2.3.4/js/dataTables.bootstrap5.min.js" 
+    integrity="sha384-G85lmdZCo2WkHaZ8U1ZceHekzKcg37sFrs4St2+u/r2UtfvSDQmQrkMsEx4Cgv/W" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
+  </script>
+
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/3.0.2/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/3.0.2/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdn.datatables.net/responsive/4.0.2/js/dataTables.responsive.min.js"></script>
+  <script src="https://cdn.datatables.net/responsive/4.0.2/js/responsive.bootstrap5.min.js"></script> -->
+
+  <script 
+    src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" 
+    integrity="sha384-d3UHjPdzJkZuk5H3qKYMLRyWLAQBJbby2yr2Q58hXXtAGF8RSNO9jpLDlKKPv5v3" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
   </script>
 
   <script 
-    src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js">
-  </script>
-
-  <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js">
+    src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js" 
+    integrity="sha384-Si3HKTyQYGU+NC4aAF3ThcOSvK+ZQiyEKlYyfjiIFKMqsnCmfHjGa1VK1kYP9UdS" 
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer">
   </script>
 
 

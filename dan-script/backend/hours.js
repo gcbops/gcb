@@ -32,104 +32,255 @@ function recordManualClientHours(clientName, task, hours, date = new Date()) {
   );
 }
 
+function validateManualHoursFormData(formData) {
+  if (!formData || typeof formData !== "object") {
+    throw new Error("Invalid form data.");
+  }
+
+  const client = String(formData.client ?? "").trim();
+  const type = String(formData.type ?? "").trim();
+  const task = String(formData.task ?? "").trim();
+  const hourValue = String(formData.hour ?? "").trim();
+
+  if (!client) {
+    throw new Error("Client is required.");
+  }
+
+  if (!type) {
+    throw new Error("Type is required.");
+  }
+
+  if (!task) {
+    throw new Error("Task is required.");
+  }
+
+  if (task.toLowerCase() === "loading...") {
+    throw new Error("Please select a valid task.");
+  }
+
+  if (!hourValue) {
+    throw new Error("Hours are required.");
+  }
+
+  const hours = Number(hourValue);
+
+  if (!Number.isFinite(hours)) {
+    throw new Error("Hours must be a valid number.");
+  }
+
+  if (hours <= 0) {
+    throw new Error("Hours must be greater than 0.");
+  }
+
+  return {
+    client,
+    type,
+    task,
+    hours,
+  };
+}
+
+function recordClientHoursToSheet(sheet, data) {
+  const {
+    type,
+    task,
+    hours,
+  } = data;
+
+  const startRow = 3;
+  const lastRow = sheet.getLastRow();
+
+  const today = formatDateSafe(
+    new Date(),
+    "M/d/yyyy",
+  );
+
+  const rowCount = Math.max(
+    1,
+    lastRow - startRow + 1,
+  );
+
+  const values = sheet
+    .getRange(startRow, 5, rowCount, 4)
+    .getValues();
+
+  /* ---------- Update existing entry ---------- */
+
+  for (let i = 0; i < values.length; i++) {
+    const [
+      typeDev,
+      taskProject,
+      existingHours,
+      entryDate,
+    ] = values[i];
+
+    const sameType =
+      normalizeText(typeDev) ===
+      normalizeText(type);
+
+    const sameTask =
+      normalizeText(taskProject) ===
+      normalizeText(task);
+
+    const sameDate =
+      formatDateSafe(
+        entryDate,
+        "M/d/yyyy",
+      ) === today;
+
+    if (sameType && sameTask && sameDate) {
+      const currentHours =
+        Number(existingHours) || 0;
+
+      const newHours =
+        currentHours + hours;
+
+      sheet
+        .getRange(startRow + i, 7)
+        .setValue(newHours);
+
+      return {
+        success: true,
+        action: "updated",
+      };
+    }
+  }
+
+  /* ---------- Create new entry ---------- */
+
+  const emptyRow = getFirstEmptyRow(
+    sheet,
+    5,
+    startRow,
+  );
+
+  sheet
+    .getRange(emptyRow, 5, 1, 4)
+    .setValues([
+      [type, task, hours, today],
+    ]);
+
+  return {
+    success: true,
+    action: "created",
+  };
+}
+
 function recordManualClientHoursFromForm(formData) {
   try {
-    /* ---------- Validate input ---------- */
+    const data =
+      validateManualHoursFormData(formData);
 
-    if (!formData || typeof formData !== "object") {
-      throw new Error("Invalid form data.");
-    }
-
-    const client = String(formData.client ?? "").trim();
-    const type = String(formData.type ?? "").trim();
-    const task = String(formData.task ?? "").trim();
-    const hourValue = String(formData.hour ?? "").trim();
-
-    if (!client) {
-      throw new Error("Client is required.");
-    }
-
-    if (!type) {
-      throw new Error("Type is required.");
-    }
-
-    if (!task) {
-      throw new Error("Task is required.");
-    }
-
-    if (task.toLowerCase() === "loading...") {
-      throw new Error("Please select a valid task.");
-    }
-
-    if (!hourValue) {
-      throw new Error("Hours are required.");
-    }
-
-    const hours = Number(hourValue);
-
-    if (!Number.isFinite(hours)) {
-      throw new Error("Hours must be a valid number.");
-    }
-
-    if (hours <= 0) {
-      throw new Error("Hours must be greater than 0.");
-    }
-
-    /* ---------- Get client sheet ---------- */
-
-    const clientSheet = getSheetSafe(client);
+    const clientSheet =
+      getSheetSafe(data.client);
 
     if (!clientSheet) {
-      throw new Error(`Sheet "${client}" not found.`);
+      throw new Error(
+        `Sheet "${data.client}" not found.`,
+      );
     }
 
-    const startRow = 3;
-    const lastRow = clientSheet.getLastRow();
-
-    const today = formatDateSafe(new Date(), "M/d/yyyy");
-
-    const rowCount = Math.max(1, lastRow - startRow + 1);
-
-    const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
-
-    /* ---------- Update existing entry ---------- */
-
-    for (let i = 0; i < data.length; i++) {
-      const [typeDev, taskProject, existingHours, entryDate] = data[i];
-
-      const sameType = normalizeText(typeDev) === normalizeText(type);
-
-      const sameTask = normalizeText(taskProject) === normalizeText(task);
-
-      const sameDate = formatDateSafe(entryDate, "M/d/yyyy") === today;
-
-      if (sameType && sameTask && sameDate) {
-        const currentHours = Number(existingHours) || 0;
-        const newHours = currentHours + hours;
-
-        clientSheet.getRange(startRow + i, 7).setValue(newHours);
-
-        return {
-          success: true,
-          action: "updated",
-        };
-      }
-    }
-
-    /* ---------- Create new entry ---------- */
-
-    const emptyRow = getFirstEmptyRow(clientSheet, 5, startRow);
-
-    clientSheet
-      .getRange(emptyRow, 5, 1, 4)
-      .setValues([[type, task, hours, today]]);
-
-    return {
-      success: true,
-      action: "created",
-    };
+    return recordClientHoursToSheet(
+      clientSheet,
+      data,
+    );
   } catch (err) {
-    throw new Error(err.message || String(err));
+    throw new Error(
+      err.message || String(err),
+    );
+  }
+}
+
+function recordExternalClientHoursFromForm(formData) {
+  try {
+    const data =
+      validateManualHoursFormData(formData);
+
+    const ss =
+      SpreadsheetApp.getActiveSpreadsheet();
+
+    const registrySheet =
+      ss.getSheetByName("External Sheets");
+
+    if (
+      !registrySheet ||
+      registrySheet.getLastRow() < 2
+    ) {
+      throw new Error(
+        "External Sheets registry not found.",
+      );
+    }
+
+    const values = registrySheet
+      .getRange(
+        2,
+        1,
+        registrySheet.getLastRow() - 1,
+        5,
+      )
+      .getValues();
+
+    const normalizedClient =
+      normalizeText(data.client);
+
+    const externalRow = values.find(
+      (row) =>
+        normalizeText(
+          String(row[1] || ""),
+        ) === normalizedClient,
+    );
+
+    if (!externalRow) {
+      throw new Error(
+        `External client "${data.client}" was not found.`,
+      );
+    }
+
+    const spreadsheetId =
+      String(externalRow[0] || "").trim();
+
+    if (!spreadsheetId) {
+      throw new Error(
+        `No spreadsheet ID found for external client "${data.client}".`,
+      );
+    }
+
+    let externalSS;
+
+    try {
+      externalSS =
+        SpreadsheetApp.openById(spreadsheetId);
+    } catch (err) {
+      throw new Error(
+        `Unable to access the external spreadsheet for "${data.client}".`,
+      );
+    }
+
+    const projectSheet = externalSS.getSheetByName(data.task);
+
+    if (!projectSheet) {
+      throw new Error(
+        `Project sheet "${data.task}" was not found for "${data.client}".`,
+      );
+    }
+
+    if (
+      projectSheet.getName() === "Projects" ||
+      projectSheet.getName() === "BLANK"
+    ) {
+      throw new Error(`Invalid project sheet "${data.task}".`);
+    }
+
+    const result = recordClientHoursToSheet(projectSheet, data);
+
+    combineExternalSheetData(spreadsheetId);
+
+    return result;
+    
+  } catch (err) {
+    throw new Error(
+      err.message || String(err),
+    );
   }
 }
 
