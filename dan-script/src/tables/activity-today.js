@@ -367,8 +367,9 @@ const ActivityToday = (() => {
       .on("click.activityToday", handleSheetView);
   }
 
-  function handleSheetView() {
+  function handleSheetView(e) {
     const clientName = String($("#client-view-hours").val() || "").trim();
+    const btn = e.currentTarget;
 
     if (!clientName) {
       AppUtils.showError("Please select a client first.");
@@ -376,16 +377,18 @@ const ActivityToday = (() => {
       return;
     }
 
-    AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
+    const loading = AppUtils.setButtonLoading(btn, "Redirecting...");
 
     google.script.run
       .withSuccessHandler((url) => {
         if (url) {
           window.open(url, "_blank");
         }
+        loading.restore();
       })
       .withFailureHandler(() => {
         AppUtils.showError("Sheet doesn't exist!");
+        loading.restore();
       })
       .getClientSheetUrl(clientName);
   }

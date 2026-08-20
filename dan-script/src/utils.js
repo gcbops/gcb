@@ -370,7 +370,7 @@ const AppUtils = (() => {
     toastr.options = {
       closeButton: true,
       progressBar: true,
-      positionClass: "toast-bottom-center",
+      positionClass: "toast-top-right",
       timeOut: 4000,
     };
 

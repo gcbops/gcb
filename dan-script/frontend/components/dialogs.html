@@ -8,20 +8,22 @@
             <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px">
               <h5 class="card-title">Recent Records</h5>
               <div style="flex: 1"></div>
-              <button type="button" class="btn btn-primary" id="viewMySheet-v-h">View Sheet</button>
+              <button type="button" class="btn btn-primary" id="viewMySheet-v-h">View</button>
             </div>
             <input type="hidden" name="client-view-hours" id="client-view-hours" />
-            <table class="mb-0 table" id="client-hours-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Project</th>
-                  <th>Hours</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <div class="table-responsive" style="max-height: 230px; overflow-y: auto;">
+                <table class="align-middle mb-0 table table-borderless table-hover" id="client-hours-table">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Project</th>
+                        <th>Hours</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
           </div>
         </div>
       </div>

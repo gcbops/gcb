@@ -14,6 +14,36 @@ const TableRenderer = (() => {
     return Array.isArray(row) && row.every(isEmptyCell);
   }
 
+  /**
+   * Normalize a row so it always has exactly the
+   * same number of cells as the table header.
+   */
+  function normalizeRow(row, columnCount, debug = false, rowIndex = -1) {
+    const log = (...args) => debug && console.log(...args);
+
+    if (!Array.isArray(row)) {
+      log(`[Row ${rowIndex}] Invalid row:`, row);
+
+      return Array(columnCount).fill("");
+    }
+
+    const normalized = row.slice(0, columnCount);
+
+    while (normalized.length < columnCount) {
+      normalized.push("");
+    }
+
+    if (normalized.length !== row.length) {
+      log(`[Row ${rowIndex}] Normalized:`, {
+        originalLength: row.length,
+        columnCount,
+        row: normalized,
+      });
+    }
+
+    return normalized;
+  }
+
   function renderCell(cell, colIndex, isActivityTable, debug, rowIndex) {
     const log = (...args) => debug && console.log(...args);
 
@@ -71,10 +101,25 @@ const TableRenderer = (() => {
 
     const isActivityTable = normalizedTitle === ACTIVITY_TABLE_TITLE;
 
+    /*
+     * Get the expected number of columns
+     * directly from the table header.
+     */
+    const $table = $tbody.closest("table");
+    const columnCount = $table.find("thead tr:first th").length;
+
+    if (!columnCount) {
+      log("[TableRenderer] Unable to determine column count.");
+      return;
+    }
+
+    log("[TableRenderer] Expected column count:", columnCount);
+
     $tbody.empty();
 
     let skipped = 0;
     let rendered = 0;
+    let normalized = 0;
 
     data.forEach((row, rowIndex) => {
       if (!Array.isArray(row)) {
@@ -93,9 +138,18 @@ const TableRenderer = (() => {
         return;
       }
 
+      /*
+       * Normalize before rendering.
+       */
+      const normalizedRow = normalizeRow(row, columnCount, debug, rowIndex);
+
+      if (normalizedRow.length !== row.length) {
+        normalized++;
+      }
+
       const $tr = $("<tr>");
 
-      row.forEach((cell, colIndex) => {
+      normalizedRow.forEach((cell, colIndex) => {
         $tr.append(
           renderCell(cell, colIndex, isActivityTable, debug, rowIndex),
         );
@@ -109,6 +163,8 @@ const TableRenderer = (() => {
     log("[TableRenderer] renderTableBody complete", {
       renderedRows: rendered,
       skippedRows: skipped,
+      normalizedRows: normalized,
+      columnCount,
     });
   }
 
