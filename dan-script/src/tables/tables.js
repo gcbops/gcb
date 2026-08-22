@@ -204,10 +204,10 @@ const TableModule = (() => {
             $tbodyClient.append(
               `
               <tr>
-                <td>${escapeHtml(row[0] ?? "")}</td>
-                <td>${escapeHtml(row[1] ?? "")}</td>
-                <td>${escapeHtml(row[2] ?? "")}</td>
-                <td>${escapeHtml(row[3] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[1] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[2] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[3] ?? "")}</td>
               </tr>
               `,
             );
@@ -295,7 +295,7 @@ const TableModule = (() => {
           .append(
             `
             <span
-              class="badge badge-pill badge-success badge-new-report ml-2">
+              class="badge badge-pill badge-success badge-new-report ms-2">
               NEW
             </span>
             `,
@@ -308,19 +308,6 @@ const TableModule = (() => {
         }, 15000);
       });
     });
-  }
-
-  function escapeHtml(text) {
-    if (text === null || text === undefined) {
-      return "";
-    }
-
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
   return {

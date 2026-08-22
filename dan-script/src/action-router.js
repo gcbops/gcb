@@ -1,8 +1,26 @@
 import { RouterModule } from "./routers.js";
 
 const ActionRouterModule = (() => {
+  let initialized = false;
+
   function init() {
+    if (initialized) {
+      return;
+    }
+
     document.addEventListener("click", handleNavigationClick, true);
+
+    initialized = true;
+  }
+
+  function destroy() {
+    if (!initialized) {
+      return;
+    }
+
+    document.removeEventListener("click", handleNavigationClick, true);
+
+    initialized = false;
   }
 
   function handleNavigationClick(e) {
@@ -27,6 +45,12 @@ const ActionRouterModule = (() => {
       return;
     }
 
+    const appContainer = document.querySelector(".app-container");
+
+    if (appContainer) {
+      appContainer.classList.add("closed-sidebar");
+    }
+
     RouterModule.go(page);
   }
 
@@ -39,6 +63,7 @@ const ActionRouterModule = (() => {
 
   return {
     init,
+    destroy,
   };
 })();
 

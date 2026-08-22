@@ -237,6 +237,8 @@ const ActivityToday = (() => {
 
     let $submitBtn = $form.find('button[type="submit"]');
 
+    const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
+
     if (!$submitBtn.length) {
       $submitBtn = $("#submit-new-hours");
     }
@@ -253,14 +255,68 @@ const ActivityToday = (() => {
         "Please fill out all required fields!",
         "error",
       );
+      loading.restore();
 
       return;
     }
 
-    const submit = (isExternal) => {
+    const normalizedClient = formData.client.trim().toLowerCase();
+
+    /*
+     * First try the external-sheets cache.
+     */
+    const externalClients = AppUtils.cacheGet("externalSheets");
+
+    if (Array.isArray(externalClients)) {
+      const externalClient = externalClients.find(
+        (item) =>
+          String(item?.clientName || "")
+            .trim()
+            .toLowerCase() === normalizedClient,
+      );
+
+      submitHours(externalClient);
+      return;
+    }
+
+    /*
+     * Cache does not exist.
+     * Ask Apps Script directly.
+     */
+    google.script.run
+      .withSuccessHandler((isExternal) => {
+        submitHours(
+          isExternal
+            ? {
+                clientName: formData.client,
+              }
+            : null,
+          loading,
+        );
+      })
+      .withFailureHandler((err) => {
+        console.error("isExternalClient failed:", err);
+
+        AppUtils.showDashboardToast(
+          "Unable to determine client type.",
+          "error",
+        );
+        loading.restore();
+      })
+      .isExternalClient(formData.client);
+
+    function submitHours(externalClient, loading) {
+      const isExternal = Boolean(externalClient);
+
       const gscriptFunc = isExternal
         ? "recordExternalClientHoursFromForm"
         : "recordManualClientHoursFromForm";
+
+      // console.log(`[Hours] Client: ${formData.client}`);
+
+      // console.log(`[Hours] External: ${isExternal}`);
+
+      // console.log(`[Hours] Function: ${gscriptFunc}`);
 
       AppUtils.submitForm({
         gscriptFunc,
@@ -272,45 +328,7 @@ const ActivityToday = (() => {
           handleTaskSaveSuccess(formData);
         },
       });
-    };
-
-    /*
-     * Check external client from cache first.
-     */
-    const externalClients = AppUtils.cacheGet("externalSheets");
-
-    const normalizedClient = formData.client.toLowerCase();
-
-    if (externalClients) {
-      const externalClient = externalClients.find(
-        (item) =>
-          String(item.clientName || "")
-            .trim()
-            .toLowerCase() === normalizedClient,
-      );
-
-      submit(Boolean(externalClient));
-
-      return;
     }
-
-    /*
-     * No external sheet cache.
-     * Check directly through Apps Script.
-     */
-    google.script.run
-      .withSuccessHandler((isExternal) => {
-        submit(Boolean(isExternal));
-      })
-      .withFailureHandler((err) => {
-        console.error("isExternalClient failed:", err);
-
-        AppUtils.showDashboardToast(
-          "Unable to determine client type.",
-          "error",
-        );
-      })
-      .isExternalClient(formData.client);
   }
 
   function handleTaskSaveSuccess(formData) {

@@ -28,7 +28,7 @@ const TodayHoursEditor = (() => {
         <input
           type="hidden"
           id="${CLIENT_ID.replace("#", "")}"
-          value="${escapeHtml(clientName)}"
+          value="${AppUtils.escapeHtml(clientName)}"
         >
 
         <div id="${RECORDS_ID.replace("#", "")}">
@@ -83,7 +83,7 @@ const TodayHoursEditor = (() => {
         if (!response?.success) {
           $modal.find(RECORDS_ID).html(`
             <div class="text-center text-danger py-3">
-              ${escapeHtml(
+              ${AppUtils.escapeHtml(
                 response?.message || "Unable to load today's records.",
               )}
             </div>
@@ -199,7 +199,7 @@ const TodayHoursEditor = (() => {
         </div>
 
         <div class="small text-muted">
-          Date: ${escapeHtml(record.date || "")}
+          Date: ${AppUtils.escapeHtml(record.date || "")}
         </div>
       </div>
     `);
@@ -244,9 +244,9 @@ const TodayHoursEditor = (() => {
 
       options.push(`
       <option
-        value="${escapeHtml(value)}"
+        value="${AppUtils.escapeHtml(value)}"
         ${selected}>
-        ${escapeHtml(text)}
+        ${AppUtils.escapeHtml(text)}
       </option>
     `);
     });
@@ -389,15 +389,6 @@ const TodayHoursEditor = (() => {
         AppUtils.closeModal(MODAL_ID);
       },
     });
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
   return {

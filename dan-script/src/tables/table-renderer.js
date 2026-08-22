@@ -1,3 +1,5 @@
+import { AppUtils } from "../utils";
+
 const TableRenderer = (() => {
   const STATUS_COLUMN_INDEX = 3;
   const ACTIVITY_TABLE_TITLE = "activity today";
@@ -59,12 +61,23 @@ const TableRenderer = (() => {
       !isActivityTable &&
       !isEmptyCell(cell)
     ) {
-      const $status = $("<span>", {
-        class: String(cell),
-        text: String(cell),
-      });
+      const value = String(cell || "").trim();
 
-      $td.append($status);
+      if (value.toUpperCase() === "INACTIVE") {
+        $td.html(`
+        <span class="badge bg-danger text-center">
+          INACTIVE
+        </span>
+      `);
+
+        return $td;
+      }
+
+      $td.html(`
+      <span class="badge bg-success text-center">
+        ${AppUtils.escapeHtml(value || "ACTIVE")}
+      </span>
+    `);
 
       return $td;
     }

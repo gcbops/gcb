@@ -52,7 +52,7 @@ const ReportsOverview = (() => {
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            ${log.name}
+            <i class="fa fa-file-pdf"></i> ${log.name}
           </span>
         </td>
 

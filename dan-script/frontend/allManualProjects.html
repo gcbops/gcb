@@ -1,20 +1,40 @@
 <div class="row">
     <div class="col-md-12">
-        <div class="main-card mb-3 card">
-            <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
-                <table class="align-middle mb-0 table table-borderless table-hover">
-                    <thead>
+      <div class="main-card mb-3 card">
+          <div class="card-body">
+            <div class="d-flex align-items-start mb-3">
+
+                <h5 class="card-title mb-0">
+                  Project Tracker
+                </h5>
+
+                <div class="ms-auto d-flex justify-content-end">
+                  <button type="button" class="btn btn-light mb-2 me-2" id="refresh-projects"><i class="fa fa-sync"></i></button>
+                  <button
+                    type="button"
+                    class="btn btn-primary mb-2"
+                    id="add-new-project"
+                    >
+                    <i class="fa fa-plus"></i>
+                  </button>
+                </div>
+
+            </div>
+              <div id="container" class="mt-4">
+                <table id="projectsTable" class="table table-hover nowrap" style="width:100%">
+                  <thead>
                     <tr>
                         <th class="text-center">#</th>
-                        <th>Projects</th>
+                        <th>Project</th>
                         <th class="text-center">Hours</th>
-                        <th class="text-center">Clients</th>
+                        <th class="text-center">Client</th>
                     </tr>
-                    </thead>
-                    <tbody id="dataBody"></tbody>
+                  </thead>
+                  <tbody id="dataBody"></tbody>
                 </table>
-            </div>
-        </div>
+              </div>
+          </div>
+      </div>
     </div>
 </div>
 <div class="row">
@@ -28,7 +48,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -43,7 +63,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -58,7 +78,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -73,7 +93,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -88,7 +108,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -103,7 +123,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -118,7 +138,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -133,7 +153,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -148,7 +168,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>
@@ -163,7 +183,7 @@
                             <li class="list-group-item">
                                 <div class="widget-content p-0">
                                     <div class="widget-content-wrapper">
-                                        <div class="widget-content-left mr-3">
+                                        <div class="widget-content-left me-3">
                                             <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                 style="width:42px; height:42px; font-weight:600;">GC</div>
                                         </div>

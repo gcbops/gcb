@@ -1,10 +1,10 @@
+import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
 const ReportHistory = (() => {
   function loadReportHistory(
     cacheKey,
     serverFunction,
-    tableBodyId,
     callback = null,
     refresh = false,
   ) {
@@ -15,7 +15,7 @@ const ReportHistory = (() => {
       (data) => {
         const reportLogs = data?.reportLogs || [];
 
-        renderReportHistory(tableBodyId, reportLogs);
+        renderReportHistory(reportLogs);
 
         if (typeof callback !== "function") {
           return;
@@ -33,23 +33,39 @@ const ReportHistory = (() => {
     );
   }
 
-  function renderReportHistory(tableBodyId, reportLogs) {
-    const tbody = $(`#${tableBodyId}`);
+  function renderReportHistory(reportLogs) {
+    const $tbody = $("#data-table-body");
 
-    if (!tbody.length) {
+    if (!$tbody.length) {
       return;
     }
 
-    tbody.empty();
+    const $table = $tbody.closest("table");
+
+    if (!$table.length) {
+      return;
+    }
+
+    const tableId = $table.attr("id");
+
+
+    $tbody.empty();
 
     if (!Array.isArray(reportLogs) || !reportLogs.length) {
-      renderEmptyReportHistory(tbody);
+      renderEmptyReportHistory($tbody);
       return;
     }
 
     reportLogs.forEach((log, index) => {
-      tbody.append(createReportHistoryRow(log, index));
+      $tbody.append(createReportHistoryRow(log, index));
     });
+
+    /*
+     * Initialize after rendering.
+     */
+    if (tableId) {
+      DataTableModule.init("Report History", `#${tableId}`);
+    }
   }
 
   function renderEmptyReportHistory(tbody) {
@@ -78,7 +94,7 @@ const ReportHistory = (() => {
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            ${log.name || ""}
+            <i class="fa fa-file-pdf"></i> ${log.name || ""}
           </span>
         </td>
 
@@ -119,7 +135,6 @@ const ReportHistory = (() => {
     loadReportHistory(
       "monthlyReportsPageData",
       "getMonthlyReportHistory",
-      "monthly-report-history",
       callback,
       refresh,
     );
@@ -129,7 +144,6 @@ const ReportHistory = (() => {
     loadReportHistory(
       "yearlyReportsPageData",
       "getYearlyReportHistory",
-      "yearly-report-history",
       callback,
       refresh,
     );

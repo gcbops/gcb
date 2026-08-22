@@ -105,7 +105,7 @@ const ReportGenerator = (() => {
           .off(ns)
           .on(`click${ns}`, ".btn-cancel, .btn-close", () => {
             AppUtils.closeModal("#app-modal");
-            console.log(loading);
+            
             if (loading) {
               setGenerateState(type, false, loading);
             }

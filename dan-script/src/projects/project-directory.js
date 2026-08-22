@@ -1,8 +1,17 @@
+import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
 const ProjectDirectory = (() => {
+  function init() {
+    bindEvents();
+    loadProjectDirectory();
+  }
+
+  function destroy() {
+    $(document).off(".projectDirectory");
+  }
+
   function loadProjectDirectory(log = false) {
-    bindProjectDirectoryEvents();
 
     const cacheKey = "allProjects";
     const cached = fetchCachedProjects(cacheKey);
@@ -69,9 +78,26 @@ const ProjectDirectory = (() => {
 
     tbody.innerHTML = "";
 
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-muted">
+          No projects found.
+        </td>
+      </tr>
+    `;
+
+      return;
+    }
+
     data.forEach((project, index) => {
       tbody.appendChild(createProjectDirectoryRow(project, index));
     });
+
+    /*
+     * Initialize after rows are rendered.
+     */
+    DataTableModule.init("Projects", "#projectsTable");
 
     if (log) {
       console.log("[ProjectDirectory] Rendered", data.length, "projects");
@@ -81,37 +107,41 @@ const ProjectDirectory = (() => {
   function createProjectDirectoryRow(project, index) {
     const tr = document.createElement("tr");
 
-    const colA = project[0] || "";
-    const colB = project[1] || "";
-    const colC = project[2] || "";
+    const colA = project[0] ?? "";
+    const colB = project[1] ?? "";
+    const colC = project[2] ?? "";
 
     tr.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">
-        ${index + 1}
-      </td>
+    <td class="text-center text-muted font-weight-bold">
+      ${index + 1}
+    </td>
 
-      <td>${colA}</td>
+    <td>
+      ${AppUtils.escapeHtml(colA)}
+    </td>
 
-      <td class="text-center">
-        ${colB}
-      </td>
+    <td class="text-center">
+      ${AppUtils.escapeHtml(colB)}
+    </td>
 
-      <td class="text-center">
-        ${colC}
-      </td>
-    `;
+    <td class="text-center">
+      ${AppUtils.escapeHtml(colC)}
+    </td>
+  `;
 
     return tr;
   }
 
-  function bindProjectDirectoryEvents() {
-    if (document.body.dataset.projectDirectoryBound) {
-      return;
-    }
+  function bindEvents() {
+    $(document)
+      .off("click.projectDirectory", "#add-new-project")
+      .on("click.projectDirectory", "#add-new-project", handleAddProjectClick);
 
-    document.body.dataset.projectDirectoryBound = "true";
-
-    $(document).on("click", "#add-new-project", handleAddProjectClick);
+    $(document)
+      .off("click.projectDirectory", "#refresh-projects")
+      .on("click.projectDirectory", "#refresh-projects", function () {
+        fetchProjectDirectory("allProjects");
+      });
   }
 
   function handleAddProjectClick() {
@@ -123,7 +153,8 @@ const ProjectDirectory = (() => {
   }
 
   return {
-    loadProjectDirectory,
+    init,
+    destroy
   };
 })();
 

@@ -5,6 +5,37 @@ const TableClientSelector = (() => {
   const CLIENTS_CACHE_KEY = "allClientsData";
   const CLIENTS_SERVER_FUNCTION = "getClientDataWithNickname";
 
+  let initialized = false;
+  let currentSelectId = "#client";
+
+  function init(selectId = "#client", isForProject = false) {
+    if (initialized) {
+      return;
+    }
+
+    initialized = true;
+
+    currentSelectId = selectId;
+
+    initClientSelector(selectId, isForProject);
+  }
+
+  function destroy() {
+    if (!initialized) {
+      return;
+    }
+
+    initialized = false;
+
+    const $select = $(currentSelectId);
+
+    if ($select.length) {
+      $select.off(".clientSelector");
+    }
+
+    currentSelectId = "#client";
+  }
+
   function initClientSelector(selectId = "#client", isForProject = false) {
     const $select = $(selectId);
 
@@ -71,7 +102,8 @@ const TableClientSelector = (() => {
   }
 
   return {
-    initClientSelector,
+    init,
+    destroy,
   };
 })();
 

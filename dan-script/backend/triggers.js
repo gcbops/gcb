@@ -68,6 +68,26 @@ const SCHEDULED_TRIGGERS = {
         .create();
     },
   },
+
+  scheduledBackup: {
+    functionName: "scheduledBackup",
+
+    required: () => {
+      return Boolean(
+        PropertiesService.getScriptProperties().getProperty(
+          "MAIN_SHEETS_FOLDER_ID",
+        ) &&
+        PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID"),
+      );
+    },
+
+    create: () => {
+      ScriptApp.newTrigger("scheduledBackup")
+        .timeBased()
+        .everyMonths(3)
+        .create();
+    },
+  },
 };
 
 function getTrigger(functionName) {

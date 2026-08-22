@@ -164,12 +164,12 @@ const upsellOverviewPage = (() => {
         .map(
           (row) => `
           <tr>
-            <td>${escapeHtml(row[0] ?? "")}</td>
+            <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
             <td style="text-align:center;">
-              ${escapeHtml(row[1] ?? "")}
+              ${AppUtils.escapeHtml(row[1] ?? "")}
             </td>
             <td style="text-align:center;">
-              ${escapeHtml(row[2] ?? "")}
+              ${AppUtils.escapeHtml(row[2] ?? "")}
             </td>
           </tr>
         `,
@@ -182,19 +182,6 @@ const upsellOverviewPage = (() => {
     if (Array.isArray(tableData) && tableData.length > 0) {
       DataTableModule.init("Upsell", "#upsellTable");
     }
-  }
-
-  function escapeHtml(text) {
-    if (text === null || text === undefined) {
-      return "";
-    }
-
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
   return { init, destroy };

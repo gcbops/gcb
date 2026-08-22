@@ -56,6 +56,7 @@ const CONFIG = {
       "Year Log Generator",
       "Yearly Report PDF Generator",
       "Current Year Log",
+      "External Sheets",
     ]),
   },
 
@@ -65,12 +66,7 @@ const CONFIG = {
         ...PAID_OWED_DIALOG,
         title: "Outstanding Accounts",
       },
-
-      "Active Clients": {
-        ...PAID_OWED_DIALOG,
-        title: "Active Clients",
-      },
-
+      
       "Top Paid": {
         ...PAID_OWED_DIALOG,
         title: "Top Paid Accounts",

@@ -5,17 +5,40 @@ import { TableClientSelector } from "../tables/client-selector.js";
 import { ActivityToday } from "../tables/activity-today.js";
 
 const allManualProjectsPage = (() => {
+  let bound = false;
+
   function init() {
-    ProjectDirectory.loadProjectDirectory();
+    if (bound) {
+      return;
+    }
+
+    bound = true;
+
+    ProjectDirectory.init();
 
     ClientRanking.renderTopPaidClients();
     ProjectRankings.renderTopProjects();
 
     ActivityToday.setupTaskForm();
-    TableClientSelector.initClientSelector("#client", true);
+    TableClientSelector.init("#client", true);
   }
 
-  return { init };
+  function destroy() {
+    if (!bound) {
+      return;
+    }
+
+    bound = false;
+
+    ProjectDirectory.destroy?.();
+    ActivityToday.destroy?.();
+    TableClientSelector.destroy?.();
+  }
+
+  return {
+    init,
+    destroy,
+  };
 })();
 
 export { allManualProjectsPage };

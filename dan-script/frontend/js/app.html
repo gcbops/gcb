@@ -6,6 +6,24 @@
     const APP_CACHE_PREFIX = "gcb_";
     const CACHE_TTL = 24 * 60 * 60 * 1e3;
     let notificationAudio = null;
+    const APP_CONFIG = {
+      HTML_VERSIONING: false
+    };
+    let htmlVersion = null;
+    function getHtmlVersion() {
+      if (!APP_CONFIG.HTML_VERSIONING) {
+        return "";
+      }
+      if (!htmlVersion) {
+        const randomPart = Math.random().toString(36).substring(2, 8);
+        htmlVersion = `${Date.now()}_${randomPart}`;
+      }
+      return htmlVersion;
+    }
+    function getHtmlCacheKey(cacheKey) {
+      const version = getHtmlVersion();
+      return version ? `${cacheKey}_${version}` : cacheKey;
+    }
     function getStorageKey(key) {
       return `${APP_CACHE_PREFIX}${key}`;
     }
@@ -161,6 +179,12 @@
         })[gFuncName](...args);
       }, 0);
     }
+    function escapeHtml(value) {
+      if (value === null || value === void 0) {
+        return "";
+      }
+      return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
     function showError(err) {
       const fields = ["message", "error", "details"];
       let msg = "";
@@ -225,7 +249,7 @@
       toastr.options = {
         closeButton: true,
         progressBar: true,
-        positionClass: "toast-bottom-center",
+        positionClass: "toast-top-right",
         timeOut: 4e3
       };
       toastr[toastType](msg);
@@ -512,7 +536,11 @@
       resetCacheKeys,
       // gscript
       cachedGScriptCall,
+      // html
+      getHtmlVersion,
+      getHtmlCacheKey,
       // utils
+      escapeHtml,
       showError,
       playNotif,
       getInitials,
@@ -586,7 +614,7 @@
           <div class="widget-content p-0">
             <div class="widget-content-wrapper">
 
-              <div class="widget-content-left mr-3">
+              <div class="widget-content-left me-3">
                 <div
                   class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
                   text-white rounded-circle d-flex align-items-center justify-content-center"
@@ -675,254 +703,6 @@
     return {
       renderTopPaidClients,
       renderLowestPaidClients
-    };
-  })();
-
-  // src/clients/client-directory.js
-  var ClientDirectory = /* @__PURE__ */ (() => {
-    function loadClientDirectory(source = "allClientsData") {
-      bindClientDirectoryEvents();
-      const cached = fetchCachedClientDirectory(source);
-      if (cached) {
-        renderClientDirectory(cached);
-        refreshClientDirectory(source, cached);
-        return;
-      }
-      fetchClientDirectory(source);
-    }
-    function fetchCachedClientDirectory(source) {
-      const cached = AppUtils.cacheGet(source);
-      if (!Array.isArray(cached) || !cached.length) {
-        return null;
-      }
-      return cached;
-    }
-    function fetchClientDirectory(source) {
-      AppUtils.cachedGScriptCall(
-        source,
-        "getClientDataWithNickname",
-        [source],
-        (data) => {
-          if (!Array.isArray(data)) {
-            AppUtils.showDashboardToast(
-              "Something went wrong loading clients!",
-              "error"
-            );
-            return;
-          }
-          renderClientDirectory(data);
-        }
-      );
-    }
-    function refreshClientDirectory(source, cached) {
-      AppUtils.cachedGScriptCall(
-        source,
-        "getClientDataWithNickname",
-        [source],
-        (fresh) => {
-          if (!Array.isArray(fresh)) {
-            return;
-          }
-          if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
-            renderClientDirectory(fresh);
-          }
-        }
-      );
-    }
-    function renderClientDirectory(data) {
-      const tbody = document.getElementById("dataBody");
-      if (!tbody) {
-        return;
-      }
-      tbody.innerHTML = "";
-      data.forEach((client, index) => {
-        tbody.appendChild(createClientDirectoryRow(client, index));
-      });
-    }
-    function createClientDirectoryRow(client, index) {
-      const row = document.createElement("tr");
-      const initials = AppUtils.getInitials(client.name);
-      row.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">${index + 1}</td>
-
-      <td>
-        <div class="widget-content p-0">
-          <div class="widget-content-wrapper">
-            <div class="widget-content-left mr-3">
-              <div
-                class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
-                style="width:40px;height:40px;font-weight:600;"
-              >
-                ${initials}
-              </div>
-            </div>
-
-            <div class="widget-content-left flex2">
-              <div class="widget-heading">${client.name}</div>
-              <div class="widget-subheading opacity-7">${client.role || ""}</div>
-            </div>
-          </div>
-        </div>
-      </td>
-
-      <td class="text-center text-muted">${client.id || ""}</td>
-
-      <td class="text-center text-muted">${client.city || ""}</td>
-
-      <td class="text-center">
-        <div class="badge text-white ${getStatusColor(client.status)}">
-          ${client.status || ""}
-        </div>
-      </td>
-
-      <td class="text-center action-btn">
-        <i class="pe-7s-note open-client-btn"></i>
-      </td>
-    `;
-      return row;
-    }
-    function bindClientDirectoryEvents() {
-      const tbody = document.getElementById("dataBody");
-      if (!tbody || tbody.dataset.bound) {
-        return;
-      }
-      tbody.dataset.bound = "true";
-      tbody.addEventListener("click", handleClientDirectoryClick);
-    }
-    function handleClientDirectoryClick(e) {
-      const btn = e.target.closest(".open-client-btn");
-      if (!btn) {
-        return;
-      }
-      const row = btn.closest("tr");
-      if (!row) {
-        return;
-      }
-      const clientName = row.querySelector(".widget-heading")?.textContent;
-      AppUtils.showDashboardToast("Redirecting to sheet!", "info");
-      google.script.run.withSuccessHandler((url) => {
-        if (url && url.startsWith("http")) {
-          window.open(url, "_blank");
-        } else {
-          AppUtils.showError(url);
-        }
-      }).withFailureHandler((err) => {
-        AppUtils.showError(err);
-      }).goToPresentClient(clientName);
-    }
-    function getStatusColor(status) {
-      if (!status) {
-        return "btn-secondary";
-      }
-      status = status.toLowerCase();
-      if (status.includes("online") || status === "active") {
-        return "bg-grow-early";
-      }
-      if (status.includes("idle")) {
-        return "bg-sunny-morning";
-      }
-      if (status.includes("offline") || status === "inactive") {
-        return "bg-love-kiss";
-      }
-      return "btn-secondary";
-    }
-    return {
-      loadClientDirectory
-    };
-  })();
-
-  // src/projects/project-ranking.js
-  var ProjectRankings = /* @__PURE__ */ (() => {
-    function renderTopProjects() {
-      renderProjectRanking({
-        cacheKey: "topProjects",
-        method: "getTopProjects",
-        listSelector: "#top-projects",
-        avatarClass: "bg-malibu-beach",
-        sortFn: sortTopProjects,
-        iconClass: "fas fa-briefcase",
-        iconColor: "text-warning"
-      });
-    }
-    function renderLowestProjects() {
-      renderProjectRanking({
-        cacheKey: "lowestProjects",
-        method: "getTopProjects",
-        listSelector: "#lowest-projects",
-        avatarClass: "bg-love-kiss",
-        sortFn: sortLowestProjects,
-        iconClass: "fas fa-exclamation-circle",
-        iconColor: "text-danger"
-      });
-    }
-    function renderProjectRanking(config) {
-      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
-        if (!Array.isArray(data) || !data.length) {
-          return;
-        }
-        const list = document.querySelector(config.listSelector);
-        if (!list) {
-          return;
-        }
-        list.innerHTML = "";
-        renderProjectList(list, config.sortFn([...data]), config);
-      });
-    }
-    function renderProjectList(list, projects, config) {
-      projects.forEach((project) => {
-        list.appendChild(createProjectItem(project, config));
-      });
-    }
-    function createProjectItem(project, config) {
-      const [projectName, hours, client] = project;
-      const li = document.createElement("li");
-      li.className = "list-group-item";
-      li.innerHTML = `
-      <div class="widget-content p-0">
-        <div class="widget-content-wrapper">
-
-          <div class="widget-content-left mr-3">
-            <div
-              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-              text-white rounded-circle d-flex align-items-center justify-content-center"
-              style="width:42px;height:42px;font-weight:600;">
-              ${AppUtils.getInitials(client)}
-            </div>
-          </div>
-
-          <div class="widget-content-left">
-            <div class="widget-heading">
-              ${projectName}
-            </div>
-
-            <div class="widget-subheading">
-              ${client}
-            </div>
-          </div>
-
-          <div class="widget-content-right font-weight-bold">
-            <div class="font-size-xs text-muted">
-              <span>${hours}</span>
-              <small class="${config.iconColor} pl-2">
-                <i class="${config.iconClass}"></i>
-              </small>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    `;
-      return li;
-    }
-    function sortTopProjects(data) {
-      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
-    }
-    function sortLowestProjects(data) {
-      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
-    }
-    return {
-      renderTopProjects,
-      renderLowestProjects
     };
   })();
 
@@ -1148,6 +928,7 @@
       event.preventDefault();
       const $form = $(this);
       let $submitBtn = $form.find('button[type="submit"]');
+      const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
       if (!$submitBtn.length) {
         $submitBtn = $("#submit-new-hours");
       }
@@ -1162,9 +943,35 @@
           "Please fill out all required fields!",
           "error"
         );
+        loading.restore();
         return;
       }
-      const submit = (isExternal) => {
+      const normalizedClient = formData.client.trim().toLowerCase();
+      const externalClients = AppUtils.cacheGet("externalSheets");
+      if (Array.isArray(externalClients)) {
+        const externalClient = externalClients.find(
+          (item) => String(item?.clientName || "").trim().toLowerCase() === normalizedClient
+        );
+        submitHours(externalClient);
+        return;
+      }
+      google.script.run.withSuccessHandler((isExternal) => {
+        submitHours(
+          isExternal ? {
+            clientName: formData.client
+          } : null,
+          loading
+        );
+      }).withFailureHandler((err) => {
+        console.error("isExternalClient failed:", err);
+        AppUtils.showDashboardToast(
+          "Unable to determine client type.",
+          "error"
+        );
+        loading.restore();
+      }).isExternalClient(formData.client);
+      function submitHours(externalClient, loading2) {
+        const isExternal = Boolean(externalClient);
         const gscriptFunc = isExternal ? "recordExternalClientHoursFromForm" : "recordManualClientHoursFromForm";
         AppUtils.submitForm({
           gscriptFunc,
@@ -1175,25 +982,7 @@
             handleTaskSaveSuccess(formData);
           }
         });
-      };
-      const externalClients = AppUtils.cacheGet("externalSheets");
-      const normalizedClient = formData.client.toLowerCase();
-      if (externalClients) {
-        const externalClient = externalClients.find(
-          (item) => String(item.clientName || "").trim().toLowerCase() === normalizedClient
-        );
-        submit(Boolean(externalClient));
-        return;
       }
-      google.script.run.withSuccessHandler((isExternal) => {
-        submit(Boolean(isExternal));
-      }).withFailureHandler((err) => {
-        console.error("isExternalClient failed:", err);
-        AppUtils.showDashboardToast(
-          "Unable to determine client type.",
-          "error"
-        );
-      }).isExternalClient(formData.client);
     }
     function handleTaskSaveSuccess(formData) {
       AppUtils.showDashboardToast(
@@ -1394,7 +1183,12 @@
     const MAIN_TABLES = [
       "top paid accounts",
       "activity today",
-      "outstanding accounts"
+      "outstanding accounts",
+      "report history",
+      "projects",
+      "upsell",
+      "clients",
+      "active clients"
     ];
     const NUMERIC_SORT_TABLES = ["top paid accounts", "outstanding accounts"];
     function init(title, tableId, debug = false) {
@@ -1562,17 +1356,8 @@
         addColumnClass(tableId, 2, "highlight");
         addColumnClass(tableId, 3, "dt-center");
         highlightTopRows(tableId, 3);
-      } else if (cleanTitle === "active clients") {
-        applyStatusFilter(tableId, "Active");
       }
       log("Extra table logic completed:", title);
-    }
-    function applyStatusFilter(tableId, status) {
-      const instance = getInstance(tableId);
-      if (!instance) {
-        return;
-      }
-      instance.order([3, "asc"]).column(3).search(status ? `^${status}$` : "", true, false).draw();
     }
     function highlightTopRows(tableId, rowCount, rowClass = "highlight-row") {
       const $tbody = $(`${tableId} tbody`);
@@ -1600,6 +1385,297 @@
       init,
       getInstance,
       destroyAll
+    };
+  })();
+
+  // src/clients/client-directory.js
+  var ClientDirectory = /* @__PURE__ */ (() => {
+    let initialized = false;
+    function init(source = "allClientsData") {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
+      bindClientDirectoryEvents();
+      loadClientDirectory(source);
+    }
+    function destroy() {
+      if (!initialized) {
+        return;
+      }
+      initialized = false;
+      unbindClientDirectoryEvents();
+    }
+    function loadClientDirectory(source = "allClientsData") {
+      bindClientDirectoryEvents();
+      const cached = fetchCachedClientDirectory(source);
+      if (cached) {
+        renderClientDirectory(cached);
+        refreshClientDirectory(source, cached);
+        return;
+      }
+      fetchClientDirectory(source);
+    }
+    function fetchCachedClientDirectory(source) {
+      const cached = AppUtils.cacheGet(source);
+      if (!Array.isArray(cached) || !cached.length) {
+        return null;
+      }
+      return cached;
+    }
+    function fetchClientDirectory(source) {
+      AppUtils.cachedGScriptCall(
+        source,
+        "getClientDataWithNickname",
+        [source],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showDashboardToast(
+              "Something went wrong loading clients!",
+              "error"
+            );
+            return;
+          }
+          renderClientDirectory(data);
+        }
+      );
+    }
+    function refreshClientDirectory(source, cached) {
+      AppUtils.cachedGScriptCall(
+        source,
+        "getClientDataWithNickname",
+        [source],
+        (fresh) => {
+          if (!Array.isArray(fresh)) {
+            return;
+          }
+          if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
+            renderClientDirectory(fresh);
+          }
+        }
+      );
+    }
+    function renderClientDirectory(data) {
+      const tbody = document.getElementById("dataBody");
+      if (!tbody) {
+        return;
+      }
+      tbody.innerHTML = "";
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-muted">
+          No clients found.
+        </td>
+      </tr>
+    `;
+        return;
+      }
+      data.forEach((client, index) => {
+        tbody.appendChild(createClientDirectoryRow(client, index));
+      });
+      DataTableModule.init("Clients", "#clientsTable");
+    }
+    function createClientDirectoryRow(client, index) {
+      const row = document.createElement("tr");
+      const initials = AppUtils.getInitials(client.name);
+      const status = String(client.status || "").trim();
+      const statusHtml = status.toLowerCase() === "inactive" ? `
+        <span class="badge bg-danger text-center">
+          Inactive
+        </span>
+      ` : `
+        <span class="badge bg-success text-center">
+          ${AppUtils.escapeHtml(status || "Active")}
+        </span>
+      `;
+      row.innerHTML = `
+    <td class="text-center text-muted font-weight-bold">
+      ${index + 1}
+    </td>
+
+    <td>
+      <div class="widget-content p-0">
+        <div class="widget-content-wrapper">
+          <div class="widget-content-left me-3">
+            <div
+              class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
+              style="width:40px;height:40px;font-weight:600;"
+            >
+              ${AppUtils.escapeHtml(initials)}
+            </div>
+          </div>
+
+          <div class="widget-content-left flex2">
+            <div class="widget-heading">
+              ${AppUtils.escapeHtml(client.name)}
+            </div>
+
+            <div class="widget-subheading opacity-7">
+              ${AppUtils.escapeHtml(client.role)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </td>
+
+    <td class="text-center text-muted">
+      ${AppUtils.escapeHtml(client.projects)}
+    </td>
+
+    <td class="text-center text-muted">
+      ${AppUtils.escapeHtml(client.paid)}
+    </td>
+
+    <td class="text-center text-muted">
+      ${AppUtils.escapeHtml(client.owed)}
+    </td>
+
+    <td class="text-center">
+      ${statusHtml}
+    </td>
+
+    <td class="text-center action-btn">
+      <i class="pe-7s-note open-client-btn"></i>
+    </td>
+  `;
+      return row;
+    }
+    function bindClientDirectoryEvents() {
+      const tbody = document.getElementById("dataBody");
+      if (!tbody) {
+        return;
+      }
+      tbody.removeEventListener("click", handleClientDirectoryClick);
+      tbody.addEventListener("click", handleClientDirectoryClick);
+    }
+    function unbindClientDirectoryEvents() {
+      const tbody = document.getElementById("dataBody");
+      if (!tbody) {
+        return;
+      }
+      tbody.removeEventListener("click", handleClientDirectoryClick);
+    }
+    function handleClientDirectoryClick(e) {
+      const btn = e.target.closest(".open-client-btn");
+      if (!btn) {
+        return;
+      }
+      const row = btn.closest("tr");
+      if (!row) {
+        return;
+      }
+      const clientName = row.querySelector(".widget-heading")?.textContent;
+      AppUtils.showDashboardToast("Redirecting to sheet!", "info");
+      google.script.run.withSuccessHandler((url) => {
+        if (url && url.startsWith("http")) {
+          window.open(url, "_blank");
+        } else {
+          AppUtils.showError(url);
+        }
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+      }).goToPresentClient(clientName);
+    }
+    return {
+      init,
+      destroy,
+      refreshClientDirectory
+    };
+  })();
+
+  // src/projects/project-ranking.js
+  var ProjectRankings = /* @__PURE__ */ (() => {
+    function renderTopProjects() {
+      renderProjectRanking({
+        cacheKey: "topProjects",
+        method: "getTopProjects",
+        listSelector: "#top-projects",
+        avatarClass: "bg-malibu-beach",
+        sortFn: sortTopProjects,
+        iconClass: "fas fa-briefcase",
+        iconColor: "text-warning"
+      });
+    }
+    function renderLowestProjects() {
+      renderProjectRanking({
+        cacheKey: "lowestProjects",
+        method: "getTopProjects",
+        listSelector: "#lowest-projects",
+        avatarClass: "bg-love-kiss",
+        sortFn: sortLowestProjects,
+        iconClass: "fas fa-exclamation-circle",
+        iconColor: "text-danger"
+      });
+    }
+    function renderProjectRanking(config) {
+      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
+        if (!Array.isArray(data) || !data.length) {
+          return;
+        }
+        const list = document.querySelector(config.listSelector);
+        if (!list) {
+          return;
+        }
+        list.innerHTML = "";
+        renderProjectList(list, config.sortFn([...data]), config);
+      });
+    }
+    function renderProjectList(list, projects, config) {
+      projects.forEach((project) => {
+        list.appendChild(createProjectItem(project, config));
+      });
+    }
+    function createProjectItem(project, config) {
+      const [projectName, hours, client] = project;
+      const li = document.createElement("li");
+      li.className = "list-group-item";
+      li.innerHTML = `
+      <div class="widget-content p-0">
+        <div class="widget-content-wrapper">
+
+          <div class="widget-content-left me-3">
+            <div
+              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
+              text-white rounded-circle d-flex align-items-center justify-content-center"
+              style="width:42px;height:42px;font-weight:600;">
+              ${AppUtils.getInitials(client)}
+            </div>
+          </div>
+
+          <div class="widget-content-left">
+            <div class="widget-heading">
+              ${projectName}
+            </div>
+
+            <div class="widget-subheading">
+              ${client}
+            </div>
+          </div>
+
+          <div class="widget-content-right font-weight-bold">
+            <div class="font-size-xs text-muted">
+              <span>${hours}</span>
+              <small class="${config.iconColor} pl-2">
+                <i class="${config.iconClass}"></i>
+              </small>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+      return li;
+    }
+    function sortTopProjects(data) {
+      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
+    }
+    function sortLowestProjects(data) {
+      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
+    }
+    return {
+      renderTopProjects,
+      renderLowestProjects
     };
   })();
 
@@ -1637,11 +1713,20 @@
       log(`[Row ${rowIndex}][Col ${colIndex}] value:`, cell);
       const $td = $("<td>");
       if (colIndex === STATUS_COLUMN_INDEX && !isActivityTable && !isEmptyCell(cell)) {
-        const $status = $("<span>", {
-          class: String(cell),
-          text: String(cell)
-        });
-        $td.append($status);
+        const value = String(cell || "").trim();
+        if (value.toUpperCase() === "INACTIVE") {
+          $td.html(`
+        <span class="badge bg-danger text-center">
+          INACTIVE
+        </span>
+      `);
+          return $td;
+        }
+        $td.html(`
+      <span class="badge bg-success text-center">
+        ${AppUtils.escapeHtml(value || "ACTIVE")}
+      </span>
+    `);
         return $td;
       }
       $td.text(isEmptyCell(cell) ? "" : String(cell));
@@ -1733,7 +1818,7 @@
         <input
           type="hidden"
           id="${CLIENT_ID.replace("#", "")}"
-          value="${escapeHtml(clientName)}"
+          value="${AppUtils.escapeHtml(clientName)}"
         >
 
         <div id="${RECORDS_ID.replace("#", "")}">
@@ -1779,7 +1864,7 @@
           if (!response?.success) {
             $modal.find(RECORDS_ID).html(`
             <div class="text-center text-danger py-3">
-              ${escapeHtml(
+              ${AppUtils.escapeHtml(
               response?.message || "Unable to load today's records."
             )}
             </div>
@@ -1881,7 +1966,7 @@
         </div>
 
         <div class="small text-muted">
-          Date: ${escapeHtml(record.date || "")}
+          Date: ${AppUtils.escapeHtml(record.date || "")}
         </div>
       </div>
     `);
@@ -1909,9 +1994,9 @@
         const selected = String(value) === String(selectedTask) ? " selected" : "";
         options.push(`
       <option
-        value="${escapeHtml(value)}"
+        value="${AppUtils.escapeHtml(value)}"
         ${selected}>
-        ${escapeHtml(text)}
+        ${AppUtils.escapeHtml(text)}
       </option>
     `);
       });
@@ -2005,9 +2090,6 @@
           AppUtils.closeModal(MODAL_ID);
         }
       });
-    }
-    function escapeHtml(value) {
-      return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
     return {
       open
@@ -2163,10 +2245,10 @@
             $tbodyClient.append(
               `
               <tr>
-                <td>${escapeHtml(row[0] ?? "")}</td>
-                <td>${escapeHtml(row[1] ?? "")}</td>
-                <td>${escapeHtml(row[2] ?? "")}</td>
-                <td>${escapeHtml(row[3] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[1] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[2] ?? "")}</td>
+                <td>${AppUtils.escapeHtml(row[3] ?? "")}</td>
               </tr>
               `
             );
@@ -2231,7 +2313,7 @@
           $row.find("td").eq(badgeColumn).append(
             `
             <span
-              class="badge badge-pill badge-success badge-new-report ml-2">
+              class="badge badge-pill badge-success badge-new-report ms-2">
               NEW
             </span>
             `
@@ -2242,12 +2324,6 @@
           }, 15e3);
         });
       });
-    }
-    function escapeHtml(text) {
-      if (text === null || text === void 0) {
-        return "";
-      }
-      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
     return {
       loadClientTasks,
@@ -2264,6 +2340,27 @@
   var TableClientSelector = /* @__PURE__ */ (() => {
     const CLIENTS_CACHE_KEY = "allClientsData";
     const CLIENTS_SERVER_FUNCTION = "getClientDataWithNickname";
+    let initialized = false;
+    let currentSelectId = "#client";
+    function init(selectId = "#client", isForProject = false) {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
+      currentSelectId = selectId;
+      initClientSelector(selectId, isForProject);
+    }
+    function destroy() {
+      if (!initialized) {
+        return;
+      }
+      initialized = false;
+      const $select = $(currentSelectId);
+      if ($select.length) {
+        $select.off(".clientSelector");
+      }
+      currentSelectId = "#client";
+    }
     function initClientSelector(selectId = "#client", isForProject = false) {
       const $select = $(selectId);
       if (!$select.length) {
@@ -2310,7 +2407,8 @@
       });
     }
     return {
-      initClientSelector
+      init,
+      destroy
     };
   })();
 
@@ -2332,6 +2430,8 @@
       bound = false;
       $(document).off("click.allClients");
       $(document).off("submit.allClients");
+      ClientDirectory.destroy?.();
+      TableClientSelector.destroy?.();
     };
     const bindActions = () => {
       $(document).off("click.allClients", "#add-new-client-sheet").on("click.allClients", "#add-new-client-sheet", function() {
@@ -2360,17 +2460,19 @@
               ).syncClientSheetList();
               AppUtils.cacheClear("allClientsData");
               if (RouterModule.getCurrentPage() === "addManualHours") {
-                TableClientSelector.initClientSelector();
+                TableClientSelector.init();
               }
-              ClientDirectory.loadClientDirectory("allClientsData");
+              ClientDirectory.init("allClientsData");
               $("#sheet_name").val("");
             }
           });
         });
+      }).off("click.allClients", "#sync-clients-list").on("click.allClients", "#sync-clients-list", function() {
+        ClientDirectory.refreshClientDirectory("allClientsData", null);
       });
     };
     const loadData = () => {
-      ClientDirectory.loadClientDirectory("allClientsData");
+      ClientDirectory.init("allClientsData");
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
     };
@@ -2512,12 +2614,12 @@
         html = tableData.map(
           (row) => `
           <tr>
-            <td>${escapeHtml(row[0] ?? "")}</td>
+            <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
             <td style="text-align:center;">
-              ${escapeHtml(row[1] ?? "")}
+              ${AppUtils.escapeHtml(row[1] ?? "")}
             </td>
             <td style="text-align:center;">
-              ${escapeHtml(row[2] ?? "")}
+              ${AppUtils.escapeHtml(row[2] ?? "")}
             </td>
           </tr>
         `
@@ -2527,12 +2629,6 @@
       if (Array.isArray(tableData) && tableData.length > 0) {
         DataTableModule.init("Upsell", "#upsellTable");
       }
-    }
-    function escapeHtml(text) {
-      if (text === null || text === void 0) {
-        return "";
-      }
-      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
     return { init, destroy };
   })();
@@ -2686,14 +2782,14 @@
       }
       switch (type) {
         case "yearly":
-          return drawYearlyChart(ctx, type, data);
+          return drawYearlyChart(ctx, type, data, true);
         case "hourly":
-          return drawHourlyChart(ctx, type, data);
+          return drawHourlyChart(ctx, type, data, true);
         case "monthly-prev-merged":
-          return drawMonthlyComparisonChart(ctx, type, data);
+          return drawMonthlyComparisonChart(ctx, type, data, true);
         case "daily":
         case "monthly":
-          return drawLineChart(ctx, type, data, animated);
+          return drawLineChart(ctx, type, data, animated, true);
         default:
           return AppUtils.showError(`Unknown chart type: ${type}`);
       }
@@ -2703,7 +2799,7 @@
         chart.resize();
       });
     }
-    function drawYearlyChart(ctx, type, data) {
+    function drawYearlyChart(ctx, type, data, animated = false) {
       const labels = data.map((row) => row?.[0] ?? "");
       const paid = data.map((row) => Number(row?.[2]) || 0);
       const owed = data.map((row) => Number(row?.[3]) || 0);
@@ -2720,7 +2816,13 @@
                 ctx,
                 "rgba(14, 165, 233, 0.8)",
                 "rgba(14, 165, 233, 0.4)"
-              )
+              ),
+              borderColor: "#0ea5e9",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75
             },
             {
               label: "Net Owed",
@@ -2729,7 +2831,13 @@
                 ctx,
                 "rgba(249, 115, 22, 0.8)",
                 "rgba(249, 115, 22, 0.4)"
-              )
+              ),
+              borderColor: "#f97316",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75
             },
             {
               label: "Net Hrs",
@@ -2738,56 +2846,90 @@
                 ctx,
                 "rgba(16, 185, 129, 0.8)",
                 "rgba(16, 185, 129, 0.4)"
-              )
+              ),
+              borderColor: "#10b981",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: animated ? void 0 : false,
+          ...animated && {
+            animations: {
+              y: {
+                duration: 1200,
+                easing: "easeOutQuart",
+                from: 0
+              }
+            }
+          },
+          interaction: {
+            mode: "index",
+            axis: "x",
+            intersect: false
+          },
           plugins: {
             legend: {
               position: "top"
             },
             tooltip: {
               mode: "index",
+              axis: "x",
               intersect: false,
               callbacks: {
-                label: (context) => `${context.dataset.label}: ${context.formattedValue} hrs`
+                label: (context) => {
+                  const value = Number(context.parsed.y) || 0;
+                  return `${context.dataset.label}: ${value.toLocaleString()} hrs`;
+                }
               }
             }
           },
-          interaction: {
-            mode: "index",
-            intersect: false
-          },
           scales: {
             x: {
+              stacked: false,
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
                 }
+              },
+              border: {
+                display: false
               }
             },
             y: {
               beginAtZero: true,
+              stacked: false,
+              title: {
+                display: true,
+                text: "Hours"
+              },
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
-                }
+                },
+                callback: (value) => `${value} hrs`
+              },
+              border: {
+                display: false
               }
             }
           }
         }
       });
     }
-    function drawHourlyChart(ctx, type, data) {
+    function drawHourlyChart(ctx, type, data, animated = false) {
       const labels = data.map((row) => String(row?.[0] || ""));
       const values = data.map((row) => Number(row?.[1]) || 0);
       chartInstances[type] = new Chart(ctx, {
@@ -2805,13 +2947,34 @@
               ),
               borderColor: "#0ea5e9",
               borderWidth: 2,
-              borderRadius: 6
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75,
+              hoverBackgroundColor: "rgba(14, 165, 233, 0.95)",
+              hoverBorderColor: "#0284c7",
+              hoverBorderWidth: 2
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: animated ? void 0 : false,
+          ...animated && {
+            animations: {
+              y: {
+                duration: 1200,
+                easing: "easeOutQuart",
+                from: 0
+              }
+            }
+          },
+          interaction: {
+            mode: "index",
+            axis: "x",
+            intersect: false
+          },
           plugins: {
             legend: {
               display: false
@@ -2823,100 +2986,183 @@
               font: {
                 size: 18,
                 weight: "600"
+              },
+              padding: {
+                bottom: 16
               }
             },
             tooltip: {
+              enabled: true,
+              mode: "index",
+              axis: "x",
+              intersect: false,
+              backgroundColor: "#0f172a",
+              titleColor: "#ffffff",
+              bodyColor: "#ffffff",
+              padding: 12,
+              bodySpacing: 6,
+              displayColors: true,
               callbacks: {
-                label: (context) => `${context.formattedValue} hrs`
+                title: (tooltipItems) => {
+                  return tooltipItems[0]?.label || "";
+                },
+                label: (context) => {
+                  const value = Number(context.parsed.y) || 0;
+                  return `Total: ${value.toLocaleString()} hrs`;
+                }
               }
             }
           },
           scales: {
             x: {
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
-                }
+                },
+                autoSkip: true,
+                maxRotation: 0
+              },
+              border: {
+                display: false
               }
             },
             y: {
               beginAtZero: true,
+              title: {
+                display: true,
+                text: "Hours"
+              },
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
-                }
+                },
+                callback: (value) => `${value} hrs`
+              },
+              border: {
+                display: false
               }
             }
           }
         }
       });
     }
-    function drawMonthlyComparisonChart(ctx, type, data) {
+    function drawMonthlyComparisonChart(ctx, type, data, animated = false) {
       const prev = fillMonthlyData(data?.prevYear || []);
       const current = fillMonthlyData(data?.currentYear || []);
       chartInstances[type] = new Chart(ctx, {
-        type: "bar",
+        type: "line",
         data: {
           labels: REPORT_MONTHS,
           datasets: [
             {
               label: "Previous Year",
               data: prev,
+              // Same orange color/gradient as the bar chart
+              borderColor: "#f97316",
               backgroundColor: createGradient(
                 ctx,
-                "rgba(249, 115, 22, 0.8)",
-                "rgba(249, 115, 22, 0.4)"
-              )
+                "rgba(249, 115, 22, 0.5)",
+                "rgba(249, 115, 22, 0.05)"
+              ),
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#f97316",
+              pointBorderWidth: 2,
+              borderWidth: 2
             },
             {
               label: "Current Year",
               data: current,
+              // Green gradient for the current year
+              borderColor: "#22c55e",
               backgroundColor: createGradient(
                 ctx,
-                "rgba(14, 165, 233, 0.8)",
-                "rgba(14, 165, 233, 0.4)"
-              )
+                "rgba(34, 197, 94, 0.5)",
+                "rgba(34, 197, 94, 0.05)"
+              ),
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#22c55e",
+              pointBorderWidth: 2,
+              borderWidth: 2
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: "top"
+          animation: animated ? void 0 : false,
+          ...animated && {
+            animations: {
+              tension: {
+                duration: 1500,
+                easing: "easeInOutQuart",
+                from: 1,
+                to: 0.4,
+                loop: true
+              }
             }
           },
           interaction: {
             mode: "index",
+            axis: "x",
             intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: "top"
+            },
+            tooltip: {
+              mode: "index",
+              axis: "x",
+              intersect: false,
+              callbacks: {
+                label: function(context) {
+                  const value = Number(context.parsed.y) || 0;
+                  return `${context.dataset.label}: ${value.toLocaleString()}`;
+                }
+              }
+            }
           },
           scales: {
             x: {
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
                 }
+              },
+              border: {
+                display: false
               }
             },
             y: {
               beginAtZero: true,
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
                 }
+              },
+              border: {
+                display: false
               }
             }
           }
@@ -2941,23 +3187,32 @@
     function drawLineChart(ctx, type, data, animated = false) {
       const labels = data.map((row) => row?.[0] ?? "");
       const values = data.map((row) => Number(row?.[1]) || 0);
+      const isMonthly = type === "monthly";
+      const lineColor = isMonthly ? "#22c55e" : "#0ea5e9";
+      const gradientTopColor = isMonthly ? "rgba(34, 197, 94, 0.5)" : "rgba(14, 165, 233, 0.5)";
+      const gradientBottomColor = isMonthly ? "rgba(220, 252, 231, 0.2)" : "rgba(231, 246, 254, 0.2)";
       chartInstances[type] = new Chart(ctx, {
         type: "line",
         data: {
           labels,
           datasets: [
             {
-              label: type === "monthly" ? "Monthly Data" : "Daily Data",
+              label: isMonthly ? "Monthly Data" : "Daily Data",
               data: values,
-              borderColor: "#0ea5e9",
+              borderColor: lineColor,
               backgroundColor: createGradient(
                 ctx,
-                "rgba(14, 165, 233, 0.5)",
-                "rgba(231, 246, 254, 0.2)"
+                gradientTopColor,
+                gradientBottomColor
               ),
               fill: true,
               tension: 0.4,
-              pointRadius: 2
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: lineColor,
+              pointBorderWidth: 2,
+              borderWidth: 2
             }
           ]
         },
@@ -2979,7 +3234,7 @@
           scales: {
             x: {
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
@@ -2991,8 +3246,9 @@
               }
             },
             y: {
+              beginAtZero: true,
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
@@ -3007,7 +3263,23 @@
           plugins: {
             legend: {
               display: false
+            },
+            tooltip: {
+              mode: "index",
+              axis: "x",
+              intersect: false,
+              callbacks: {
+                label: function(context) {
+                  const value = Number(context.parsed.y) || 0;
+                  return `${context.dataset.label}: ${value.toLocaleString()}`;
+                }
+              }
             }
+          },
+          interaction: {
+            mode: "index",
+            axis: "x",
+            intersect: false
           }
         }
       });
@@ -3031,20 +3303,38 @@
             {
               label: "Dataset 1",
               data: [],
-              borderColor: "#0ea5e9",
-              backgroundColor: "transparent",
+              borderColor: "#8b5cf6",
+              backgroundColor: createGradient(
+                ctx,
+                "rgba(139, 92, 246, 0.45)",
+                "rgba(237, 233, 254, 0.05)"
+              ),
+              fill: true,
               borderDash: [8, 4],
               borderWidth: 3,
               pointRadius: 2,
+              pointHoverRadius: 5,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#8b5cf6",
+              pointBorderWidth: 2,
               tension: 0.4
             },
             {
               label: "Dataset 2",
               data: [],
-              borderColor: "#f97316",
-              backgroundColor: "transparent",
+              borderColor: "#10b981",
+              backgroundColor: createGradient(
+                ctx,
+                "rgba(16, 185, 129, 0.45)",
+                "rgba(220, 252, 231, 0.05)"
+              ),
+              fill: true,
               borderWidth: 3,
               pointRadius: 2,
+              pointHoverRadius: 5,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#10b981",
+              pointBorderWidth: 2,
               tension: 0.4
             }
           ]
@@ -3052,37 +3342,76 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          // Data is updated manually through requestAnimationFrame
           animation: false,
           interaction: {
-            intersect: false,
-            mode: "nearest"
+            mode: "nearest",
+            axis: "x",
+            intersect: false
           },
           plugins: {
             legend: {
               display: false
+            },
+            tooltip: {
+              enabled: true,
+              mode: "nearest",
+              axis: "x",
+              intersect: false,
+              backgroundColor: "#0f172a",
+              titleColor: "#ffffff",
+              bodyColor: "#ffffff",
+              padding: 12,
+              bodySpacing: 6,
+              displayColors: true,
+              callbacks: {
+                title: (tooltipItems) => {
+                  const timestamp = tooltipItems[0]?.parsed.x;
+                  if (!timestamp) {
+                    return "";
+                  }
+                  return new Date(timestamp).toLocaleTimeString();
+                },
+                label: (context) => {
+                  const value = Number(context.parsed.y) || 0;
+                  return `${context.dataset.label}: ${value.toFixed(2)}`;
+                }
+              }
             }
           },
           scales: {
             x: {
               type: "linear",
+              grid: {
+                color: "rgba(0, 0, 0, 0.04)"
+              },
               ticks: {
                 font: {
                   size: 10
+                },
+                callback: (value) => {
+                  return new Date(value).toLocaleTimeString([], {
+                    minute: "2-digit",
+                    second: "2-digit"
+                  });
                 }
               },
-              grid: {
-                color: "rgba(0,0,0,0.04)"
+              border: {
+                display: false
               }
             },
             y: {
               beginAtZero: false,
               grid: {
-                color: "rgba(0,0,0,0.04)"
+                color: "rgba(0, 0, 0, 0.04)"
               },
               ticks: {
                 font: {
                   size: 10
                 }
+              },
+              border: {
+                display: false
               }
             }
           }
@@ -3118,7 +3447,9 @@
           });
           const cutoff = now - 3e4;
           chart.data.datasets.forEach((dataset) => {
-            dataset.data = dataset.data.filter((point) => point.x >= cutoff);
+            dataset.data = dataset.data.filter((point) => {
+              return point.x >= cutoff;
+            });
           });
           chart.options.scales.x.min = cutoff;
           chart.options.scales.x.max = now;
@@ -3309,7 +3640,7 @@
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            ${log.name}
+            <i class="fa fa-file-pdf"></i> ${log.name}
           </span>
         </td>
 
@@ -3540,14 +3871,14 @@
 
   // src/reports/history.js
   var ReportHistory = /* @__PURE__ */ (() => {
-    function loadReportHistory(cacheKey, serverFunction, tableBodyId, callback = null, refresh = false) {
+    function loadReportHistory(cacheKey, serverFunction, callback = null, refresh = false) {
       AppUtils.cachedGScriptCall(
         cacheKey,
         serverFunction,
         [],
         (data) => {
           const reportLogs = data?.reportLogs || [];
-          renderReportHistory(tableBodyId, reportLogs);
+          renderReportHistory(reportLogs);
           if (typeof callback !== "function") {
             return;
           }
@@ -3561,19 +3892,27 @@
         refresh
       );
     }
-    function renderReportHistory(tableBodyId, reportLogs) {
-      const tbody = $(`#${tableBodyId}`);
-      if (!tbody.length) {
+    function renderReportHistory(reportLogs) {
+      const $tbody = $("#data-table-body");
+      if (!$tbody.length) {
         return;
       }
-      tbody.empty();
+      const $table = $tbody.closest("table");
+      if (!$table.length) {
+        return;
+      }
+      const tableId = $table.attr("id");
+      $tbody.empty();
       if (!Array.isArray(reportLogs) || !reportLogs.length) {
-        renderEmptyReportHistory(tbody);
+        renderEmptyReportHistory($tbody);
         return;
       }
       reportLogs.forEach((log, index) => {
-        tbody.append(createReportHistoryRow(log, index));
+        $tbody.append(createReportHistoryRow(log, index));
       });
+      if (tableId) {
+        DataTableModule.init("Report History", `#${tableId}`);
+      }
     }
     function renderEmptyReportHistory(tbody) {
       tbody.html(`
@@ -3600,7 +3939,7 @@
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            ${log.name || ""}
+            <i class="fa fa-file-pdf"></i> ${log.name || ""}
           </span>
         </td>
 
@@ -3640,7 +3979,6 @@
       loadReportHistory(
         "monthlyReportsPageData",
         "getMonthlyReportHistory",
-        "monthly-report-history",
         callback,
         refresh
       );
@@ -3649,7 +3987,6 @@
       loadReportHistory(
         "yearlyReportsPageData",
         "getYearlyReportHistory",
-        "yearly-report-history",
         callback,
         refresh
       );
@@ -3740,7 +4077,6 @@
         onOpen($modal) {
           $modal.off(ns).on(`click${ns}`, ".btn-cancel, .btn-close", () => {
             AppUtils.closeModal("#app-modal");
-            console.log(loading);
             if (loading) {
               setGenerateState(type, false, loading);
             }
@@ -4091,18 +4427,177 @@
     function loadAppearanceSettings() {
     }
     function handleClick(e) {
-      const btn = e.target.closest("#btnClearCache, #btnSyncClient");
+      const btn = e.target.closest(
+        "#btnClearCache, #btnSyncClient, #btnAddMasterFormula",
+        "#btnBackupAllSheets"
+      );
       if (!btn) {
         return;
       }
       e.preventDefault();
-      if (btn.id === "btnClearCache") {
-        clearCache(btn);
+      switch (btn.id) {
+        case "btnClearCache":
+          clearCache(btn);
+          break;
+        case "btnSyncClient":
+          syncClientSheets(btn);
+          break;
+        case "btnAddMasterFormula":
+          openMasterFormulaModal();
+          break;
+        case "btnBackupAllSheets":
+          BackupAllSheets(btn);
+          break;
+        default:
+          break;
+      }
+    }
+    function BackupAllSheets(btn) {
+      const loading = AppUtils.setButtonLoading(
+        btn[0],
+        "Creating Backup..."
+      );
+      google.script.run.withSuccessHandler((result) => {
+        AppUtils.showDashboardToast("Backup completed", "info");
+        console.log("Backup completed:", result);
+        loading.restore();
+      }).withFailureHandler((err) => {
+        console.error("Backup failed:", err);
+        AppUtils.showDashboardToast(
+          "Something went wrong",
+          "error"
+        );
+        loading.restore();
+      }).backupAllSheets();
+    }
+    function openMasterFormulaModal() {
+      const ns = ".masterFormula";
+      AppUtils.openModal("#app-modal", {
+        size: "md",
+        placement: "center",
+        header: `
+      <h5 class="modal-title">
+        Add Master Formula
+      </h5>
+    `,
+        body: `
+      <div class="mb-3">
+        <label
+          for="masterFormulaCell"
+          class="form-label"
+        >
+          Cell Reference
+        </label>
+
+        <input
+          type="text"
+          class="form-control"
+          id="masterFormulaCell"
+          placeholder="B39"
+          autocomplete="off"
+        >
+
+        <div class="form-text">
+          Example: B39, N18, or AB25.
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label
+          for="masterFormulaValue"
+          class="form-label"
+        >
+          Formula
+        </label>
+
+        <textarea
+          class="form-control"
+          id="masterFormulaValue"
+          rows="3"
+          placeholder='=COUNTIF(B41:B,"<>")'
+        ></textarea>
+      </div>
+
+      <div class="small text-muted">
+        The formula will be applied to the applicable client
+        sheets and the <strong>Projects</strong> sheet of
+        registered external spreadsheets.
+      </div>
+    `,
+        footer: `
+      <button
+        type="button"
+        class="btn btn-secondary btn-cancel"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-primary btn-save"
+      >
+        Apply Formula
+      </button>
+    `,
+        onOpen($modal) {
+          $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
+            AppUtils.closeModal("#app-modal");
+          }).on(`click${ns}`, ".btn-save", () => {
+            const $btn = $modal.find(".btn-save");
+            applyMasterFormula($modal, $btn);
+          });
+        },
+        onClose($modal) {
+          $modal.off(ns);
+        }
+      });
+    }
+    function isValidCellRef(ref) {
+      return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
+    }
+    function isValidFormula(formula) {
+      return /^=\s*[A-Z]+\(/i.test(formula) || /^=.+[A-Z0-9]/i.test(formula);
+    }
+    function applyMasterFormula($modal, $btn) {
+      const cellRef = String($modal.find("#masterFormulaCell").val() || "").trim().toUpperCase();
+      const formula = String(
+        $modal.find("#masterFormulaValue").val() || ""
+      ).trim();
+      if (!cellRef) {
+        AppUtils.showDashboardToast("Cell reference is required.", "error");
         return;
       }
-      if (btn.id === "btnSyncClient") {
-        syncClientSheets(btn);
+      if (!isValidCellRef(cellRef)) {
+        AppUtils.showDashboardToast(
+          "Invalid cell reference. Example: B39 or AB25.",
+          "error"
+        );
+        return;
       }
+      if (!formula) {
+        AppUtils.showDashboardToast("Formula is required.", "error");
+        return;
+      }
+      if (!isValidFormula(formula)) {
+        AppUtils.showDashboardToast("Invalid Google Sheets formula.", "error");
+        return;
+      }
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Applying Formula..."
+      );
+      google.script.run.withSuccessHandler((result) => {
+        loading.restore();
+        AppUtils.closeModal("#app-modal");
+        AppUtils.showDashboardToast("Formula applied successfully.", "success");
+      }).withFailureHandler((err) => {
+        console.error("applyFormulaToSheets failed:", err);
+        loading.restore();
+        AppUtils.showDashboardToast(
+          err?.message || "Failed to apply formula.",
+          "error"
+        );
+      }).applyFormulaToSheets(cellRef, formula);
     }
     function handleTabShown(e) {
       const tab = e.target;
@@ -4178,16 +4673,6 @@
     };
   })();
 
-  // src/pages/active-clients-page.js
-  var activeClientsPage = /* @__PURE__ */ (() => {
-    function init() {
-      ClientDirectory.loadClientDirectory("activeClientsData");
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
-    }
-    return { init };
-  })();
-
   // src/clients/client-data-service.js
   var ClientDataService = /* @__PURE__ */ (() => {
     function renderClientDataByStatus(sourceSheet, title, category, debug = false) {
@@ -4204,42 +4689,142 @@
         "getClientDataByStatus",
         [category, sourceSheet],
         (data) => {
-          handleClientDataResponse(data, sourceSheet, title, category, log);
+          handleClientDataResponse(data, title, log);
         }
       );
     }
-    function handleClientDataResponse(data, sourceSheet, title, category, log) {
+    function handleClientDataResponse(data, title, log) {
       log("[renderClientDataByStatus] callback data:", data);
       if (!Array.isArray(data)) {
         log("[renderClientDataByStatus] invalid data", data);
         AppUtils.showError("\u26A0\uFE0F invalid dialog data");
         return;
       }
-      log("[renderClientDataByStatus] rendering table");
       TableModule.renderClientData(data, title);
     }
     function getCacheKey(category) {
       return `cache_${category.replace(/\s+/g, "")}`;
     }
+    function renderActivePaidOwedClients(debug = false, reset = false) {
+      const log = (...args) => debug && console.log(...args);
+      const cacheKey = "paidOwedClients";
+      log("[renderActivePaidOwedClients] loading");
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getActiveClientsPaidOwed",
+        [],
+        (data) => {
+          log("[renderActivePaidOwedClients] callback:", data);
+          if (!Array.isArray(data)) {
+            log("[renderActivePaidOwedClients] invalid data:", data);
+            AppUtils.showError("\u26A0\uFE0F Invalid paid & owed data.");
+            return;
+          }
+          renderPaidOwedTable(data);
+        },
+        debug,
+        reset
+      );
+    }
+    function renderPaidOwedTable(data) {
+      const $table = $("#active-clients");
+      if (!$table.length) {
+        return;
+      }
+      const $tbody = $table.find("tbody");
+      $tbody.empty();
+      data.forEach((row, index) => {
+        $tbody.append(`
+        <tr>
+          <td class="text-center">
+            ${index + 1}
+          </td>
+
+          <td>
+            ${AppUtils.escapeHtml(row.client ?? "")}
+          </td>
+
+          <td class="text-center">
+            ${formatAmount(row.totalOwed)}
+          </td>
+
+          <td class="text-center">
+            ${formatAmount(row.currentMonthOwed)}
+          </td>
+
+          <td class="text-center">
+            ${formatAmount(row.totalPaid)}
+          </td>
+
+          <td class="text-center">
+            ${row.today}
+          </td>
+        </tr>
+      `);
+      });
+      DataTableModule.init("Active Clients", "#active-clients");
+    }
+    function formatAmount(value) {
+      return (Number(value) || 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
     return {
-      renderClientDataByStatus
+      renderClientDataByStatus,
+      renderActivePaidOwedClients
     };
   })();
 
-  // src/pages/add-manual-hours-page.js
-  var addManualHoursPage = /* @__PURE__ */ (() => {
+  // src/pages/active-clients-page.js
+  var activeClientsPage = /* @__PURE__ */ (() => {
     function init() {
-      HourSummary.loadHourTotals();
-      ClientDataService.renderClientDataByStatus("Client Tracker - Today", "Activity Today", "Activity Today");
-      TableClientSelector.initClientSelector();
+      ClientDataService.renderActivePaidOwedClients();
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
     }
     return { init };
   })();
 
+  // src/pages/add-manual-hours-page.js
+  var addManualHoursPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    function init() {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      HourSummary.loadHourTotals();
+      ClientDataService.renderClientDataByStatus(
+        "Client Tracker - Today",
+        "Activity Today",
+        "Activity Today"
+      );
+      TableClientSelector.init();
+    }
+    function destroy() {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      TableClientSelector.destroy?.();
+    }
+    return {
+      init,
+      destroy
+    };
+  })();
+
   // src/projects/project-directory.js
   var ProjectDirectory = /* @__PURE__ */ (() => {
+    function init() {
+      bindEvents();
+      loadProjectDirectory();
+    }
+    function destroy() {
+      $(document).off(".projectDirectory");
+    }
     function loadProjectDirectory(log = false) {
-      bindProjectDirectoryEvents();
       const cacheKey = "allProjects";
       const cached = fetchCachedProjects(cacheKey);
       if (cached) {
@@ -4293,41 +4878,53 @@
         return;
       }
       tbody.innerHTML = "";
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-muted">
+          No projects found.
+        </td>
+      </tr>
+    `;
+        return;
+      }
       data.forEach((project, index) => {
         tbody.appendChild(createProjectDirectoryRow(project, index));
       });
+      DataTableModule.init("Projects", "#projectsTable");
       if (log) {
         console.log("[ProjectDirectory] Rendered", data.length, "projects");
       }
     }
     function createProjectDirectoryRow(project, index) {
       const tr = document.createElement("tr");
-      const colA = project[0] || "";
-      const colB = project[1] || "";
-      const colC = project[2] || "";
+      const colA = project[0] ?? "";
+      const colB = project[1] ?? "";
+      const colC = project[2] ?? "";
       tr.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">
-        ${index + 1}
-      </td>
+    <td class="text-center text-muted font-weight-bold">
+      ${index + 1}
+    </td>
 
-      <td>${colA}</td>
+    <td>
+      ${AppUtils.escapeHtml(colA)}
+    </td>
 
-      <td class="text-center">
-        ${colB}
-      </td>
+    <td class="text-center">
+      ${AppUtils.escapeHtml(colB)}
+    </td>
 
-      <td class="text-center">
-        ${colC}
-      </td>
-    `;
+    <td class="text-center">
+      ${AppUtils.escapeHtml(colC)}
+    </td>
+  `;
       return tr;
     }
-    function bindProjectDirectoryEvents() {
-      if (document.body.dataset.projectDirectoryBound) {
-        return;
-      }
-      document.body.dataset.projectDirectoryBound = "true";
-      $(document).on("click", "#add-new-project", handleAddProjectClick);
+    function bindEvents() {
+      $(document).off("click.projectDirectory", "#add-new-project").on("click.projectDirectory", "#add-new-project", handleAddProjectClick);
+      $(document).off("click.projectDirectory", "#refresh-projects").on("click.projectDirectory", "#refresh-projects", function() {
+        fetchProjectDirectory("allProjects");
+      });
     }
     function handleAddProjectClick() {
       AppUtils.openDrawer("#drawerManualAdd", {
@@ -4336,20 +4933,38 @@
       $("#taskForm .form-group").first().removeClass("element-hidden");
     }
     return {
-      loadProjectDirectory
+      init,
+      destroy
     };
   })();
 
   // src/pages/all-manual-projects-page.js
   var allManualProjectsPage = /* @__PURE__ */ (() => {
+    let bound = false;
     function init() {
-      ProjectDirectory.loadProjectDirectory();
+      if (bound) {
+        return;
+      }
+      bound = true;
+      ProjectDirectory.init();
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
       ActivityToday.setupTaskForm();
-      TableClientSelector.initClientSelector("#client", true);
+      TableClientSelector.init("#client", true);
     }
-    return { init };
+    function destroy() {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      ProjectDirectory.destroy?.();
+      ActivityToday.destroy?.();
+      TableClientSelector.destroy?.();
+    }
+    return {
+      init,
+      destroy
+    };
   })();
 
   // src/pages/billing-owed-hours-page.js
@@ -4836,8 +5451,9 @@
           }
           mainInner.innerHTML = titleHtml;
           updatePageHeader(meta);
+          const cacheKey = AppUtils.getHtmlCacheKey(`page_${pageName}`);
           AppUtils.cachedGScriptCall(
-            `page_${pageName}`,
+            cacheKey,
             "loadHtmlComponent",
             [pageName],
             (pageHtml) => {
@@ -4921,9 +5537,10 @@
     let initialized = false;
     let initializing = null;
     function loadComponent(cacheKey, fileName) {
+      const htmlCacheKey = AppUtils.getHtmlCacheKey(cacheKey);
       return new Promise((resolve, reject) => {
         AppUtils.cachedGScriptCall(
-          cacheKey,
+          htmlCacheKey,
           "loadHtmlComponent",
           [fileName],
           (html) => resolve(html),
@@ -5147,7 +5764,7 @@
     }
     function buildHeaderHtml(integration, config) {
       const logoSrc = getIntegrationLogo(integration);
-      const title = escapeHtml(config.title);
+      const title = AppUtils.escapeHtml(config.title);
       return `
       <div class="integration-modal-header">
         <div class="integration-modal-logo">
@@ -5158,11 +5775,11 @@
     `;
     }
     function buildBodyHtml(config) {
-      const description = escapeHtml(config.description);
-      const fieldLabel = escapeHtml(config.field.label);
+      const description = AppUtils.escapeHtml(config.description);
+      const fieldLabel = AppUtils.escapeHtml(config.field.label);
       const fieldType = config.field.type;
-      const fieldName = escapeHtml(config.field.name);
-      const placeholder = escapeHtml(config.field.placeholder || "");
+      const fieldName = AppUtils.escapeHtml(config.field.name);
+      const placeholder = AppUtils.escapeHtml(config.field.placeholder || "");
       return `
       <div class="integration-modal-description mb-4">
         ${description}
@@ -5240,12 +5857,6 @@
         );
         loading.restore();
       }).saveIntegration(integration, value);
-    }
-    function escapeHtml(text) {
-      if (text === null || text === void 0) {
-        return "";
-      }
-      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
     return {
       init,
@@ -5649,8 +6260,20 @@
 
   // src/action-router.js
   var ActionRouterModule = /* @__PURE__ */ (() => {
+    let initialized = false;
     function init() {
+      if (initialized) {
+        return;
+      }
       document.addEventListener("click", handleNavigationClick, true);
+      initialized = true;
+    }
+    function destroy() {
+      if (!initialized) {
+        return;
+      }
+      document.removeEventListener("click", handleNavigationClick, true);
+      initialized = false;
     }
     function handleNavigationClick(e) {
       const pageBtn = e.target.closest("[data-page]");
@@ -5667,13 +6290,18 @@
       if (!page) {
         return;
       }
+      const appContainer = document.querySelector(".app-container");
+      if (appContainer) {
+        appContainer.classList.add("closed-sidebar");
+      }
       RouterModule.go(page);
     }
     function shouldIgnore($btn) {
       return $btn.hasClass("mm-active") || $btn.is("[aria-expanded]") && $btn.next().prop("tagName") === "UL";
     }
     return {
-      init
+      init,
+      destroy
     };
   })();
 

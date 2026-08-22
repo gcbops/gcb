@@ -186,7 +186,7 @@ const integrationsConfigurationPage = (() => {
 
   function buildHeaderHtml(integration, config) {
     const logoSrc = getIntegrationLogo(integration);
-    const title = escapeHtml(config.title);
+    const title = AppUtils.escapeHtml(config.title);
 
     return `
       <div class="integration-modal-header">
@@ -199,11 +199,11 @@ const integrationsConfigurationPage = (() => {
   }
 
   function buildBodyHtml(config) {
-    const description = escapeHtml(config.description);
-    const fieldLabel = escapeHtml(config.field.label);
+    const description = AppUtils.escapeHtml(config.description);
+    const fieldLabel = AppUtils.escapeHtml(config.field.label);
     const fieldType = config.field.type;
-    const fieldName = escapeHtml(config.field.name);
-    const placeholder = escapeHtml(config.field.placeholder || "");
+    const fieldName = AppUtils.escapeHtml(config.field.name);
+    const placeholder = AppUtils.escapeHtml(config.field.placeholder || "");
 
     return `
       <div class="integration-modal-description mb-4">
@@ -310,19 +310,6 @@ const integrationsConfigurationPage = (() => {
         loading.restore();
       })
       .saveIntegration(integration, value);
-  }
-
-  function escapeHtml(text) {
-    if (text === null || text === undefined) {
-      return "";
-    }
-
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
   return {

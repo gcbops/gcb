@@ -1,6 +1,30 @@
+import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
 const ClientDirectory = (() => {
+  let initialized = false;
+
+  function init(source = "allClientsData") {
+    if (initialized) {
+      return;
+    }
+
+    initialized = true;
+
+    bindClientDirectoryEvents();
+    loadClientDirectory(source);
+  }
+
+  function destroy() {
+    if (!initialized) {
+      return;
+    }
+
+    initialized = false;
+
+    unbindClientDirectoryEvents();
+  }
+
   function loadClientDirectory(source = "allClientsData") {
     bindClientDirectoryEvents();
 
@@ -69,58 +93,101 @@ const ClientDirectory = (() => {
 
   function renderClientDirectory(data) {
     const tbody = document.getElementById("dataBody");
+
     if (!tbody) {
       return;
     }
 
     tbody.innerHTML = "";
 
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-muted">
+          No clients found.
+        </td>
+      </tr>
+    `;
+
+      return;
+    }
+
     data.forEach((client, index) => {
       tbody.appendChild(createClientDirectoryRow(client, index));
     });
+
+    DataTableModule.init("Clients", "#clientsTable");
   }
 
   function createClientDirectoryRow(client, index) {
     const row = document.createElement("tr");
     const initials = AppUtils.getInitials(client.name);
 
-    row.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">${index + 1}</td>
+    const status = String(client.status || "").trim();
 
-      <td>
-        <div class="widget-content p-0">
-          <div class="widget-content-wrapper">
-            <div class="widget-content-left mr-3">
-              <div
-                class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
-                style="width:40px;height:40px;font-weight:600;"
-              >
-                ${initials}
-              </div>
+    const statusHtml =
+      status.toLowerCase() === "inactive"
+        ? `
+        <span class="badge bg-danger text-center">
+          Inactive
+        </span>
+      `
+        : `
+        <span class="badge bg-success text-center">
+          ${AppUtils.escapeHtml(status || "Active")}
+        </span>
+      `;
+
+    row.innerHTML = `
+    <td class="text-center text-muted font-weight-bold">
+      ${index + 1}
+    </td>
+
+    <td>
+      <div class="widget-content p-0">
+        <div class="widget-content-wrapper">
+          <div class="widget-content-left me-3">
+            <div
+              class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
+              style="width:40px;height:40px;font-weight:600;"
+            >
+              ${AppUtils.escapeHtml(initials)}
+            </div>
+          </div>
+
+          <div class="widget-content-left flex2">
+            <div class="widget-heading">
+              ${AppUtils.escapeHtml(client.name)}
             </div>
 
-            <div class="widget-content-left flex2">
-              <div class="widget-heading">${client.name}</div>
-              <div class="widget-subheading opacity-7">${client.role || ""}</div>
+            <div class="widget-subheading opacity-7">
+              ${AppUtils.escapeHtml(client.role)}
             </div>
           </div>
         </div>
-      </td>
+      </div>
+    </td>
 
-      <td class="text-center text-muted">${client.id || ""}</td>
+    <td class="text-center text-muted">
+      ${AppUtils.escapeHtml(client.projects)}
+    </td>
 
-      <td class="text-center text-muted">${client.city || ""}</td>
+    <td class="text-center text-muted">
+      ${AppUtils.escapeHtml(client.paid)}
+    </td>
 
-      <td class="text-center">
-        <div class="badge text-white ${getStatusColor(client.status)}">
-          ${client.status || ""}
-        </div>
-      </td>
+    <td class="text-center text-muted">
+      ${AppUtils.escapeHtml(client.owed)}
+    </td>
 
-      <td class="text-center action-btn">
-        <i class="pe-7s-note open-client-btn"></i>
-      </td>
-    `;
+    <td class="text-center">
+      ${statusHtml}
+    </td>
+
+    <td class="text-center action-btn">
+      <i class="pe-7s-note open-client-btn"></i>
+    </td>
+  `;
 
     return row;
   }
@@ -128,13 +195,23 @@ const ClientDirectory = (() => {
   function bindClientDirectoryEvents() {
     const tbody = document.getElementById("dataBody");
 
-    if (!tbody || tbody.dataset.bound) {
+    if (!tbody) {
       return;
     }
 
-    tbody.dataset.bound = "true";
+    tbody.removeEventListener("click", handleClientDirectoryClick);
 
     tbody.addEventListener("click", handleClientDirectoryClick);
+  }
+
+  function unbindClientDirectoryEvents() {
+    const tbody = document.getElementById("dataBody");
+
+    if (!tbody) {
+      return;
+    }
+
+    tbody.removeEventListener("click", handleClientDirectoryClick);
   }
 
   function handleClientDirectoryClick(e) {
@@ -166,30 +243,10 @@ const ClientDirectory = (() => {
       .goToPresentClient(clientName);
   }
 
-  function getStatusColor(status) {
-    if (!status) {
-      return "btn-secondary";
-    }
-
-    status = status.toLowerCase();
-
-    if (status.includes("online") || status === "active") {
-      return "bg-grow-early";
-    }
-
-    if (status.includes("idle")) {
-      return "bg-sunny-morning";
-    }
-
-    if (status.includes("offline") || status === "inactive") {
-      return "bg-love-kiss";
-    }
-
-    return "btn-secondary";
-  }
-
   return {
-    loadClientDirectory,
+    init,
+    destroy,
+    refreshClientDirectory,
   };
 })();
 

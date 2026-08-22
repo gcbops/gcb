@@ -145,8 +145,10 @@ const PageLoaderModule = (() => {
 
         updatePageHeader(meta);
 
+        const cacheKey = AppUtils.getHtmlCacheKey(`page_${pageName}`);
+
         AppUtils.cachedGScriptCall(
-          `page_${pageName}`,
+          cacheKey,
           "loadHtmlComponent",
           [pageName],
           (pageHtml) => {

@@ -23,6 +23,9 @@ const allClientsPage = (() => {
     // remove only this module’s events
     $(document).off("click.allClients");
     $(document).off("submit.allClients");
+
+    ClientDirectory.destroy?.();
+    TableClientSelector.destroy?.();
   };
 
   const bindActions = () => {
@@ -68,21 +71,26 @@ const allClientsPage = (() => {
                 AppUtils.cacheClear("allClientsData");
 
                 if (RouterModule.getCurrentPage() === "addManualHours") {
-                  TableClientSelector.initClientSelector();
+                  TableClientSelector.init();
                 }
 
-                ClientDirectory.loadClientDirectory("allClientsData");
+                ClientDirectory.init("allClientsData");
 
                 $("#sheet_name").val("");
               },
             });
           });
 
+      })
+
+      .off("click.allClients", "#sync-clients-list")
+      .on("click.allClients", "#sync-clients-list", function () {
+        ClientDirectory.refreshClientDirectory("allClientsData", null);
       });
   };
 
   const loadData = () => {
-    ClientDirectory.loadClientDirectory("allClientsData");
+    ClientDirectory.init("allClientsData");
     ClientRanking.renderTopPaidClients();
     ProjectRankings.renderTopProjects();
   };

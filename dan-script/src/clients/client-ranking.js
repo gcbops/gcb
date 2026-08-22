@@ -69,7 +69,7 @@ const ClientRanking = (() => {
           <div class="widget-content p-0">
             <div class="widget-content-wrapper">
 
-              <div class="widget-content-left mr-3">
+              <div class="widget-content-left me-3">
                 <div
                   class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
                   text-white rounded-circle d-flex align-items-center justify-content-center"

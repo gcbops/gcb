@@ -7,6 +7,11 @@ const DataTableModule = (() => {
     "top paid accounts",
     "activity today",
     "outstanding accounts",
+    "report history",
+    "projects",
+    "upsell",
+    "clients",
+    "active clients"
   ];
 
   const NUMERIC_SORT_TABLES = ["top paid accounts", "outstanding accounts"];
@@ -261,25 +266,9 @@ const DataTableModule = (() => {
       addColumnClass(tableId, 3, "dt-center");
 
       highlightTopRows(tableId, 3);
-    } else if (cleanTitle === "active clients") {
-      applyStatusFilter(tableId, "Active");
     }
 
     log("Extra table logic completed:", title);
-  }
-
-  function applyStatusFilter(tableId, status) {
-    const instance = getInstance(tableId);
-
-    if (!instance) {
-      return;
-    }
-
-    instance
-      .order([3, "asc"])
-      .column(3)
-      .search(status ? `^${status}$` : "", true, false)
-      .draw();
   }
 
   function highlightTopRows(tableId, rowCount, rowClass = "highlight-row") {

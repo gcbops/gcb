@@ -3,7 +3,7 @@ const EXTERNAL_SHEETS_CONFIG = {
 
   templateProperty: "EXTERNAL_SHEET_TEMPLATE_ID",
 
-  folderProperty: "EXTERNAL_SHEETS_FOLDER_ID",
+  folderProperty: "MAIN_SHEETS_FOLDER_ID",
 
   headers: ["Spreadsheet ID", "Client Name", "Verified", "Status"],
 };
@@ -38,7 +38,7 @@ function getExternalSheetsFolder() {
   );
 
   if (!folderId) {
-    throw new Error("EXTERNAL_SHEETS_FOLDER_ID is not configured.");
+    throw new Error("MAIN_SHEETS_FOLDER_ID is not configured.");
   }
 
   try {

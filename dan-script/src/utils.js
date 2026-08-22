@@ -7,6 +7,32 @@ const AppUtils = (() => {
   const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day
   let notificationAudio = null;
 
+  const APP_CONFIG = {
+    HTML_VERSIONING: false,
+  };
+
+  let htmlVersion = null;
+
+  function getHtmlVersion() {
+    if (!APP_CONFIG.HTML_VERSIONING) {
+      return "";
+    }
+
+    if (!htmlVersion) {
+      const randomPart = Math.random().toString(36).substring(2, 8);
+
+      htmlVersion = `${Date.now()}_${randomPart}`;
+    }
+
+    return htmlVersion;
+  }
+
+  function getHtmlCacheKey(cacheKey) {
+    const version = getHtmlVersion();
+
+    return version ? `${cacheKey}_${version}` : cacheKey;
+  }
+
   /**
    * Get the actual localStorage key used by the app.
    *
@@ -276,6 +302,20 @@ const AppUtils = (() => {
   }
 
   // ---- EXTRA UTILS ----
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function showError(err) {
     const fields = ["message", "error", "details"];
     let msg = "";
@@ -787,7 +827,12 @@ const AppUtils = (() => {
     // gscript
     cachedGScriptCall,
 
+    // html
+    getHtmlVersion,
+    getHtmlCacheKey,
+
     // utils
+    escapeHtml,
     showError,
     playNotif,
     getInitials,

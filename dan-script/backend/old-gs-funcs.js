@@ -36,10 +36,7 @@ function getClientOptions() {
   try {
     return getClientSheetsList();
   } catch (err) {
-    logResponse(
-      `Error fetching client options: ${err.message}`,
-      "Error",
-    );
+    logResponse(`Error fetching client options: ${err.message}`, "Error");
 
     return [];
   }
@@ -175,7 +172,8 @@ function getProfileData() {
   const notificationEmail = getNotificationEmail();
   const discordWebhook = getDiscordWebhook();
   const spreadsheetId = CONFIG.SPREADSHEET_ID;
-  const reportFolderId = PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
+  const reportFolderId =
+    PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
 
   data.notifEmail = {
     configured: Boolean(notificationEmail),
@@ -202,7 +200,7 @@ function getProfileData() {
 
 function saveProfileData(data) {
   // requireAuthorizedUser();
-  
+
   const sheet = getLabSheet();
   if (!sheet) return "❌ Lab 3.0 sheet not found.";
 
@@ -514,4 +512,69 @@ function getReminderNotificationData(ss) {
   console.log(`✅ Returning ${reminders.length} Reminders`);
 
   return reminders;
+}
+
+function showDialog(
+  file,
+  title = "Dialog",
+  height = 500,
+  width = 400,
+  data = {},
+) {
+  try {
+    const html = loadHtmlFile(file);
+
+    html.data = data;
+
+    SpreadsheetApp.getUi().showModalDialog(
+      html.evaluate().setWidth(width).setHeight(height),
+      title,
+    );
+  } catch (err) {
+    logResponse(`Failed to open dialog: ${err.message}`, "Error");
+  }
+}
+
+function showDialogByStatus(
+  status,
+  title,
+  height = 600,
+  width = 900,
+  customSheet,
+) {
+  const config = CONFIG.DIALOGS.STATUS[status];
+
+  if (!config) {
+    return logResponse("⚠️ Invalid status requested.");
+  }
+
+  const template = loadHtmlFile("DailyNotificationBoardDialog");
+
+  Object.assign(template, {
+    title: config.header,
+    headerTexts: config.headers,
+    status,
+    sheetName: customSheet || config.sheet,
+  });
+
+  SpreadsheetApp.getUi().showModalDialog(
+    template.evaluate().setWidth(width).setHeight(height),
+    title,
+  );
+}
+
+function showOutstandingAccounts() {
+  showDialogByStatus("Outstanding Accounts", "Outstanding Accounts");
+}
+
+function showActiveClients() {
+  showDialogByStatus("Active Clients", "Active Clients");
+}
+
+function showTopPaid() {
+  showDialogByStatus("Top Paid", "Top Paid");
+}
+
+function showDailyActivity() {
+  showDialogByStatus("Activity Today", "Activity Today", 600, 950);
 }

@@ -247,16 +247,6 @@ td span {
   display: inline-block;
 }
 
-td span.ACTIVE {
-  background: #e8fee7;
-  color: #35b171;
-}
-
-td span.INACTIVE {
-  background: #fde7e9;
-  color: #d92550;
-}
-
 /* --- Action Buttons --- */
 .action-btn {
   text-align: center !important;
@@ -266,6 +256,7 @@ td span.INACTIVE {
 .action-btn i {
   font-size: 18px;
   transition: color 0.2s ease;
+  cursor: pointer;
 }
 
 .action-btn i.open-client-btn {
@@ -309,6 +300,12 @@ td span.INACTIVE {
 @media (max-width: 768px) {
   .action-btn {
     text-align: left !important;
+  }
+  #dashFilter, #waitingFilter {
+    font-size: 10px
+  }
+  #dashFilter span, #waitingFilter span {
+    padding-bottom: 0
   }
 }   
 

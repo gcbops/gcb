@@ -5,13 +5,15 @@ const AppShellModule = (() => {
   let initializing = null;
 
   function loadComponent(cacheKey, fileName) {
+    const htmlCacheKey = AppUtils.getHtmlCacheKey(cacheKey);
+
     return new Promise((resolve, reject) => {
       AppUtils.cachedGScriptCall(
-        cacheKey,
+        htmlCacheKey,
         "loadHtmlComponent",
         [fileName],
         (html) => resolve(html),
-        false,
+        false
       );
     });
   }

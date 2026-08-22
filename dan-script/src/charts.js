@@ -205,17 +205,17 @@ const ChartModule = (() => {
 
     switch (type) {
       case "yearly":
-        return drawYearlyChart(ctx, type, data);
+        return drawYearlyChart(ctx, type, data, true);
 
       case "hourly":
-        return drawHourlyChart(ctx, type, data);
+        return drawHourlyChart(ctx, type, data, true);
 
       case "monthly-prev-merged":
-        return drawMonthlyComparisonChart(ctx, type, data);
+        return drawMonthlyComparisonChart(ctx, type, data, true);
 
       case "daily":
       case "monthly":
-        return drawLineChart(ctx, type, data, animated);
+        return drawLineChart(ctx, type, data, animated, true);
 
       default:
         return AppUtils.showError(`Unknown chart type: ${type}`);
@@ -232,8 +232,9 @@ const ChartModule = (() => {
   // YEARLY
   // --------------------------------------------------
 
-  function drawYearlyChart(ctx, type, data) {
+  function drawYearlyChart(ctx, type, data, animated = false) {
     const labels = data.map((row) => row?.[0] ?? "");
+
     const paid = data.map((row) => Number(row?.[2]) || 0);
     const owed = data.map((row) => Number(row?.[3]) || 0);
     const net = data.map((row) => Number(row?.[4]) || 0);
@@ -248,31 +249,61 @@ const ChartModule = (() => {
           {
             label: "Net Paid",
             data: paid,
+
             backgroundColor: createGradient(
               ctx,
               "rgba(14, 165, 233, 0.8)",
               "rgba(14, 165, 233, 0.4)",
             ),
+
+            borderColor: "#0ea5e9",
+            borderWidth: 1,
+
+            borderRadius: 6,
+            borderSkipped: false,
+
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
           },
 
           {
             label: "Net Owed",
             data: owed,
+
             backgroundColor: createGradient(
               ctx,
               "rgba(249, 115, 22, 0.8)",
               "rgba(249, 115, 22, 0.4)",
             ),
+
+            borderColor: "#f97316",
+            borderWidth: 1,
+
+            borderRadius: 6,
+            borderSkipped: false,
+
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
           },
 
           {
             label: "Net Hrs",
             data: net,
+
             backgroundColor: createGradient(
               ctx,
               "rgba(16, 185, 129, 0.8)",
               "rgba(16, 185, 129, 0.4)",
             ),
+
+            borderColor: "#10b981",
+            borderWidth: 1,
+
+            borderRadius: 6,
+            borderSkipped: false,
+
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
           },
         ],
       },
@@ -281,6 +312,24 @@ const ChartModule = (() => {
         responsive: true,
         maintainAspectRatio: false,
 
+        animation: animated ? undefined : false,
+
+        ...(animated && {
+          animations: {
+            y: {
+              duration: 1200,
+              easing: "easeOutQuart",
+              from: 0,
+            },
+          },
+        }),
+
+        interaction: {
+          mode: "index",
+          axis: "x",
+          intersect: false,
+        },
+
         plugins: {
           legend: {
             position: "top",
@@ -288,41 +337,61 @@ const ChartModule = (() => {
 
           tooltip: {
             mode: "index",
+            axis: "x",
             intersect: false,
 
             callbacks: {
-              label: (context) =>
-                `${context.dataset.label}: ${context.formattedValue} hrs`,
+              label: (context) => {
+                const value = Number(context.parsed.y) || 0;
+
+                return `${context.dataset.label}: ${value.toLocaleString()} hrs`;
+              },
             },
           },
         },
 
-        interaction: {
-          mode: "index",
-          intersect: false,
-        },
-
         scales: {
           x: {
+            stacked: false,
+
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
+
             ticks: {
               font: {
                 size: 10,
               },
+            },
+
+            border: {
+              display: false,
             },
           },
 
           y: {
             beginAtZero: true,
-            grid: {
-              color: "rgba(0,0,0,0.04)",
+            stacked: false,
+
+            title: {
+              display: true,
+              text: "Hours",
             },
+
+            grid: {
+              color: "rgba(0, 0, 0, 0.04)",
+            },
+
             ticks: {
               font: {
                 size: 10,
               },
+
+              callback: (value) => `${value} hrs`,
+            },
+
+            border: {
+              display: false,
             },
           },
         },
@@ -334,7 +403,7 @@ const ChartModule = (() => {
   // HOURLY
   // --------------------------------------------------
 
-  function drawHourlyChart(ctx, type, data) {
+  function drawHourlyChart(ctx, type, data, animated = false) {
     const labels = data.map((row) => String(row?.[0] || ""));
     const values = data.map((row) => Number(row?.[1]) || 0);
 
@@ -347,6 +416,7 @@ const ChartModule = (() => {
         datasets: [
           {
             label: "Total",
+
             data: values,
 
             backgroundColor: createGradient(
@@ -357,7 +427,16 @@ const ChartModule = (() => {
 
             borderColor: "#0ea5e9",
             borderWidth: 2,
+
             borderRadius: 6,
+            borderSkipped: false,
+
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
+
+            hoverBackgroundColor: "rgba(14, 165, 233, 0.95)",
+            hoverBorderColor: "#0284c7",
+            hoverBorderWidth: 2,
           },
         ],
       },
@@ -365,6 +444,24 @@ const ChartModule = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+
+        animation: animated ? undefined : false,
+
+        ...(animated && {
+          animations: {
+            y: {
+              duration: 1200,
+              easing: "easeOutQuart",
+              from: 0,
+            },
+          },
+        }),
+
+        interaction: {
+          mode: "index",
+          axis: "x",
+          intersect: false,
+        },
 
         plugins: {
           legend: {
@@ -375,15 +472,42 @@ const ChartModule = (() => {
             display: true,
             text: "Hourly History by Year",
             color: "#334155",
+
             font: {
               size: 18,
               weight: "600",
             },
+
+            padding: {
+              bottom: 16,
+            },
           },
 
           tooltip: {
+            enabled: true,
+
+            mode: "index",
+            axis: "x",
+            intersect: false,
+
+            backgroundColor: "#0f172a",
+            titleColor: "#ffffff",
+            bodyColor: "#ffffff",
+
+            padding: 12,
+            bodySpacing: 6,
+            displayColors: true,
+
             callbacks: {
-              label: (context) => `${context.formattedValue} hrs`,
+              title: (tooltipItems) => {
+                return tooltipItems[0]?.label || "";
+              },
+
+              label: (context) => {
+                const value = Number(context.parsed.y) || 0;
+
+                return `Total: ${value.toLocaleString()} hrs`;
+              },
             },
           },
         },
@@ -391,27 +515,45 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
 
             ticks: {
               font: {
                 size: 10,
               },
+
+              autoSkip: true,
+              maxRotation: 0,
+            },
+
+            border: {
+              display: false,
             },
           },
 
           y: {
             beginAtZero: true,
 
+            title: {
+              display: true,
+              text: "Hours",
+            },
+
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
 
             ticks: {
               font: {
                 size: 10,
               },
+
+              callback: (value) => `${value} hrs`,
+            },
+
+            border: {
+              display: false,
             },
           },
         },
@@ -423,12 +565,12 @@ const ChartModule = (() => {
   // MONTHLY COMPARISON
   // --------------------------------------------------
 
-  function drawMonthlyComparisonChart(ctx, type, data) {
+  function drawMonthlyComparisonChart(ctx, type, data, animated = false) {
     const prev = fillMonthlyData(data?.prevYear || []);
     const current = fillMonthlyData(data?.currentYear || []);
 
     chartInstances[type] = new Chart(ctx, {
-      type: "bar",
+      type: "line",
 
       data: {
         labels: REPORT_MONTHS,
@@ -438,22 +580,52 @@ const ChartModule = (() => {
             label: "Previous Year",
             data: prev,
 
+            // Same orange color/gradient as the bar chart
+            borderColor: "#f97316",
+
             backgroundColor: createGradient(
               ctx,
-              "rgba(249, 115, 22, 0.8)",
-              "rgba(249, 115, 22, 0.4)",
+              "rgba(249, 115, 22, 0.5)",
+              "rgba(249, 115, 22, 0.05)",
             ),
+
+            fill: true,
+            tension: 0.4,
+
+            pointRadius: 3,
+            pointHoverRadius: 6,
+
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#f97316",
+            pointBorderWidth: 2,
+
+            borderWidth: 2,
           },
 
           {
             label: "Current Year",
             data: current,
 
+            // Green gradient for the current year
+            borderColor: "#22c55e",
+
             backgroundColor: createGradient(
               ctx,
-              "rgba(14, 165, 233, 0.8)",
-              "rgba(14, 165, 233, 0.4)",
+              "rgba(34, 197, 94, 0.5)",
+              "rgba(34, 197, 94, 0.05)",
             ),
+
+            fill: true,
+            tension: 0.4,
+
+            pointRadius: 3,
+            pointHoverRadius: 6,
+
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#22c55e",
+            pointBorderWidth: 2,
+
+            borderWidth: 2,
           },
         ],
       },
@@ -462,38 +634,79 @@ const ChartModule = (() => {
         responsive: true,
         maintainAspectRatio: false,
 
-        plugins: {
-          legend: {
-            position: "top",
+        animation: animated ? undefined : false,
+
+        ...(animated && {
+          animations: {
+            tension: {
+              duration: 1500,
+              easing: "easeInOutQuart",
+              from: 1,
+              to: 0.4,
+              loop: true,
+            },
           },
-        },
+        }),
 
         interaction: {
           mode: "index",
+          axis: "x",
           intersect: false,
+        },
+
+        plugins: {
+          legend: {
+            display: true,
+            position: "top",
+          },
+
+          tooltip: {
+            mode: "index",
+            axis: "x",
+            intersect: false,
+
+            callbacks: {
+              label: function (context) {
+                const value = Number(context.parsed.y) || 0;
+
+                return `${context.dataset.label}: ${value.toLocaleString()}`;
+              },
+            },
+          },
         },
 
         scales: {
           x: {
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
+
             ticks: {
               font: {
                 size: 10,
               },
+            },
+
+            border: {
+              display: false,
             },
           },
 
           y: {
             beginAtZero: true,
+
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
+
             ticks: {
               font: {
                 size: 10,
               },
+            },
+
+            border: {
+              display: false,
             },
           },
         },
@@ -530,6 +743,20 @@ const ChartModule = (() => {
     const labels = data.map((row) => row?.[0] ?? "");
     const values = data.map((row) => Number(row?.[1]) || 0);
 
+    const isMonthly = type === "monthly";
+
+    const lineColor = isMonthly
+      ? "#22c55e" // Green for monthly
+      : "#0ea5e9"; // Blue for daily
+
+    const gradientTopColor = isMonthly
+      ? "rgba(34, 197, 94, 0.5)"
+      : "rgba(14, 165, 233, 0.5)";
+
+    const gradientBottomColor = isMonthly
+      ? "rgba(220, 252, 231, 0.2)"
+      : "rgba(231, 246, 254, 0.2)";
+
     chartInstances[type] = new Chart(ctx, {
       type: "line",
 
@@ -538,20 +765,28 @@ const ChartModule = (() => {
 
         datasets: [
           {
-            label: type === "monthly" ? "Monthly Data" : "Daily Data",
+            label: isMonthly ? "Monthly Data" : "Daily Data",
             data: values,
 
-            borderColor: "#0ea5e9",
+            borderColor: lineColor,
 
             backgroundColor: createGradient(
               ctx,
-              "rgba(14, 165, 233, 0.5)",
-              "rgba(231, 246, 254, 0.2)",
+              gradientTopColor,
+              gradientBottomColor,
             ),
 
             fill: true,
             tension: 0.4,
+
             pointRadius: 2,
+            pointHoverRadius: 5,
+
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: lineColor,
+            pointBorderWidth: 2,
+
+            borderWidth: 2,
           },
         ],
       },
@@ -577,7 +812,7 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
 
             ticks: {
@@ -592,8 +827,10 @@ const ChartModule = (() => {
           },
 
           y: {
+            beginAtZero: true,
+
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
 
             ticks: {
@@ -612,6 +849,26 @@ const ChartModule = (() => {
           legend: {
             display: false,
           },
+
+          tooltip: {
+            mode: "index",
+            axis: "x",
+            intersect: false,
+
+            callbacks: {
+              label: function (context) {
+                const value = Number(context.parsed.y) || 0;
+
+                return `${context.dataset.label}: ${value.toLocaleString()}`;
+              },
+            },
+          },
+        },
+
+        interaction: {
+          mode: "index",
+          axis: "x",
+          intersect: false,
         },
       },
     });
@@ -646,21 +903,53 @@ const ChartModule = (() => {
           {
             label: "Dataset 1",
             data: [],
-            borderColor: "#0ea5e9",
-            backgroundColor: "transparent",
+
+            borderColor: "#8b5cf6",
+
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(139, 92, 246, 0.45)",
+              "rgba(237, 233, 254, 0.05)",
+            ),
+
+            fill: true,
+
             borderDash: [8, 4],
             borderWidth: 3,
+
             pointRadius: 2,
+            pointHoverRadius: 5,
+
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#8b5cf6",
+            pointBorderWidth: 2,
+
             tension: 0.4,
           },
 
           {
             label: "Dataset 2",
             data: [],
-            borderColor: "#f97316",
-            backgroundColor: "transparent",
+
+            borderColor: "#10b981",
+
+            backgroundColor: createGradient(
+              ctx,
+              "rgba(16, 185, 129, 0.45)",
+              "rgba(220, 252, 231, 0.05)",
+            ),
+
+            fill: true,
+
             borderWidth: 3,
+
             pointRadius: 2,
+            pointHoverRadius: 5,
+
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: "#10b981",
+            pointBorderWidth: 2,
+
             tension: 0.4,
           },
         ],
@@ -669,16 +958,53 @@ const ChartModule = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+
+        // Data is updated manually through requestAnimationFrame
         animation: false,
 
         interaction: {
-          intersect: false,
           mode: "nearest",
+          axis: "x",
+          intersect: false,
         },
 
         plugins: {
           legend: {
             display: false,
+          },
+
+          tooltip: {
+            enabled: true,
+
+            mode: "nearest",
+            axis: "x",
+            intersect: false,
+
+            backgroundColor: "#0f172a",
+            titleColor: "#ffffff",
+            bodyColor: "#ffffff",
+
+            padding: 12,
+            bodySpacing: 6,
+            displayColors: true,
+
+            callbacks: {
+              title: (tooltipItems) => {
+                const timestamp = tooltipItems[0]?.parsed.x;
+
+                if (!timestamp) {
+                  return "";
+                }
+
+                return new Date(timestamp).toLocaleTimeString();
+              },
+
+              label: (context) => {
+                const value = Number(context.parsed.y) || 0;
+
+                return `${context.dataset.label}: ${value.toFixed(2)}`;
+              },
+            },
           },
         },
 
@@ -686,14 +1012,25 @@ const ChartModule = (() => {
           x: {
             type: "linear",
 
+            grid: {
+              color: "rgba(0, 0, 0, 0.04)",
+            },
+
             ticks: {
               font: {
                 size: 10,
               },
+
+              callback: (value) => {
+                return new Date(value).toLocaleTimeString([], {
+                  minute: "2-digit",
+                  second: "2-digit",
+                });
+              },
             },
 
-            grid: {
-              color: "rgba(0,0,0,0.04)",
+            border: {
+              display: false,
             },
           },
 
@@ -701,7 +1038,7 @@ const ChartModule = (() => {
             beginAtZero: false,
 
             grid: {
-              color: "rgba(0,0,0,0.04)",
+              color: "rgba(0, 0, 0, 0.04)",
             },
 
             ticks: {
@@ -709,14 +1046,20 @@ const ChartModule = (() => {
                 size: 10,
               },
             },
+
+            border: {
+              display: false,
+            },
           },
         },
       },
     });
 
     let lastTime = 0;
+
     let value1 = 20;
     let value2 = 60;
+
     let target1 = 20;
     let target2 = 60;
 
@@ -754,7 +1097,9 @@ const ChartModule = (() => {
         const cutoff = now - 30000;
 
         chart.data.datasets.forEach((dataset) => {
-          dataset.data = dataset.data.filter((point) => point.x >= cutoff);
+          dataset.data = dataset.data.filter((point) => {
+            return point.x >= cutoff;
+          });
         });
 
         chart.options.scales.x.min = cutoff;

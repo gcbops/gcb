@@ -126,6 +126,38 @@ function getClientDataByStatus(status, customSheet) {
     .filter((row) => row.some(Boolean));
 }
 
+function getActiveClientsPaidOwed() {
+  try {
+    const sheet = getSheetSafe("Paid & Owed Log");
+
+    if (!sheet) {
+      throw new Error('Sheet "Paid & Owed Log" was not found.');
+    }
+
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      return [];
+    }
+
+    const values = sheet
+      .getRange(2, 15, lastRow - 1, 5) // O:S
+      .getValues();
+
+    return values
+      .filter((row) => row.some((value) => value !== ""))
+      .map((row) => ({
+        client: row[0],
+        totalOwed: Number(row[1]) || 0,
+        currentMonthOwed: Number(row[2]) || 0,
+        totalPaid: Number(row[3]) || 0,
+        today: Number(row[4]) || 0,
+      }));
+  } catch (err) {
+    throw new Error(err.message || String(err));
+  }
+}
+
 function getTopPaidClients() {
   const sheet = getSheetSafe("Paid & Owed Log");
 
@@ -202,8 +234,6 @@ function getClientSheetUrl(name) {
 }
 
 function getClientDataWithNickname(dt) {
-  console.log("[GAS] getClientDataWithNickname START");
-
   const ss = getActiveSpreadsheet();
   const logSheet = ss.getSheetByName("Paid & Owed Log");
   const clientNamesSheet = ss.getSheetByName("Client Names");
@@ -227,12 +257,15 @@ function getClientDataWithNickname(dt) {
       ? logSheet.getRange(2, 15, lastRow - 1, 4).getValues()
       : logSheet.getRange(2, 10, lastRow - 1, 4).getValues();
 
-  // Client Names:
-  // A = Client Name
-  // H = Nickname
+  /*
+   * Client Names:
+   * A = Client Name
+   * E = Number of Projects
+   * H = Nickname
+   */
   const clientNamesLastRow = clientNamesSheet.getLastRow();
 
-  const nicknameMap = new Map();
+  const clientMap = new Map();
 
   if (clientNamesLastRow >= 2) {
     const clientNamesData = clientNamesSheet
@@ -241,13 +274,18 @@ function getClientDataWithNickname(dt) {
 
     clientNamesData.forEach((row) => {
       const name = String(row[0] ?? "").trim();
-      const nickname = String(row[7] ?? "").trim();
 
       if (!name) {
         return;
       }
 
-      nicknameMap.set(normalizeText(name), nickname);
+      const projects = Number(row[4]) || 0;
+      const nickname = String(row[7] ?? "").trim();
+
+      clientMap.set(normalizeText(name), {
+        projects,
+        nickname,
+      });
     });
   }
 
@@ -256,12 +294,18 @@ function getClientDataWithNickname(dt) {
     .map((row) => {
       const name = String(row[0] ?? "").trim();
 
+      const clientInfo = clientMap.get(normalizeText(name)) || {
+        projects: 0,
+        nickname: "",
+      };
+
       return {
         name,
-        id: row[1],
-        city: row[2],
+        paid: row[1],
+        owed: row[2],
         status: row[3],
-        role: nicknameMap.get(normalizeText(name)) || "",
+        role: clientInfo.nickname,
+        projects: clientInfo.projects,
       };
     });
 }

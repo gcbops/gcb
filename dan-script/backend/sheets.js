@@ -35,9 +35,14 @@ function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
 }
 
 function applyFormulaToSheets(cellRef, formula) {
+  // requireAuthorizedUser();
+
   try {
     const ss = getActiveSpreadsheet();
 
+    /*
+     * Main spreadsheet
+     */
     ss.getSheets().forEach((sheet) => {
       const name = sheet.getName();
 
@@ -46,9 +51,46 @@ function applyFormulaToSheets(cellRef, formula) {
       }
     });
 
+    /*
+     * External spreadsheets
+     *
+     * Only update their "Projects" sheet.
+     */
+    const externalSheets = getExternalSheets();
+
+    externalSheets.forEach((external) => {
+      const spreadsheetId = external.spreadsheetId;
+
+      if (!spreadsheetId) {
+        return;
+      }
+
+      try {
+        const externalSS = SpreadsheetApp.openById(spreadsheetId);
+
+        const projectsSheet = externalSS.getSheetByName("Projects");
+
+        if (!projectsSheet) {
+          console.warn(
+            `External spreadsheet "${spreadsheetId}" has no Projects sheet.`,
+          );
+
+          return;
+        }
+
+        projectsSheet.getRange(cellRef).setFormula(formula);
+      } catch (err) {
+        console.warn(
+          `Unable to update external spreadsheet "${spreadsheetId}":`,
+          err,
+        );
+      }
+    });
+
     return `Formula applied at ${cellRef}`;
   } catch (err) {
     logResponse(err);
+
     return `Error: ${err.message}`;
   }
 }
