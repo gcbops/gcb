@@ -4,51 +4,90 @@ import { DataTableModule } from "../tables/data-table.js";
 const upsellOverviewPage = (() => {
   let bound = false;
 
-  const init = () => {
-    if (bound) {return;}
+  const TABLE_ID = "#upsellTable";
+  const TABLE_TITLE = "Upsell";
+  const TABLE_BODY_ID = "recordsBody";
+
+  const UPSell_RECORDS_CACHE_KEY = "upsellRecords";
+  const UPSELL_SUMMARY_CACHE_KEY = "upsellSummary";
+
+  function init() {
+    if (bound) {
+      return;
+    }
+
     bound = true;
 
     bindActions();
     loadData();
-  };
+  }
 
-  const destroy = () => {
-    if (!bound) {return;}
+  function destroy() {
+    if (!bound) {
+      return;
+    }
+
     bound = false;
 
+    /*
+     * Remove page-specific event handlers.
+     */
     $("#addtoSheet-upsell").off(".upsellOverview");
     $("#upsellForm").off(".upsellOverview");
-  };
 
-  const bindActions = () => {
+    /*
+     * Destroy the DataTable instance.
+     *
+     * DataTableModule.destroy() keeps the actual
+     * table element in the DOM.
+     */
+    DataTableModule.destroy(TABLE_ID);
+  }
 
+  function bindActions() {
+    bindSheetButton();
+    bindUpsellForm();
+  }
+
+  function bindSheetButton() {
     $("#addtoSheet-upsell")
       .off("click.upsellOverview")
       .on("click.upsellOverview", function () {
         const btn = $(this);
+
         const loading = AppUtils.setButtonLoading(
           btn[0],
           "Redirecting to the sheet...",
         );
 
         google.script.run
-          .withSuccessHandler(function (url) {
+          .withSuccessHandler((url) => {
             loading.restore();
-            window.open(url, "_blank");
+
+            if (url && String(url).startsWith("http")) {
+              window.open(url, "_blank");
+            } else {
+              AppUtils.showError("Unable to open the Upsells sheet.");
+            }
           })
           .withFailureHandler((err) => {
-            AppUtils.showError(err);
             loading.restore();
+
+            AppUtils.showError(err);
           })
           .getClientSheetUrl("Upsells");
       });
+  }
 
+  function bindUpsellForm() {
     $("#upsellForm")
       .off("submit.upsellOverview")
       .on("submit.upsellOverview", function (e) {
         e.preventDefault();
 
-        const $submitBtn = $(this).find('button[type="submit"]');
+        const $form = $(this);
+
+        const $submitBtn = $form.find('button[type="submit"]');
 
         const fields = [
           "clientName",
@@ -60,131 +99,169 @@ const upsellOverviewPage = (() => {
         ];
 
         const required = ["clientName", "upsellHours", "reportedDate"];
+
         const data = {};
 
         fields.forEach((id) => {
-          const $el = $("#" + id);
-          data[id] = $el.length ? ($el.val() || "").trim() : "";
+          const $el = $form.find(`#${id}`);
+
+          data[id] = $el.length ? String($el.val() || "").trim() : "";
         });
 
-        if (required.some((k) => data[k] === "")) {
+        if (required.some((field) => !data[field])) {
           AppUtils.showError("Please fill out all required fields!");
+
           return;
         }
 
         AppUtils.submitForm({
           gscriptFunc: "addUpsellEntry",
-          data: data,
+          data,
           $btn: $submitBtn,
           loadingText: "Saving upsell...",
-          onSuccess: () => {
-            AppUtils.showDashboardToast(
-              "Record added successfully!",
-              "success",
-            );
 
-            fields.forEach((id) => {
-              const $el = $("#" + id);
-              if ($el.length) {
-                $el.val("");
-              }
-            });
-
-            AppUtils.resetCacheKeys(["upsellRecords", "upsellSummary"]);
-
-            setTimeout(() => {
-              loadUpsellSummary(true);
-              loadUpsellRecords(true);
-            }, 600);
-          },
+          onSuccess: handleUpsellSaveSuccess,
         });
       });
+  }
 
-  };
+  function handleUpsellSaveSuccess() {
+    AppUtils.showDashboardToast("Record added successfully!", "success");
 
-  const loadData = () => {
+    resetUpsellForm();
+
+    AppUtils.resetCacheKeys([
+      UPSell_RECORDS_CACHE_KEY,
+      UPSELL_SUMMARY_CACHE_KEY,
+    ]);
+
+    /*
+     * Refresh both the summary and table.
+     */
+    loadUpsellSummary(true);
+    loadUpsellRecords(true);
+  }
+
+  function resetUpsellForm() {
+    const $form = $("#upsellForm");
+
+    if (!$form.length) {
+      return;
+    }
+
+    $form[0].reset();
+  }
+
+  function loadData() {
     loadUpsellSummary();
     loadUpsellRecords();
-  };
+  }
 
   function loadUpsellSummary(forceRefresh = false) {
     AppUtils.cachedGScriptCall(
-      "upsellSummary",
+      UPSELL_SUMMARY_CACHE_KEY,
       "getUpsellSummary",
       [],
-      function (summary) {
-        summary = summary || { total: 0, today: 0, month: 0 };
+      (summary) => {
+        summary = summary || {
+          total: 0,
+          today: 0,
+          month: 0,
+        };
+
         const totalEl = document.getElementById("total");
+
         const todayEl = document.getElementById("today");
+
         const monthEl = document.getElementById("month");
+
         if (totalEl) {
-          totalEl.textContent = summary.total;
+          totalEl.textContent = summary.total ?? 0;
         }
+
         if (todayEl) {
-          todayEl.textContent = summary.today;
+          todayEl.textContent = summary.today ?? 0;
         }
+
         if (monthEl) {
-          monthEl.textContent = summary.month;
+          monthEl.textContent = summary.month ?? 0;
         }
       },
+      false,
+      forceRefresh,
     );
   }
 
   function loadUpsellRecords(forceRefresh = false) {
+    /*
+     * Show the loader only when there isn't
+     * usable cached data.
+     */
+    if (forceRefresh || !AppUtils.cacheGet(UPSell_RECORDS_CACHE_KEY)) {
+      DataTableModule.showLoader(TABLE_ID);
+    }
+
     AppUtils.cachedGScriptCall(
-      "upsellRecords",
+      UPSell_RECORDS_CACHE_KEY,
       "getUpsellRecords",
       [],
-      function (table) {
-        renderUpsellTables(table);
+      (tableData) => {
+        renderUpsellTable(tableData);
       },
+      false,
+      forceRefresh,
     );
   }
 
-  function renderUpsellTables(tableData) {
-    const $table = $("#upsellTable");
-    const $tbody = $("#recordsBody");
+  function renderUpsellTable(tableData) {
+    const tbody = document.getElementById(TABLE_BODY_ID);
 
-    if (!$table.length || !$tbody.length) {
+    if (!tbody) {
       return;
     }
 
-    let html;
-
     if (!Array.isArray(tableData) || tableData.length === 0) {
-      html = `
-      <tr>
-        <td colspan="3" style="text-align:center;color:#64748b">
-          No records yet
-        </td>
-      </tr>
-    `;
-    } else {
-      html = tableData
-        .map(
-          (row) => `
-          <tr>
-            <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
-            <td style="text-align:center;">
-              ${AppUtils.escapeHtml(row[1] ?? "")}
-            </td>
-            <td style="text-align:center;">
-              ${AppUtils.escapeHtml(row[2] ?? "")}
-            </td>
-          </tr>
-        `,
-        )
-        .join("");
+      DataTableModule.showEmpty(TABLE_ID, "No records yet");
+
+      return;
     }
 
-    $tbody.html(html);
+    tbody.innerHTML = "";
 
-    if (Array.isArray(tableData) && tableData.length > 0) {
-      DataTableModule.init("Upsell", "#upsellTable");
-    }
+    tableData.forEach((row) => {
+      tbody.appendChild(createUpsellRow(row));
+    });
+
+    /*
+     * Initialize DataTable after rows exist.
+     */
+    DataTableModule.init(TABLE_TITLE, TABLE_ID);
   }
 
-  return { init, destroy };
+  function createUpsellRow(row) {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        ${AppUtils.escapeHtml(row[0] ?? "")}
+      </td>
+
+      <td class="text-center">
+        ${AppUtils.escapeHtml(row[1] ?? "")}
+      </td>
+
+      <td class="text-center">
+        ${AppUtils.escapeHtml(row[2] ?? "")}
+      </td>
+    `;
+
+    return tr;
+  }
+
+  return {
+    init,
+    destroy,
+  };
 })();
 
 export { upsellOverviewPage };

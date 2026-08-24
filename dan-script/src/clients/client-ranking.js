@@ -118,9 +118,9 @@ const ClientRanking = (() => {
     if (owed === 0) {
       return `
         <div class="font-size-xs text-muted">
-          <small class="opacity-5 pr-1">$</small>
+          <small class="opacity-5 pe-1">$</small>
           <span>${paid}</span>
-          <small class="text-warning pl-2">
+          <small class="text-warning ps-2">
             <i class="fa fa-dot-circle"></i>
           </small>
         </div>
@@ -130,14 +130,14 @@ const ClientRanking = (() => {
     return `
       <div class="font-size-xs text-muted">
         <span>${paid}</span>
-        <small class="text-success pl-2">
+        <small class="text-success ps-2">
           <i class="fa fa-angle-up"></i>
         </small>
       </div>
 
       <div class="font-size-xs text-muted">
         <span>${owed}</span>
-        <small class="text-danger pl-2">
+        <small class="text-danger ps-2">
           <i class="fa fa-angle-down"></i>
         </small>
       </div>
@@ -148,7 +148,7 @@ const ClientRanking = (() => {
     let html = `
       <div class="font-size-xs text-muted">
         <span>${paid}</span>
-        <small class="text-danger pl-2">
+        <small class="text-danger ps-2">
           <i class="fa fa-angle-down"></i>
         </small>
       </div>
@@ -158,7 +158,7 @@ const ClientRanking = (() => {
       html += `
         <div class="font-size-xs text-muted">
           <span>${owed}</span>
-          <small class="text-warning pl-2">
+          <small class="text-warning ps-2">
             <i class="fa fa-exclamation-circle"></i>
           </small>
         </div>

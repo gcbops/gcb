@@ -85,8 +85,7 @@ const settingsConfigurationPage = (() => {
 
   function handleClick(e) {
     const btn = e.target.closest(
-      "#btnClearCache, #btnSyncClient, #btnAddMasterFormula",
-      "#btnBackupAllSheets",
+      "#btnClearCache, #btnSyncClient, #btnBackupAllSheets, #btnAddMasterFormula",
     );
 
     if (!btn) {

@@ -8,7 +8,7 @@ const AppUtils = (() => {
   let notificationAudio = null;
 
   const APP_CONFIG = {
-    HTML_VERSIONING: false,
+    HTML_VERSIONING: true,
   };
 
   let htmlVersion = null;
@@ -410,7 +410,7 @@ const AppUtils = (() => {
     toastr.options = {
       closeButton: true,
       progressBar: true,
-      positionClass: "toast-top-right",
+      positionClass: "toast-bottom-right",
       timeOut: 4000,
     };
 

@@ -3,6 +3,10 @@ import { TableModule } from "../tables/tables";
 import { DataTableModule } from "../tables/data-table";
 
 const ClientDataService = (() => {
+  const ACTIVE_CLIENTS_TABLE_ID = "#active-clients";
+  const ACTIVE_CLIENTS_TITLE = "Active Clients";
+  const CLIENT_DATA_TABLE_ID = "#table";
+
   function renderClientDataByStatus(
     sourceSheet,
     title,
@@ -20,6 +24,8 @@ const ClientDataService = (() => {
       cacheKey,
     });
 
+    DataTableModule.showLoader(CLIENT_DATA_TABLE_ID, `Loading ${title.toLowerCase()}...`);
+
     AppUtils.cachedGScriptCall(
       cacheKey,
       "getClientDataByStatus",
@@ -27,6 +33,7 @@ const ClientDataService = (() => {
       (data) => {
         handleClientDataResponse(data, title, log);
       },
+      debug,
     );
   }
 
@@ -35,7 +42,9 @@ const ClientDataService = (() => {
 
     if (!Array.isArray(data)) {
       log("[renderClientDataByStatus] invalid data", data);
-      AppUtils.showError("⚠️ invalid dialog data");
+
+      AppUtils.showError("⚠️ Invalid client data.");
+
       return;
     }
 
@@ -56,8 +65,11 @@ const ClientDataService = (() => {
     const log = (...args) => debug && console.log(...args);
 
     const cacheKey = "paidOwedClients";
+    const tableId = "#active-clients";
 
     log("[renderActivePaidOwedClients] loading");
+
+    DataTableModule.showLoader(tableId, "Loading active clients...");
 
     AppUtils.cachedGScriptCall(
       cacheKey,
@@ -67,10 +79,7 @@ const ClientDataService = (() => {
         log("[renderActivePaidOwedClients] callback:", data);
 
         if (!Array.isArray(data)) {
-          log("[renderActivePaidOwedClients] invalid data:", data);
-
           AppUtils.showError("⚠️ Invalid paid & owed data.");
-
           return;
         }
 
@@ -82,47 +91,66 @@ const ClientDataService = (() => {
   }
 
   function renderPaidOwedTable(data) {
-    const $table = $("#active-clients");
+    const tbody = document.querySelector(`${ACTIVE_CLIENTS_TABLE_ID} tbody`);
 
-    if (!$table.length) {
+    if (!tbody) {
       return;
     }
 
-    const $tbody = $table.find("tbody");
+    /*
+     * No data.
+     */
+    if (!data.length) {
+      DataTableModule.showEmpty(
+        ACTIVE_CLIENTS_TABLE_ID,
+        "No active clients found.",
+      );
 
-    $tbody.empty();
+      return;
+    }
+
+    tbody.innerHTML = "";
 
     data.forEach((row, index) => {
-      $tbody.append(`
-        <tr>
-          <td class="text-center">
-            ${index + 1}
-          </td>
-
-          <td>
-            ${AppUtils.escapeHtml(row.client ?? "")}
-          </td>
-
-          <td class="text-center">
-            ${formatAmount(row.totalOwed)}
-          </td>
-
-          <td class="text-center">
-            ${formatAmount(row.currentMonthOwed)}
-          </td>
-
-          <td class="text-center">
-            ${formatAmount(row.totalPaid)}
-          </td>
-
-          <td class="text-center">
-            ${row.today}
-          </td>
-        </tr>
-      `);
+      tbody.appendChild(createPaidOwedRow(row, index));
     });
 
-    DataTableModule.init("Active Clients", "#active-clients");
+    /*
+     * Initialize after rows have been rendered.
+     */
+    DataTableModule.init(ACTIVE_CLIENTS_TITLE, ACTIVE_CLIENTS_TABLE_ID);
+  }
+
+  function createPaidOwedRow(row, index) {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td class="text-center">
+        ${index + 1}
+      </td>
+
+      <td>
+        ${AppUtils.escapeHtml(row.client ?? "")}
+      </td>
+
+      <td class="text-center">
+        ${formatAmount(row.totalOwed)}
+      </td>
+
+      <td class="text-center">
+        ${formatAmount(row.currentMonthOwed)}
+      </td>
+
+      <td class="text-center">
+        ${formatAmount(row.totalPaid)}
+      </td>
+
+      <td class="text-center">
+        ${AppUtils.escapeHtml(row.today ?? "")}
+      </td>
+    `;
+
+    return tr;
   }
 
   function formatAmount(value) {

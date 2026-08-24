@@ -340,6 +340,19 @@ const ChartModule = (() => {
             axis: "x",
             intersect: false,
 
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+
+            titleColor: "#111827",
+            bodyColor: "#374151",
+
+            borderColor: "#d1d5db",
+            borderWidth: 0,
+
+            padding: 12,
+            cornerRadius: 8,
+
+            displayColors: true,
+
             callbacks: {
               label: (context) => {
                 const value = Number(context.parsed.y) || 0;
@@ -490,12 +503,17 @@ const ChartModule = (() => {
             axis: "x",
             intersect: false,
 
-            backgroundColor: "#0f172a",
-            titleColor: "#ffffff",
-            bodyColor: "#ffffff",
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+
+            titleColor: "#111827",
+            bodyColor: "#374151",
+
+            borderColor: "#d1d5db",
+            borderWidth: 0,
 
             padding: 12,
-            bodySpacing: 6,
+            cornerRadius: 8,
+
             displayColors: true,
 
             callbacks: {
@@ -664,6 +682,19 @@ const ChartModule = (() => {
             mode: "index",
             axis: "x",
             intersect: false,
+
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+
+            titleColor: "#111827",
+            bodyColor: "#374151",
+
+            borderColor: "#d1d5db",
+            borderWidth: 0,
+
+            padding: 12,
+            cornerRadius: 8,
+
+            displayColors: true,
 
             callbacks: {
               label: function (context) {
@@ -855,6 +886,19 @@ const ChartModule = (() => {
             axis: "x",
             intersect: false,
 
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+
+            titleColor: "#111827",
+            bodyColor: "#374151",
+
+            borderColor: "#d1d5db",
+            borderWidth: 0,
+
+            padding: 12,
+            cornerRadius: 8,
+
+            displayColors: true,
+
             callbacks: {
               label: function (context) {
                 const value = Number(context.parsed.y) || 0;
@@ -980,12 +1024,17 @@ const ChartModule = (() => {
             axis: "x",
             intersect: false,
 
-            backgroundColor: "#0f172a",
-            titleColor: "#ffffff",
-            bodyColor: "#ffffff",
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+
+            titleColor: "#111827",
+            bodyColor: "#374151",
+
+            borderColor: "#d1d5db",
+            borderWidth: 0,
 
             padding: 12,
-            bodySpacing: 6,
+            cornerRadius: 8,
+
             displayColors: true,
 
             callbacks: {

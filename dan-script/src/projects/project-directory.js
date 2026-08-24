@@ -2,6 +2,10 @@ import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
 const ProjectDirectory = (() => {
+  const TABLE_ID = "#projectsTable";
+  const TABLE_TITLE = "Projects";
+  const CACHE_KEY = "allProjects";
+
   function init() {
     bindEvents();
     loadProjectDirectory();
@@ -9,125 +13,86 @@ const ProjectDirectory = (() => {
 
   function destroy() {
     $(document).off(".projectDirectory");
+
+    DataTableModule.destroy(TABLE_ID);
   }
 
   function loadProjectDirectory(log = false) {
+    const logMessage = (...args) => {
+      if (log) {
+        console.log(...args);
+      }
+    };
 
-    const cacheKey = "allProjects";
-    const cached = fetchCachedProjects(cacheKey);
+    /*
+     * Show loader immediately while cached/server data is being loaded.
+     */
+    DataTableModule.showLoader(TABLE_ID);
 
-    if (cached) {
-      renderProjectDirectory(cached, log);
-      refreshProjectDirectory(cacheKey, cached, log);
-      return;
-    }
-
-    fetchProjectDirectory(cacheKey, log);
-  }
-
-  function fetchCachedProjects(cacheKey) {
-    const cached = AppUtils.cacheGet(cacheKey);
-
-    return Array.isArray(cached) && cached.length ? cached : null;
-  }
-
-  function fetchProjectDirectory(cacheKey, log) {
     AppUtils.cachedGScriptCall(
-      cacheKey,
+      CACHE_KEY,
       "getProjects",
       [],
       (data) => {
         if (!Array.isArray(data)) {
-          AppUtils.showError("Something went wrong!");
+          DataTableModule.showError(TABLE_ID, "Unable to load projects.");
+
           return;
         }
 
-        renderProjectDirectory(data, log);
-      },
-      log,
-    );
-  }
-
-  function refreshProjectDirectory(cacheKey, cached, log) {
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getProjects",
-      [],
-      (fresh) => {
-        if (!Array.isArray(fresh)) {
-          return;
-        }
-
-        if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
-          renderProjectDirectory(fresh, log);
-        }
+        renderProjectDirectory(data, logMessage);
       },
       log,
     );
   }
 
   function renderProjectDirectory(data, log) {
-    const tbody = document.getElementById("dataBody");
-
-    if (!tbody) {
-      if (log) {
-        console.log("[ProjectDirectory] tbody not found");
-      }
-      return;
-    }
-
-    tbody.innerHTML = "";
-
-    if (!Array.isArray(data) || data.length === 0) {
-      tbody.innerHTML = `
-      <tr>
-        <td colspan="4" class="text-center text-muted">
-          No projects found.
-        </td>
-      </tr>
-    `;
+    if (!Array.isArray(data)) {
+      DataTableModule.showError(TABLE_ID, "Unable to load projects.");
 
       return;
     }
-
-    data.forEach((project, index) => {
-      tbody.appendChild(createProjectDirectoryRow(project, index));
-    });
 
     /*
-     * Initialize after rows are rendered.
+     * Render rows before DataTables initialization.
      */
-    DataTableModule.init("Projects", "#projectsTable");
+    DataTableModule.renderRows(TABLE_ID, data, createProjectDirectoryRow);
 
-    if (log) {
-      console.log("[ProjectDirectory] Rendered", data.length, "projects");
-    }
+    /*
+     * Initialize DataTable after the tbody is populated.
+     *
+     * DataTableModule.init() already destroys any
+     * previous instance before initializing.
+     */
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false);
+
+    log("[ProjectDirectory] Rendered", data.length, "projects");
   }
 
   function createProjectDirectoryRow(project, index) {
     const tr = document.createElement("tr");
 
-    const colA = project[0] ?? "";
-    const colB = project[1] ?? "";
-    const colC = project[2] ?? "";
+    const projectName = project[0] ?? "";
+    const clientName = project[1] ?? "";
+    const hours = project[2] ?? "";
 
     tr.innerHTML = `
-    <td class="text-center text-muted font-weight-bold">
-      ${index + 1}
-    </td>
+      <td class="text-center text-muted font-weight-bold">
+        ${index + 1}
+      </td>
 
-    <td>
-      ${AppUtils.escapeHtml(colA)}
-    </td>
+      <td class="text-center">
+        ${AppUtils.escapeHtml(projectName)}
+      </td>
 
-    <td class="text-center">
-      ${AppUtils.escapeHtml(colB)}
-    </td>
+      <td class="text-center">
+        ${AppUtils.escapeHtml(clientName)}
+      </td>
 
-    <td class="text-center">
-      ${AppUtils.escapeHtml(colC)}
-    </td>
-  `;
+      <td class="text-center">
+        ${AppUtils.escapeHtml(hours)}
+      </td>
+    `;
 
     return tr;
   }
@@ -139,8 +104,8 @@ const ProjectDirectory = (() => {
 
     $(document)
       .off("click.projectDirectory", "#refresh-projects")
-      .on("click.projectDirectory", "#refresh-projects", function () {
-        fetchProjectDirectory("allProjects");
+      .on("click.projectDirectory", "#refresh-projects", () => {
+        loadProjectDirectory(true);
       });
   }
 
@@ -154,7 +119,8 @@ const ProjectDirectory = (() => {
 
   return {
     init,
-    destroy
+    destroy,
+    loadProjectDirectory,
   };
 })();
 

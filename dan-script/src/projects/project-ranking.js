@@ -82,7 +82,7 @@ const ProjectRankings = (() => {
           <div class="widget-content-right font-weight-bold">
             <div class="font-size-xs text-muted">
               <span>${hours}</span>
-              <small class="${config.iconColor} pl-2">
+              <small class="${config.iconColor} ps-2">
                 <i class="${config.iconClass}"></i>
               </small>
             </div>
