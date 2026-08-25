@@ -5,14 +5,14 @@ node_modules/
 npm-debug.log*
 
 # clasp
-.claspignore
 .clasp.json
+.clasprc.json
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# VS Code (optional)
+# VS Code
 .vscode/
 
 # Environment files

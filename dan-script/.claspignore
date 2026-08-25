@@ -1,7 +1,7 @@
 # Node
 node_modules/**
 
-# Build & development
+# Build / development
 build/**
 src/**
 dist/**
@@ -19,6 +19,10 @@ package-lock.json
 
 # ESLint
 eslint.config.mjs
+
+# Clasp
+.clasp.json
+.clasprc.json
 
 # Documentation
 README.md
