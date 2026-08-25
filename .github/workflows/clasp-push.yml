@@ -1,12 +1,9 @@
-name: Push to Google Apps Script
+name: Build and Push to Google Apps Script
 
 on:
   push:
     branches:
       - main
-    paths:
-      - "dan-script/**"
-      - ".github/workflows/clasp-push.yml"
 
 jobs:
   clasp-push:
@@ -19,18 +16,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: Install clasp
-        run: npm install -g @google/clasp
+      - name: Install dependencies
+        working-directory: dan-script
+        run: npm ci
+
+      - name: Build project
+        working-directory: dan-script
+        run: npm run build
 
       - name: Create clasp configuration
         working-directory: dan-script
         run: |
           echo '${{ secrets.CLASP_JSON }}' > .clasp.json
-          echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+          echo '${{ secrets.CLASPRC_JSON }}' > .clasprc.json
 
       - name: Push to Google Apps Script
         working-directory: dan-script
         run: |
-          clasp push
+          npx @google/clasp push
