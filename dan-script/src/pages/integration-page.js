@@ -285,14 +285,14 @@ const integrationsConfigurationPage = (() => {
 
     google.script.run
       .withSuccessHandler(() => {
+        loading.setSuccess("Configuration Saved");
+        
+        AppUtils.closeModal(MODAL_ID);
+        
         AppUtils.showDashboardToast(
           `${title} configuration saved successfully!`,
           "success",
         );
-
-        loading.restore();
-        
-        AppUtils.closeModal(MODAL_ID);
 
         // Assuming loadData() is in outer scope; if not, expose it or pass it in.
         if (typeof loadData === "function") {

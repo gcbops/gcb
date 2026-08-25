@@ -15,7 +15,7 @@ const TableModule = (() => {
 
     $tbody
       .off("click.tableActions")
-      .on("click.tableActions", ".action-btn .btn", function (e) {
+      .on("click.tableActions", ".action-btn-group .btn", function (e) {
         e.stopPropagation();
 
         const $btn = $(this);

@@ -141,7 +141,7 @@ const DataTableModule = (() => {
 
         {
           targets: -1,
-          className: "action-btn",
+          className: "action-btn-group",
           orderable: false,
           searchable: false,
 

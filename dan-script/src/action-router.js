@@ -47,8 +47,22 @@ const ActionRouterModule = (() => {
 
     const appContainer = document.querySelector(".app-container");
 
-    if (appContainer) {
-      appContainer.classList.add("closed-sidebar");
+    if (window.matchMedia("(min-width: 992px)").matches) {
+      // Desktop / larger devices
+      if(appContainer) {
+        appContainer.classList.add("closed-sidebar");
+      }
+    } else {
+      // Mobile / smaller devices
+      if (appContainer) {
+        appContainer.classList.remove("sidebar-mobile-open");
+      }
+
+      const hamburger = document.querySelector(".app-header__mobile-menu .hamburger");
+
+      if(hamburger) {
+        hamburger.classList.remove("is-active");
+      }
     }
 
     RouterModule.go(page);

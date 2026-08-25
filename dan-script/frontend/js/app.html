@@ -7,7 +7,7 @@
     const CACHE_TTL = 24 * 60 * 60 * 1e3;
     let notificationAudio = null;
     const APP_CONFIG = {
-      HTML_VERSIONING: true
+      HTML_VERSIONING: false
     };
     let htmlVersion = null;
     function getHtmlVersion() {
@@ -340,7 +340,9 @@
       };
       try {
         google.script.run.withSuccessHandler((result) => {
-          restoreButton();
+          if (loading) {
+            loading.setSuccess("Saved");
+          }
           if (typeof onSuccess === "function") {
             onSuccess(result);
           }
@@ -369,8 +371,20 @@
         <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84a.484.484 0 00-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 00-.59.22L2.09 8.83a.488.488 0 00.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.488.488 0 00-.12.61l1.92 3.32c.12.21.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.488.488 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
       </svg>
     `;
+      const getSuccessHtml = (text) => `
+      ${text}
+      <svg class="check-icon ms-2" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+      </svg>
+    `;
       const setText = (text) => {
         $button.prop("disabled", true).html(getLoadingHtml(text));
+      };
+      const setSuccess = (text = "Done", delayMs = 2e3) => {
+        $button.prop("disabled", false).html(getSuccessHtml(text));
+        setTimeout(() => {
+          restore();
+        }, delayMs);
       };
       const restore = () => {
         $button.prop("disabled", false).html($button.data("original-text"));
@@ -379,6 +393,7 @@
       setText(loadingText);
       return {
         setText,
+        setSuccess,
         restore
       };
     }
@@ -1043,7 +1058,7 @@
     <div class="btn-group btn-group-sm">
       <button
         type="button"
-        class="btn add-client"
+        class="btn action-btn add-client"
         title="Add Client">
         <i class="pe-7s-plus"></i>
       </button>
@@ -1051,7 +1066,7 @@
       ${canEdit ? `
             <button
               type="button"
-              class="btn edit-today-hours"
+              class="btn action-btn edit-today-hours"
               title="Edit Today's Hours">
               <i class="pe-7s-note"></i>
             </button>
@@ -1059,14 +1074,14 @@
 
       <button
         type="button"
-        class="btn view-client"
+        class="btn action-btn view-client"
         title="View Client">
         <i class="pe-7s-look"></i>
       </button>
 
       <button
         type="button"
-        class="btn edit-client"
+        class="btn action-btn edit-client"
         title="Edit Client">
         <i class="pe-7s-note2"></i>
       </button>
@@ -1255,7 +1270,7 @@
           ...tableOptions.columnDefs || [],
           {
             targets: -1,
-            className: "action-btn",
+            className: "action-btn-group",
             orderable: false,
             searchable: false,
             render: (_data, _type, row) => ActivityToday.buildActionButtons(row).html()
@@ -1619,8 +1634,14 @@
         ${statusHtml}
       </td>
 
-      <td class="text-center action-btn">
-        <i class="pe-7s-note open-client-btn"></i>
+      <td class="text-center action-btn-group">
+        <button
+          type="button"
+          class="btn action-btn open-client-btn"
+          title="Open Client Sheet"
+        >
+          <i class="pe-7s-note"></i>
+        </button>
       </td>
     `;
       return row;
@@ -2189,7 +2210,7 @@
       if (!$tbody?.length) {
         return;
       }
-      $tbody.off("click.tableActions").on("click.tableActions", ".action-btn .btn", function(e) {
+      $tbody.off("click.tableActions").on("click.tableActions", ".action-btn-group .btn", function(e) {
         e.stopPropagation();
         const $btn = $(this);
         const $tr = $btn.closest("tr");
@@ -3807,6 +3828,7 @@
     const TABLE_ID = "#reports-export-table";
     const TABLE_TITLE = "Reports Overview";
     function loadReportsOverview() {
+      DataTableModule.showLoader(TABLE_ID, "Loading reports...");
       AppUtils.cachedGScriptCall(
         "reportsOverview",
         "getReportsOverview",
@@ -3819,51 +3841,32 @@
       );
     }
     function renderReportsOverview(data) {
-      if (!data || typeof data !== "object") {
+      if (!data) {
+        DataTableModule.showEmpty(TABLE_ID, "No report data available.");
         return;
       }
-      renderReportLogs(Array.isArray(data.logs) ? data.logs : []);
+      renderReportLogs(data.logs || []);
       renderReportStatus(data);
-      renderReportCounts(
-        data.counts && typeof data.counts === "object" ? data.counts : {}
-      );
+      renderReportCounts(data.counts || {});
     }
     function renderReportLogs(logs) {
-      const $table = $(TABLE_ID);
-      if (!$table.length) {
+      const $tbody = $(`${TABLE_ID} tbody`);
+      if (!$tbody.length) {
         return;
       }
-      const $tbody = $table.find("#data-table-body");
-      if (!$tbody.length) {
+      if (!Array.isArray(logs) || !logs.length) {
+        DataTableModule.showEmpty(TABLE_ID, "No reports generated yet.");
         return;
       }
       DataTableModule.destroy(TABLE_ID);
       $tbody.empty();
-      if (!logs.length) {
-        renderEmptyReportLogs($table, $tbody);
-        return;
-      }
       logs.forEach((log, index) => {
         $tbody.append(createReportLogRow(log, index));
       });
       DataTableModule.init(TABLE_TITLE, TABLE_ID);
     }
-    function renderEmptyReportLogs($table, $tbody) {
-      const colspan = getTableColumnCount($table);
-      $tbody.html(`
-      <tr>
-        <td
-          colspan="${colspan}"
-          class="text-center text-muted py-4"
-        >
-          No reports generated yet.
-        </td>
-      </tr>
-    `);
-    }
     function createReportLogRow(log, index) {
-      const type = String(log?.type || "").trim();
-      const badgeClass = type.toLowerCase() === "monthly" ? "bg-primary" : "bg-success";
+      const badgeClass = log.type === "Monthly" ? "bg-primary" : "bg-success";
       return `
       <tr>
 
@@ -3872,19 +3875,19 @@
         </td>
 
         <td>
-          ${AppUtils.escapeHtml(log?.date ?? "")}
+          ${AppUtils.escapeHtml(log.date ?? "")}
         </td>
 
         <td class="text-center">
           <span class="badge bg-light text-info">
             <i class="fa fa-file-pdf"></i>
-            ${AppUtils.escapeHtml(log?.name ?? "")}
+            ${AppUtils.escapeHtml(log.name ?? "")}
           </span>
         </td>
 
         <td class="text-center">
           <span class="badge text-white ${badgeClass}">
-            ${AppUtils.escapeHtml(type)}
+            ${AppUtils.escapeHtml(log.type ?? "")}
           </span>
         </td>
 
@@ -3893,7 +3896,7 @@
 
             <button
               class="btn btn-report-action btn-view-report"
-              data-url="${AppUtils.escapeHtml(log?.link ?? "")}"
+              data-url="${AppUtils.escapeHtml(log.link ?? "")}"
               title="View Report"
             >
               <i class="fa fa-eye"></i>
@@ -3901,7 +3904,7 @@
 
             <button
               class="btn btn-report-action btn-email-report"
-              data-id="${AppUtils.escapeHtml(log?.id ?? "")}"
+              data-id="${AppUtils.escapeHtml(log.id ?? "")}"
               title="Send Email"
             >
               <i class="fa fa-envelope"></i>
@@ -3909,7 +3912,7 @@
 
             <button
               class="btn btn-report-action btn-discord-report"
-              data-id="${AppUtils.escapeHtml(log?.id ?? "")}"
+              data-id="${AppUtils.escapeHtml(log.id ?? "")}"
               title="Send to Discord"
             >
               <i class="fab fa-discord"></i>
@@ -3922,9 +3925,8 @@
     `;
     }
     function renderReportStatus(data) {
-      const logs = Array.isArray(data.logs) ? data.logs : [];
-      $("#last-monthly-report").text(getLatestReportDate(logs, "Monthly"));
-      $("#last-yearly-report").text(getLatestReportDate(logs, "Yearly"));
+      $("#last-monthly-report").text(getLatestReportDate(data.logs, "Monthly"));
+      $("#last-yearly-report").text(getLatestReportDate(data.logs, "Yearly"));
       $("#next-scheduled-report").text(data.nextScheduled || "-");
       updateConnectionStatus("#drive-storage-status", data.driveStorage);
       updateConnectionStatus("#discord-status", data.discord);
@@ -3942,14 +3944,11 @@
       );
     }
     function getLatestReportDate(logs = [], type) {
-      const report = logs.find((log) => log?.type === type);
-      return report?.date || "-";
+      const report = logs.find((log) => log.type === type);
+      return report ? report.date : "-";
     }
     function updateConnectionStatus(selector, connected, successText = "Connected", failureText = "Not Connected") {
-      $(selector).text(connected ? successText : failureText).toggleClass("text-success", Boolean(connected)).toggleClass("text-danger", !connected);
-    }
-    function getTableColumnCount($table) {
-      return $table.find("thead tr:first th").length || 1;
+      $(selector).text(connected ? successText : failureText).toggleClass("text-success", connected).toggleClass("text-danger", !connected);
     }
     return {
       loadReportsOverview
@@ -4032,7 +4031,7 @@
     }
     function handleReportSuccess(btn, message, loading) {
       if (loading) {
-        loading.restore();
+        loading.setSuccess("Sent successfully");
       }
       AppUtils.showDashboardToast(message, "success");
     }
@@ -4380,7 +4379,8 @@
       google.script.run.withFailureHandler((err) => {
         handleGenerateError(type, btn, err, loading);
       }).withSuccessHandler(() => {
-        setGenerateState(type, false, loading);
+        loading.setSuccess("Generated successfully");
+        setGenerateState(type, false);
         cfg.reloadHistory(() => {
           TableModule.highlightLatestRow(cfg.historyTableId, 0);
         });
@@ -4638,7 +4638,7 @@
       const loading = AppUtils.setButtonLoading(btn, "Clearing cache...");
       AppUtils.clearAppCache();
       AppUtils.showDashboardToast("App cache cleared successfully!", "success");
-      loading.restore();
+      loading.setSuccess("Cleared Cache");
     }
     function syncClientSheets(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Syncing client lists...");
@@ -4647,7 +4647,7 @@
           "Client list synced successfully!",
           "success"
         );
-        loading.restore();
+        loading.setSuccess("Synced Clients");
       }).withFailureHandler((err) => {
         console.error("syncClientSheetList failed:", err);
         AppUtils.showDashboardToast(
@@ -4711,13 +4711,13 @@
     }
     function BackupAllSheets(btn) {
       const loading = AppUtils.setButtonLoading(
-        btn[0],
+        btn,
         "Creating Backup..."
       );
       google.script.run.withSuccessHandler((result) => {
         AppUtils.showDashboardToast("Backup completed", "info");
         console.log("Backup completed:", result);
-        loading.restore();
+        loading.setSuccess("Backup Completed");
       }).withFailureHandler((err) => {
         console.error("Backup failed:", err);
         AppUtils.showDashboardToast(
@@ -4844,7 +4844,8 @@
         "Applying Formula..."
       );
       google.script.run.withSuccessHandler((result) => {
-        loading.restore();
+        console.log("applyFormulaToSheets:", result);
+        loading.setSuccess("Formula Applied");
         AppUtils.closeModal("#app-modal");
         AppUtils.showDashboardToast("Formula applied successfully.", "success");
       }).withFailureHandler((err) => {
@@ -5548,6 +5549,294 @@
     return { init };
   })();
 
+  // src/app-shell.js
+  var AppShellModule = /* @__PURE__ */ (() => {
+    let initialized = false;
+    let initializing = null;
+    function loadComponent(cacheKey, fileName) {
+      const htmlCacheKey = AppUtils.getHtmlCacheKey(cacheKey);
+      return new Promise((resolve, reject) => {
+        AppUtils.cachedGScriptCall(
+          htmlCacheKey,
+          "loadHtmlComponent",
+          [fileName],
+          (html) => resolve(html),
+          false
+        );
+      });
+    }
+    function waitForElement(selector, timeout = 5e3) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(selector);
+        if (existing) {
+          resolve(existing);
+          return;
+        }
+        const observer = new MutationObserver(() => {
+          const element = document.querySelector(selector);
+          if (!element) {
+            return;
+          }
+          observer.disconnect();
+          clearTimeout(timeoutId);
+          resolve(element);
+        });
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+        const timeoutId = setTimeout(() => {
+          observer.disconnect();
+          reject(
+            new Error(`Element "${selector}" was not found within ${timeout}ms.`)
+          );
+        }, timeout);
+      });
+    }
+    async function init() {
+      if (initialized) {
+        return true;
+      }
+      if (initializing) {
+        return initializing;
+      }
+      initializing = (async () => {
+        try {
+          const appContainer = await waitForElement("#app-container");
+          const headerHtml = await loadComponent(
+            "app-page-title",
+            "app-page-title"
+          );
+          if (headerHtml) {
+            const header = appContainer.querySelector("#app-page-title");
+            if (header) {
+              initializeDropdowns(header);
+            }
+          }
+          try {
+            const loaderHtml = await loadComponent("app-loader", "loader");
+            if (loaderHtml) {
+              document.body.insertAdjacentHTML("afterbegin", loaderHtml);
+            }
+          } catch (error) {
+            console.warn("[AppShell] Loader failed:", error);
+          }
+          try {
+            const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
+            if (dialogsHtml) {
+              appContainer.insertAdjacentHTML("afterend", dialogsHtml);
+            }
+          } catch (error) {
+            console.warn("[AppShell] Dialogs failed:", error);
+          }
+          try {
+            initializeShellUI();
+          } catch (error) {
+            console.warn("[AppShell] Shell UI initialization failed:", error);
+          }
+          initialized = true;
+          return true;
+        } catch (error) {
+          console.error("[AppShell] Initialization failed:", error);
+          initialized = false;
+          AppUtils.showError(
+            `Failed to initialize application: ${error?.message || error}`
+          );
+          return false;
+        } finally {
+          initializing = null;
+        }
+      })();
+      return initializing;
+    }
+    function initializeShellUI() {
+      initializeSidebar();
+    }
+    function initializeDropdowns(container = document) {
+      console.log("[DropdownDebug] =======================================");
+      console.log("[DropdownDebug] initializeDropdowns() START");
+      console.log("[DropdownDebug] container:", container);
+      console.log("[DropdownDebug] container type:", typeof container);
+      console.log("[DropdownDebug] container connected:", container?.isConnected);
+      console.log(
+        "[DropdownDebug] bootstrap:",
+        typeof bootstrap !== "undefined" ? bootstrap : "UNDEFINED"
+      );
+      console.log(
+        "[DropdownDebug] bootstrap.Dropdown:",
+        typeof bootstrap !== "undefined" ? bootstrap.Dropdown : "UNAVAILABLE"
+      );
+      if (typeof bootstrap === "undefined" || !bootstrap.Dropdown) {
+        console.warn("[DropdownDebug] Bootstrap Dropdown unavailable");
+        return;
+      }
+      if (!container || typeof container.querySelectorAll !== "function") {
+        console.error("[DropdownDebug] INVALID CONTAINER:", container);
+        return;
+      }
+      const elements = container.querySelectorAll('[data-bs-toggle="dropdown"]');
+      console.log("[DropdownDebug] Found dropdown toggles:", elements.length);
+      elements.forEach((element, index) => {
+        console.log(`[DropdownDebug] #${index} START`);
+        console.log(`[DropdownDebug] #${index} element:`, element);
+        console.log(`[DropdownDebug] #${index} connected:`, element.isConnected);
+        console.log(`[DropdownDebug] #${index} parent:`, element.parentNode);
+        console.log(
+          `[DropdownDebug] #${index} parent element:`,
+          element.parentElement
+        );
+        console.log(
+          `[DropdownDebug] #${index} parent connected:`,
+          element.parentElement?.isConnected
+        );
+        console.log(
+          `[DropdownDebug] #${index} aria-expanded BEFORE:`,
+          element.getAttribute("aria-expanded")
+        );
+        console.log(
+          `[DropdownDebug] #${index} classes BEFORE:`,
+          element.className
+        );
+        const dropdownParent = element.closest(".dropdown") || element.closest(".btn-group");
+        console.log(`[DropdownDebug] #${index} dropdown parent:`, dropdownParent);
+        console.log(
+          `[DropdownDebug] #${index} dropdown parent connected:`,
+          dropdownParent?.isConnected
+        );
+        const menu = dropdownParent?.querySelector(".dropdown-menu");
+        console.log(`[DropdownDebug] #${index} menu:`, menu);
+        console.log(
+          `[DropdownDebug] #${index} menu connected:`,
+          menu?.isConnected
+        );
+        console.log(`[DropdownDebug] #${index} menu classes:`, menu?.className);
+        let instance = bootstrap.Dropdown.getInstance(element);
+        console.log(`[DropdownDebug] #${index} existing instance:`, instance);
+        if (instance) {
+          console.log(
+            `[DropdownDebug] #${index} instance parent:`,
+            instance._parent
+          );
+          console.log(`[DropdownDebug] #${index} instance menu:`, instance._menu);
+          console.log(
+            `[DropdownDebug] #${index} instance config:`,
+            instance._config
+          );
+          console.log(
+            `[DropdownDebug] #${index} instance element connected:`,
+            instance._element?.isConnected
+          );
+          console.log(
+            `[DropdownDebug] #${index} instance menu connected:`,
+            instance._menu?.isConnected
+          );
+          console.log(
+            `[DropdownDebug] #${index} instance parent connected:`,
+            instance._parent?.isConnected
+          );
+          console.log(`[DropdownDebug] #${index} END - already initialized`);
+          return;
+        }
+        if (!element.isConnected) {
+          console.warn(
+            `[DropdownDebug] #${index} SKIPPED - element disconnected`
+          );
+          return;
+        }
+        if (!element.parentNode) {
+          console.warn(`[DropdownDebug] #${index} SKIPPED - no parentNode`);
+          return;
+        }
+        if (!dropdownParent) {
+          console.warn(
+            `[DropdownDebug] #${index} SKIPPED - no .dropdown/.btn-group parent`
+          );
+          return;
+        }
+        if (!menu) {
+          console.warn(`[DropdownDebug] #${index} SKIPPED - no .dropdown-menu`);
+          return;
+        }
+        try {
+          console.log(`[DropdownDebug] #${index} Creating Bootstrap instance...`);
+          instance = bootstrap.Dropdown.getOrCreateInstance(element);
+          console.log(`[DropdownDebug] #${index} CREATED instance:`, instance);
+          console.log(
+            `[DropdownDebug] #${index} created _element:`,
+            instance?._element
+          );
+          console.log(
+            `[DropdownDebug] #${index} created _parent:`,
+            instance?._parent
+          );
+          console.log(
+            `[DropdownDebug] #${index} created _menu:`,
+            instance?._menu
+          );
+          console.log(
+            `[DropdownDebug] #${index} aria-expanded AFTER CREATE:`,
+            element.getAttribute("aria-expanded")
+          );
+        } catch (error) {
+          console.error(`[DropdownDebug] #${index} FAILED TO CREATE INSTANCE`, {
+            element,
+            parent: element.parentNode,
+            dropdownParent,
+            menu,
+            error
+          });
+          return;
+        }
+        console.log(
+          `[DropdownDebug] #${index} FINAL INSTANCE:`,
+          bootstrap.Dropdown.getInstance(element)
+        );
+        console.log(`[DropdownDebug] #${index} END`);
+      });
+      console.log("[DropdownDebug] initializeDropdowns() END");
+      console.log("[DropdownDebug] =======================================");
+      document.addEventListener("shown.bs.dropdown", (e) => {
+        console.log("[DropdownDebug] SHOWN:", e.target);
+      });
+      document.addEventListener("hidden.bs.dropdown", (e) => {
+        console.log("[DropdownDebug] HIDDEN:", e.target);
+      });
+      const btn = document.querySelector(
+        '.d-inline-block.dropdown [data-bs-toggle="dropdown"]'
+      );
+      console.log("[DropdownDebug] TEST BUTTON:", btn);
+      const dd = bootstrap.Dropdown.getOrCreateInstance(btn);
+      console.log("[DropdownDebug] TEST INSTANCE:", dd);
+      console.log("[DropdownDebug] TEST MENU:", dd._menu);
+      console.log("[DropdownDebug] TEST PARENT:", dd._parent);
+    }
+    function initializeSidebar() {
+      const CloseSideBar = document.querySelectorAll(".close-sidebar-btn");
+      if (!CloseSideBar) {
+        return;
+      }
+      CloseSideBar.forEach((button) => {
+        if (button.dataset.shellBound === "true") {
+          return;
+        }
+        button.dataset.shellBound = "true";
+        button.addEventListener("click", () => {
+          const className = button.dataset.class;
+          if (!className) {
+            return;
+          }
+          document.querySelector(".app-container")?.classList.toggle(className);
+          button.classList.toggle("is-active");
+        });
+      });
+    }
+    return {
+      init,
+      waitForElement,
+      initializeDropdowns
+    };
+  })();
+
   // src/page-loader.js
   var PageLoaderModule = /* @__PURE__ */ (() => {
     const DEFAULT_PAGE_META = {
@@ -5685,6 +5974,7 @@
             return;
           }
           mainInner.innerHTML = titleHtml;
+          AppShellModule.initializeDropdowns(mainInner);
           updatePageHeader(meta);
           const cacheKey = AppUtils.getHtmlCacheKey(`page_${pageName}`);
           AppUtils.cachedGScriptCall(
@@ -5693,6 +5983,7 @@
             [pageName],
             (pageHtml) => {
               mainInner.insertAdjacentHTML("beforeend", pageHtml);
+              AppShellModule.initializeDropdowns(mainInner);
               if (typeof done === "function") {
                 done();
               }
@@ -5764,97 +6055,6 @@
     return {
       init,
       activateNavigation
-    };
-  })();
-
-  // src/app-shell.js
-  var AppShellModule = /* @__PURE__ */ (() => {
-    let initialized = false;
-    let initializing = null;
-    function loadComponent(cacheKey, fileName) {
-      const htmlCacheKey = AppUtils.getHtmlCacheKey(cacheKey);
-      return new Promise((resolve, reject) => {
-        AppUtils.cachedGScriptCall(
-          htmlCacheKey,
-          "loadHtmlComponent",
-          [fileName],
-          (html) => resolve(html),
-          false
-        );
-      });
-    }
-    function waitForElement(selector, timeout = 5e3) {
-      return new Promise((resolve, reject) => {
-        const existing = document.querySelector(selector);
-        if (existing) {
-          resolve(existing);
-          return;
-        }
-        const observer = new MutationObserver(() => {
-          const element = document.querySelector(selector);
-          if (!element) {
-            return;
-          }
-          observer.disconnect();
-          clearTimeout(timeoutId);
-          resolve(element);
-        });
-        observer.observe(document.body, {
-          childList: true,
-          subtree: true
-        });
-        const timeoutId = setTimeout(() => {
-          observer.disconnect();
-          reject(
-            new Error(`Element "${selector}" was not found within ${timeout}ms.`)
-          );
-        }, timeout);
-      });
-    }
-    async function init() {
-      if (initialized) {
-        return true;
-      }
-      if (initializing) {
-        return initializing;
-      }
-      initializing = (async () => {
-        try {
-          const appContainer = await waitForElement("#app-container");
-          try {
-            const loaderHtml = await loadComponent("app-loader", "loader");
-            if (loaderHtml) {
-              document.body.insertAdjacentHTML("afterbegin", loaderHtml);
-            }
-          } catch (error) {
-            console.warn("[AppShell] Loader failed:", error);
-          }
-          try {
-            const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
-            if (dialogsHtml) {
-              appContainer.insertAdjacentHTML("afterend", dialogsHtml);
-            }
-          } catch (error) {
-            console.warn("[AppShell] Dialogs failed:", error);
-          }
-          initialized = true;
-          return true;
-        } catch (error) {
-          console.error("[AppShell] Initialization failed:", error);
-          initialized = false;
-          AppUtils.showError(
-            `Failed to initialize application: ${error?.message || error}`
-          );
-          return false;
-        } finally {
-          initializing = null;
-        }
-      })();
-      return initializing;
-    }
-    return {
-      init,
-      waitForElement
     };
   })();
 
@@ -6075,12 +6275,12 @@
       const config = getIntegrationConfig(integration);
       const title = config?.title || "Integration";
       google.script.run.withSuccessHandler(() => {
+        loading.setSuccess("Configuration Saved");
+        AppUtils.closeModal(MODAL_ID);
         AppUtils.showDashboardToast(
           `${title} configuration saved successfully!`,
           "success"
         );
-        loading.restore();
-        AppUtils.closeModal(MODAL_ID);
         if (typeof loadData === "function") {
           loadData();
         }
@@ -6102,31 +6302,40 @@
   // src/pages/external-sheets-manager-page.js
   var externalSheetsManagerPage = /* @__PURE__ */ (() => {
     let bound = false;
-    const init = () => {
+    const TABLE_ID = "#externalSheetsTable";
+    const TABLE_TITLE = "External Sheets";
+    const CACHE_KEY = "externalSheets";
+    const MODAL_ID = "#app-modal";
+    function init() {
       if (bound) {
         return;
       }
       bound = true;
       bindActions();
       loadData();
-    };
-    const destroy = () => {
+    }
+    function destroy() {
       if (!bound) {
         return;
       }
       bound = false;
       $(document).off(".externalSheetsPage");
-      destroyTable();
-    };
-    const bindActions = () => {
+      DataTableModule.destroy(TABLE_ID);
+    }
+    function bindActions() {
       $(document).off("click.externalSheetsPage", "#add-external-sheet").on("click.externalSheetsPage", "#add-external-sheet", openCreateModal);
-      $(document).off("click.externalSheetsPage", "#sync-external-sheets").on("click.externalSheetsPage", "#sync-external-sheets", syncExternalSheets);
+      $(document).off("click.externalSheetsPage", "#sync-external-sheets").on(
+        "click.externalSheetsPage",
+        "#sync-external-sheets",
+        syncExternalSheets
+      );
       $(document).off("click.externalSheetsPage", ".external-sheet-view-btn").on("click.externalSheetsPage", ".external-sheet-view-btn", handleView);
-    };
-    const loadData = (reset = false) => {
+    }
+    function loadData(reset = false) {
       HourSummary.loadHoursSummary("#hours-summary");
+      DataTableModule.showLoader(TABLE_ID, "Loading external sheets...");
       AppUtils.cachedGScriptCall(
-        "externalSheets",
+        CACHE_KEY,
         "getExternalSheets",
         [],
         (data) => {
@@ -6135,79 +6344,77 @@
         false,
         reset
       );
-    };
-    const renderTable = (data) => {
+    }
+    function renderTable(data) {
       const rows = Array.isArray(data) ? data : [];
-      destroyTable();
-      $("#externalSheetsTable").DataTable({
-        data: rows,
-        columns: [
-          {
-            data: "clientName",
-            defaultContent: "-"
-          },
-          {
-            data: "totalHours",
-            defaultContent: 0,
-            render: (value) => {
-              return Number(value || 0).toFixed(2);
-            }
-          },
-          {
-            data: "projectCount",
-            defaultContent: 0
-          },
-          {
-            data: "status",
-            defaultContent: "Unknown",
-            className: "text-center",
-            render: (value, type, row) => {
-              if (!row.accessible) {
-                return `
-                <span class="badge bg-danger text-center">
-                  Inaccessible
-                </span>
-              `;
-              }
-              return `
-              <span class="badge bg-success text-center">
-                ${escapeHtml(value || "Active")}
-              </span>
-            `;
-            }
-          },
-          {
-            data: null,
-            orderable: false,
-            searchable: false,
-            className: "action-btn",
-            render: (data2, type, row) => {
-              if (!row.spreadsheetId) {
-                return "-";
-              }
-              return `
-              <button
-                type="button"
-                class="btn external-sheet-view-btn"
-                data-spreadsheet-id="${escapeHtml(row.spreadsheetId)}"
-              >
-                <i class="pe-7s-look"></i>
-              </button>
-            `;
-            }
-          }
-        ],
-        pageLength: 10,
-        responsive: true,
-        autoWidth: false,
-        language: {
-          emptyTable: "No external sheets configured."
-        }
+      const $tbody = $(`${TABLE_ID} tbody`);
+      if (!$tbody.length) {
+        return;
+      }
+      if (!rows.length) {
+        DataTableModule.showEmpty(TABLE_ID, "No external sheets configured.");
+        return;
+      }
+      DataTableModule.destroy(TABLE_ID);
+      $tbody.empty();
+      rows.forEach((row) => {
+        $tbody.append(createRow(row));
       });
-    };
-    const openCreateModal = () => {
-      const modalId = "#app-modal";
-      AppUtils.openModal(modalId, {
+      DataTableModule.init(TABLE_TITLE, TABLE_ID);
+    }
+    function createRow(row) {
+      const clientName = AppUtils.escapeHtml(row.clientName ?? "");
+      const totalHours = Number(row.totalHours || 0).toFixed(2);
+      const projectCount = Number(row.projectCount || 0);
+      const status = AppUtils.escapeHtml(row.status || "Active");
+      const spreadsheetId = AppUtils.escapeHtml(row.spreadsheetId || "");
+      const statusHtml = !row.accessible ? `
+        <span class="badge bg-danger text-center">
+          Inaccessible
+        </span>
+      ` : `
+        <span class="badge bg-success text-center">
+          ${status}
+        </span>
+      `;
+      const actionHtml = !row.spreadsheetId ? "-" : `
+        <button
+          type="button"
+          class="btn action-btn external-sheet-view-btn"
+          data-spreadsheet-id="${spreadsheetId}"
+          title="Open External Sheet"
+        >
+          <i class="pe-7s-look"></i>
+        </button>
+      `;
+      return `
+      <tr>
+
+        <td>
+          ${clientName}
+        </td>
+
+        <td class="text-center">
+          ${totalHours}
+        </td>
+
+        <td class="text-center">
+          ${projectCount}
+        </td>
+
+        <td class="text-center">
+          ${statusHtml}
+        </td>
+
+        <td class="text-center action-btn-group">
+          ${actionHtml}
+        </td>
+
+      </tr>
+    `;
+    }
+    function openCreateModal() {
+      AppUtils.openModal(MODAL_ID, {
         size: "md",
         placement: "center",
         header: `
@@ -6282,7 +6489,7 @@
         onOpen($modal) {
           const ns = ".externalSheetModal";
           $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
-            AppUtils.closeModal(modalId);
+            AppUtils.closeModal(MODAL_ID);
           }).on(`click${ns}`, ".btn-create", () => {
             const $btn = $modal.find(".btn-create");
             createExternalSheet($modal, $btn);
@@ -6292,14 +6499,17 @@
           $modal.off(".externalSheetModal");
         }
       });
-    };
-    const createExternalSheet = ($modal, $btn) => {
+    }
+    function createExternalSheet($modal, $btn) {
       const form = $modal.find("#externalSheetForm")[0];
-      if (!form.checkValidity()) {
-        form.reportValidity();
+      if (!form?.checkValidity()) {
+        form?.reportValidity();
         return;
       }
-      const loading = AppUtils.setButtonLoading($btn[0], "Creating External Sheet...");
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Creating External Sheet..."
+      );
       const clientName = String(
         $modal.find("#externalClientName").val() || ""
       ).trim();
@@ -6307,14 +6517,17 @@
         $modal.find("#externalProjects").val() || ""
       ).trim();
       google.script.run.withSuccessHandler((result) => {
-        loading.restore();
-        AppUtils.closeModal("#app-modal");
+        loading.setSuccess("Sheet Created");
+        AppUtils.closeModal(MODAL_ID);
         AppUtils.showDashboardToast(
           `External sheet created for ${result.clientName}.`,
           "success"
         );
-        google.script.run.withFailureHandler(() => AppUtils.showError("Syncing error!")).syncClientSheetList();
         AppUtils.cacheClear("allClientsData");
+        AppUtils.cacheClear(CACHE_KEY);
+        google.script.run.withFailureHandler((err) => {
+          console.error("syncClientSheetList failed:", err);
+        }).syncClientSheetList();
         loadData(true);
       }).withFailureHandler((err) => {
         console.error("createExternalSheet failed:", err);
@@ -6327,23 +6540,29 @@
         clientName,
         projects
       });
-    };
+    }
     function syncExternalSheets() {
-      const loading = AppUtils.setButtonLoading("#sync-external-sheets", "Syncing...");
+      const $btn = $("#sync-external-sheets");
+      const loading = AppUtils.setButtonLoading($btn[0], "Syncing...");
       google.script.run.withSuccessHandler((result) => {
+        loading.restore();
+        AppUtils.cacheClear(CACHE_KEY);
         loadData(true);
+        const count = Array.isArray(result) ? result.length : 0;
         AppUtils.showDashboardToast(
-          result.length ? `${result.length} external sheet(s) registered.` : "External sheets are already up to date.",
+          count ? `${count} external sheet(s) registered.` : "External sheets are already up to date.",
           "success"
         );
-        loading.restore();
       }).withFailureHandler((err) => {
         console.error("reconcileExternalSheets failed:", err);
-        AppUtils.showDashboardToast("Failed to sync external sheets.", "error");
         loading.restore();
+        AppUtils.showDashboardToast(
+          err?.message || "Failed to sync external sheets.",
+          "error"
+        );
       }).reconcileExternalSheets();
     }
-    const handleView = (e) => {
+    function handleView(e) {
       e.preventDefault();
       const spreadsheetId = e.currentTarget.getAttribute("data-spreadsheet-id");
       if (!spreadsheetId) {
@@ -6354,16 +6573,7 @@
         "_blank",
         "noopener,noreferrer"
       );
-    };
-    const destroyTable = () => {
-      const $table = $("#externalSheetsTable");
-      if ($.fn.DataTable && $.fn.DataTable.isDataTable("#externalSheetsTable")) {
-        $table.DataTable().clear().destroy();
-      }
-    };
-    const escapeHtml = (value) => {
-      return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    };
+    }
     return {
       init,
       destroy
@@ -6526,8 +6736,18 @@
         return;
       }
       const appContainer = document.querySelector(".app-container");
-      if (appContainer) {
-        appContainer.classList.add("closed-sidebar");
+      if (window.matchMedia("(min-width: 992px)").matches) {
+        if (appContainer) {
+          appContainer.classList.add("closed-sidebar");
+        }
+      } else {
+        if (appContainer) {
+          appContainer.classList.remove("sidebar-mobile-open");
+        }
+        const hamburger = document.querySelector(".app-header__mobile-menu .hamburger");
+        if (hamburger) {
+          hamburger.classList.remove("is-active");
+        }
       }
       RouterModule.go(page);
     }

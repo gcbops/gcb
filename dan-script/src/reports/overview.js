@@ -6,6 +6,8 @@ const ReportsOverview = (() => {
   const TABLE_TITLE = "Reports Overview";
 
   function loadReportsOverview() {
+    DataTableModule.showLoader(TABLE_ID, "Loading reports...");
+
     AppUtils.cachedGScriptCall(
       "reportsOverview",
       "getReportsOverview",
@@ -19,80 +21,43 @@ const ReportsOverview = (() => {
   }
 
   function renderReportsOverview(data) {
-    if (!data || typeof data !== "object") {
+    if (!data) {
+      DataTableModule.showEmpty(TABLE_ID, "No report data available.");
+
       return;
     }
 
-    renderReportLogs(Array.isArray(data.logs) ? data.logs : []);
-
+    renderReportLogs(data.logs || []);
     renderReportStatus(data);
-
-    renderReportCounts(
-      data.counts && typeof data.counts === "object" ? data.counts : {},
-    );
+    renderReportCounts(data.counts || {});
   }
 
-  /* ============================================================
-   * REPORT LOGS
-   * ========================================================== */
-
   function renderReportLogs(logs) {
-    const $table = $(TABLE_ID);
-
-    if (!$table.length) {
-      return;
-    }
-
-    const $tbody = $table.find("#data-table-body");
+    const $tbody = $(`${TABLE_ID} tbody`);
 
     if (!$tbody.length) {
       return;
     }
 
-    /*
-     * DataTables owns the table once initialized.
-     *
-     * Destroy it before rebuilding the tbody.
-     */
+    if (!Array.isArray(logs) || !logs.length) {
+      DataTableModule.showEmpty(TABLE_ID, "No reports generated yet.");
+
+      return;
+    }
+
     DataTableModule.destroy(TABLE_ID);
 
     $tbody.empty();
-
-    if (!logs.length) {
-      renderEmptyReportLogs($table, $tbody);
-      return;
-    }
 
     logs.forEach((log, index) => {
       $tbody.append(createReportLogRow(log, index));
     });
 
-    /*
-     * Initialize only after rows exist.
-     */
     DataTableModule.init(TABLE_TITLE, TABLE_ID);
   }
 
-  function renderEmptyReportLogs($table, $tbody) {
-    const colspan = getTableColumnCount($table);
-
-    $tbody.html(`
-      <tr>
-        <td
-          colspan="${colspan}"
-          class="text-center text-muted py-4"
-        >
-          No reports generated yet.
-        </td>
-      </tr>
-    `);
-  }
-
   function createReportLogRow(log, index) {
-    const type = String(log?.type || "").trim();
-
-    const badgeClass =
-      type.toLowerCase() === "monthly" ? "bg-primary" : "bg-success";
+    const badgeClass = log.type === "Monthly" ? "bg-primary" : "bg-success";
 
     return `
       <tr>
@@ -102,19 +67,19 @@ const ReportsOverview = (() => {
         </td>
 
         <td>
-          ${AppUtils.escapeHtml(log?.date ?? "")}
+          ${AppUtils.escapeHtml(log.date ?? "")}
         </td>
 
         <td class="text-center">
           <span class="badge bg-light text-info">
             <i class="fa fa-file-pdf"></i>
-            ${AppUtils.escapeHtml(log?.name ?? "")}
+            ${AppUtils.escapeHtml(log.name ?? "")}
           </span>
         </td>
 
         <td class="text-center">
           <span class="badge text-white ${badgeClass}">
-            ${AppUtils.escapeHtml(type)}
+            ${AppUtils.escapeHtml(log.type ?? "")}
           </span>
         </td>
 
@@ -123,7 +88,7 @@ const ReportsOverview = (() => {
 
             <button
               class="btn btn-report-action btn-view-report"
-              data-url="${AppUtils.escapeHtml(log?.link ?? "")}"
+              data-url="${AppUtils.escapeHtml(log.link ?? "")}"
               title="View Report"
             >
               <i class="fa fa-eye"></i>
@@ -131,7 +96,7 @@ const ReportsOverview = (() => {
 
             <button
               class="btn btn-report-action btn-email-report"
-              data-id="${AppUtils.escapeHtml(log?.id ?? "")}"
+              data-id="${AppUtils.escapeHtml(log.id ?? "")}"
               title="Send Email"
             >
               <i class="fa fa-envelope"></i>
@@ -139,7 +104,7 @@ const ReportsOverview = (() => {
 
             <button
               class="btn btn-report-action btn-discord-report"
-              data-id="${AppUtils.escapeHtml(log?.id ?? "")}"
+              data-id="${AppUtils.escapeHtml(log.id ?? "")}"
               title="Send to Discord"
             >
               <i class="fab fa-discord"></i>
@@ -152,16 +117,10 @@ const ReportsOverview = (() => {
     `;
   }
 
-  /* ============================================================
-   * REPORT STATUS
-   * ========================================================== */
-
   function renderReportStatus(data) {
-    const logs = Array.isArray(data.logs) ? data.logs : [];
+    $("#last-monthly-report").text(getLatestReportDate(data.logs, "Monthly"));
 
-    $("#last-monthly-report").text(getLatestReportDate(logs, "Monthly"));
-
-    $("#last-yearly-report").text(getLatestReportDate(logs, "Yearly"));
+    $("#last-yearly-report").text(getLatestReportDate(data.logs, "Yearly"));
 
     $("#next-scheduled-report").text(data.nextScheduled || "-");
 
@@ -171,10 +130,6 @@ const ReportsOverview = (() => {
 
     updateConnectionStatus("#email-status", data.email);
   }
-
-  /* ============================================================
-   * REPORT COUNTS
-   * ========================================================== */
 
   function renderReportCounts(counts) {
     $("#monthly-reports-count").text(counts.monthly ?? 0);
@@ -191,14 +146,10 @@ const ReportsOverview = (() => {
     );
   }
 
-  /* ============================================================
-   * HELPERS
-   * ========================================================== */
-
   function getLatestReportDate(logs = [], type) {
-    const report = logs.find((log) => log?.type === type);
+    const report = logs.find((log) => log.type === type);
 
-    return report?.date || "-";
+    return report ? report.date : "-";
   }
 
   function updateConnectionStatus(
@@ -209,12 +160,8 @@ const ReportsOverview = (() => {
   ) {
     $(selector)
       .text(connected ? successText : failureText)
-      .toggleClass("text-success", Boolean(connected))
+      .toggleClass("text-success", connected)
       .toggleClass("text-danger", !connected);
-  }
-
-  function getTableColumnCount($table) {
-    return $table.find("thead tr:first th").length || 1;
   }
 
   return {

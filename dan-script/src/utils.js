@@ -8,7 +8,7 @@ const AppUtils = (() => {
   let notificationAudio = null;
 
   const APP_CONFIG = {
-    HTML_VERSIONING: true,
+    HTML_VERSIONING: false,
   };
 
   let htmlVersion = null;
@@ -552,7 +552,9 @@ const AppUtils = (() => {
     try {
       google.script.run
         .withSuccessHandler((result) => {
-          restoreButton();
+          if (loading) {
+            loading.setSuccess("Saved");
+          }
 
           if (typeof onSuccess === "function") {
             onSuccess(result);
@@ -589,13 +591,27 @@ const AppUtils = (() => {
       </svg>
     `;
 
+    const getSuccessHtml = (text) => `
+      ${text}
+      <svg class="check-icon ms-2" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+      </svg>
+    `;
+
     const setText = (text) => {
       $button.prop("disabled", true).html(getLoadingHtml(text));
     };
 
+    const setSuccess = (text = "Done", delayMs = 2000) => {
+      $button.prop("disabled", false).html(getSuccessHtml(text));
+
+      setTimeout(() => {
+        restore();
+      }, delayMs);
+    };
+
     const restore = () => {
       $button.prop("disabled", false).html($button.data("original-text"));
-
       $button.removeData("original-text");
     };
 
@@ -603,6 +619,7 @@ const AppUtils = (() => {
 
     return {
       setText,
+      setSuccess,
       restore,
     };
   }

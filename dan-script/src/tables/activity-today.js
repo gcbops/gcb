@@ -423,7 +423,7 @@ const ActivityToday = (() => {
     <div class="btn-group btn-group-sm">
       <button
         type="button"
-        class="btn add-client"
+        class="btn action-btn add-client"
         title="Add Client">
         <i class="pe-7s-plus"></i>
       </button>
@@ -433,7 +433,7 @@ const ActivityToday = (() => {
           ? `
             <button
               type="button"
-              class="btn edit-today-hours"
+              class="btn action-btn edit-today-hours"
               title="Edit Today's Hours">
               <i class="pe-7s-note"></i>
             </button>
@@ -443,14 +443,14 @@ const ActivityToday = (() => {
 
       <button
         type="button"
-        class="btn view-client"
+        class="btn action-btn view-client"
         title="View Client">
         <i class="pe-7s-look"></i>
       </button>
 
       <button
         type="button"
-        class="btn edit-client"
+        class="btn action-btn edit-client"
         title="Edit Client">
         <i class="pe-7s-note2"></i>
       </button>

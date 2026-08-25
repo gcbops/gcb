@@ -197,8 +197,14 @@ const ClientDirectory = (() => {
         ${statusHtml}
       </td>
 
-      <td class="text-center action-btn">
-        <i class="pe-7s-note open-client-btn"></i>
+      <td class="text-center action-btn-group">
+        <button
+          type="button"
+          class="btn action-btn open-client-btn"
+          title="Open Client Sheet"
+        >
+          <i class="pe-7s-note"></i>
+        </button>
       </td>
     `;
 

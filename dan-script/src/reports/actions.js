@@ -47,9 +47,6 @@ const ReportActions = (() => {
       return;
     }
 
-    // No need for a separate "Sending..." toast if button shows loading state
-    // but you can keep it if you want.
-
     google.script.run
       .withSuccessHandler(() => {
         handleReportSuccess(config.btn, config.successMessage, config.loading);
@@ -77,7 +74,7 @@ const ReportActions = (() => {
 
   function handleReportSuccess(btn, message, loading) {
     if (loading) {
-      loading.restore();
+      loading.setSuccess("Sent successfully");
     }
     AppUtils.showDashboardToast(message, "success");
   }

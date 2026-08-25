@@ -16,7 +16,7 @@ const settingsConfigurationPage = (() => {
 
     AppUtils.showDashboardToast("App cache cleared successfully!", "success");
     
-    loading.restore();
+    loading.setSuccess("Cleared Cache");
   }
 
   function syncClientSheets(btn) {
@@ -28,7 +28,8 @@ const settingsConfigurationPage = (() => {
           "Client list synced successfully!",
           "success",
         );
-        loading.restore();
+        
+        loading.setSuccess("Synced Clients");
       })
       .withFailureHandler((err) => {
         console.error("syncClientSheetList failed:", err);
@@ -120,15 +121,17 @@ const settingsConfigurationPage = (() => {
   function BackupAllSheets(btn) {
 
     const loading = AppUtils.setButtonLoading(
-      btn[0],
+      btn,
       "Creating Backup...",
     );
 
     google.script.run
       .withSuccessHandler((result) => {
         AppUtils.showDashboardToast("Backup completed", "info");
+        
         console.log("Backup completed:", result);
-        loading.restore();
+        
+        loading.setSuccess("Backup Completed");
       })
       .withFailureHandler((err) => {
         console.error("Backup failed:", err);
@@ -284,9 +287,9 @@ const settingsConfigurationPage = (() => {
 
     google.script.run
       .withSuccessHandler((result) => {
-        // console.log("applyFormulaToSheets:", result);
+        console.log("applyFormulaToSheets:", result);
 
-        loading.restore();
+        loading.setSuccess("Formula Applied");
 
         AppUtils.closeModal("#app-modal");
 

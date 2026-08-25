@@ -1,10 +1,16 @@
 import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
+import { DataTableModule } from "../tables/data-table.js";
 
 const externalSheetsManagerPage = (() => {
   let bound = false;
 
-  const init = () => {
+  const TABLE_ID = "#externalSheetsTable";
+  const TABLE_TITLE = "External Sheets";
+  const CACHE_KEY = "externalSheets";
+  const MODAL_ID = "#app-modal";
+
+  function init() {
     if (bound) {
       return;
     }
@@ -13,9 +19,9 @@ const externalSheetsManagerPage = (() => {
 
     bindActions();
     loadData();
-  };
+  }
 
-  const destroy = () => {
+  function destroy() {
     if (!bound) {
       return;
     }
@@ -24,28 +30,34 @@ const externalSheetsManagerPage = (() => {
 
     $(document).off(".externalSheetsPage");
 
-    destroyTable();
-  };
+    DataTableModule.destroy(TABLE_ID);
+  }
 
-  const bindActions = () => {
+  function bindActions() {
     $(document)
       .off("click.externalSheetsPage", "#add-external-sheet")
       .on("click.externalSheetsPage", "#add-external-sheet", openCreateModal);
 
     $(document)
       .off("click.externalSheetsPage", "#sync-external-sheets")
-      .on("click.externalSheetsPage", "#sync-external-sheets", syncExternalSheets);
+      .on(
+        "click.externalSheetsPage",
+        "#sync-external-sheets",
+        syncExternalSheets,
+      );
 
     $(document)
       .off("click.externalSheetsPage", ".external-sheet-view-btn")
       .on("click.externalSheetsPage", ".external-sheet-view-btn", handleView);
-  };
+  }
 
-  const loadData = (reset = false) => {
+  function loadData(reset = false) {
     HourSummary.loadHoursSummary("#hours-summary");
 
+    DataTableModule.showLoader(TABLE_ID, "Loading external sheets...");
+
     AppUtils.cachedGScriptCall(
-      "externalSheets",
+      CACHE_KEY,
       "getExternalSheets",
       [],
       (data) => {
@@ -54,96 +66,106 @@ const externalSheetsManagerPage = (() => {
       false,
       reset,
     );
-  };
+  }
 
-  const renderTable = (data) => {
+  function renderTable(data) {
     const rows = Array.isArray(data) ? data : [];
 
-    destroyTable();
+    const $tbody = $(`${TABLE_ID} tbody`);
 
-    $("#externalSheetsTable").DataTable({
-      data: rows,
+    if (!$tbody.length) {
+      return;
+    }
 
-      columns: [
-        {
-          data: "clientName",
-          defaultContent: "-",
-        },
+    if (!rows.length) {
+      DataTableModule.showEmpty(TABLE_ID, "No external sheets configured.");
 
-        {
-          data: "totalHours",
-          defaultContent: 0,
-          render: (value) => {
-            return Number(value || 0).toFixed(2);
-          },
-        },
+      return;
+    }
 
-        {
-          data: "projectCount",
-          defaultContent: 0,
-        },
+    /*
+     * DataTables owns the table after initialization.
+     * Destroy the previous instance before replacing rows.
+     */
+    DataTableModule.destroy(TABLE_ID);
 
-        {
-          data: "status",
-          defaultContent: "Unknown",
-          className: "text-center",
-          render: (value, type, row) => {
-            if (!row.accessible) {
-              return `
-                <span class="badge bg-danger text-center">
-                  Inaccessible
-                </span>
-              `;
-            }
+    $tbody.empty();
 
-            return `
-              <span class="badge bg-success text-center">
-                ${escapeHtml(value || "Active")}
-              </span>
-            `;
-          },
-        },
-
-        {
-          data: null,
-          orderable: false,
-          searchable: false,
-          className: "action-btn",
-
-          render: (data, type, row) => {
-            if (!row.spreadsheetId) {
-              return "-";
-            }
-
-            return `
-              <button
-                type="button"
-                class="btn external-sheet-view-btn"
-                data-spreadsheet-id="${escapeHtml(row.spreadsheetId)}"
-              >
-                <i class="pe-7s-look"></i>
-              </button>
-            `;
-          },
-        },
-      ],
-
-      pageLength: 10,
-
-      responsive: true,
-
-      autoWidth: false,
-
-      language: {
-        emptyTable: "No external sheets configured.",
-      },
+    rows.forEach((row) => {
+      $tbody.append(createRow(row));
     });
-  };
 
-  const openCreateModal = () => {
-    const modalId = "#app-modal";
+    /*
+     * Initialize only after the rows exist.
+     */
+    DataTableModule.init(TABLE_TITLE, TABLE_ID);
+  }
 
-    AppUtils.openModal(modalId, {
+  function createRow(row) {
+    const clientName = AppUtils.escapeHtml(row.clientName ?? "");
+
+    const totalHours = Number(row.totalHours || 0).toFixed(2);
+
+    const projectCount = Number(row.projectCount || 0);
+
+    const status = AppUtils.escapeHtml(row.status || "Active");
+
+    const spreadsheetId = AppUtils.escapeHtml(row.spreadsheetId || "");
+
+    const statusHtml = !row.accessible
+      ? `
+        <span class="badge bg-danger text-center">
+          Inaccessible
+        </span>
+      `
+      : `
+        <span class="badge bg-success text-center">
+          ${status}
+        </span>
+      `;
+
+    const actionHtml = !row.spreadsheetId
+      ? "-"
+      : `
+        <button
+          type="button"
+          class="btn action-btn external-sheet-view-btn"
+          data-spreadsheet-id="${spreadsheetId}"
+          title="Open External Sheet"
+        >
+          <i class="pe-7s-look"></i>
+        </button>
+      `;
+
+    return `
+      <tr>
+
+        <td>
+          ${clientName}
+        </td>
+
+        <td class="text-center">
+          ${totalHours}
+        </td>
+
+        <td class="text-center">
+          ${projectCount}
+        </td>
+
+        <td class="text-center">
+          ${statusHtml}
+        </td>
+
+        <td class="text-center action-btn-group">
+          ${actionHtml}
+        </td>
+
+      </tr>
+    `;
+  }
+
+  function openCreateModal() {
+    AppUtils.openModal(MODAL_ID, {
       size: "md",
       placement: "center",
 
@@ -225,11 +247,11 @@ const externalSheetsManagerPage = (() => {
         $modal
           .off(ns)
           .on(`click${ns}`, ".btn-cancel", () => {
-            AppUtils.closeModal(modalId);
+            AppUtils.closeModal(MODAL_ID);
           })
           .on(`click${ns}`, ".btn-create", () => {
             const $btn = $modal.find(".btn-create");
-            
+
             createExternalSheet($modal, $btn);
           });
       },
@@ -238,17 +260,20 @@ const externalSheetsManagerPage = (() => {
         $modal.off(".externalSheetModal");
       },
     });
-  };
+  }
 
-  const createExternalSheet = ($modal, $btn) => {
+  function createExternalSheet($modal, $btn) {
     const form = $modal.find("#externalSheetForm")[0];
 
-    if (!form.checkValidity()) {
-      form.reportValidity();
+    if (!form?.checkValidity()) {
+      form?.reportValidity();
       return;
     }
 
-    const loading = AppUtils.setButtonLoading($btn[0], "Creating External Sheet...");
+    const loading = AppUtils.setButtonLoading(
+      $btn[0],
+      "Creating External Sheet...",
+    );
 
     const clientName = String(
       $modal.find("#externalClientName").val() || "",
@@ -260,20 +285,33 @@ const externalSheetsManagerPage = (() => {
 
     google.script.run
       .withSuccessHandler((result) => {
-        loading.restore();
+        loading.setSuccess("Sheet Created");
 
-        AppUtils.closeModal("#app-modal");
+        AppUtils.closeModal(MODAL_ID);
 
         AppUtils.showDashboardToast(
           `External sheet created for ${result.clientName}.`,
           "success",
         );
 
-        google.script.run
-          .withFailureHandler(() => AppUtils.showError("Syncing error!"))
-          .syncClientSheetList();
-
+        /*
+         * Client list changed.
+         */
         AppUtils.cacheClear("allClientsData");
+
+        /*
+         * External sheet list changed.
+         */
+        AppUtils.cacheClear(CACHE_KEY);
+
+        /*
+         * Keep the client list synchronized.
+         */
+        google.script.run
+          .withFailureHandler((err) => {
+            console.error("syncClientSheetList failed:", err);
+          })
+          .syncClientSheetList();
 
         loadData(true);
       })
@@ -291,36 +329,44 @@ const externalSheetsManagerPage = (() => {
         clientName,
         projects,
       });
-  };
+  }
 
   function syncExternalSheets() {
-    const loading = AppUtils.setButtonLoading("#sync-external-sheets", "Syncing...");
+    const $btn = $("#sync-external-sheets");
+
+    const loading = AppUtils.setButtonLoading($btn[0], "Syncing...");
 
     google.script.run
       .withSuccessHandler((result) => {
+        loading.restore();
+
+        AppUtils.cacheClear(CACHE_KEY);
 
         loadData(true);
 
+        const count = Array.isArray(result) ? result.length : 0;
+
         AppUtils.showDashboardToast(
-          result.length
-            ? `${result.length} external sheet(s) registered.`
+          count
+            ? `${count} external sheet(s) registered.`
             : "External sheets are already up to date.",
           "success",
         );
-
-        loading.restore();
       })
       .withFailureHandler((err) => {
         console.error("reconcileExternalSheets failed:", err);
 
-        AppUtils.showDashboardToast("Failed to sync external sheets.", "error");
-
         loading.restore();
+
+        AppUtils.showDashboardToast(
+          err?.message || "Failed to sync external sheets.",
+          "error",
+        );
       })
       .reconcileExternalSheets();
   }
 
-  const handleView = (e) => {
+  function handleView(e) {
     e.preventDefault();
 
     const spreadsheetId = e.currentTarget.getAttribute("data-spreadsheet-id");
@@ -334,24 +380,7 @@ const externalSheetsManagerPage = (() => {
       "_blank",
       "noopener,noreferrer",
     );
-  };
-
-  const destroyTable = () => {
-    const $table = $("#externalSheetsTable");
-
-    if ($.fn.DataTable && $.fn.DataTable.isDataTable("#externalSheetsTable")) {
-      $table.DataTable().clear().destroy();
-    }
-  };
-
-  const escapeHtml = (value) => {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  };
+  }
 
   return {
     init,

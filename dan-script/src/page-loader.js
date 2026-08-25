@@ -1,3 +1,4 @@
+import { AppShellModule } from "./app-shell.js";
 import { AppUtils } from "./utils.js";
 
 const PageLoaderModule = (() => {
@@ -141,9 +142,23 @@ const PageLoaderModule = (() => {
           return;
         }
 
+        /*
+         * ------------------------------------------------
+         * Page title
+         * ------------------------------------------------
+         */
+
         mainInner.innerHTML = titleHtml;
 
+        AppShellModule.initializeDropdowns(mainInner);
+
         updatePageHeader(meta);
+
+        /*
+         * ------------------------------------------------
+         * Page content
+         * ------------------------------------------------
+         */
 
         const cacheKey = AppUtils.getHtmlCacheKey(`page_${pageName}`);
 
@@ -153,6 +168,8 @@ const PageLoaderModule = (() => {
           [pageName],
           (pageHtml) => {
             mainInner.insertAdjacentHTML("beforeend", pageHtml);
+
+            AppShellModule.initializeDropdowns(mainInner);
 
             if (typeof done === "function") {
               done();
@@ -188,3 +205,4 @@ const PageLoaderModule = (() => {
 })();
 
 export { PageLoaderModule };
+

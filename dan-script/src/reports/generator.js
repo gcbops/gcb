@@ -168,7 +168,8 @@ const ReportGenerator = (() => {
         handleGenerateError(type, btn, err, loading);
       })
       .withSuccessHandler(() => {
-        setGenerateState(type, false, loading);
+        loading.setSuccess("Generated successfully");
+        setGenerateState(type, false);
 
         cfg.reloadHistory(() => {
           TableModule.highlightLatestRow(cfg.historyTableId, 0);

@@ -253,28 +253,28 @@ table.table tbody .dt-loader-row td {
 } */
 
 /* --- Action Buttons --- */
-.action-btn {
+.action-btn-group {
   text-align: center !important;
 }
 
-.action-btn button i,
-.action-btn i {
+.action-btn-group button i,
+.action-btn-group i {
   font-size: 18px;
   transition: color 0.2s ease;
   cursor: pointer;
 }
 
-.action-btn i.open-client-btn {
+.action-btn-group i.open-client-btn {
   font-size: 22px;
 }
 
 /* Action Hover States */
-.action-btn .add-client i:hover { color: #00b09b; }
-.action-btn .view-client i:hover,
-.action-btn .external-sheet-view-btn i:hover { color: #d4606a; }
-.action-btn .edit-client i:hover { color: #f7b924; }
-.action-btn i.edit-today-hours:hover { color: #b960da; }
-.action-btn i.open-client-btn:hover { color: #0ea5e9; }
+.action-btn-group .add-client i:hover { color: #00b09b; }
+.action-btn-group .view-client i:hover,
+.action-btn-group .external-sheet-view-btn i:hover { color: #d4606a; }
+.action-btn-group .edit-client i:hover { color: #f7b924; }
+.action-btn-group i.edit-today-hours:hover { color: #b960da; }
+.action-btn-group i.open-client-btn:hover { color: #0ea5e9; }
 
 /* --- Report Actions --- */
 .btn-report-action {
@@ -303,7 +303,7 @@ table.table tbody .dt-loader-row td {
 
 /* Mobile Responsive */
 @media (max-width: 768px) {
-  .action-btn {
+  .action-btn-group {
     text-align: left !important;
   }
   #dashFilter, #waitingFilter {
@@ -311,6 +311,10 @@ table.table tbody .dt-loader-row td {
   }
   #dashFilter span, #waitingFilter span {
     padding-bottom: 0
+  }
+  .action-btn i {
+    font-weight: 900;
+    font-size: 18px
   }
 }   
 
@@ -818,10 +822,22 @@ td .bar-loader span {
   color: #3ac47d;
 }
 
-.cog-icon {
+.cog-icon,
+.check-icon {
   display: inline-block;
+  vertical-align: middle; 
+  position: relative;
+}
+
+.cog-icon {
+  top: -2px;
   color: #ffffffd9;
   animation: rotate 1s linear infinite;
+}
+
+.check-icon {
+  top: -1px;
+  color: inherit;
 }
 
 @keyframes rotate {
