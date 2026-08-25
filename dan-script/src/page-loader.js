@@ -1,14 +1,12 @@
-import { AppShellModule } from "./app-shell.js";
 import { AppUtils } from "./utils.js";
 
 const PageLoaderModule = (() => {
-
   const DEFAULT_PAGE_META = {
     title: "Lab Performance Dashboard",
     desc: "Monitor all key metrics across clients, projects, and hours at a glance.",
     icon: "pe-7s-graph2 icon-gradient bg-malibu-beach",
   };
-  
+
   const pageMeta = {
     activeClients: {
       title: "Active Clients",
@@ -17,7 +15,7 @@ const PageLoaderModule = (() => {
     },
     topClients: {
       title: "Top Clients",
-      desc: "Check highest performing clients .",
+      desc: "Check highest performing clients.",
       icon: "pe-7s-users icon-gradient bg-malibu-beach",
     },
     allClients: {
@@ -130,52 +128,61 @@ const PageLoaderModule = (() => {
   function loadPage(pageName, done) {
     const meta = pageMeta[pageName] || DEFAULT_PAGE_META;
 
+    /*
+     * ------------------------------------------------
+     * Page title
+     * ------------------------------------------------
+     *
+     * app-page-title is now loaded only once
+     * on the homepage.
+     *
+     * We only update its contents here.
+     */
+    updatePageHeader(meta);
+
+    /*
+     * ------------------------------------------------
+     * Page content container
+     * ------------------------------------------------
+     */
+
+    const pageContainer = document.getElementById("app-main-inner-container");
+
+    if (!pageContainer) {
+      AppUtils.showError("App main inner container not found.");
+
+      return;
+    }
+
+    /*
+     * ------------------------------------------------
+     * Load subpage
+     * ------------------------------------------------
+     */
+
+    const cacheKey = AppUtils.getHtmlCacheKey(`page_${pageName}`);
+
     AppUtils.cachedGScriptCall(
-      "app-page-title",
+      cacheKey,
       "loadHtmlComponent",
-      ["app-page-title"],
-      (titleHtml) => {
-        const mainInner = document.getElementById("app-main__inner");
+      [pageName],
+      (pageHtml) => {
+        /*
+         * Replace only the subpage content.
+         *
+         * This keeps app-page-title and the rest
+         * of the shell untouched.
+         */
+        pageContainer.innerHTML = pageHtml;
 
-        if (!mainInner) {
-          AppUtils.showError("App main container not found.");
-          return;
+        if (typeof done === "function") {
+          done();
         }
+      },
+      (error) => {
+        console.error(`[PageLoader] Failed to load page: ${pageName}`, error);
 
-        /*
-         * ------------------------------------------------
-         * Page title
-         * ------------------------------------------------
-         */
-
-        mainInner.innerHTML = titleHtml;
-
-        AppShellModule.initializeDropdowns(mainInner);
-
-        updatePageHeader(meta);
-
-        /*
-         * ------------------------------------------------
-         * Page content
-         * ------------------------------------------------
-         */
-
-        const cacheKey = AppUtils.getHtmlCacheKey(`page_${pageName}`);
-
-        AppUtils.cachedGScriptCall(
-          cacheKey,
-          "loadHtmlComponent",
-          [pageName],
-          (pageHtml) => {
-            mainInner.insertAdjacentHTML("beforeend", pageHtml);
-
-            AppShellModule.initializeDropdowns(mainInner);
-
-            if (typeof done === "function") {
-              done();
-            }
-          },
-        );
+        AppUtils.showError(`Failed to load page: ${pageName}`);
       },
     );
   }
@@ -200,9 +207,9 @@ const PageLoaderModule = (() => {
     }
   }
 
-  return { loadPage };
-
+  return {
+    loadPage,
+  };
 })();
 
 export { PageLoaderModule };
-

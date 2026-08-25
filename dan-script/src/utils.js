@@ -242,7 +242,7 @@ const AppUtils = (() => {
 
     if (cached !== null) {
       if (log) {
-        console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
+        // console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
       }
 
       safeCallback(cached);
@@ -261,7 +261,7 @@ const AppUtils = (() => {
     }
 
     if (log) {
-      console.log(`[Cache] Should fetch "${cacheKey}"?`, shouldFetch);
+      // console.log(`[Cache] Should fetch "${cacheKey}"?`, shouldFetch);
     }
 
     if (!shouldFetch) {
@@ -269,10 +269,10 @@ const AppUtils = (() => {
     }
 
     if (log) {
-      console.log(
-        `[Cache] Calling Google Script function "${gFuncName}" with args:`,
-        args,
-      );
+      // console.log(
+      //   `[Cache] Calling Google Script function "${gFuncName}" with args:`,
+      //   args,
+      // );
     }
 
     safeRun(() => {
