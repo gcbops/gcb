@@ -11,6 +11,8 @@ const AppUtils = (() => {
     HTML_VERSIONING: false,
   };
 
+ //make it false
+
   let htmlVersion = null;
 
   function getHtmlVersion() {
