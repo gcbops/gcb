@@ -8,10 +8,8 @@ const AppUtils = (() => {
   let notificationAudio = null;
 
   const APP_CONFIG = {
-    HTML_VERSIONING: false,
+    HTML_VERSIONING: true,
   };
-
- //make it false
 
   let htmlVersion = null;
 
