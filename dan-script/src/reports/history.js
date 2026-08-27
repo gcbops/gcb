@@ -18,7 +18,7 @@ const ReportHistory = (() => {
     if (refresh || !AppUtils.cacheGet(cacheKey)) {
       const tableId = getTableId();
 
-      if (tableId) {
+      if (tableId && !refresh) {
         DataTableModule.showLoader(tableId, "Loading reports...");
       }
     }
@@ -32,21 +32,7 @@ const ReportHistory = (() => {
           ? data.reportLogs
           : [];
 
-        renderReportHistory(reportLogs);
-
-        /*
-         * Some callers need to continue only after
-         * the table has finished rendering.
-         */
-        if (typeof callback !== "function") {
-          return;
-        }
-
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            callback(data);
-          });
-        });
+          renderReportHistory(reportLogs, callback);
       },
       false,
       refresh,
@@ -69,7 +55,7 @@ const ReportHistory = (() => {
     return `#${table.id}`;
   }
 
-  function renderReportHistory(reportLogs) {
+  function renderReportHistory(reportLogs, callback) {
     const tbody = document.getElementById(TABLE_BODY_ID);
 
     if (!tbody) {
@@ -83,6 +69,17 @@ const ReportHistory = (() => {
     }
 
     const tableId = `#${table.id}`;
+
+    /*
+     * Destroy the existing DataTable before changing
+     * the table body.
+     */
+    DataTableModule.destroy(tableId);
+
+    /*
+     * Render the new rows.
+     */
+    tbody.innerHTML = "";
 
     /*
      * No records.
@@ -102,7 +99,7 @@ const ReportHistory = (() => {
     /*
      * Initialize only after rows exist.
      */
-    DataTableModule.init(TABLE_TITLE, tableId);
+    DataTableModule.init(TABLE_TITLE, tableId, false, callback);
   }
 
   function createReportHistoryRow(log, index) {
@@ -127,7 +124,7 @@ const ReportHistory = (() => {
 
       <td class="text-center">
         <span class="badge bg-light text-info">
-          <i class="fa fa-file-pdf"></i>
+          <i class="fa-solid fa-file-pdf"></i>
           ${AppUtils.escapeHtml(reportName)}
         </span>
       </td>

@@ -21,6 +21,7 @@ const CONFIG = {
       "",
       "frontend/",
       "frontend/components/",
+      "frontend/pages/",
       "frontend/js/",
       "frontend/css/",
       "frontend/old/",
@@ -66,7 +67,7 @@ const CONFIG = {
         ...PAID_OWED_DIALOG,
         title: "Outstanding Accounts",
       },
-      
+
       "Top Paid": {
         ...PAID_OWED_DIALOG,
         title: "Top Paid Accounts",

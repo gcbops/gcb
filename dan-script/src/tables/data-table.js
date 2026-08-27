@@ -9,9 +9,8 @@ const DataTableModule = (() => {
     "outstanding accounts",
   ]);
 
-  function init(title, tableId, debug = false) {
+  function init(title, tableId, debug = false, callback = null) {
     const log = (...args) => debug && console.log(...args);
-
     const error = (...args) => debug && console.error(...args);
 
     const cleanTitle = String(title || "")
@@ -39,17 +38,17 @@ const DataTableModule = (() => {
     }
 
     /*
-     * Destroy any existing DataTable
-     * for this element.
+     * Destroy existing DataTable.
      */
     destroy(tableId);
 
     /*
-     * Build the default DataTable options.
-     *
-     * Every table gets these defaults.
-     * There is no need to register the
-     * table name anywhere.
+     * Detect total columns from thead.
+     */
+    const totalColumns = $table.find("thead tr:first th").length;
+
+    /*
+     * Build default DataTable options.
      */
     const tableOptions = {
       responsive: true,
@@ -75,80 +74,80 @@ const DataTableModule = (() => {
       ],
 
       initComplete() {
-        log("DataTable initComplete");
+        log("DataTable initComplete:", tableId);
+
+        if (typeof callback === "function") {
+          callback(this.api());
+        }
       },
     };
 
     /*
-     * Numeric sorting.
-     *
-     * Only tables explicitly listed here
-     * receive numeric formatting.
+     * Priority columns for responsive behavior.
      */
-    if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
-      tableOptions.columnDefs = [
-        {
-          targets: [1, 2],
-          type: "num-fmt",
-        },
-      ];
+    const priorityMap = {
+      "activity today": [0, -1],
+      clients: [1, -1],
+      "top paid accounts": [0, 1],
+      "outstanding accounts": [0, 2],
+      "active clients": [0, 1, -1],
+      "external sheets": [0, 2, -1],
+      "reports overview": [2, -1],
+      "report history": [2, -1],
+      upsell: [0, 1],
+    };
+
+    const priorityColumns = priorityMap[cleanTitle] || [];
+
+    // Start with an empty columnDefs array
+    tableOptions.columnDefs = [];
+
+    // 1) Responsive priorities (if any)
+    if (priorityColumns.length) {
+      tableOptions.columnDefs.push(
+        ...withResponsivePriorities(totalColumns, priorityColumns),
+      );
     }
 
-    /*
-     * UPSELL
-     *
-     * Override only the options that are
-     * different from the normal defaults.
-     */
+    // 2) Numeric sorting
+    if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
+      tableOptions.columnDefs.push({
+        targets: [1, 2],
+        type: "num-fmt",
+      });
+    }
+
+    // 3) UPSELL
     if (cleanTitle === "upsell") {
       Object.assign(tableOptions, {
         pageLength: 5,
-
         order: [],
-
         ordering: false,
-
         searching: true,
-
         lengthChange: false,
-
         info: false,
-
         paging: true,
-
-        dom: '<"bottom d-flex justify-content-between"f p>',
       });
 
-      tableOptions.columnDefs = [
-        {
-          targets: [1, 2],
-          className: "dt-center",
-        },
-      ];
+      tableOptions.columnDefs.push({
+        targets: [1, 2],
+        className: "dt-center",
+      });
     }
 
-    /*
-     * ACTIVITY TODAY
-     *
-     * Add its action-button column without
-     * replacing existing column definitions.
-     */
+    // 4) ACTIVITY TODAY – extra action column
     if (cleanTitle === "activity today") {
       log("Initializing Activity Today");
 
-      tableOptions.columnDefs = [
-        ...(tableOptions.columnDefs || []),
+      tableOptions.columnDefs.push({
+        targets: -1,
+        className: "action-btn-group",
+        orderable: false,
+        searchable: false,
 
-        {
-          targets: -1,
-          className: "action-btn-group",
-          orderable: false,
-          searchable: false,
-
-          render: (_data, _type, row) =>
-            ActivityToday.buildActionButtons(row).html(),
-        },
-      ];
+        render: (_data, _type, row) =>
+          ActivityToday.buildActionButtons(row).html(),
+      });
     }
 
     /*
@@ -165,19 +164,13 @@ const DataTableModule = (() => {
      */
     if (cleanTitle === "activity today") {
       ActivityToday.setupFilters(instance);
-
       ActivityToday.setupTaskForm();
-
       ActivityToday.setupSheetViewButton();
-
       ActivityToday.startRefresh(instance);
     }
 
     /*
      * Apply optional table-specific behavior.
-     *
-     * This function itself determines whether
-     * anything special needs to happen.
      */
     applyTableSpecificLogic(title, instance, tableId, debug);
 
@@ -269,6 +262,30 @@ const DataTableModule = (() => {
     });
 
     ActivityToday.stopRefresh();
+  }
+
+  function withResponsivePriorities(
+    totalColumns,
+    priorityCols,
+    priorityValue = 1,
+    defaultPriority = 3,
+  ) {
+    const normalized = priorityCols.map((i) =>
+      i === -1 ? totalColumns - 1 : i,
+    );
+    const prioritySet = new Set(normalized);
+    const columnDefs = [];
+
+    for (let i = 0; i < totalColumns; i++) {
+      columnDefs.push({
+        targets: i,
+        responsivePriority: prioritySet.has(i)
+          ? priorityValue
+          : defaultPriority,
+      });
+    }
+
+    return columnDefs;
   }
 
   function addColumnClass(tableId, colIndex, className) {

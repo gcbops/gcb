@@ -97,11 +97,29 @@ const settingsConfigurationPage = (() => {
 
     switch (btn.id) {
       case "btnClearCache":
-        clearCache(btn);
+        AppUtils.openConfirmationModal({
+          ns: "clearCache",
+          title: "Clear Application Cache?",
+          message:
+            "This will clear all temporary data from your browser's local storage. You may need to log in or reload configurations again.",
+          onProceed: ($modal, $btn) => {
+            clearCache(btn);
+            AppUtils.closeModal("#app-modal");
+          },
+        });
         break;
 
       case "btnSyncClient":
-        syncClientSheets(btn);
+        AppUtils.openConfirmationModal({
+          ns: "syncClient",
+          title: "Sync Client Sheets?",
+          message:
+            "This will refresh and synchronize the client names on the main sheet. This could take a few moments to pull the latest records.",
+          onProceed: ($modal, $btn) => {
+            syncClientSheets(btn);
+            AppUtils.closeModal("#app-modal");
+          },
+        });
         break;
 
       case "btnAddMasterFormula":
@@ -109,7 +127,16 @@ const settingsConfigurationPage = (() => {
         break;
 
       case "btnBackupAllSheets":
-        BackupAllSheets(btn);
+        AppUtils.openConfirmationModal({
+          ns: "backupAllSheets",
+          title: "Confirm All Google Sheets Backup?",
+          message:
+            "This will create a complete backup point for all active sheets. This process might take a few moments.",
+          onProceed: ($modal, $btn) => {
+            BackupAllSheets(btn);
+            AppUtils.closeModal("#app-modal");
+          },
+        });
         break;
 
       default:
@@ -151,81 +178,125 @@ const settingsConfigurationPage = (() => {
       size: "md",
       placement: "center",
 
-      header: `
-      <h5 class="modal-title">
-        Add Master Formula
-      </h5>
-    `,
-
       body: `
-      <div class="mb-3">
-        <label
-          for="masterFormulaCell"
-          class="form-label"
-        >
-          Cell Reference
-        </label>
+      <!-- STEP 1: MAIN FORM BODY -->
+      <div id="main-modal-body">
+        <div class="mb-3">
+          <label for="masterFormulaCell" class="form-label">
+            Cell Reference
+          </label>
+          <input
+            type="text"
+            class="form-none control"
+            id="masterFormulaCell"
+            placeholder="B39"
+            autocomplete="off"
+          >
+          <div class="form-text">
+            Example: B39, N18, or AB25.
+          </div>
+        </div>
 
-        <input
-          type="text"
-          class="form-control"
-          id="masterFormulaCell"
-          placeholder="B39"
-          autocomplete="off"
-        >
+        <div class="mb-3">
+          <label for="masterFormulaValue" class="form-label">
+            Formula
+          </label>
+          <textarea
+            class="form-control"
+            id="masterFormulaValue"
+            rows="3"
+            placeholder='=COUNTIF(B41:B,"<>")'
+          ></textarea>
+        </div>
 
-        <div class="form-text">
-          Example: B39, N18, or AB25.
+        <div class="small text-muted">
+          The formula will be applied to the applicable client
+          sheets and the <strong>Projects</strong> sheet of
+          registered external spreadsheets.
         </div>
       </div>
 
-      <div class="mb-3">
-        <label
-          for="masterFormulaValue"
-          class="form-label"
-        >
-          Formula
-        </label>
-
-        <textarea
-          class="form-control"
-          id="masterFormulaValue"
-          rows="3"
-          placeholder='=COUNTIF(B41:B,"<>")'
-        ></textarea>
-      </div>
-
-      <div class="small text-muted">
-        The formula will be applied to the applicable client
-        sheets and the <strong>Projects</strong> sheet of
-        registered external spreadsheets.
+      <!-- STEP 2: REVIEW / CONFIRMATION BODY -->
+      <div id="review-modal-body" class="d-none">
+        <h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>
+        <p>Please review the details before updating the spreadsheets.</p>
       </div>
     `,
 
       footer: `
-      <button
-        type="button"
-        class="btn btn-secondary btn-cancel"
-      >
-        Cancel
-      </button>
+      <!-- STEP 1: MAIN FOOTER -->
+      <div id="main-modal-footer" class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-cancel">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-primary btn-save">
+          Apply Formula
+        </button>
+      </div>
 
-      <button
-        type="button"
-        class="btn btn-primary btn-save"
-      >
-        Apply Formula
-      </button>
+      <!-- STEP 2: REVIEW FOOTER -->
+      <div id="review-modal-footer" class="d-flex gap-2 d-none">
+        <button type="button" class="btn btn-secondary btn-back">
+          Back
+        </button>
+        <button type="button" class="btn btn-success btn-proceed">
+          Proceed
+        </button>
+      </div>
     `,
 
       onOpen($modal) {
         $modal
           .off(ns)
+          // Cancel Click
           .on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal("#app-modal");
           })
+          // Original Save Click -> Shows confirmation screen
           .on(`click${ns}`, ".btn-save", () => {
-            const $btn = $modal.find(".btn-save");
+            const $cellInput = $modal.find("#masterFormulaCell");
+            const $formulaValue = $modal.find("#masterFormulaValue");
+
+            // Remove any previous validation styling
+            $cellInput.removeClass("is-invalid");
+            $formulaValue.removeClass("is-invalid");
+
+            let isValid = true;
+
+            // Check if Cell Reference is blank
+            if (!$cellInput.val().trim()) {
+              $cellInput.addClass("is-invalid");
+              isValid = false;
+            }
+
+            // Check if Formula is blank
+            if (!$formulaValue.val().trim()) {
+              $formulaValue.addClass("is-invalid");
+              isValid = false;
+            }
+
+            // Only proceed to review if both inputs are filled
+            if (isValid) {
+              $modal
+                .find("#main-modal-body, #main-modal-footer")
+                .addClass("d-none");
+              $modal
+                .find("#review-modal-body, #review-modal-footer")
+                .removeClass("d-none");
+            }
+          })
+          // Back Click -> Restores original form view
+          .on(`click${ns}`, ".btn-back", () => {
+            $modal
+              .find("#review-modal-body, #review-modal-footer")
+              .addClass("d-none");
+            $modal
+              .find("#main-modal-body, #main-modal-footer")
+              .removeClass("d-none");
+          })
+          // Proceed Click -> Triggers original submission logic
+          .on(`click${ns}`, ".btn-proceed", () => {
+            const $btn = $modal.find(".btn-proceed");
             applyMasterFormula($modal, $btn);
           });
       },

@@ -187,9 +187,9 @@ const ActivityToday = (() => {
 
     setupClientSelector($selectClient, $taskForm);
 
-    $taskForm
-      .off("submit.activityToday")
-      .on("submit.activityToday", handleTaskSubmit);
+    // $taskForm
+    //   .off("submit.activityToday")
+    //   .on("submit.activityToday", handleTaskSubmit);
 
     $("#submit-new-hours")
       .off("click.activityToday")
@@ -237,11 +237,11 @@ const ActivityToday = (() => {
 
     let $submitBtn = $form.find('button[type="submit"]');
 
-    const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
-
     if (!$submitBtn.length) {
       $submitBtn = $("#submit-new-hours");
     }
+
+    const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
 
     const formData = {
       client: String($("#client").val() || "").trim(),
@@ -260,39 +260,15 @@ const ActivityToday = (() => {
       return;
     }
 
-    const normalizedClient = formData.client.trim().toLowerCase();
-
-    /*
-     * First try the external-sheets cache.
-     */
-    const externalClients = AppUtils.cacheGet("externalSheets");
-
-    if (Array.isArray(externalClients)) {
-      const externalClient = externalClients.find(
-        (item) =>
-          String(item?.clientName || "")
-            .trim()
-            .toLowerCase() === normalizedClient,
-      );
-
-      submitHours(externalClient);
-      return;
-    }
-
     /*
      * Cache does not exist.
      * Ask Apps Script directly.
      */
     google.script.run
       .withSuccessHandler((isExternal) => {
-        submitHours(
-          isExternal
-            ? {
-                clientName: formData.client,
-              }
-            : null,
-          loading,
-        );
+        const external = isExternal === true;
+
+        submitHours(external);
       })
       .withFailureHandler((err) => {
         console.error("isExternalClient failed:", err);
@@ -301,21 +277,18 @@ const ActivityToday = (() => {
           "Unable to determine client type.",
           "error",
         );
+
         loading.restore();
       })
       .isExternalClient(formData.client);
 
-    function submitHours(externalClient, loading) {
-      const isExternal = Boolean(externalClient);
-
+    function submitHours(isExternal) {
       const gscriptFunc = isExternal
         ? "recordExternalClientHoursFromForm"
         : "recordManualClientHoursFromForm";
 
       // console.log(`[Hours] Client: ${formData.client}`);
-
       // console.log(`[Hours] External: ${isExternal}`);
-
       // console.log(`[Hours] Function: ${gscriptFunc}`);
 
       AppUtils.submitForm({

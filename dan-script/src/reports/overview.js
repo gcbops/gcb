@@ -72,7 +72,7 @@ const ReportsOverview = (() => {
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            <i class="fa fa-file-pdf"></i>
+            <i class="fa-solid fa-file-pdf"></i>
             ${AppUtils.escapeHtml(log.name ?? "")}
           </span>
         </td>

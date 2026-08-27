@@ -8,7 +8,7 @@ const AppUtils = (() => {
   let notificationAudio = null;
 
   const APP_CONFIG = {
-    HTML_VERSIONING: false,
+    HTML_VERSIONING: true,
   };
 
   let htmlVersion = null;
@@ -242,7 +242,7 @@ const AppUtils = (() => {
 
     if (cached !== null) {
       if (log) {
-        // console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
+        console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
       }
 
       safeCallback(cached);
@@ -261,7 +261,7 @@ const AppUtils = (() => {
     }
 
     if (log) {
-      // console.log(`[Cache] Should fetch "${cacheKey}"?`, shouldFetch);
+      console.log(`[Cache] Should fetch "${cacheKey}"?`, shouldFetch);
     }
 
     if (!shouldFetch) {
@@ -269,10 +269,10 @@ const AppUtils = (() => {
     }
 
     if (log) {
-      // console.log(
-      //   `[Cache] Calling Google Script function "${gFuncName}" with args:`,
-      //   args,
-      // );
+      console.log(
+        `[Cache] Calling Google Script function "${gFuncName}" with args:`,
+        args,
+      );
     }
 
     safeRun(() => {
@@ -833,6 +833,56 @@ const AppUtils = (() => {
     }
   }
 
+  function openConfirmationModal({ ns, title, message, onProceed }) {
+    // Ensure the namespace string starts with a dot if not provided
+    const eventNs = ns ? (ns.startsWith(".") ? ns : `.${ns}`) : ".confirmation";
+
+    AppUtils.openModal("#app-modal", {
+      size: "md",
+      placement: "center",
+
+      header: "<div></div>",
+
+      body: `
+      <div id="review-modal-body">
+        <h5 class="modal-title mb-2"><strong>${title}</strong></h5>
+        <p>${message}</p>
+      </div>
+    `,
+
+      footer: `
+      <div id="review-modal-footer" class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-back">
+          Back
+        </button>
+        <button type="button" class="btn btn-success btn-proceed">
+          Proceed
+        </button>
+      </div>
+    `,
+
+      onOpen($modal) {
+        $modal
+          .off(eventNs)
+          // Back Click -> Closes or handles navigation back
+          .on(`click${eventNs}`, ".btn-back", () => {
+            AppUtils.closeModal("#app-modal");
+          })
+          // Proceed Click -> Triggers the passed callback submission function
+          .on(`click${eventNs}`, ".btn-proceed", () => {
+            const $btn = $modal.find(".btn-proceed");
+            if (typeof onProceed === "function") {
+              onProceed($modal, $btn);
+            }
+          });
+      },
+
+      onClose($modal) {
+        $modal.off(eventNs);
+      },
+    });
+  }
+
   return {
     // cache
     cacheSet,
@@ -863,6 +913,7 @@ const AppUtils = (() => {
     closeDrawer,
     openModal,
     closeModal,
+    openConfirmationModal,
   };
 }
 )();

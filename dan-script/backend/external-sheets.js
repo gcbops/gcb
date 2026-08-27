@@ -538,22 +538,29 @@ function createExternalClientSheet(clientName, externalSpreadsheetId) {
 }
 
 function isExternalClient(clientName) {
-  const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Client Names");
-
-  if (!sheet || !clientName) {
+  if (!clientName) {
     return false;
   }
 
-  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const normalized = normalizeText(clientName);
+  const registrySheet = ss.getSheetByName("External Sheets");
 
-  const row = values.find(
-    ([name]) => normalizeText(String(name)) === normalized,
+  if (!registrySheet || registrySheet.getLastRow() < 2) {
+    return false;
+  }
+
+  const values = registrySheet
+    .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
+    .getValues();
+
+  const normalizedClient = normalizeText(clientName);
+
+  return values.some(
+    (row) =>
+      normalizeText(String(row[1] || "")) === normalizedClient &&
+      String(row[0] || "").trim() !== "",
   );
-
-  return row ? Boolean(row[1]) : false;
 }
 
 function combineExternalSheetData(spreadsheetId) {

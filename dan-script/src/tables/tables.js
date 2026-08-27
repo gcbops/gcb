@@ -407,23 +407,22 @@ const TableModule = (() => {
    * ========================================================== */
 
   function highlightLatestRow(elId, badgeColumn = 0) {
-    const $tbody = $(`#${elId}`);
+    const $tbody = $(`#${elId}`).find("tbody");
 
     if (!$tbody.length) {
       return;
     }
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const $row = $tbody.find("tr:first");
+    const $row = $tbody.find("tr:first");
 
-        if (!$row.length) {
-          return;
-        }
+    if (!$row.length) {
+      return;
+    }
 
-        $row.find(".badge-new-report").remove();
+    setTimeout(() => {
+      $row.find(".badge-new-report").remove();
 
-        $row.find("td").eq(badgeColumn).append(`
+      $row.find("td").eq(badgeColumn).append(`
             <span
               class="badge badge-pill badge-success badge-new-report ms-2"
             >
@@ -431,13 +430,12 @@ const TableModule = (() => {
             </span>
           `);
 
-        $row.hide().fadeIn(500).addClass("table-success");
+      $row.hide().fadeIn(500).addClass("table-row-highlighted");
+    }, 10000);
 
-        setTimeout(() => {
-          $row.removeClass("table-success");
-        }, 15000);
-      });
-    });
+    setTimeout(() => {
+      $row.removeClass("table-row-highlighted");
+    }, 20000);
   }
 
   return {

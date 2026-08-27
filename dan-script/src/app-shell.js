@@ -13,7 +13,7 @@ const AppShellModule = (() => {
         "loadHtmlComponent",
         [fileName],
         (html) => resolve(html),
-        (error) => reject(error),
+        false,
       );
     });
   }

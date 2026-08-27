@@ -179,11 +179,7 @@ const PageLoaderModule = (() => {
           done();
         }
       },
-      (error) => {
-        console.error(`[PageLoader] Failed to load page: ${pageName}`, error);
-
-        AppUtils.showError(`Failed to load page: ${pageName}`);
-      },
+      false
     );
   }
 

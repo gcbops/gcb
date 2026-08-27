@@ -65,6 +65,8 @@ const ActionRouterModule = (() => {
       }
     }
 
+    
+
     RouterModule.go(page);
   }
 

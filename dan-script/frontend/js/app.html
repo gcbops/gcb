@@ -7,7 +7,7 @@
     const CACHE_TTL = 24 * 60 * 60 * 1e3;
     let notificationAudio = null;
     const APP_CONFIG = {
-      HTML_VERSIONING: false
+      HTML_VERSIONING: true
     };
     let htmlVersion = null;
     function getHtmlVersion() {
@@ -141,6 +141,7 @@
       const cached = cacheGet(cacheKey);
       if (cached !== null) {
         if (log) {
+          console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
         }
         safeCallback(cached);
       }
@@ -149,11 +150,16 @@
         shouldFetch = true;
       }
       if (log) {
+        console.log(`[Cache] Should fetch "${cacheKey}"?`, shouldFetch);
       }
       if (!shouldFetch) {
         return;
       }
       if (log) {
+        console.log(
+          `[Cache] Calling Google Script function "${gFuncName}" with args:`,
+          args
+        );
       }
       safeRun(() => {
         google.script.run.withSuccessHandler((data) => {
@@ -536,6 +542,43 @@
         modal.hide();
       }
     }
+    function openConfirmationModal({ ns, title, message, onProceed }) {
+      const eventNs = ns ? ns.startsWith(".") ? ns : `.${ns}` : ".confirmation";
+      AppUtils.openModal("#app-modal", {
+        size: "md",
+        placement: "center",
+        header: "<div></div>",
+        body: `
+      <div id="review-modal-body">
+        <h5 class="modal-title mb-2"><strong>${title}</strong></h5>
+        <p>${message}</p>
+      </div>
+    `,
+        footer: `
+      <div id="review-modal-footer" class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-back">
+          Back
+        </button>
+        <button type="button" class="btn btn-success btn-proceed">
+          Proceed
+        </button>
+      </div>
+    `,
+        onOpen($modal) {
+          $modal.off(eventNs).on(`click${eventNs}`, ".btn-back", () => {
+            AppUtils.closeModal("#app-modal");
+          }).on(`click${eventNs}`, ".btn-proceed", () => {
+            const $btn = $modal.find(".btn-proceed");
+            if (typeof onProceed === "function") {
+              onProceed($modal, $btn);
+            }
+          });
+        },
+        onClose($modal) {
+          $modal.off(eventNs);
+        }
+      });
+    }
     return {
       // cache
       cacheSet,
@@ -561,7 +604,8 @@
       openDrawer,
       closeDrawer,
       openModal,
-      closeModal
+      closeModal,
+      openConfirmationModal
     };
   })();
 
@@ -910,7 +954,6 @@
         return;
       }
       setupClientSelector($selectClient, $taskForm);
-      $taskForm.off("submit.activityToday").on("submit.activityToday", handleTaskSubmit);
       $("#submit-new-hours").off("click.activityToday").on("click.activityToday", handleTaskSubmit);
       AppUtils.initSelect2("#drawerManualAdd .drawer-content");
     }
@@ -937,10 +980,10 @@
       event.preventDefault();
       const $form = $(this);
       let $submitBtn = $form.find('button[type="submit"]');
-      const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
       if (!$submitBtn.length) {
         $submitBtn = $("#submit-new-hours");
       }
+      const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
       const formData = {
         client: String($("#client").val() || "").trim(),
         hour: String($("#hour").val() || "").trim(),
@@ -955,22 +998,9 @@
         loading.restore();
         return;
       }
-      const normalizedClient = formData.client.trim().toLowerCase();
-      const externalClients = AppUtils.cacheGet("externalSheets");
-      if (Array.isArray(externalClients)) {
-        const externalClient = externalClients.find(
-          (item) => String(item?.clientName || "").trim().toLowerCase() === normalizedClient
-        );
-        submitHours(externalClient);
-        return;
-      }
       google.script.run.withSuccessHandler((isExternal) => {
-        submitHours(
-          isExternal ? {
-            clientName: formData.client
-          } : null,
-          loading
-        );
+        const external = isExternal === true;
+        submitHours(external);
       }).withFailureHandler((err) => {
         console.error("isExternalClient failed:", err);
         AppUtils.showDashboardToast(
@@ -979,8 +1009,7 @@
         );
         loading.restore();
       }).isExternalClient(formData.client);
-      function submitHours(externalClient, loading2) {
-        const isExternal = Boolean(externalClient);
+      function submitHours(isExternal) {
         const gscriptFunc = isExternal ? "recordExternalClientHoursFromForm" : "recordManualClientHoursFromForm";
         AppUtils.submitForm({
           gscriptFunc,
@@ -1193,7 +1222,7 @@
       "top paid accounts",
       "outstanding accounts"
     ]);
-    function init(title, tableId, debug = false) {
+    function init(title, tableId, debug = false, callback = null) {
       const log = (...args) => debug && console.log(...args);
       const error = (...args) => debug && console.error(...args);
       const cleanTitle = String(title || "").toLowerCase().trim();
@@ -1211,6 +1240,7 @@
         ActivityToday.stopRefresh();
       }
       destroy(tableId);
+      const totalColumns = $table.find("thead tr:first th").length;
       const tableOptions = {
         responsive: true,
         language: {
@@ -1229,16 +1259,35 @@
           [5, 10, 25]
         ],
         initComplete() {
-          log("DataTable initComplete");
+          log("DataTable initComplete:", tableId);
+          if (typeof callback === "function") {
+            callback(this.api());
+          }
         }
       };
+      const priorityMap = {
+        "activity today": [0, -1],
+        clients: [1, -1],
+        "top paid accounts": [0, 1],
+        "outstanding accounts": [0, 2],
+        "active clients": [0, 1, -1],
+        "external sheets": [0, 2, -1],
+        "reports overview": [2, -1],
+        "report history": [2, -1],
+        upsell: [0, 1]
+      };
+      const priorityColumns = priorityMap[cleanTitle] || [];
+      tableOptions.columnDefs = [];
+      if (priorityColumns.length) {
+        tableOptions.columnDefs.push(
+          ...withResponsivePriorities(totalColumns, priorityColumns)
+        );
+      }
       if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
-        tableOptions.columnDefs = [
-          {
-            targets: [1, 2],
-            type: "num-fmt"
-          }
-        ];
+        tableOptions.columnDefs.push({
+          targets: [1, 2],
+          type: "num-fmt"
+        });
       }
       if (cleanTitle === "upsell") {
         Object.assign(tableOptions, {
@@ -1248,28 +1297,22 @@
           searching: true,
           lengthChange: false,
           info: false,
-          paging: true,
-          dom: '<"bottom d-flex justify-content-between"f p>'
+          paging: true
         });
-        tableOptions.columnDefs = [
-          {
-            targets: [1, 2],
-            className: "dt-center"
-          }
-        ];
+        tableOptions.columnDefs.push({
+          targets: [1, 2],
+          className: "dt-center"
+        });
       }
       if (cleanTitle === "activity today") {
         log("Initializing Activity Today");
-        tableOptions.columnDefs = [
-          ...tableOptions.columnDefs || [],
-          {
-            targets: -1,
-            className: "action-btn-group",
-            orderable: false,
-            searchable: false,
-            render: (_data, _type, row) => ActivityToday.buildActionButtons(row).html()
-          }
-        ];
+        tableOptions.columnDefs.push({
+          targets: -1,
+          className: "action-btn-group",
+          orderable: false,
+          searchable: false,
+          render: (_data, _type, row) => ActivityToday.buildActionButtons(row).html()
+        });
       }
       const instance = $table.DataTable(tableOptions);
       instances[tableId] = instance;
@@ -1319,6 +1362,20 @@
         destroy(tableId);
       });
       ActivityToday.stopRefresh();
+    }
+    function withResponsivePriorities(totalColumns, priorityCols, priorityValue = 1, defaultPriority = 3) {
+      const normalized = priorityCols.map(
+        (i) => i === -1 ? totalColumns - 1 : i
+      );
+      const prioritySet = new Set(normalized);
+      const columnDefs = [];
+      for (let i = 0; i < totalColumns; i++) {
+        columnDefs.push({
+          targets: i,
+          responsivePriority: prioritySet.has(i) ? priorityValue : defaultPriority
+        });
+      }
+      return columnDefs;
     }
     function addColumnClass(tableId, colIndex, className) {
       const instance = getInstance(tableId);
@@ -2465,30 +2522,28 @@
     `);
     }
     function highlightLatestRow(elId, badgeColumn = 0) {
-      const $tbody = $(`#${elId}`);
+      const $tbody = $(`#${elId}`).find("tbody");
       if (!$tbody.length) {
         return;
       }
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const $row = $tbody.find("tr:first");
-          if (!$row.length) {
-            return;
-          }
-          $row.find(".badge-new-report").remove();
-          $row.find("td").eq(badgeColumn).append(`
+      const $row = $tbody.find("tr:first");
+      if (!$row.length) {
+        return;
+      }
+      setTimeout(() => {
+        $row.find(".badge-new-report").remove();
+        $row.find("td").eq(badgeColumn).append(`
             <span
               class="badge badge-pill badge-success badge-new-report ms-2"
             >
               NEW
             </span>
           `);
-          $row.hide().fadeIn(500).addClass("table-success");
-          setTimeout(() => {
-            $row.removeClass("table-success");
-          }, 15e3);
-        });
-      });
+        $row.hide().fadeIn(500).addClass("table-row-highlighted");
+      }, 1e4);
+      setTimeout(() => {
+        $row.removeClass("table-row-highlighted");
+      }, 2e4);
     }
     return {
       loadClientTasks,
@@ -3874,7 +3929,7 @@
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            <i class="fa fa-file-pdf"></i>
+            <i class="fa-solid fa-file-pdf"></i>
             ${AppUtils.escapeHtml(log.name ?? "")}
           </span>
         </td>
@@ -3962,151 +4017,6 @@
     return { getLatestReport };
   })();
 
-  // src/reports/actions.js
-  var ReportActions = /* @__PURE__ */ (() => {
-    function downloadLatestPDF(btn, loading) {
-      const report = getLatestReport(btn);
-      if (!report) {
-        if (loading) {
-          loading.restore();
-        }
-        return;
-      }
-      window.open(report.link, "_blank");
-      if (loading) {
-        loading.restore();
-      }
-    }
-    function emailLatestReport(btn, loading) {
-      sendLatestReport({
-        btn,
-        loading,
-        reportMethod: "emailLatestReport",
-        loadingMessage: "Sending email...",
-        successMessage: "Latest report emailed!",
-        errorMessage: "Failed to send email."
-      });
-    }
-    function sendLatestReportToDiscord(btn, loading) {
-      sendLatestReport({
-        btn,
-        loading,
-        reportMethod: "sendLatestReportToDiscord",
-        loadingMessage: "Sending Discord notification...",
-        successMessage: "Discord notification sent!",
-        errorMessage: "Failed to send Discord notification."
-      });
-    }
-    function sendLatestReport(config) {
-      const report = getLatestReport(config.btn);
-      if (!report) {
-        if (config.loading) {
-          config.loading.restore();
-        }
-        return;
-      }
-      google.script.run.withSuccessHandler(() => {
-        handleReportSuccess(config.btn, config.successMessage, config.loading);
-      }).withFailureHandler((err) => {
-        handleReportFailure(
-          config.btn,
-          err,
-          config.errorMessage,
-          config.loading
-        );
-      })[config.reportMethod](report);
-    }
-    function getLatestReport(btn) {
-      const report = ReportService.getLatestReport();
-      if (!report) {
-        return null;
-      }
-      return report;
-    }
-    function handleReportSuccess(btn, message, loading) {
-      if (loading) {
-        loading.setSuccess("Sent successfully");
-      }
-      AppUtils.showDashboardToast(message, "success");
-    }
-    function handleReportFailure(btn, err, message, loading) {
-      if (loading) {
-        loading.restore();
-      }
-      AppUtils.showError(err);
-    }
-    return {
-      downloadLatestPDF,
-      emailLatestReport,
-      sendLatestReportToDiscord
-    };
-  })();
-
-  // src/pages/reports-export-data-page.js
-  var reportsExportDataPage = /* @__PURE__ */ (() => {
-    let bound = false;
-    const init = () => {
-      if (bound) {
-        return;
-      }
-      bound = true;
-      bindActions();
-      loadData();
-    };
-    const destroy = () => {
-      if (!bound) {
-        return;
-      }
-      bound = false;
-      $(document).off(".reports");
-    };
-    const bindActions = () => {
-      $(document).off(".reports").on("click.reports", ".btn-view-report", (e) => {
-        const url = $(e.currentTarget).data("url");
-        window.open(url, "_blank");
-      }).on("click.reports", ".btn-email-report", function() {
-        const btn = $(this);
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast("Email sent successfully!", "success");
-        }).withFailureHandler((err) => {
-          AppUtils.showError(err);
-        }).sendRequestedEmailReport(btn.data("id"));
-      }).on("click.reports", ".btn-discord-report", function() {
-        const btn = $(this);
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast(
-            "Discord notification sent!",
-            "success"
-          );
-        }).withFailureHandler((err) => {
-          AppUtils.showError(err);
-        }).sendRequestedDiscordReport(btn.data("id"));
-      }).on("click.reports", "#generate-monthly-report", () => {
-        const page = "reportsMonthlyReport";
-        RouterModule.go(page);
-      }).on("click.reports", "#generate-yearly-report", () => {
-        const page = "reportsAnnualReport";
-        RouterModule.go(page);
-      }).on("click.reports", "#download-latest-pdf", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
-        ReportActions.downloadLatestPDF(btn, loading);
-      }).on("click.reports", "#email-latest-report", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
-        ReportActions.emailLatestReport(btn, loading);
-      }).on("click.reports", "#send-discord-notification", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
-        ReportActions.sendLatestReportToDiscord(btn, loading);
-      });
-    };
-    const loadData = () => {
-      ReportsOverview.loadReportsOverview();
-    };
-    return { init, destroy };
-  })();
-
   // src/reports/history.js
   var ReportHistory = /* @__PURE__ */ (() => {
     const TABLE_TITLE = "Report History";
@@ -4114,7 +4024,7 @@
     function loadReportHistory(cacheKey, serverFunction, callback = null, refresh = false) {
       if (refresh || !AppUtils.cacheGet(cacheKey)) {
         const tableId = getTableId();
-        if (tableId) {
+        if (tableId && !refresh) {
           DataTableModule.showLoader(tableId, "Loading reports...");
         }
       }
@@ -4124,15 +4034,7 @@
         [],
         (data) => {
           const reportLogs = Array.isArray(data?.reportLogs) ? data.reportLogs : [];
-          renderReportHistory(reportLogs);
-          if (typeof callback !== "function") {
-            return;
-          }
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              callback(data);
-            });
-          });
+          renderReportHistory(reportLogs, callback);
         },
         false,
         refresh
@@ -4149,7 +4051,7 @@
       }
       return `#${table.id}`;
     }
-    function renderReportHistory(reportLogs) {
+    function renderReportHistory(reportLogs, callback) {
       const tbody = document.getElementById(TABLE_BODY_ID);
       if (!tbody) {
         return;
@@ -4159,6 +4061,8 @@
         return;
       }
       const tableId = `#${table.id}`;
+      DataTableModule.destroy(tableId);
+      tbody.innerHTML = "";
       if (!Array.isArray(reportLogs) || !reportLogs.length) {
         DataTableModule.showEmpty(tableId, "No reports generated yet.");
         return;
@@ -4167,7 +4071,7 @@
       reportLogs.forEach((log, index) => {
         tbody.appendChild(createReportHistoryRow(log, index));
       });
-      DataTableModule.init(TABLE_TITLE, tableId);
+      DataTableModule.init(TABLE_TITLE, tableId, false, callback);
     }
     function createReportHistoryRow(log, index) {
       const tr = document.createElement("tr");
@@ -4186,7 +4090,7 @@
 
       <td class="text-center">
         <span class="badge bg-light text-info">
-          <i class="fa fa-file-pdf"></i>
+          <i class="fa-solid fa-file-pdf"></i>
           ${AppUtils.escapeHtml(reportName)}
         </span>
       </td>
@@ -4394,6 +4298,251 @@
     };
   })();
 
+  // src/reports/actions.js
+  var ReportActions = /* @__PURE__ */ (() => {
+    function downloadLatestPDF(btn, loading) {
+      const report = getLatestReport(btn);
+      if (!report) {
+        if (loading) {
+          loading.restore();
+        }
+        return;
+      }
+      window.open(report.link, "_blank");
+      if (loading) {
+        loading.restore();
+      }
+    }
+    function emailLatestReport(btn, loading) {
+      sendLatestReport({
+        btn,
+        loading,
+        reportMethod: "emailLatestReport",
+        loadingMessage: "Sending email...",
+        successMessage: "Latest report emailed!",
+        errorMessage: "Failed to send email."
+      });
+    }
+    function sendLatestReportToDiscord(btn, loading) {
+      sendLatestReport({
+        btn,
+        loading,
+        reportMethod: "sendLatestReportToDiscord",
+        loadingMessage: "Sending Discord notification...",
+        successMessage: "Discord notification sent!",
+        errorMessage: "Failed to send Discord notification."
+      });
+    }
+    function sendLatestReport(config) {
+      const report = getLatestReport(config.btn);
+      if (!report) {
+        if (config.loading) {
+          config.loading.restore();
+        }
+        return;
+      }
+      google.script.run.withSuccessHandler(() => {
+        handleReportSuccess(config.btn, config.successMessage, config.loading);
+      }).withFailureHandler((err) => {
+        handleReportFailure(
+          config.btn,
+          err,
+          config.errorMessage,
+          config.loading
+        );
+      })[config.reportMethod](report);
+    }
+    function getLatestReport(btn) {
+      const report = ReportService.getLatestReport();
+      if (!report) {
+        return null;
+      }
+      return report;
+    }
+    function handleReportSuccess(btn, message, loading) {
+      if (loading) {
+        loading.setSuccess("Sent successfully");
+      }
+      AppUtils.showDashboardToast(message, "success");
+    }
+    function handleReportFailure(btn, err, message, loading) {
+      if (loading) {
+        loading.restore();
+      }
+      AppUtils.showError(err);
+    }
+    const handleEmailReport = ($btn) => {
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast("Email sent successfully!", "success");
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+      }).sendRequestedEmailReport($btn.data("id"));
+    };
+    const handleDiscordReport = ($btn) => {
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast("Discord notification sent!", "success");
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+      }).sendRequestedDiscordReport($btn.data("id"));
+    };
+    const handleBtnGenerateYearlyReport = ($btn) => {
+      const selectYear = $("#yearly-report-year");
+      const type = "yearly";
+      const year = selectYear.val();
+      selectYear.prop("disabled", true);
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Analyzing Report Request..."
+      );
+      google.script.run.withSuccessHandler((result) => {
+        if (!result.valid) {
+          ReportGenerator.setGenerateState(type, false, loading);
+          AppUtils.showDashboardToast(result.message, "warning");
+          return;
+        }
+        ReportGenerator.generateYearlyReport(year, $btn, loading);
+      }).withFailureHandler((err) => {
+        ReportGenerator.setGenerateState(type, false, loading);
+        console.error(err);
+        AppUtils.showDashboardToast(
+          err.message || "Something went wrong.",
+          "error"
+        );
+      }).validateCustomYearlyReport(year);
+    };
+    const handleBtnGenerateMonthlyReport = ($btn) => {
+      const selectMonth = $("#monthly-report-month");
+      const selectYear = $("#monthly-report-year");
+      const month = selectMonth.val();
+      const year = selectYear.val();
+      const type = "monthly";
+      selectMonth.prop("disabled", true);
+      selectYear.prop("disabled", true);
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Analyzing Report Request..."
+      );
+      google.script.run.withSuccessHandler((result) => {
+        if (!result.valid) {
+          ReportGenerator.setGenerateState(type, false, loading);
+          AppUtils.showDashboardToast(result.message, "warning");
+          return;
+        }
+        ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
+      }).withFailureHandler((err) => {
+        ReportGenerator.setGenerateState(type, false, loading);
+        console.error(err);
+        AppUtils.showDashboardToast(
+          err.message || "Something went wrong.",
+          "error"
+        );
+      }).validateCustomMonthlyReport(month, year);
+    };
+    const handleEmailLatestReport = ($btn) => {
+      const loading = AppUtils.setButtonLoading($btn[0], "Sending email...");
+      emailLatestReport($btn, loading);
+    };
+    const handleSendDiscordNotification = ($btn) => {
+      const loading = AppUtils.setButtonLoading($btn[0], "Sending Discord...");
+      sendLatestReportToDiscord($btn, loading);
+    };
+    const confirmAction = (ns, title, message, actionCallback) => {
+      AppUtils.openConfirmationModal({
+        ns,
+        title,
+        message,
+        onProceed: ($modal) => {
+          actionCallback();
+          AppUtils.closeModal("#app-modal");
+        }
+      });
+    };
+    return {
+      downloadLatestPDF,
+      emailLatestReport,
+      sendLatestReportToDiscord,
+      handleEmailReport,
+      handleDiscordReport,
+      handleBtnGenerateYearlyReport,
+      handleBtnGenerateMonthlyReport,
+      handleEmailLatestReport,
+      handleSendDiscordNotification,
+      confirmAction
+    };
+  })();
+
+  // src/pages/reports-export-data-page.js
+  var reportsExportDataPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off(".reports");
+    };
+    const bindActions = () => {
+      $(document).off(".reports").on("click.reports", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
+        window.open(url, "_blank");
+      }).on("click.reports", ".btn-email-report", function() {
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to dispatch this custom report via email?",
+          () => ReportActions.handleEmailReport($btn)
+        );
+      }).on("click.reports", ".btn-discord-report", function() {
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "This will broadcast an active notification stream to the designated channel. Proceed?",
+          () => ReportActions.handleDiscordReport($btn)
+        );
+      }).on("click.reports", "#generate-monthly-report", () => {
+        const page = "reportsMonthlyReport";
+        RouterModule.go(page);
+      }).on("click.reports", "#generate-yearly-report", () => {
+        const page = "reportsAnnualReport";
+        RouterModule.go(page);
+      }).on("click.reports", "#download-latest-pdf", function() {
+        const btn = $(this);
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        ReportActions.downloadLatestPDF(btn, loading);
+      }).on("click.reports", "#email-latest-report", function() {
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "emailLatestReport",
+          "Email Latest Report?",
+          "This will send the latest generated report to your registered email.",
+          () => ReportActions.handleEmailLatestReport($btn)
+        );
+      }).on("click.reports", "#send-discord-notification", function() {
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Alert to Discord?",
+          "This will send the latest generated report directly to the private Discord channel.",
+          () => ReportActions.handleSendDiscordNotification($btn)
+        );
+      });
+    };
+    const loadData = () => {
+      ReportsOverview.loadReportsOverview();
+    };
+    return { init, destroy };
+  })();
+
   // src/pages/reports-monthly-report-page.js
   var reportsMonthlyReportPage = /* @__PURE__ */ (() => {
     let bound = false;
@@ -4417,57 +4566,29 @@
         const url = $(e.currentTarget).data("url");
         window.open(url, "_blank");
       }).on("click.reportsMonthly", ".btn-email-report", function() {
-        const btn = $(this);
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast(
-            "Email sent successfully!",
-            "success"
-          );
-        }).withFailureHandler((err) => {
-          AppUtils.showError(err);
-        }).sendRequestedEmailReport(
-          btn.data("id")
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to dispatch this custom report via email?",
+          () => ReportActions.handleEmailReport($btn)
         );
       }).on("click.reportsMonthly", ".btn-discord-report", function() {
-        const btn = $(this);
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast(
-            "Discord notification sent!",
-            "success"
-          );
-        }).withFailureHandler((err) => {
-          AppUtils.showError(err);
-        }).sendRequestedDiscordReport(
-          btn.data("id")
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "This will broadcast an active notification stream to the designated channel. Proceed?",
+          () => ReportActions.handleDiscordReport($btn)
         );
       }).on("click.reportsMonthly", "#btn-generate-monthly-report", function() {
-        const btn = $(this);
-        const selectMonth = $("#monthly-report-month");
-        const selectYear = $("#monthly-report-year");
-        const month = selectMonth.val();
-        const year = selectYear.val();
-        const type = "monthly";
-        selectMonth.prop("disabled", true);
-        selectYear.prop("disabled", true);
-        const loading = AppUtils.setButtonLoading(
-          btn[0],
-          "Analyzing Report Request..."
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "generateMonthlyReport",
+          "Generate Monthly Summary?",
+          "Compiling logs requires calculations across your monthly data points. Proceed?",
+          () => ReportActions.handleBtnGenerateMonthlyReport($btn)
         );
-        google.script.run.withSuccessHandler((result) => {
-          if (!result.valid) {
-            ReportGenerator.setGenerateState(type, false, loading);
-            AppUtils.showDashboardToast(result.message, "warning");
-            return;
-          }
-          ReportGenerator.generateMonthlyReport(month, year, btn, loading);
-        }).withFailureHandler((err) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-          console.error(err);
-          AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error"
-          );
-        }).validateCustomMonthlyReport(month, year);
       }).on("click.reportsMonthly", "#generate-yearly-report", () => {
         const page = "reportsAnnualReport";
         RouterModule.go(page);
@@ -4476,13 +4597,21 @@
         const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
         ReportActions.downloadLatestPDF(btn, loading);
       }).on("click.reportsMonthly", "#email-latest-report", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
-        ReportActions.emailLatestReport(btn, loading);
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "emailLatestReport",
+          "Email Latest Report?",
+          "This will send the latest generated report to your registered email.",
+          () => ReportActions.handleEmailLatestReport($btn)
+        );
       }).on("click.reportsMonthly", "#send-discord-notification", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
-        ReportActions.sendLatestReportToDiscord(btn, loading);
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Alert to Discord?",
+          "This will send the latest generated report directly to the private Discord channel.",
+          () => ReportActions.handleSendDiscordNotification($btn)
+        );
       });
     };
     const loadData = () => {
@@ -4528,78 +4657,52 @@
         const url = $(e.currentTarget).data("url");
         window.open(url, "_blank");
       }).on("click.reportsAnnual", ".btn-email-report", function() {
-        const btn = $(this);
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast(
-            "Email sent successfully!",
-            "success"
-          );
-        }).withFailureHandler((err) => {
-          AppUtils.showError(err);
-        }).sendRequestedEmailReport(
-          btn.data("id")
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to dispatch this custom report via email?",
+          () => ReportActions.handleEmailReport($btn)
         );
       }).on("click.reportsAnnual", ".btn-discord-report", function() {
-        const btn = $(this);
-        google.script.run.withSuccessHandler(() => {
-          AppUtils.showDashboardToast(
-            "Discord notification sent!",
-            "success"
-          );
-        }).withFailureHandler((err) => {
-          AppUtils.showError(err);
-        }).sendRequestedDiscordReport(
-          btn.data("id")
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "This will broadcast an active notification stream to the designated channel. Proceed?",
+          () => ReportActions.handleDiscordReport($btn)
         );
-      }).on("click.reportsAnnual", "#btn-generate-yearly-report", function() {
-        const btn = $(this);
-        const selectYear = $("#yearly-report-year");
-        const type = "yearly";
-        const year = selectYear.val();
-        selectYear.prop("disabled", true);
-        const loading = AppUtils.setButtonLoading(
-          btn[0],
-          "Analyzing Report Request..."
-        );
-        google.script.run.withSuccessHandler((result) => {
-          if (!result.valid) {
-            ReportGenerator.setGenerateState(type, false, loading);
-            AppUtils.showDashboardToast(
-              result.message,
-              "warning"
-            );
-            return;
-          }
-          ReportGenerator.generateYearlyReport(year, btn, loading);
-        }).withFailureHandler((err) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-          console.error(err);
-          AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error"
-          );
-        }).validateCustomYearlyReport(year);
-      }).on("click.reportsAnnual", "#generate-yearly-report", () => {
-        const page = "reportsAnnualReport";
+      }).on("click.reportsAnnual", "#generate-monthly-report", () => {
+        const page = "reportsMonthlyReport";
         RouterModule.go(page);
+      }).on("click.reportsAnnual", "#btn-generate-yearly-report", function() {
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "generateYearlyReport",
+          "Generate Yearly Summary?",
+          "Compiling analytics logs requires data calculations across historical points. Proceed?",
+          () => ReportActions.handleBtnGenerateYearlyReport($btn)
+        );
       }).on("click.reportsAnnual", "#download-latest-pdf", function() {
         const btn = $(this);
         const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
         ReportActions.downloadLatestPDF(btn, loading);
       }).on("click.reportsAnnual", "#email-latest-report", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(
-          btn[0],
-          "Sending email..."
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "emailLatestReport",
+          "Email Latest Report?",
+          "This will send the latest generated report to your registered email.",
+          () => ReportActions.handleEmailLatestReport($btn)
         );
-        ReportActions.emailLatestReport(btn, loading);
       }).on("click.reportsAnnual", "#send-discord-notification", function() {
-        const btn = $(this);
-        const loading = AppUtils.setButtonLoading(
-          btn[0],
-          "Sending Discord..."
+        const $btn = $(this);
+        ReportActions.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Alert to Discord?",
+          "This will send the latest generated report directly to the private Discord channel.",
+          () => ReportActions.handleSendDiscordNotification($btn)
         );
-        ReportActions.sendLatestReportToDiscord(btn, loading);
       });
     };
     const loadData = () => {
@@ -4607,9 +4710,7 @@
       const $year = $("#yearly-report-year");
       $year.empty();
       for (let year = 2024; year <= currentYear; year++) {
-        $year.append(
-          `<option value="${year}">${year}</option>`
-        );
+        $year.append(`<option value="${year}">${year}</option>`);
       }
       $year.val(currentYear);
       ReportHistory.loadCustomYearlyReportsPageData();
@@ -4688,16 +4789,40 @@
       e.preventDefault();
       switch (btn.id) {
         case "btnClearCache":
-          clearCache(btn);
+          AppUtils.openConfirmationModal({
+            ns: "clearCache",
+            title: "Clear Application Cache?",
+            message: "This will clear all temporary data from your browser's local storage. You may need to log in or reload configurations again.",
+            onProceed: ($modal, $btn) => {
+              clearCache(btn);
+              AppUtils.closeModal("#app-modal");
+            }
+          });
           break;
         case "btnSyncClient":
-          syncClientSheets(btn);
+          AppUtils.openConfirmationModal({
+            ns: "syncClient",
+            title: "Sync Client Sheets?",
+            message: "This will refresh and synchronize the client names on the main sheet. This could take a few moments to pull the latest records.",
+            onProceed: ($modal, $btn) => {
+              syncClientSheets(btn);
+              AppUtils.closeModal("#app-modal");
+            }
+          });
           break;
         case "btnAddMasterFormula":
           openMasterFormulaModal();
           break;
         case "btnBackupAllSheets":
-          BackupAllSheets(btn);
+          AppUtils.openConfirmationModal({
+            ns: "backupAllSheets",
+            title: "Confirm All Google Sheets Backup?",
+            message: "This will create a complete backup point for all active sheets. This process might take a few moments.",
+            onProceed: ($modal, $btn) => {
+              BackupAllSheets(btn);
+              AppUtils.closeModal("#app-modal");
+            }
+          });
           break;
         default:
           break;
@@ -4726,75 +4851,97 @@
       AppUtils.openModal("#app-modal", {
         size: "md",
         placement: "center",
-        header: `
-      <h5 class="modal-title">
-        Add Master Formula
-      </h5>
-    `,
         body: `
-      <div class="mb-3">
-        <label
-          for="masterFormulaCell"
-          class="form-label"
-        >
-          Cell Reference
-        </label>
+      <!-- STEP 1: MAIN FORM BODY -->
+      <div id="main-modal-body">
+        <div class="mb-3">
+          <label for="masterFormulaCell" class="form-label">
+            Cell Reference
+          </label>
+          <input
+            type="text"
+            class="form-none control"
+            id="masterFormulaCell"
+            placeholder="B39"
+            autocomplete="off"
+          >
+          <div class="form-text">
+            Example: B39, N18, or AB25.
+          </div>
+        </div>
 
-        <input
-          type="text"
-          class="form-control"
-          id="masterFormulaCell"
-          placeholder="B39"
-          autocomplete="off"
-        >
+        <div class="mb-3">
+          <label for="masterFormulaValue" class="form-label">
+            Formula
+          </label>
+          <textarea
+            class="form-control"
+            id="masterFormulaValue"
+            rows="3"
+            placeholder='=COUNTIF(B41:B,"<>")'
+          ></textarea>
+        </div>
 
-        <div class="form-text">
-          Example: B39, N18, or AB25.
+        <div class="small text-muted">
+          The formula will be applied to the applicable client
+          sheets and the <strong>Projects</strong> sheet of
+          registered external spreadsheets.
         </div>
       </div>
 
-      <div class="mb-3">
-        <label
-          for="masterFormulaValue"
-          class="form-label"
-        >
-          Formula
-        </label>
-
-        <textarea
-          class="form-control"
-          id="masterFormulaValue"
-          rows="3"
-          placeholder='=COUNTIF(B41:B,"<>")'
-        ></textarea>
-      </div>
-
-      <div class="small text-muted">
-        The formula will be applied to the applicable client
-        sheets and the <strong>Projects</strong> sheet of
-        registered external spreadsheets.
+      <!-- STEP 2: REVIEW / CONFIRMATION BODY -->
+      <div id="review-modal-body" class="d-none">
+        <h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>
+        <p>Please review the details before updating the spreadsheets.</p>
       </div>
     `,
         footer: `
-      <button
-        type="button"
-        class="btn btn-secondary btn-cancel"
-      >
-        Cancel
-      </button>
+      <!-- STEP 1: MAIN FOOTER -->
+      <div id="main-modal-footer" class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-cancel">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-primary btn-save">
+          Apply Formula
+        </button>
+      </div>
 
-      <button
-        type="button"
-        class="btn btn-primary btn-save"
-      >
-        Apply Formula
-      </button>
+      <!-- STEP 2: REVIEW FOOTER -->
+      <div id="review-modal-footer" class="d-flex gap-2 d-none">
+        <button type="button" class="btn btn-secondary btn-back">
+          Back
+        </button>
+        <button type="button" class="btn btn-success btn-proceed">
+          Proceed
+        </button>
+      </div>
     `,
         onOpen($modal) {
           $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal("#app-modal");
           }).on(`click${ns}`, ".btn-save", () => {
-            const $btn = $modal.find(".btn-save");
+            const $cellInput = $modal.find("#masterFormulaCell");
+            const $formulaValue = $modal.find("#masterFormulaValue");
+            $cellInput.removeClass("is-invalid");
+            $formulaValue.removeClass("is-invalid");
+            let isValid = true;
+            if (!$cellInput.val().trim()) {
+              $cellInput.addClass("is-invalid");
+              isValid = false;
+            }
+            if (!$formulaValue.val().trim()) {
+              $formulaValue.addClass("is-invalid");
+              isValid = false;
+            }
+            if (isValid) {
+              $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
+              $modal.find("#review-modal-body, #review-modal-footer").removeClass("d-none");
+            }
+          }).on(`click${ns}`, ".btn-back", () => {
+            $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
+            $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
+          }).on(`click${ns}`, ".btn-proceed", () => {
+            const $btn = $modal.find(".btn-proceed");
             applyMasterFormula($modal, $btn);
           });
         },
@@ -5686,10 +5833,7 @@
             done();
           }
         },
-        (error) => {
-          console.error(`[PageLoader] Failed to load page: ${pageName}`, error);
-          AppUtils.showError(`Failed to load page: ${pageName}`);
-        }
+        false
       );
     }
     function updatePageHeader(meta) {
@@ -5754,9 +5898,38 @@
         }
       }, 5e3);
     }
+    function setupStaggerCards(container = "#app-main__inner") {
+      const root = typeof container === "string" ? document.querySelector(container) : container;
+      if (!root) {
+        return;
+      }
+      root.querySelectorAll(".card").forEach((card) => {
+        card.classList.remove("loaded");
+        card.classList.add("stagger");
+      });
+    }
+    function playStaggerReveal(container = "#app-main__inner") {
+      const root = typeof container === "string" ? document.querySelector(container) : container;
+      if (!root) {
+        return;
+      }
+      const cards = root.querySelectorAll(".card.stagger");
+      const stagger = 350;
+      cards.forEach((card, index) => {
+        setTimeout(
+          () => {
+            card.classList.remove("stagger");
+            card.classList.add("loaded");
+          },
+          400 + index * stagger
+        );
+      });
+    }
     return {
       init,
-      activateNavigation
+      activateNavigation,
+      setupStaggerCards,
+      playStaggerReveal
     };
   })();
 
@@ -5772,7 +5945,7 @@
           "loadHtmlComponent",
           [fileName],
           (html) => resolve(html),
-          (error) => reject(error)
+          false
         );
       });
     }
@@ -6537,9 +6710,13 @@
         if (token !== pageToken) {
           return;
         }
+        AppUI.setupStaggerCards();
         page.init?.(token);
         currentModule = page;
         AppUI.activateNavigation(resolvedPageName);
+        requestAnimationFrame(() => {
+          AppUI.playStaggerReveal();
+        });
       });
     }
     return {

@@ -193,51 +193,47 @@ function recordManualClientHoursFromForm(formData) {
 
 function recordExternalClientHoursFromForm(formData) {
   try {
-    const data =
-      validateManualHoursFormData(formData);
+    const data = validateManualHoursFormData(formData);
 
-    const ss =
-      SpreadsheetApp.getActiveSpreadsheet();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    const registrySheet =
-      ss.getSheetByName("External Sheets");
+    const registrySheet = ss.getSheetByName("External Sheets");
 
-    if (
-      !registrySheet ||
-      registrySheet.getLastRow() < 2
-    ) {
-      throw new Error(
-        "External Sheets registry not found.",
-      );
+    if (!registrySheet || registrySheet.getLastRow() < 2) {
+      throw new Error("External Sheets registry not found.");
     }
 
+    /*
+     * External Sheets registry:
+     *
+     * A = Spreadsheet ID
+     * B = Client Name
+     * C = Projects
+     * D = Status
+     * E = ...
+     */
     const values = registrySheet
-      .getRange(
-        2,
-        1,
-        registrySheet.getLastRow() - 1,
-        5,
-      )
+      .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
       .getValues();
 
-    const normalizedClient =
-      normalizeText(data.client);
+    const normalizedClient = normalizeText(data.client);
 
+    /*
+     * Find the external client.
+     */
     const externalRow = values.find(
       (row) =>
-        normalizeText(
-          String(row[1] || ""),
-        ) === normalizedClient,
+        normalizeText(String(row[1] || "")) === normalizedClient &&
+        String(row[0] || "").trim() !== "",
     );
 
     if (!externalRow) {
       throw new Error(
-        `External client "${data.client}" was not found.`,
+        `External client "${data.client}" was not found in the External Sheets registry.`,
       );
     }
 
-    const spreadsheetId =
-      String(externalRow[0] || "").trim();
+    const spreadsheetId = String(externalRow[0] || "").trim();
 
     if (!spreadsheetId) {
       throw new Error(
@@ -245,42 +241,59 @@ function recordExternalClientHoursFromForm(formData) {
       );
     }
 
+    /*
+     * Open the client's external spreadsheet.
+     */
     let externalSS;
 
     try {
-      externalSS =
-        SpreadsheetApp.openById(spreadsheetId);
+      externalSS = SpreadsheetApp.openById(spreadsheetId);
     } catch (err) {
       throw new Error(
         `Unable to access the external spreadsheet for "${data.client}".`,
       );
     }
 
-    const projectSheet = externalSS.getSheetByName(data.task);
+    /*
+     * Find the project/task tab INSIDE the external spreadsheet.
+     */
+    const taskName = String(data.task || "").trim();
+
+    if (!taskName) {
+      throw new Error("Project/task is required.");
+    }
+
+    const projectSheet = externalSS.getSheetByName(taskName);
 
     if (!projectSheet) {
       throw new Error(
-        `Project sheet "${data.task}" was not found for "${data.client}".`,
+        `Project sheet "${taskName}" was not found in the external spreadsheet for "${data.client}".`,
       );
     }
 
-    if (
-      projectSheet.getName() === "Projects" ||
-      projectSheet.getName() === "BLANK"
-    ) {
-      throw new Error(`Invalid project sheet "${data.task}".`);
+    /*
+     * Prevent writing to registry/system sheets.
+     */
+    const sheetName = projectSheet.getName();
+
+    if (sheetName === "Projects" || sheetName === "BLANK") {
+      throw new Error(`Invalid project sheet "${sheetName}".`);
     }
 
+    /*
+     * Record directly into the external client's
+     * project/task sheet.
+     */
     const result = recordClientHoursToSheet(projectSheet, data);
 
+    /*
+     * Rebuild/refresh aggregated external-sheet data.
+     */
     combineExternalSheetData(spreadsheetId);
 
     return result;
-    
   } catch (err) {
-    throw new Error(
-      err.message || String(err),
-    );
+    throw new Error(err?.message || String(err));
   }
 }
 

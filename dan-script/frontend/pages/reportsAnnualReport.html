@@ -6,34 +6,19 @@
                 <div class="card-header">
                     Generate Report
                 </div>
+
                 <div class="card-body">
                     <form class>
-                        <div class="position-relative">
-                            <label class="form-label">Month</label>
 
-                            <select class="form-select form-control" type="select" id="monthly-report-month">
-                                <option>January</option>
-                                <option>February</option>
-                                <option>March</option>
-                                <option>April</option>
-                                <option>May</option>
-                                <option>June</option>
-                                <option>July</option>
-                                <option>August</option>
-                                <option>September</option>
-                                <option>October</option>
-                                <option>November</option>
-                                <option>December</option>
-                            </select>
-                        </div>
                         <div class="position-relative">
                             <label class="form-label">Year</label>
 
-                            <select class="form-select form-control" type="select" id="monthly-report-year"></select>
+                            <select class="form-select form-control" type="select" id="yearly-report-year"></select>
                         </div>
-                        <button class="btn btn-primary btn-lg" id="btn-generate-monthly-report">
+
+                        <button class="btn btn-primary btn-lg" id="btn-generate-yearly-report">
                             <i class="bi bi-play-fill"></i>
-                            Generate Monthly Report
+                            Generate Annual Report
                         </button>
                     </form>
                 </div>
@@ -44,24 +29,20 @@
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-3">
-                        <button class="btn btn-success btn-lg" id="generate-yearly-report">
-                            <i class="bi bi-calendar3">
-                            </i>
-                            Generate Yearly Report
+                        <button class="btn btn-success btn-lg" id="generate-monthly-report">
+                            <i class="fa-solid fa-calendar-day"></i>
+                            Generate Monthly Report
                         </button>
                         <button class="btn btn-danger btn-lg" id="download-latest-pdf">
-                            <i class="bi bi-file-earmark-pdf">
-                            </i>
+                            <i class="fa-solid fa-file-pdf"></i>
                             Download Latest PDF
                         </button>
                         <button class="btn btn-warning btn-lg" id="email-latest-report">
-                            <i class="bi bi-envelope-fill">
-                            </i>
+                            <i class="fa-solid fa-envelope"></i>
                             Email Latest Report
                         </button>
                         <button class="btn btn-dark btn-lg" id="send-discord-notification">
-                            <i class="bi bi-discord">
-                            </i>
+                            <i class="fa-brands fa-discord"></i>
                             Send Discord Notification
                         </button>
                     </div>
@@ -80,8 +61,8 @@
                                 </h5>
 
                             </div>
-                            <div id="container" class="mt-4">
-                                <table id="monthly-report-history" class="table table-hover nowrap" style="width:100%">
+                            <div id="table-wrapper" class="mt-4">
+                                <table id="yearly-report-history" class="table table-hover nowrap" style="width:100%">
                                 <thead>
                                     <tr>
                                         <th class="text-center">#</th>

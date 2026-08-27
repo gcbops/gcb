@@ -277,6 +277,8 @@ const RouterModule = (() => {
         return;
       }
 
+      AppUI.setupStaggerCards();
+
       /*
        * Initialize page.
        */
@@ -288,6 +290,10 @@ const RouterModule = (() => {
        * Update navigation.
        */
       AppUI.activateNavigation(resolvedPageName);
+
+      requestAnimationFrame(() => {
+        AppUI.playStaggerReveal();
+      });
     });
   }
 

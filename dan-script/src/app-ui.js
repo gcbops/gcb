@@ -55,9 +55,52 @@ const AppUI = (() => {
     }, 5000);
   }
 
+  // Set up the initial skeleton/blur state on each card
+  function setupStaggerCards(container = "#app-main__inner") {
+    const root =
+      typeof container === "string"
+        ? document.querySelector(container)
+        : container;
+
+    if (!root) {
+      return;
+    }
+
+    root.querySelectorAll(".card").forEach((card) => {
+      card.classList.remove("loaded");
+      card.classList.add("stagger");
+    });
+  }
+
+  function playStaggerReveal(container = "#app-main__inner") {
+    const root =
+      typeof container === "string"
+        ? document.querySelector(container)
+        : container;
+
+    if (!root) {
+      return;
+    }
+
+    const cards = root.querySelectorAll(".card.stagger");
+    const stagger = 350;
+
+    cards.forEach((card, index) => {
+      setTimeout(
+        () => {
+          card.classList.remove("stagger");
+          card.classList.add("loaded");
+        },
+        400 + index * stagger,
+      );
+    });
+  }
+
   return {
     init,
     activateNavigation,
+    setupStaggerCards,
+    playStaggerReveal,
   };
 })();
 

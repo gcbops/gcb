@@ -16,6 +16,33 @@
   overflow-y: hidden;
 }
 
+@media (max-width: 767.98px) {
+  .app-wrapper-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 1030;
+  }
+
+  .app-main__inner {
+    padding-bottom: 80px;
+  }
+
+  .body-tabs.nav {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto; /* Allows scrolling if tabs exceed screen width */
+    white-space: nowrap;
+  }
+
+  .body-tabs.nav > li {
+    float: none;
+    display: inline-block;
+  }
+}
+
 /* --- Utility Classes (Grouped) --- */
 /* Gap Utilities */
 .gap-1 { gap: 0.25rem !important; } /* 4px */
@@ -24,6 +51,77 @@
 
 /* Display Utilities */
 .d-grid { display: grid !important; }   
+
+/* 
+What you'll see:
+
+Skeleton shimmer — each element shows a subtle moving gradient (like a loading placeholder)
+Blur → sharp — filter: blur(12px) transitions to blur(0) as it "materializes"
+Scale pop — slight scale(0.96) → scale(1) for a "settling in" feel
+Staggered — each element loads 350 ms after the previous one
+Tweak knobs:
+
+Value	Effect
+blur(12px)	Higher = more dramatic blur-to-sharp
+stagger = 350	Time between each element appearing
+400 (initial delay)	How long the first "skeleton" state shows
+shimmer animation duration	Speed of the loading shimmer
+scale(0.96)	Remove or change for a different entrance feel 
+
+*/
+.card.stagger {
+  position: relative;
+  opacity: 0;
+  filter: blur(12px);
+  transform: scale(0.96);
+  transition: opacity 0.5s ease, filter 0.7s ease, transform 0.5s ease;
+}
+
+/* Shimmer overlay visible during "loading" */
+.card.stagger::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255,255,255,0.06) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card.stagger {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    transition: none;
+  }
+
+  .card.stagger::before {
+    animation: none;
+  }
+}
+
+/* --- LOADED STATE --- */
+.card.stagger.loaded {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+
+.card.stagger.loaded::before {
+  display: none;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 /* --- Core Drawer Styles --- */
 
@@ -231,26 +329,42 @@ table.table tbody .dt-loader-row td {
   margin-top: 25px;
 }
 
+.dt-paging {
+  margin-top: 25px;
+}
+
 .dt-paging-button button {
-  border-color: #fff !important;
-  color: #5f656b;
-  border-radius: 50px;
-  padding: 7px 15px; /* Balanced horizontal padding */
+  padding: 7px 15px;
+  background: transparent !important;
+  font-weight: 600;
+  border: none;
+}
+
+.dt-paging-button:not(.active) button:not(.next):not(.previous) {
+  color: #c2c2c2 !important;
+}
+
+.dt-paging-button.active button, .dt-paging-button button.next, .dt-paging-button button.previous {
+  color: #6d7ae0 !important;
+}
+
+.dt-paging-button button.next, .dt-paging-button button.previous {
+  font-weight: 900;
 }
 
 .dt-paging-button.active button {
-  background-color: #6d7ae0 !important;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
 }
 
-/* --- Status Badges (Grouped) --- */
-/* td span {
-  color: #0D0D0D;
-  padding: 4px 8px;
-  font-size: 10px;
-  border-radius: 6px;
-  font-weight: 600;
-  display: inline-block;
-} */
+.dt-paging-button button:hover {
+  color: #6d7ae0 !important;
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
 
 /* --- Action Buttons --- */
 .action-btn-group {
@@ -267,6 +381,44 @@ table.table tbody .dt-loader-row td {
 .action-btn-group i.open-client-btn {
   font-size: 22px;
 }
+
+/* Highlight latest row style */
+.badge-new-report {
+  display: inline-block;
+  padding: 0.35em 0.65em;
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center; 
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.375rem;
+  color: #fff;
+  background-color: #0ea5e9; 
+}
+
+.badge-new-report:empty {
+  display: none;
+}   
+
+.table-row-highlighted {
+    border-color: var(--bs-table-border-color);
+    color: var(--bs-table-color);
+}
+
+.table-row-highlighted {
+  --bs-table-color: #000;
+  --bs-table-border-color: #b6d4fe;
+  --bs-table-bg: #e7f1ff; 
+  --bs-table-striped-bg: #dce9ff;
+  --bs-table-striped-color: #000;
+  --bs-table-active-bg: #cfe2ff;
+  --bs-table-active-color: #000;
+  --bs-table-hover-bg: #d6e4ff;
+  --bs-table-hover-color: #000;
+  color: var(--bs-table-color);
+  border-color: var(--bs-table-border-color);
+}   
 
 /* Action Hover States */
 .action-btn-group .add-client i:hover { color: #00b09b; }
@@ -315,6 +467,16 @@ table.table tbody .dt-loader-row td {
   .action-btn i {
     font-weight: 900;
     font-size: 18px
+  }
+  #table-wrapper {
+    width: 100%;
+    overflow-x: auto;  
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #table-wrapper table {
+    min-width: 100%;
+    border-collapse: collapse;
   }
 }   
 
