@@ -4,6 +4,7 @@ import { ClientRanking } from "../clients/client-ranking.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { ProjectRankings } from "../projects/project-ranking.js";
 import { TableClientSelector } from "../tables/client-selector.js";
+import { ReportActions } from "../reports/actions.js";
 
 const allClientsPage = (() => {
   let bound = false;
@@ -33,7 +34,6 @@ const allClientsPage = (() => {
     $(document)
       .off("click.allClients", "#add-new-client-sheet")
       .on("click.allClients", "#add-new-client-sheet", function () {
-
         AppUtils.openDrawer("#drawerClientAdd");
 
         const $addClientForm = $("#addClientForm");
@@ -51,42 +51,62 @@ const allClientsPage = (() => {
               return;
             }
 
-            AppUtils.submitForm({
-              gscriptFunc: "createClientSheet",
-              data: { name: clientName },
-              $btn: $submitBtn,
-              loadingText: "Creating new client sheet...",
-              onSuccess: () => {
-                AppUtils.showDashboardToast(
-                  "Sheet created successfully!",
-                  "success",
-                );
+            // Added confirmation step before form execution
+            ReportActions.confirmAction(
+              "addClientSheet",
+              "Register New Client?",
+              `Are you sure you want to add "${clientName}" to the record?`,
+              () => {
+                AppUtils.submitForm({
+                  gscriptFunc: "createClientSheet",
+                  data: { name: clientName },
+                  $btn: $submitBtn,
+                  loadingText: "Creating new client sheet...",
+                  onSuccess: () => {
+                    AppUtils.showDashboardToast(
+                      "Sheet created successfully!",
+                      "success",
+                    );
 
-                google.script.run
-                  .withFailureHandler(() =>
-                    AppUtils.showError("Syncing error!"),
-                  )
-                  .syncClientSheetList();
+                    google.script.run
+                      .withFailureHandler(() =>
+                        AppUtils.showError("Syncing error!"),
+                      )
+                      .syncClientSheetList();
 
-                AppUtils.cacheClear("allClientsData");
+                    AppUtils.cacheClear("allClientsData");
 
-                if (RouterModule.getCurrentPage() === "addManualHours") {
-                  TableClientSelector.init();
-                }
+                    if (RouterModule.getCurrentPage() === "addManualHours") {
+                      TableClientSelector.init();
+                    }
 
-                ClientDirectory.init("allClientsData");
+                    ClientDirectory.init("allClientsData");
 
-                $("#sheet_name").val("");
+                    $("#sheet_name").val("");
+                  },
+                });
               },
-            });
+            );
           });
-
       })
 
       .off("click.allClients", "#sync-clients-list")
       .on("click.allClients", "#sync-clients-list", function () {
-        ClientDirectory.refreshClientDirectory("allClientsData", null);
+        ReportActions.confirmAction(
+          "syncClientsList",
+          "Synchronize Client Directory?",
+          "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+          () => {
+            ClientDirectory.refreshClientDirectory("allClientsData", () => {
+              AppUtils.showDashboardToast(
+                "Clients refreshed successfully.",
+                "success",
+              );
+            });
+          },
+        );
       });
+
   };
 
   const loadData = () => {

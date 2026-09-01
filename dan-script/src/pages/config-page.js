@@ -1,3 +1,4 @@
+import { ReportActions } from "../reports/actions.js";
 import { AppUtils } from "../utils.js";
 
 const settingsConfigurationPage = (() => {
@@ -177,6 +178,8 @@ const settingsConfigurationPage = (() => {
     AppUtils.openModal("#app-modal", {
       size: "md",
       placement: "center",
+
+      header: "<div></div>",
 
       body: `
       <!-- STEP 1: MAIN FORM BODY -->
@@ -399,16 +402,21 @@ const settingsConfigurationPage = (() => {
   }
 
   function handleSubmit(e) {
-    if (e.target.id !== "settingsIntegrationForm") {
-      return;
-    }
-
     e.preventDefault();
 
-    const form = e.target;
-    const $btn = $(form).find('button[type="submit"], input[type="submit"]');
+    if (e.target.id === "settingsIntegrationForm") {
+      const form = e.target;
+      const $btn = $(form).find('button[type="submit"], input[type="submit"]');
 
-    saveIntegrationSettings(form, $btn);
+      ReportActions.confirmAction(
+        "saveGlobalIntegrationSettings",
+        "Save Integration Settings?",
+        "Are you sure you want to update the master integration connections, alert directories, and pipeline destination paths?",
+        () => {
+          saveIntegrationSettings(form, $btn);
+        },
+      );
+    }
   }
 
   function saveIntegrationSettings(form, $btn) {

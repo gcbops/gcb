@@ -5,7 +5,7 @@ import { ProjectRankings } from "../projects/project-ranking.js";
 
 const yearlyOverviewPage = (() => {
   function init() {
-    HourSummary.loadHoursSummary("#hours-summary");
+    HourSummary.loadYearHoursSummary("#year-hours-summary");
     ChartModule.loadChart("yearly", false, new Date().getFullYear());
     ClientRanking.renderTopPaidClients();
     ProjectRankings.renderTopProjects();

@@ -19,7 +19,7 @@ const ReportHistory = (() => {
       const tableId = getTableId();
 
       if (tableId && !refresh) {
-        DataTableModule.showLoader(tableId, "Loading reports...");
+        DataTableModule.showLoader(tableId);
       }
     }
 

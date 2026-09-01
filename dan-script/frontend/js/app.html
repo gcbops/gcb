@@ -240,6 +240,40 @@
       }
       return name.trim().split(/\s+/).filter(Boolean).map((word) => word.charAt(0).toUpperCase()).join("").slice(0, 3);
     }
+    function formatHours(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return "0.0";
+      }
+      return number.toLocaleString(void 0, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+    }
+    function formatPercent(value) {
+      if (value === null || value === void 0 || value === "") {
+        return "0%";
+      }
+      if (typeof value === "string" && value.includes("%")) {
+        return value;
+      }
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return "0%";
+      }
+      const percent = Math.abs(number) <= 1 ? number * 100 : number;
+      return `${percent.toFixed(2)}%`;
+    }
+    function parsePercent(value) {
+      if (typeof value === "string") {
+        value = value.replace("%", "").trim();
+      }
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return 0;
+      }
+      return Math.abs(number) <= 1 ? number * 100 : number;
+    }
     function showDashboardToast(msg, type = "success") {
       if (typeof toastr === "undefined") {
         console.warn("Toastr not found:", msg);
@@ -596,6 +630,9 @@
       showError,
       playNotif,
       getInitials,
+      formatHours,
+      formatPercent,
+      parsePercent,
       showDashboardToast,
       initSelect2,
       submitForm,
@@ -667,11 +704,10 @@
           <div class="widget-content p-0">
             <div class="widget-content-wrapper">
 
-              <div class="widget-content-left me-3">
+              <div class="widget-content-left me-2 me-lg-3">
                 <div
                   class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-                  text-white rounded-circle d-flex align-items-center justify-content-center"
-                  style="width:42px;height:42px;font-weight:600;">
+                  text-white rounded-circle d-flex align-items-center justify-content-center">
                   ${AppUtils.getInitials(name)}
                 </div>
               </div>
@@ -776,19 +812,37 @@
       );
     }
     function renderHoursSummary(containerSelector, data) {
-      const map = {
-        "Total Hours": data.totalHours,
-        "Paid Hours": data.totalPaid,
-        "Owed Hours": data.owedHours,
-        "Net Hours": data.netHours
-      };
-      document.querySelectorAll(`${containerSelector} .widget-content`).forEach((container) => {
-        const heading = container.querySelector(".widget-heading")?.innerText.trim();
-        const valueSpan = container.querySelector(".widget-numbers span");
-        if (map[heading] !== void 0 && valueSpan) {
-          valueSpan.textContent = map[heading];
-        }
-      });
+      const $container = $(containerSelector);
+      if (!$container.length || !data) {
+        return;
+      }
+      $container.find('[data-metric="total-hours"]').text(AppUtils.formatHours(data.totalHours));
+      $container.find('[data-metric="paid-hours"]').text(AppUtils.formatHours(data.totalPaid));
+      $container.find('[data-metric="owed-hours"]').text(AppUtils.formatHours(data.owedHours));
+      $container.find('[data-metric="net-hours"]').text(AppUtils.formatHours(data.netHours));
+      $container.find('[data-metric="lifetime"]').text(AppUtils.formatPercent(data.lifetimePercent));
+      $container.find('[data-metric="collection"]').text(AppUtils.formatPercent(data.collectionRate));
+      $container.find('[data-metric="debt"]').text(AppUtils.formatPercent(data.debtExposureRate));
+      $container.find('[data-metric="yield"]').text(AppUtils.formatPercent(data.netHoursYield));
+      setRateColor(
+        $container.find('[data-metric="collection"]'),
+        data.collectionRate,
+        "collection"
+      );
+      setRateColor(
+        $container.find('[data-metric="debt"]'),
+        data.debtExposureRate,
+        "debt"
+      );
+      setRateColor(
+        $container.find('[data-metric="yield"]'),
+        data.netHoursYield,
+        "yield"
+      );
+      setNetHoursColor(
+        $container.find('[data-metric="net-hours"]'),
+        data.netHours
+      );
     }
     function loadHourTotals(isRefresh) {
       AppUtils.cachedGScriptCall(
@@ -816,9 +870,104 @@
         isRefresh
       );
     }
+    function loadYearHoursSummary(containerSelector) {
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      AppUtils.cachedGScriptCall(
+        "yearHoursSummary",
+        "getYearHoursSummary",
+        [currentYear],
+        (data) => {
+          if (!data) {
+            AppUtils.showError("No yearly analytics found.");
+            return;
+          }
+          renderYearHoursSummary(containerSelector, data);
+        }
+      );
+    }
+    function renderYearHoursSummary(containerSelector, data) {
+      const $container = $(containerSelector);
+      if (!$container.length || !data) {
+        return;
+      }
+      $container.find('[data-metric="total-hours"]').text(AppUtils.formatHours(data.hours));
+      $container.find('[data-metric="paid-hours"]').text(AppUtils.formatHours(data.paid));
+      $container.find('[data-metric="owed-hours"]').text(AppUtils.formatHours(data.owed));
+      $container.find('[data-metric="net-hours"]').text(AppUtils.formatHours(data.netHours));
+      $container.find('[data-metric="lifetime"]').text(AppUtils.formatPercent(data.lifetime));
+      $container.find('[data-metric="collection"]').text(AppUtils.formatPercent(data.collection));
+      $container.find('[data-metric="debt"]').text(AppUtils.formatPercent(data.debt));
+      $container.find('[data-metric="yield"]').text(AppUtils.formatPercent(data.yield));
+      setRateColor(
+        $container.find('[data-metric="collection"]'),
+        data.collection,
+        "collection"
+      );
+      setRateColor($container.find('[data-metric="debt"]'), data.debt, "debt");
+      setRateColor(
+        $container.find('[data-metric="yield"]'),
+        data.yield,
+        "yield"
+      );
+      setNetHoursColor(
+        $container.find('[data-metric="net-hours"]'),
+        data.netHours
+      );
+    }
+    function setRateColor($element, value, type) {
+      const number = AppUtils.parsePercent(value);
+      $element.removeClass(
+        "text-success text-warning text-danger bg-success-light bg-warning-light bg-danger-light text-primary"
+      );
+      if (type === "collection") {
+        if (number >= 70) {
+          $element.addClass("text-success bg-success-light");
+        } else if (number >= 40) {
+          $element.addClass("text-warning bg-warning-light");
+        } else {
+          $element.addClass("text-danger bg-danger-light");
+        }
+        return;
+      }
+      if (type === "debt") {
+        if (number <= 30) {
+          $element.addClass("text-success bg-success-light");
+        } else if (number <= 60) {
+          $element.addClass("text-warning bg-warning-light");
+        } else {
+          $element.addClass("text-danger bg-danger-light");
+        }
+        return;
+      }
+      if (type === "yield") {
+        if (number > 0) {
+          $element.addClass("text-success bg-success-light");
+        } else if (number === 0) {
+          $element.addClass("text-warning bg-warning-light");
+        } else {
+          $element.addClass("text-danger bg-danger-light");
+        }
+      }
+    }
+    function setNetHoursColor($element, value) {
+      const number = Number(value);
+      $element.removeClass("text-success text-warning text-danger");
+      if (!Number.isFinite(number)) {
+        $element.addClass("text-dark");
+        return;
+      }
+      if (number > 0) {
+        $element.addClass("text-success");
+      } else if (number === 0) {
+        $element.addClass("text-warning");
+      } else {
+        $element.addClass("text-danger");
+      }
+    }
     return {
       loadHoursSummary,
-      loadHourTotals
+      loadHourTotals,
+      loadYearHoursSummary
     };
   })();
 
@@ -1267,7 +1416,7 @@
       };
       const priorityMap = {
         "activity today": [0, -1],
-        clients: [1, -1],
+        clients: [0],
         "top paid accounts": [0, 1],
         "outstanding accounts": [0, 2],
         "active clients": [0, 1, -1],
@@ -1370,9 +1519,11 @@
       const prioritySet = new Set(normalized);
       const columnDefs = [];
       for (let i = 0; i < totalColumns; i++) {
+        const isPriority = prioritySet.has(i);
         columnDefs.push({
           targets: i,
-          responsivePriority: prioritySet.has(i) ? priorityValue : defaultPriority
+          responsivePriority: isPriority ? priorityValue : defaultPriority,
+          ...isPriority ? {} : { className: "dt-center" }
         });
       }
       return columnDefs;
@@ -1565,19 +1716,18 @@
       }
       initialized = false;
       unbindClientDirectoryEvents();
-      DataTableModule.destroy(TABLE_ID);
     }
     function loadClientDirectory(source = CACHE_KEY) {
       const cached = AppUtils.cacheGet(source);
-      if (Array.isArray(cached) && cached.length) {
+      if (Array.isArray(cached) && cached.length > 0) {
         renderClientDirectory(cached);
-        refreshClientDirectory(source, cached);
+        refreshClientDirectoryInBackground(source, cached);
         return;
       }
-      DataTableModule.showLoader(TABLE_ID, "Loading clients...");
+      DataTableModule.showLoader(TABLE_ID);
       fetchClientDirectory(source);
     }
-    function fetchClientDirectory(source) {
+    function fetchClientDirectory(source, callback = null) {
       AppUtils.cachedGScriptCall(
         source,
         "getClientDataWithNickname",
@@ -1590,11 +1740,38 @@
             );
             return;
           }
-          renderClientDirectory(data);
+          renderClientDirectory(data, callback);
         }
       );
     }
-    function refreshClientDirectory(source, cached) {
+    function refreshClientDirectory(source = CACHE_KEY, callback = null) {
+      DataTableModule.showLoader(TABLE_ID);
+      $("#sync-clients-list i").addClass("fa-spin");
+      AppUtils.cacheClear(source);
+      AppUtils.cachedGScriptCall(
+        source,
+        "getClientDataWithNickname",
+        [source],
+        (data) => {
+          $("#sync-clients-list i").removeClass("fa-spin");
+          if (!Array.isArray(data)) {
+            AppUtils.showDashboardToast(
+              "Something went wrong refreshing clients!",
+              "error"
+            );
+            return;
+          }
+          renderClientDirectory(data, () => {
+            if (typeof callback === "function") {
+              callback();
+            }
+          });
+        },
+        false,
+        true
+      );
+    }
+    function refreshClientDirectoryInBackground(source, cached) {
       AppUtils.cachedGScriptCall(
         source,
         "getClientDataWithNickname",
@@ -1603,54 +1780,59 @@
           if (!Array.isArray(fresh)) {
             return;
           }
-          if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
-            renderClientDirectory(fresh);
+          if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+            return;
           }
+          renderClientDirectory(fresh);
         },
         false,
         true
       );
     }
-    function renderClientDirectory(data) {
+    function renderClientDirectory(data, callback = null) {
       const tbody = document.getElementById(TABLE_BODY_ID);
       if (!tbody) {
         return;
       }
       if (!Array.isArray(data) || data.length === 0) {
+        DataTableModule.destroy(TABLE_ID);
         DataTableModule.showEmpty(TABLE_ID, "No clients found.");
         return;
       }
+      DataTableModule.destroy(TABLE_ID);
       tbody.innerHTML = "";
       data.forEach((client, index) => {
         tbody.appendChild(createClientDirectoryRow(client, index));
       });
-      DataTableModule.init(TABLE_TITLE, TABLE_ID);
+      DataTableModule.init(TABLE_TITLE, TABLE_ID, false, callback);
     }
     function createClientDirectoryRow(client, index) {
       const row = document.createElement("tr");
-      const initials = AppUtils.getInitials(client.name);
-      const status = String(client.status || "").trim();
-      const statusHtml = status.toLowerCase() === "inactive" ? `
-          <span class="badge bg-danger text-center">
-            Inactive
-          </span>
-        ` : `
-          <span class="badge bg-success text-center">
-            ${AppUtils.escapeHtml(status || "Active")}
-          </span>
-        `;
+      const name = String(client?.name || "").trim();
+      const role = String(client?.role || "").trim();
+      const projects = String(client?.projects ?? "").trim();
+      const paid = String(client?.paid ?? "").trim();
+      const owed = String(client?.owed ?? "").trim();
+      const status = String(client?.status || "").trim();
+      const initials = AppUtils.getInitials(name);
+      const isInactive = status.toLowerCase() === "inactive";
+      const statusHtml = isInactive ? `
+        <span class="badge bg-danger text-center">
+          Inactive
+        </span>
+      ` : `
+        <span class="badge bg-success text-center">
+          ${AppUtils.escapeHtml(status || "Active")}
+        </span>
+      `;
       row.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">
-        ${index + 1}
-      </td>
 
       <td>
         <div class="widget-content p-0">
           <div class="widget-content-wrapper">
-            <div class="widget-content-left me-3">
+            <div class="widget-content-left me-2 me-lg-3">
               <div
                 class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
-                style="width:40px;height:40px;font-weight:600;"
               >
                 ${AppUtils.escapeHtml(initials)}
               </div>
@@ -1658,11 +1840,11 @@
 
             <div class="widget-content-left flex2">
               <div class="widget-heading">
-                ${AppUtils.escapeHtml(client.name)}
+                ${AppUtils.escapeHtml(name)}
               </div>
 
               <div class="widget-subheading opacity-7">
-                ${AppUtils.escapeHtml(client.role)}
+                ${AppUtils.escapeHtml(role)}
               </div>
             </div>
           </div>
@@ -1670,15 +1852,15 @@
       </td>
 
       <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.projects)}
+        ${AppUtils.escapeHtml(projects)}
       </td>
 
       <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.paid)}
+        ${AppUtils.escapeHtml(paid)}
       </td>
 
       <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.owed)}
+        ${AppUtils.escapeHtml(owed)}
       </td>
 
       <td class="text-center">
@@ -1690,6 +1872,7 @@
           type="button"
           class="btn action-btn open-client-btn"
           title="Open Client Sheet"
+          aria-label="Open ${AppUtils.escapeHtml(name)} sheet"
         >
           <i class="pe-7s-note"></i>
         </button>
@@ -1712,12 +1895,12 @@
       }
       tbody.removeEventListener("click", handleClientDirectoryClick);
     }
-    function handleClientDirectoryClick(e) {
-      const btn = e.target.closest(".open-client-btn");
-      if (!btn) {
+    function handleClientDirectoryClick(event) {
+      const button = event.target.closest(".open-client-btn");
+      if (!button) {
         return;
       }
-      const row = btn.closest("tr");
+      const row = button.closest("tr");
       if (!row) {
         return;
       }
@@ -1727,13 +1910,15 @@
       }
       AppUtils.showDashboardToast("Redirecting to sheet!", "info");
       google.script.run.withSuccessHandler((url) => {
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-        } else {
-          AppUtils.showError(url);
+        const clientUrl = String(url || "").trim();
+        if (clientUrl.startsWith("http")) {
+          window.open(clientUrl, "_blank");
+          return;
         }
-      }).withFailureHandler((err) => {
-        AppUtils.showError(err);
+        AppUtils.showError(url);
+      }).withFailureHandler((error) => {
+        console.error("[ClientDirectory] Failed to open client sheet:", error);
+        AppUtils.showError(error);
       }).goToPresentClient(clientName);
     }
     return {
@@ -1793,11 +1978,10 @@
       <div class="widget-content p-0">
         <div class="widget-content-wrapper">
 
-          <div class="widget-content-left me-3">
+          <div class="widget-content-left me-2 me-lg-3">
             <div
               class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-              text-white rounded-circle d-flex align-items-center justify-content-center"
-              style="width:42px;height:42px;font-weight:600;">
+              text-white rounded-circle d-flex align-items-center justify-content-center">
               ${AppUtils.getInitials(client)}
             </div>
           </div>
@@ -2632,6 +2816,473 @@
     };
   })();
 
+  // src/reports/service.js
+  var ReportService = /* @__PURE__ */ (() => {
+    function getLatestReport() {
+      const data = AppUtils.cacheGet("reportsOverview");
+      if (!data || !data.logs?.length) {
+        AppUtils.showError("No reports found.");
+        return null;
+      }
+      return data.logs[0];
+    }
+    return { getLatestReport };
+  })();
+
+  // src/reports/history.js
+  var ReportHistory = /* @__PURE__ */ (() => {
+    const TABLE_TITLE = "Report History";
+    const TABLE_BODY_ID = "data-table-body";
+    function loadReportHistory(cacheKey, serverFunction, callback = null, refresh = false) {
+      if (refresh || !AppUtils.cacheGet(cacheKey)) {
+        const tableId = getTableId();
+        if (tableId && !refresh) {
+          DataTableModule.showLoader(tableId);
+        }
+      }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        serverFunction,
+        [],
+        (data) => {
+          const reportLogs = Array.isArray(data?.reportLogs) ? data.reportLogs : [];
+          renderReportHistory(reportLogs, callback);
+        },
+        false,
+        refresh
+      );
+    }
+    function getTableId() {
+      const tbody = document.getElementById(TABLE_BODY_ID);
+      if (!tbody) {
+        return null;
+      }
+      const table = tbody.closest("table");
+      if (!table?.id) {
+        return null;
+      }
+      return `#${table.id}`;
+    }
+    function renderReportHistory(reportLogs, callback) {
+      const tbody = document.getElementById(TABLE_BODY_ID);
+      if (!tbody) {
+        return;
+      }
+      const table = tbody.closest("table");
+      if (!table?.id) {
+        return;
+      }
+      const tableId = `#${table.id}`;
+      DataTableModule.destroy(tableId);
+      tbody.innerHTML = "";
+      if (!Array.isArray(reportLogs) || !reportLogs.length) {
+        DataTableModule.showEmpty(tableId, "No reports generated yet.");
+        return;
+      }
+      tbody.innerHTML = "";
+      reportLogs.forEach((log, index) => {
+        tbody.appendChild(createReportHistoryRow(log, index));
+      });
+      DataTableModule.init(TABLE_TITLE, tableId, false, callback);
+    }
+    function createReportHistoryRow(log, index) {
+      const tr = document.createElement("tr");
+      const reportDate = log?.date ?? "";
+      const reportName = log?.name ?? "";
+      const reportLink = log?.link ?? "";
+      const reportId = log?.id ?? "";
+      tr.innerHTML = `
+      <td class="text-center">
+        <b>${index + 1}</b>
+      </td>
+
+      <td>
+        ${AppUtils.escapeHtml(reportDate)}
+      </td>
+
+      <td class="text-center">
+        <span class="badge bg-light text-info">
+          <i class="fa-solid fa-file-pdf"></i>
+          ${AppUtils.escapeHtml(reportName)}
+        </span>
+      </td>
+
+      <td class="text-center">
+        <div class="btn-group btn-group-sm">
+
+          <button
+            type="button"
+            class="btn btn-report-action btn-view-report"
+            data-url="${AppUtils.escapeHtml(reportLink)}"
+            title="View Report"
+          >
+            <i class="fa fa-eye"></i>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-report-action btn-email-report"
+            data-id="${AppUtils.escapeHtml(reportId)}"
+            title="Send Email"
+          >
+            <i class="fa fa-envelope"></i>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-report-action btn-discord-report"
+            data-id="${AppUtils.escapeHtml(reportId)}"
+            title="Send to Discord"
+          >
+            <i class="fab fa-discord"></i>
+          </button>
+
+        </div>
+      </td>
+    `;
+      return tr;
+    }
+    function loadCustomMonthlyReportsPageData(callback = null, refresh = false) {
+      loadReportHistory(
+        "monthlyReportsPageData",
+        "getMonthlyReportHistory",
+        callback,
+        refresh
+      );
+    }
+    function loadCustomYearlyReportsPageData(callback = null, refresh = false) {
+      loadReportHistory(
+        "yearlyReportsPageData",
+        "getYearlyReportHistory",
+        callback,
+        refresh
+      );
+    }
+    return {
+      loadCustomMonthlyReportsPageData,
+      loadCustomYearlyReportsPageData
+    };
+  })();
+
+  // src/reports/generator.js
+  var ReportGenerator = /* @__PURE__ */ (() => {
+    const REPORT_MAX_ATTEMPTS = 30;
+    const REPORT_CHECK_INTERVAL = 5e3;
+    const CONFIG = {
+      yearly: {
+        fields: ["#yearly-report-year"],
+        reportName: ({ year }) => `${year} Performance`,
+        updateArgs: ({ year }) => [null, year],
+        historyTableId: "yearly-report-history",
+        successMessage: "Annual report generated successfully!",
+        reloadHistory: (callback) => ReportHistory.loadCustomYearlyReportsPageData(callback, true)
+      },
+      monthly: {
+        fields: ["#monthly-report-month", "#monthly-report-year"],
+        reportName: ({ month, year }) => `${month} ${year}`,
+        updateArgs: ({ month, year }) => [month, year],
+        historyTableId: "monthly-report-history",
+        successMessage: "Monthly report generated successfully!",
+        reloadHistory: (callback) => ReportHistory.loadCustomMonthlyReportsPageData(callback, true)
+      }
+    };
+    function setGenerateState(type, disabled, loading) {
+      CONFIG[type].fields.forEach((selector) => {
+        $(selector).prop("disabled", disabled);
+      });
+      if (loading) {
+        loading.restore();
+      }
+    }
+    function handleGenerateError(type, btn, err, message = "Something went wrong!", loading) {
+      setGenerateState(type, false, loading);
+      if (err) {
+        console.error(err);
+        AppUtils.showError(err);
+      }
+      AppUtils.showError(message);
+    }
+    function prepareReportGeneration(type, btn, params, loading) {
+      const cfg = CONFIG[type];
+      const reportName = cfg.reportName(params);
+      google.script.run.withFailureHandler((err) => {
+        setGenerateState(type, false, loading);
+        AppUtils.showError(err);
+      }).withSuccessHandler((result) => {
+        if (!result.exists) {
+          loading.setText("Generating Report...");
+          requestReportGeneration(cfg, type, btn, params, loading);
+          return;
+        }
+        showExistsModal(cfg, type, btn, params, result.report, loading);
+      }).checkExistingReport(type, reportName);
+    }
+    function showExistsModal(cfg, type, btn, params, report, loading) {
+      const ns = `.${type}ReportModal`;
+      AppUtils.openModal("#app-modal", {
+        placement: "center",
+        header: "<div></div>",
+        body: `
+                <h5 class="modal-title">
+                    <strong>Report Already Exists</strong>
+                </h5>
+                <p>
+                    A report for <strong>${report.name}</strong> already exists.
+                </p>
+            `,
+        footer: `
+                <button class="btn btn-secondary btn-lg btn-cancel">
+                    Cancel
+                </button>
+                <button class="btn btn-info btn-lg btn-download">
+                    Download
+                </button>
+                <button class="btn btn-danger btn-lg btn-generate">
+                    Generate New
+                </button>
+            `,
+        onOpen($modal) {
+          $modal.off(ns).on(`click${ns}`, ".btn-cancel, .btn-close", () => {
+            AppUtils.closeModal("#app-modal");
+            if (loading) {
+              setGenerateState(type, false, loading);
+            }
+          }).on(`click${ns}`, ".btn-download", () => {
+            window.open(report.link, "_blank");
+            AppUtils.closeModal("#app-modal");
+            if (loading) {
+              setGenerateState(type, false, loading);
+            }
+          }).on(`click${ns}`, ".btn-generate", () => {
+            if (loading) {
+              loading.setText("Generating Annual Report...");
+            }
+            requestReportGeneration(cfg, type, btn, params, loading);
+            AppUtils.closeModal("#app-modal");
+          });
+        },
+        onClose($modal) {
+          $modal.off(ns);
+        }
+      });
+    }
+    function requestReportGeneration(cfg, type, btn, params, loading) {
+      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err, loading)).withSuccessHandler(() => checkReportReady(cfg, type, btn, "", loading)).updateCustomReportPDF(type, ...cfg.updateArgs(params));
+    }
+    function checkReportReady(cfg, type, btn, attempts = 0, loading) {
+      if (attempts >= REPORT_MAX_ATTEMPTS) {
+        setGenerateState(type, false, loading);
+        AppUtils.showError("Timed out waiting for report.");
+        return;
+      }
+      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err, loading)).withSuccessHandler((ready) => {
+        if (!ready) {
+          setTimeout(() => {
+            checkReportReady(cfg, type, btn, attempts + 1, loading);
+          }, REPORT_CHECK_INTERVAL);
+          return;
+        }
+        saveReport(type, btn, cfg, loading);
+      }).isReportReady(type);
+    }
+    function saveReport(type, btn, cfg, loading) {
+      google.script.run.withFailureHandler((err) => {
+        handleGenerateError(type, btn, err, loading);
+      }).withSuccessHandler(() => {
+        loading.setSuccess("Generated successfully");
+        setGenerateState(type, false);
+        cfg.reloadHistory(() => {
+          TableModule.highlightLatestRow(cfg.historyTableId, 0);
+        });
+        AppUtils.showDashboardToast(cfg.successMessage, "success");
+      }).saveCustomReportPDF(type);
+    }
+    function generateMonthlyReport(month, year, btn, loading) {
+      prepareReportGeneration("monthly", btn, { month, year }, loading);
+    }
+    function generateYearlyReport(year, btn, loading) {
+      prepareReportGeneration("yearly", btn, { year }, loading);
+    }
+    return {
+      generateMonthlyReport,
+      generateYearlyReport,
+      setGenerateState
+    };
+  })();
+
+  // src/reports/actions.js
+  var ReportActions = /* @__PURE__ */ (() => {
+    function downloadLatestPDF(btn, loading) {
+      const report = getLatestReport(btn);
+      if (!report) {
+        if (loading) {
+          loading.restore();
+        }
+        return;
+      }
+      window.open(report.link, "_blank");
+      if (loading) {
+        loading.restore();
+      }
+    }
+    function emailLatestReport(btn, loading) {
+      sendLatestReport({
+        btn,
+        loading,
+        reportMethod: "emailLatestReport",
+        loadingMessage: "Sending email...",
+        successMessage: "Latest report emailed!",
+        errorMessage: "Failed to send email."
+      });
+    }
+    function sendLatestReportToDiscord(btn, loading) {
+      sendLatestReport({
+        btn,
+        loading,
+        reportMethod: "sendLatestReportToDiscord",
+        loadingMessage: "Sending Discord notification...",
+        successMessage: "Discord notification sent!",
+        errorMessage: "Failed to send Discord notification."
+      });
+    }
+    function sendLatestReport(config) {
+      const report = getLatestReport(config.btn);
+      if (!report) {
+        if (config.loading) {
+          config.loading.restore();
+        }
+        return;
+      }
+      google.script.run.withSuccessHandler(() => {
+        handleReportSuccess(config.btn, config.successMessage, config.loading);
+      }).withFailureHandler((err) => {
+        handleReportFailure(
+          config.btn,
+          err,
+          config.errorMessage,
+          config.loading
+        );
+      })[config.reportMethod](report);
+    }
+    function getLatestReport(btn) {
+      const report = ReportService.getLatestReport();
+      if (!report) {
+        return null;
+      }
+      return report;
+    }
+    function handleReportSuccess(btn, message, loading) {
+      if (loading) {
+        loading.setSuccess("Sent successfully");
+      }
+      AppUtils.showDashboardToast(message, "success");
+    }
+    function handleReportFailure(btn, err, message, loading) {
+      if (loading) {
+        loading.restore();
+      }
+      AppUtils.showError(err);
+    }
+    const handleEmailReport = ($btn) => {
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast("Email sent successfully!", "success");
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+      }).sendRequestedEmailReport($btn.data("id"));
+    };
+    const handleDiscordReport = ($btn) => {
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast("Discord notification sent!", "success");
+      }).withFailureHandler((err) => {
+        AppUtils.showError(err);
+      }).sendRequestedDiscordReport($btn.data("id"));
+    };
+    const handleBtnGenerateYearlyReport = ($btn) => {
+      const selectYear = $("#yearly-report-year");
+      const type = "yearly";
+      const year = selectYear.val();
+      selectYear.prop("disabled", true);
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Analyzing Report Request..."
+      );
+      google.script.run.withSuccessHandler((result) => {
+        if (!result.valid) {
+          ReportGenerator.setGenerateState(type, false, loading);
+          AppUtils.showDashboardToast(result.message, "warning");
+          return;
+        }
+        ReportGenerator.generateYearlyReport(year, $btn, loading);
+      }).withFailureHandler((err) => {
+        ReportGenerator.setGenerateState(type, false, loading);
+        console.error(err);
+        AppUtils.showDashboardToast(
+          err.message || "Something went wrong.",
+          "error"
+        );
+      }).validateCustomYearlyReport(year);
+    };
+    const handleBtnGenerateMonthlyReport = ($btn) => {
+      const selectMonth = $("#monthly-report-month");
+      const selectYear = $("#monthly-report-year");
+      const month = selectMonth.val();
+      const year = selectYear.val();
+      const type = "monthly";
+      selectMonth.prop("disabled", true);
+      selectYear.prop("disabled", true);
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Analyzing Report Request..."
+      );
+      google.script.run.withSuccessHandler((result) => {
+        if (!result.valid) {
+          ReportGenerator.setGenerateState(type, false, loading);
+          AppUtils.showDashboardToast(result.message, "warning");
+          return;
+        }
+        ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
+      }).withFailureHandler((err) => {
+        ReportGenerator.setGenerateState(type, false, loading);
+        console.error(err);
+        AppUtils.showDashboardToast(
+          err.message || "Something went wrong.",
+          "error"
+        );
+      }).validateCustomMonthlyReport(month, year);
+    };
+    const handleEmailLatestReport = ($btn) => {
+      const loading = AppUtils.setButtonLoading($btn[0], "Sending email...");
+      emailLatestReport($btn, loading);
+    };
+    const handleSendDiscordNotification = ($btn) => {
+      const loading = AppUtils.setButtonLoading($btn[0], "Sending Discord...");
+      sendLatestReportToDiscord($btn, loading);
+    };
+    const confirmAction = (ns, title, message, actionCallback) => {
+      AppUtils.openConfirmationModal({
+        ns,
+        title,
+        message,
+        onProceed: ($modal) => {
+          actionCallback();
+          AppUtils.closeModal("#app-modal");
+        }
+      });
+    };
+    return {
+      downloadLatestPDF,
+      emailLatestReport,
+      sendLatestReportToDiscord,
+      handleEmailReport,
+      handleDiscordReport,
+      handleBtnGenerateYearlyReport,
+      handleBtnGenerateMonthlyReport,
+      handleEmailLatestReport,
+      handleSendDiscordNotification,
+      confirmAction
+    };
+  })();
+
   // src/pages/all-clients-page.js
   var allClientsPage = /* @__PURE__ */ (() => {
     let bound = false;
@@ -2665,30 +3316,49 @@
             AppUtils.showError("Client name is required!");
             return;
           }
-          AppUtils.submitForm({
-            gscriptFunc: "createClientSheet",
-            data: { name: clientName },
-            $btn: $submitBtn,
-            loadingText: "Creating new client sheet...",
-            onSuccess: () => {
-              AppUtils.showDashboardToast(
-                "Sheet created successfully!",
-                "success"
-              );
-              google.script.run.withFailureHandler(
-                () => AppUtils.showError("Syncing error!")
-              ).syncClientSheetList();
-              AppUtils.cacheClear("allClientsData");
-              if (RouterModule.getCurrentPage() === "addManualHours") {
-                TableClientSelector.init();
-              }
-              ClientDirectory.init("allClientsData");
-              $("#sheet_name").val("");
+          ReportActions.confirmAction(
+            "addClientSheet",
+            "Register New Client?",
+            `Are you sure you want to add "${clientName}" to the record?`,
+            () => {
+              AppUtils.submitForm({
+                gscriptFunc: "createClientSheet",
+                data: { name: clientName },
+                $btn: $submitBtn,
+                loadingText: "Creating new client sheet...",
+                onSuccess: () => {
+                  AppUtils.showDashboardToast(
+                    "Sheet created successfully!",
+                    "success"
+                  );
+                  google.script.run.withFailureHandler(
+                    () => AppUtils.showError("Syncing error!")
+                  ).syncClientSheetList();
+                  AppUtils.cacheClear("allClientsData");
+                  if (RouterModule.getCurrentPage() === "addManualHours") {
+                    TableClientSelector.init();
+                  }
+                  ClientDirectory.init("allClientsData");
+                  $("#sheet_name").val("");
+                }
+              });
             }
-          });
+          );
         });
       }).off("click.allClients", "#sync-clients-list").on("click.allClients", "#sync-clients-list", function() {
-        ClientDirectory.refreshClientDirectory("allClientsData", null);
+        ReportActions.confirmAction(
+          "syncClientsList",
+          "Synchronize Client Directory?",
+          "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+          () => {
+            ClientDirectory.refreshClientDirectory("allClientsData", () => {
+              AppUtils.showDashboardToast(
+                "Clients refreshed successfully.",
+                "success"
+              );
+            });
+          }
+        );
       });
     };
     const loadData = () => {
@@ -2733,7 +3403,7 @@
         const btn = $(this);
         const loading = AppUtils.setButtonLoading(
           btn[0],
-          "Redirecting to the sheet..."
+          "Redirecting..."
         );
         google.script.run.withSuccessHandler((url) => {
           loading.restore();
@@ -2771,13 +3441,20 @@
           AppUtils.showError("Please fill out all required fields!");
           return;
         }
-        AppUtils.submitForm({
-          gscriptFunc: "addUpsellEntry",
-          data,
-          $btn: $submitBtn,
-          loadingText: "Saving upsell...",
-          onSuccess: handleUpsellSaveSuccess
-        });
+        ReportActions.confirmAction(
+          "submitUpsellForm",
+          "Submit Upsell Entry?",
+          `Are you sure you want to log an upsell entry of ${data.upsellHours} hours for ${data.clientName}?`,
+          () => {
+            AppUtils.submitForm({
+              gscriptFunc: "addUpsellEntry",
+              data,
+              $btn: $submitBtn,
+              loadingText: "Saving upsell...",
+              onSuccess: handleUpsellSaveSuccess
+            });
+          }
+        );
       });
     }
     function handleUpsellSaveSuccess() {
@@ -3315,47 +3992,46 @@
       const prev = fillMonthlyData(data?.prevYear || []);
       const current = fillMonthlyData(data?.currentYear || []);
       chartInstances[type] = new Chart(ctx, {
-        type: "line",
+        type: "bar",
         data: {
           labels: REPORT_MONTHS,
           datasets: [
             {
               label: "Previous Year",
               data: prev,
-              // Same orange color/gradient as the bar chart
-              borderColor: "#f97316",
               backgroundColor: createGradient(
                 ctx,
-                "rgba(249, 115, 22, 0.5)",
-                "rgba(249, 115, 22, 0.05)"
+                "rgba(249, 115, 22, 0.9)",
+                "rgba(249, 115, 22, 0.5)"
               ),
-              fill: true,
-              tension: 0.4,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "#f97316",
-              pointBorderWidth: 2,
-              borderWidth: 2
+              borderColor: "#f97316",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75,
+              hoverBackgroundColor: "rgba(249, 115, 22, 1)",
+              hoverBorderColor: "#ea580c",
+              hoverBorderWidth: 1
             },
             {
               label: "Current Year",
               data: current,
-              // Green gradient for the current year
-              borderColor: "#22c55e",
+              // Lighter, related orange/amber for current year
               backgroundColor: createGradient(
                 ctx,
-                "rgba(34, 197, 94, 0.5)",
-                "rgba(34, 197, 94, 0.05)"
+                "rgba(251, 146, 60, 0.9)",
+                "rgba(251, 146, 60, 0.5)"
               ),
-              fill: true,
-              tension: 0.4,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "#22c55e",
-              pointBorderWidth: 2,
-              borderWidth: 2
+              borderColor: "#fb923c",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75,
+              hoverBackgroundColor: "rgba(251, 146, 60, 1)",
+              hoverBorderColor: "#f97316",
+              hoverBorderWidth: 1
             }
           ]
         },
@@ -3365,12 +4041,10 @@
           animation: animated ? void 0 : false,
           ...animated && {
             animations: {
-              tension: {
-                duration: 1500,
-                easing: "easeInOutQuart",
-                from: 1,
-                to: 0.4,
-                loop: true
+              y: {
+                duration: 1200,
+                easing: "easeOutQuart",
+                from: 0
               }
             }
           },
@@ -3388,11 +4062,11 @@
               mode: "index",
               axis: "x",
               intersect: false,
-              backgroundColor: "rgba(255, 255, 255, 0.9)",
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
               titleColor: "#111827",
               bodyColor: "#374151",
-              borderColor: "#d1d5db",
-              borderWidth: 0,
+              borderColor: "#e5e7eb",
+              borderWidth: 1,
               padding: 12,
               cornerRadius: 8,
               displayColors: true,
@@ -3426,7 +4100,8 @@
               ticks: {
                 font: {
                   size: 10
-                }
+                },
+                callback: (value) => `${value}`
               },
               border: {
                 display: false
@@ -3821,7 +4496,7 @@
     const bindActions = () => {
       $("#addtoSheet-hourly").on("click", function() {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Redirecting to the sheet...");
+        const loading = AppUtils.setButtonLoading(btn[0], "Redirecting...");
         google.script.run.withSuccessHandler(function(url) {
           loading.restore();
           window.open(url, "_blank");
@@ -3839,16 +4514,28 @@
           AppUtils.showError("Please enter the number!");
           return;
         }
-        AppUtils.submitForm({
-          gscriptFunc: "addCurrMthTotalHrly",
-          data: { fValue: fValueVal },
-          $btn: $submitBtn,
-          loadingText: "Saving ...",
-          onSuccess: () => {
-            AppUtils.showDashboardToast("Successfully added Total!", "success");
-            $fValue.val("");
+        ReportActions.confirmAction(
+          "addMonthTotal",
+          "Submit Total Hours?",
+          "Do you want to submit current month total hour for hourly projects?",
+          () => {
+            AppUtils.submitForm({
+              gscriptFunc: "addCurrMthTotalHrly",
+              data: fValueVal,
+              $btn: $submitBtn,
+              loadingText: "Saving ...",
+              onSuccess: () => {
+                AppUtils.showDashboardToast(
+                  "Successfully added Total!",
+                  "success"
+                );
+                $fValue.val("");
+                ChartModule.loadChart("hourly");
+                loadTotalHourlyHours();
+              }
+            });
           }
-        });
+        );
       });
     };
     function loadTotalHourlyHours() {
@@ -3877,7 +4564,7 @@
     const TABLE_ID = "#reports-export-table";
     const TABLE_TITLE = "Reports Overview";
     function loadReportsOverview() {
-      DataTableModule.showLoader(TABLE_ID, "Loading reports...");
+      DataTableModule.showLoader(TABLE_ID);
       AppUtils.cachedGScriptCall(
         "reportsOverview",
         "getReportsOverview",
@@ -4001,473 +4688,6 @@
     }
     return {
       loadReportsOverview
-    };
-  })();
-
-  // src/reports/service.js
-  var ReportService = /* @__PURE__ */ (() => {
-    function getLatestReport() {
-      const data = AppUtils.cacheGet("reportsOverview");
-      if (!data || !data.logs?.length) {
-        AppUtils.showError("No reports found.");
-        return null;
-      }
-      return data.logs[0];
-    }
-    return { getLatestReport };
-  })();
-
-  // src/reports/history.js
-  var ReportHistory = /* @__PURE__ */ (() => {
-    const TABLE_TITLE = "Report History";
-    const TABLE_BODY_ID = "data-table-body";
-    function loadReportHistory(cacheKey, serverFunction, callback = null, refresh = false) {
-      if (refresh || !AppUtils.cacheGet(cacheKey)) {
-        const tableId = getTableId();
-        if (tableId && !refresh) {
-          DataTableModule.showLoader(tableId, "Loading reports...");
-        }
-      }
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        serverFunction,
-        [],
-        (data) => {
-          const reportLogs = Array.isArray(data?.reportLogs) ? data.reportLogs : [];
-          renderReportHistory(reportLogs, callback);
-        },
-        false,
-        refresh
-      );
-    }
-    function getTableId() {
-      const tbody = document.getElementById(TABLE_BODY_ID);
-      if (!tbody) {
-        return null;
-      }
-      const table = tbody.closest("table");
-      if (!table?.id) {
-        return null;
-      }
-      return `#${table.id}`;
-    }
-    function renderReportHistory(reportLogs, callback) {
-      const tbody = document.getElementById(TABLE_BODY_ID);
-      if (!tbody) {
-        return;
-      }
-      const table = tbody.closest("table");
-      if (!table?.id) {
-        return;
-      }
-      const tableId = `#${table.id}`;
-      DataTableModule.destroy(tableId);
-      tbody.innerHTML = "";
-      if (!Array.isArray(reportLogs) || !reportLogs.length) {
-        DataTableModule.showEmpty(tableId, "No reports generated yet.");
-        return;
-      }
-      tbody.innerHTML = "";
-      reportLogs.forEach((log, index) => {
-        tbody.appendChild(createReportHistoryRow(log, index));
-      });
-      DataTableModule.init(TABLE_TITLE, tableId, false, callback);
-    }
-    function createReportHistoryRow(log, index) {
-      const tr = document.createElement("tr");
-      const reportDate = log?.date ?? "";
-      const reportName = log?.name ?? "";
-      const reportLink = log?.link ?? "";
-      const reportId = log?.id ?? "";
-      tr.innerHTML = `
-      <td class="text-center">
-        <b>${index + 1}</b>
-      </td>
-
-      <td>
-        ${AppUtils.escapeHtml(reportDate)}
-      </td>
-
-      <td class="text-center">
-        <span class="badge bg-light text-info">
-          <i class="fa-solid fa-file-pdf"></i>
-          ${AppUtils.escapeHtml(reportName)}
-        </span>
-      </td>
-
-      <td class="text-center">
-        <div class="btn-group btn-group-sm">
-
-          <button
-            type="button"
-            class="btn btn-report-action btn-view-report"
-            data-url="${AppUtils.escapeHtml(reportLink)}"
-            title="View Report"
-          >
-            <i class="fa fa-eye"></i>
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-report-action btn-email-report"
-            data-id="${AppUtils.escapeHtml(reportId)}"
-            title="Send Email"
-          >
-            <i class="fa fa-envelope"></i>
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-report-action btn-discord-report"
-            data-id="${AppUtils.escapeHtml(reportId)}"
-            title="Send to Discord"
-          >
-            <i class="fab fa-discord"></i>
-          </button>
-
-        </div>
-      </td>
-    `;
-      return tr;
-    }
-    function loadCustomMonthlyReportsPageData(callback = null, refresh = false) {
-      loadReportHistory(
-        "monthlyReportsPageData",
-        "getMonthlyReportHistory",
-        callback,
-        refresh
-      );
-    }
-    function loadCustomYearlyReportsPageData(callback = null, refresh = false) {
-      loadReportHistory(
-        "yearlyReportsPageData",
-        "getYearlyReportHistory",
-        callback,
-        refresh
-      );
-    }
-    return {
-      loadCustomMonthlyReportsPageData,
-      loadCustomYearlyReportsPageData
-    };
-  })();
-
-  // src/reports/generator.js
-  var ReportGenerator = /* @__PURE__ */ (() => {
-    const REPORT_MAX_ATTEMPTS = 30;
-    const REPORT_CHECK_INTERVAL = 5e3;
-    const CONFIG = {
-      yearly: {
-        fields: ["#yearly-report-year"],
-        reportName: ({ year }) => `${year} Performance`,
-        updateArgs: ({ year }) => [null, year],
-        historyTableId: "yearly-report-history",
-        successMessage: "Annual report generated successfully!",
-        reloadHistory: (callback) => ReportHistory.loadCustomYearlyReportsPageData(callback, true)
-      },
-      monthly: {
-        fields: ["#monthly-report-month", "#monthly-report-year"],
-        reportName: ({ month, year }) => `${month} ${year}`,
-        updateArgs: ({ month, year }) => [month, year],
-        historyTableId: "monthly-report-history",
-        successMessage: "Monthly report generated successfully!",
-        reloadHistory: (callback) => ReportHistory.loadCustomMonthlyReportsPageData(callback, true)
-      }
-    };
-    function setGenerateState(type, disabled, loading) {
-      CONFIG[type].fields.forEach((selector) => {
-        $(selector).prop("disabled", disabled);
-      });
-      if (loading) {
-        loading.restore();
-      }
-    }
-    function handleGenerateError(type, btn, err, message = "Something went wrong!", loading) {
-      setGenerateState(type, false, loading);
-      if (err) {
-        console.error(err);
-        AppUtils.showError(err);
-      }
-      AppUtils.showError(message);
-    }
-    function prepareReportGeneration(type, btn, params, loading) {
-      const cfg = CONFIG[type];
-      const reportName = cfg.reportName(params);
-      google.script.run.withFailureHandler((err) => {
-        setGenerateState(type, false, loading);
-        AppUtils.showError(err);
-      }).withSuccessHandler((result) => {
-        if (!result.exists) {
-          loading.setText("Generating Report...");
-          requestReportGeneration(cfg, type, btn, params, loading);
-          return;
-        }
-        showExistsModal(cfg, type, btn, params, result.report, loading);
-      }).checkExistingReport(type, reportName);
-    }
-    function showExistsModal(cfg, type, btn, params, report, loading) {
-      const ns = `.${type}ReportModal`;
-      AppUtils.openModal("#app-modal", {
-        placement: "center",
-        header: "<div></div>",
-        body: `
-                <h5 class="modal-title">
-                    <strong>Report Already Exists</strong>
-                </h5>
-                <p>
-                    A report for <strong>${report.name}</strong> already exists.
-                </p>
-            `,
-        footer: `
-                <button class="btn btn-secondary btn-lg btn-cancel">
-                    Cancel
-                </button>
-                <button class="btn btn-info btn-lg btn-download">
-                    Download
-                </button>
-                <button class="btn btn-danger btn-lg btn-generate">
-                    Generate New
-                </button>
-            `,
-        onOpen($modal) {
-          $modal.off(ns).on(`click${ns}`, ".btn-cancel, .btn-close", () => {
-            AppUtils.closeModal("#app-modal");
-            if (loading) {
-              setGenerateState(type, false, loading);
-            }
-          }).on(`click${ns}`, ".btn-download", () => {
-            window.open(report.link, "_blank");
-            AppUtils.closeModal("#app-modal");
-            if (loading) {
-              setGenerateState(type, false, loading);
-            }
-          }).on(`click${ns}`, ".btn-generate", () => {
-            if (loading) {
-              loading.setText("Generating Annual Report...");
-            }
-            requestReportGeneration(cfg, type, btn, params, loading);
-            AppUtils.closeModal("#app-modal");
-          });
-        },
-        onClose($modal) {
-          $modal.off(ns);
-        }
-      });
-    }
-    function requestReportGeneration(cfg, type, btn, params, loading) {
-      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err, loading)).withSuccessHandler(() => checkReportReady(cfg, type, btn, "", loading)).updateCustomReportPDF(type, ...cfg.updateArgs(params));
-    }
-    function checkReportReady(cfg, type, btn, attempts = 0, loading) {
-      if (attempts >= REPORT_MAX_ATTEMPTS) {
-        setGenerateState(type, false, loading);
-        AppUtils.showError("Timed out waiting for report.");
-        return;
-      }
-      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err, loading)).withSuccessHandler((ready) => {
-        if (!ready) {
-          setTimeout(() => {
-            checkReportReady(cfg, type, btn, attempts + 1, loading);
-          }, REPORT_CHECK_INTERVAL);
-          return;
-        }
-        saveReport(type, btn, cfg, loading);
-      }).isReportReady(type);
-    }
-    function saveReport(type, btn, cfg, loading) {
-      google.script.run.withFailureHandler((err) => {
-        handleGenerateError(type, btn, err, loading);
-      }).withSuccessHandler(() => {
-        loading.setSuccess("Generated successfully");
-        setGenerateState(type, false);
-        cfg.reloadHistory(() => {
-          TableModule.highlightLatestRow(cfg.historyTableId, 0);
-        });
-        AppUtils.showDashboardToast(cfg.successMessage, "success");
-      }).saveCustomReportPDF(type);
-    }
-    function generateMonthlyReport(month, year, btn, loading) {
-      prepareReportGeneration("monthly", btn, { month, year }, loading);
-    }
-    function generateYearlyReport(year, btn, loading) {
-      prepareReportGeneration("yearly", btn, { year }, loading);
-    }
-    return {
-      generateMonthlyReport,
-      generateYearlyReport,
-      setGenerateState
-    };
-  })();
-
-  // src/reports/actions.js
-  var ReportActions = /* @__PURE__ */ (() => {
-    function downloadLatestPDF(btn, loading) {
-      const report = getLatestReport(btn);
-      if (!report) {
-        if (loading) {
-          loading.restore();
-        }
-        return;
-      }
-      window.open(report.link, "_blank");
-      if (loading) {
-        loading.restore();
-      }
-    }
-    function emailLatestReport(btn, loading) {
-      sendLatestReport({
-        btn,
-        loading,
-        reportMethod: "emailLatestReport",
-        loadingMessage: "Sending email...",
-        successMessage: "Latest report emailed!",
-        errorMessage: "Failed to send email."
-      });
-    }
-    function sendLatestReportToDiscord(btn, loading) {
-      sendLatestReport({
-        btn,
-        loading,
-        reportMethod: "sendLatestReportToDiscord",
-        loadingMessage: "Sending Discord notification...",
-        successMessage: "Discord notification sent!",
-        errorMessage: "Failed to send Discord notification."
-      });
-    }
-    function sendLatestReport(config) {
-      const report = getLatestReport(config.btn);
-      if (!report) {
-        if (config.loading) {
-          config.loading.restore();
-        }
-        return;
-      }
-      google.script.run.withSuccessHandler(() => {
-        handleReportSuccess(config.btn, config.successMessage, config.loading);
-      }).withFailureHandler((err) => {
-        handleReportFailure(
-          config.btn,
-          err,
-          config.errorMessage,
-          config.loading
-        );
-      })[config.reportMethod](report);
-    }
-    function getLatestReport(btn) {
-      const report = ReportService.getLatestReport();
-      if (!report) {
-        return null;
-      }
-      return report;
-    }
-    function handleReportSuccess(btn, message, loading) {
-      if (loading) {
-        loading.setSuccess("Sent successfully");
-      }
-      AppUtils.showDashboardToast(message, "success");
-    }
-    function handleReportFailure(btn, err, message, loading) {
-      if (loading) {
-        loading.restore();
-      }
-      AppUtils.showError(err);
-    }
-    const handleEmailReport = ($btn) => {
-      google.script.run.withSuccessHandler(() => {
-        AppUtils.showDashboardToast("Email sent successfully!", "success");
-      }).withFailureHandler((err) => {
-        AppUtils.showError(err);
-      }).sendRequestedEmailReport($btn.data("id"));
-    };
-    const handleDiscordReport = ($btn) => {
-      google.script.run.withSuccessHandler(() => {
-        AppUtils.showDashboardToast("Discord notification sent!", "success");
-      }).withFailureHandler((err) => {
-        AppUtils.showError(err);
-      }).sendRequestedDiscordReport($btn.data("id"));
-    };
-    const handleBtnGenerateYearlyReport = ($btn) => {
-      const selectYear = $("#yearly-report-year");
-      const type = "yearly";
-      const year = selectYear.val();
-      selectYear.prop("disabled", true);
-      const loading = AppUtils.setButtonLoading(
-        $btn[0],
-        "Analyzing Report Request..."
-      );
-      google.script.run.withSuccessHandler((result) => {
-        if (!result.valid) {
-          ReportGenerator.setGenerateState(type, false, loading);
-          AppUtils.showDashboardToast(result.message, "warning");
-          return;
-        }
-        ReportGenerator.generateYearlyReport(year, $btn, loading);
-      }).withFailureHandler((err) => {
-        ReportGenerator.setGenerateState(type, false, loading);
-        console.error(err);
-        AppUtils.showDashboardToast(
-          err.message || "Something went wrong.",
-          "error"
-        );
-      }).validateCustomYearlyReport(year);
-    };
-    const handleBtnGenerateMonthlyReport = ($btn) => {
-      const selectMonth = $("#monthly-report-month");
-      const selectYear = $("#monthly-report-year");
-      const month = selectMonth.val();
-      const year = selectYear.val();
-      const type = "monthly";
-      selectMonth.prop("disabled", true);
-      selectYear.prop("disabled", true);
-      const loading = AppUtils.setButtonLoading(
-        $btn[0],
-        "Analyzing Report Request..."
-      );
-      google.script.run.withSuccessHandler((result) => {
-        if (!result.valid) {
-          ReportGenerator.setGenerateState(type, false, loading);
-          AppUtils.showDashboardToast(result.message, "warning");
-          return;
-        }
-        ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
-      }).withFailureHandler((err) => {
-        ReportGenerator.setGenerateState(type, false, loading);
-        console.error(err);
-        AppUtils.showDashboardToast(
-          err.message || "Something went wrong.",
-          "error"
-        );
-      }).validateCustomMonthlyReport(month, year);
-    };
-    const handleEmailLatestReport = ($btn) => {
-      const loading = AppUtils.setButtonLoading($btn[0], "Sending email...");
-      emailLatestReport($btn, loading);
-    };
-    const handleSendDiscordNotification = ($btn) => {
-      const loading = AppUtils.setButtonLoading($btn[0], "Sending Discord...");
-      sendLatestReportToDiscord($btn, loading);
-    };
-    const confirmAction = (ns, title, message, actionCallback) => {
-      AppUtils.openConfirmationModal({
-        ns,
-        title,
-        message,
-        onProceed: ($modal) => {
-          actionCallback();
-          AppUtils.closeModal("#app-modal");
-        }
-      });
-    };
-    return {
-      downloadLatestPDF,
-      emailLatestReport,
-      sendLatestReportToDiscord,
-      handleEmailReport,
-      handleDiscordReport,
-      handleBtnGenerateYearlyReport,
-      handleBtnGenerateMonthlyReport,
-      handleEmailLatestReport,
-      handleSendDiscordNotification,
-      confirmAction
     };
   })();
 
@@ -4851,6 +5071,7 @@
       AppUtils.openModal("#app-modal", {
         size: "md",
         placement: "center",
+        header: "<div></div>",
         body: `
       <!-- STEP 1: MAIN FORM BODY -->
       <div id="main-modal-body">
@@ -5012,13 +5233,19 @@
       handler();
     }
     function handleSubmit(e) {
-      if (e.target.id !== "settingsIntegrationForm") {
-        return;
-      }
       e.preventDefault();
-      const form = e.target;
-      const $btn = $(form).find('button[type="submit"], input[type="submit"]');
-      saveIntegrationSettings(form, $btn);
+      if (e.target.id === "settingsIntegrationForm") {
+        const form = e.target;
+        const $btn = $(form).find('button[type="submit"], input[type="submit"]');
+        ReportActions.confirmAction(
+          "saveGlobalIntegrationSettings",
+          "Save Integration Settings?",
+          "Are you sure you want to update the master integration connections, alert directories, and pipeline destination paths?",
+          () => {
+            saveIntegrationSettings(form, $btn);
+          }
+        );
+      }
     }
     function saveIntegrationSettings(form, $btn) {
       const data = {
@@ -5086,7 +5313,7 @@
         category,
         cacheKey
       });
-      DataTableModule.showLoader(CLIENT_DATA_TABLE_ID, `Loading ${title.toLowerCase()}...`);
+      DataTableModule.showLoader(CLIENT_DATA_TABLE_ID);
       AppUtils.cachedGScriptCall(
         cacheKey,
         "getClientDataByStatus",
@@ -5114,7 +5341,7 @@
       const cacheKey = "paidOwedClients";
       const tableId = "#active-clients";
       log("[renderActivePaidOwedClients] loading");
-      DataTableModule.showLoader(tableId, "Loading active clients...");
+      DataTableModule.showLoader(tableId);
       AppUtils.cachedGScriptCall(
         cacheKey,
         "getActiveClientsPaidOwed",
@@ -5231,18 +5458,26 @@
 
   // src/projects/project-directory.js
   var ProjectDirectory = /* @__PURE__ */ (() => {
+    let initialized = false;
     const TABLE_ID = "#projectsTable";
     const TABLE_TITLE = "Projects";
     const CACHE_KEY = "allProjects";
     function init() {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
       bindEvents();
       loadProjectDirectory();
     }
     function destroy() {
+      if (!initialized) {
+        return;
+      }
+      initialized = false;
       $(document).off(".projectDirectory");
-      DataTableModule.destroy(TABLE_ID);
     }
-    function loadProjectDirectory(log = false) {
+    function loadProjectDirectory(log = false, refresh = false) {
       const logMessage = (...args) => {
         if (log) {
           console.log(...args);
@@ -5258,26 +5493,35 @@
             DataTableModule.showError(TABLE_ID, "Unable to load projects.");
             return;
           }
-          renderProjectDirectory(data, logMessage);
+          renderProjectDirectory(data, logMessage, refresh);
         },
-        log
+        log,
+        refresh
       );
     }
-    function renderProjectDirectory(data, log) {
+    function renderProjectDirectory(data, log, refresh = false) {
       if (!Array.isArray(data)) {
         DataTableModule.showError(TABLE_ID, "Unable to load projects.");
         return;
       }
       DataTableModule.renderRows(TABLE_ID, data, createProjectDirectoryRow);
       DataTableModule.init(TABLE_TITLE, TABLE_ID, false);
-      log("[ProjectDirectory] Rendered", data.length, "projects");
+      if (typeof log === "function") {
+        log("[ProjectDirectory] Rendered", data.length, "projects");
+      }
+      if (refresh) {
+        AppUtils.showDashboardToast(
+          "Projects refreshed successfully.",
+          "success"
+        );
+      }
     }
     function createProjectDirectoryRow(project, index) {
-      const tr = document.createElement("tr");
-      const projectName = project[0] ?? "";
-      const clientName = project[1] ?? "";
-      const hours = project[2] ?? "";
-      tr.innerHTML = `
+      const row = document.createElement("tr");
+      const projectName = String(project?.[0] ?? "").trim();
+      const clientName = String(project?.[1] ?? "").trim();
+      const hours = String(project?.[2] ?? "").trim();
+      row.innerHTML = `
       <td class="text-center text-muted font-weight-bold">
         ${index + 1}
       </td>
@@ -5294,12 +5538,30 @@
         ${AppUtils.escapeHtml(hours)}
       </td>
     `;
-      return tr;
+      return row;
+    }
+    function refreshProjectDirectory(log = false) {
+      AppUtils.cacheClear(CACHE_KEY);
+      loadProjectDirectory(false, true);
     }
     function bindEvents() {
-      $(document).off("click.projectDirectory", "#add-new-project").on("click.projectDirectory", "#add-new-project", handleAddProjectClick);
+      $(document).off("click.projectDirectory", "#add-new-project").on("click.projectDirectory", "#add-new-project", () => {
+        ReportActions.confirmAction(
+          "addProjectDirectory",
+          "Add Initial Hours?",
+          "To register a new project, you must first assign its initial baseline hours. Do you want to proceed?",
+          handleAddProjectClick
+        );
+      });
       $(document).off("click.projectDirectory", "#refresh-projects").on("click.projectDirectory", "#refresh-projects", () => {
-        loadProjectDirectory(true);
+        ReportActions.confirmAction(
+          "refreshProjectDirectory",
+          "Refresh Project Directory?",
+          "This will pull the latest spreadsheet logging updates and sync the directory records. Proceed?",
+          () => {
+            refreshProjectDirectory();
+          }
+        );
       });
     }
     function handleAddProjectClick() {
@@ -5519,7 +5781,7 @@
       HourSummary.loadHoursSummary("#hours-summary");
       ChartModule.loadChart("daily");
       ChartModule.loadChart("monthly");
-      ChartModule.loadChart("yearly", false, (/* @__PURE__ */ new Date()).getFullYear());
+      ChartModule.loadChart("yearly");
       ChartModule.loadPrevYearCombinedChart();
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
@@ -5682,12 +5944,130 @@
   // src/pages/yearly-overview-page.js
   var yearlyOverviewPage = /* @__PURE__ */ (() => {
     function init() {
-      HourSummary.loadHoursSummary("#hours-summary");
+      HourSummary.loadYearHoursSummary("#year-hours-summary");
       ChartModule.loadChart("yearly", false, (/* @__PURE__ */ new Date()).getFullYear());
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
     }
     return { init };
+  })();
+
+  // src/app-ui.js
+  var AppUI = /* @__PURE__ */ (() => {
+    function init() {
+      initPerfectScrollbars();
+      initLoadingState();
+      initScrollBehavior();
+    }
+    function initLoadingState() {
+      setTimeout(() => {
+        document.body.classList.add("loaded");
+        document.querySelectorAll(".drawer").forEach((drawer) => {
+          drawer.classList.add("reg");
+        });
+        const appContainer = document.querySelector(".app-container");
+        if (appContainer) {
+          appContainer.classList.remove("loading");
+          appContainer.classList.add("closed-sidebar");
+        }
+      }, 5e3);
+    }
+    function initScrollBehavior() {
+      let lastScrollY = window.scrollY;
+      let ticking = false;
+      function handleScroll() {
+        const currentScrollY = window.scrollY;
+        if (window.innerWidth <= 768) {
+          handleMobileFooterScroll(currentScrollY, lastScrollY);
+        }
+        lastScrollY = currentScrollY;
+        ticking = false;
+      }
+      function requestTick() {
+        if (!ticking) {
+          window.requestAnimationFrame(handleScroll);
+          ticking = true;
+        }
+      }
+      window.addEventListener("scroll", requestTick, {
+        passive: true
+      });
+      window.addEventListener("resize", () => {
+        if (window.innerWidth > 768) {
+          const footer = document.querySelector(".app-wrapper-footer");
+          footer?.classList.remove("footer-hidden");
+        }
+      });
+    }
+    function activateNavigation(pageName) {
+      $(".drawer").removeClass("drawer-open");
+      $(".app-sidebar__inner li a, .dropdown-quick-actions .dropdown-item").removeClass("mm-active").filter(`[data-page="${pageName}"]`).addClass("mm-active");
+    }
+    function initPerfectScrollbars() {
+      if (typeof PerfectScrollbar === "undefined") {
+        console.warn("[AppUI] PerfectScrollbar library not loaded.");
+        return;
+      }
+      const elements = [
+        document.querySelector(".scrollbar-sidebar"),
+        ...document.querySelectorAll(".scrollbar-container")
+      ].filter(Boolean);
+      elements.forEach((element) => {
+        if (element._perfectScrollbar) {
+          return;
+        }
+        try {
+          element._perfectScrollbar = new PerfectScrollbar(element);
+        } catch (error) {
+          console.warn("[AppUI] PerfectScrollbar failed:", element, error);
+        }
+      });
+    }
+    function handleMobileFooterScroll(currentScrollY, lastScrollY) {
+      const footer = document.querySelector(".app-wrapper-footer");
+      if (!footer) {
+        return;
+      }
+      if (currentScrollY > lastScrollY && currentScrollY > 80) {
+        footer.classList.add("footer-hidden");
+      } else {
+        footer.classList.remove("footer-hidden");
+      }
+    }
+    function setupStaggerCards(container = "#app-main__inner") {
+      const root = typeof container === "string" ? document.querySelector(container) : container;
+      if (!root) {
+        return;
+      }
+      root.querySelectorAll(".card").forEach((card) => {
+        card.classList.remove("loaded");
+        card.classList.add("stagger");
+      });
+    }
+    function playStaggerReveal(container = "#app-main__inner") {
+      const root = typeof container === "string" ? document.querySelector(container) : container;
+      if (!root) {
+        return;
+      }
+      document.getElementById("app-main-inner-container").classList.remove("opacity-0");
+      const cards = root.querySelectorAll(".card.stagger");
+      const stagger = 350;
+      cards.forEach((card, index) => {
+        setTimeout(
+          () => {
+            card.classList.remove("stagger");
+            card.classList.add("loaded");
+          },
+          400 + index * stagger
+        );
+      });
+    }
+    return {
+      init,
+      activateNavigation,
+      setupStaggerCards,
+      playStaggerReveal
+    };
   })();
 
   // src/page-loader.js
@@ -5829,6 +6209,7 @@
         [pageName],
         (pageHtml) => {
           pageContainer.innerHTML = pageHtml;
+          AppUI.setupStaggerCards();
           if (typeof done === "function") {
             done();
           }
@@ -5852,84 +6233,6 @@
     }
     return {
       loadPage
-    };
-  })();
-
-  // src/app-ui.js
-  var AppUI = /* @__PURE__ */ (() => {
-    function init() {
-      initPerfectScrollbars();
-      initLoadingState();
-    }
-    function activateNavigation(pageName) {
-      $(".drawer").removeClass("drawer-open");
-      $(".app-sidebar__inner li a, .dropdown-quick-actions .dropdown-item").removeClass("mm-active").filter(`[data-page="${pageName}"]`).addClass("mm-active");
-    }
-    function initPerfectScrollbars() {
-      if (typeof PerfectScrollbar === "undefined") {
-        console.warn("[AppUI] PerfectScrollbar library not loaded.");
-        return;
-      }
-      const elements = [
-        document.querySelector(".scrollbar-sidebar"),
-        ...document.querySelectorAll(".scrollbar-container")
-      ].filter(Boolean);
-      elements.forEach((element) => {
-        if (element._perfectScrollbar) {
-          return;
-        }
-        try {
-          element._perfectScrollbar = new PerfectScrollbar(element);
-        } catch (error) {
-          console.warn("[AppUI] PerfectScrollbar failed:", element, error);
-        }
-      });
-    }
-    function initLoadingState() {
-      setTimeout(() => {
-        document.body.classList.add("loaded");
-        document.querySelectorAll(".drawer").forEach((drawer) => {
-          drawer.classList.add("reg");
-        });
-        const appContainer = document.querySelector(".app-container");
-        if (appContainer) {
-          appContainer.classList.remove("loading");
-          appContainer.classList.add("closed-sidebar");
-        }
-      }, 5e3);
-    }
-    function setupStaggerCards(container = "#app-main__inner") {
-      const root = typeof container === "string" ? document.querySelector(container) : container;
-      if (!root) {
-        return;
-      }
-      root.querySelectorAll(".card").forEach((card) => {
-        card.classList.remove("loaded");
-        card.classList.add("stagger");
-      });
-    }
-    function playStaggerReveal(container = "#app-main__inner") {
-      const root = typeof container === "string" ? document.querySelector(container) : container;
-      if (!root) {
-        return;
-      }
-      const cards = root.querySelectorAll(".card.stagger");
-      const stagger = 350;
-      cards.forEach((card, index) => {
-        setTimeout(
-          () => {
-            card.classList.remove("stagger");
-            card.classList.add("loaded");
-          },
-          400 + index * stagger
-        );
-      });
-    }
-    return {
-      init,
-      activateNavigation,
-      setupStaggerCards,
-      playStaggerReveal
     };
   })();
 
@@ -6202,13 +6505,45 @@
         size: "md",
         placement: "center",
         header: buildHeaderHtml(integration, config),
-        body: buildBodyHtml(config),
-        footer: buildFooterHtml(),
+        body: `
+      <!-- CONFIGURATION FORM ENTRY -->
+      <div id="main-modal-body">
+        ${buildBodyHtml(config)}
+      </div>
+
+      <!-- REVIEW / CONFIRMATION ALERT -->
+      <div id="review-modal-body" class="d-none">
+        <h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>
+        <p>Please review the integration settings before applying the updates.</p>
+      </div>
+    `,
+        footer: `
+      <!-- INITIAL SUBMIT FOOTER -->
+      <div id="main-modal-footer" class="d-flex gap-2">
+        ${buildFooterHtml()}
+      </div>
+
+      <!-- REVIEW ACTION FOOTER -->
+      <div id="review-modal-footer" class="d-flex gap-2 d-none">
+        <button type="button" class="btn btn-secondary btn-back">
+          Back
+        </button>
+        <button type="button" class="btn btn-success btn-proceed">
+          Proceed
+        </button>
+      </div>
+    `,
         onOpen($modal) {
           $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
           }).on(`click${ns}`, ".btn-save", (e) => {
-            const $btn = $modal.find(".btn-save");
+            $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
+            $modal.find("#review-modal-body, #review-modal-footer").removeClass("d-none");
+          }).on(`click${ns}`, ".btn-back", () => {
+            $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
+            $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
+          }).on(`click${ns}`, ".btn-proceed", () => {
+            const $btn = $modal.find(".btn-proceed");
             saveIntegration(integration, $modal, $btn);
           });
           loadIntegrationConfigStatus(integration, $modal);
@@ -6345,16 +6680,21 @@
     }
     function bindActions() {
       $(document).off("click.externalSheetsPage", "#add-external-sheet").on("click.externalSheetsPage", "#add-external-sheet", openCreateModal);
-      $(document).off("click.externalSheetsPage", "#sync-external-sheets").on(
-        "click.externalSheetsPage",
-        "#sync-external-sheets",
-        syncExternalSheets
-      );
+      $(document).off("click.externalSheetsPage", "#sync-external-sheets").on("click.externalSheetsPage", "#sync-external-sheets", function() {
+        ReportActions.confirmAction(
+          "syncExternalSheets",
+          "Sync External Sheets?",
+          "This will pull down and reconcile all metadata records from registered external linked files. This process might take a few moments. Proceed?",
+          () => {
+            syncExternalSheets();
+          }
+        );
+      });
       $(document).off("click.externalSheetsPage", ".external-sheet-view-btn").on("click.externalSheetsPage", ".external-sheet-view-btn", handleView);
     }
     function loadData(reset = false) {
       HourSummary.loadHoursSummary("#hours-summary");
-      DataTableModule.showLoader(TABLE_ID, "Loading external sheets...");
+      DataTableModule.showLoader(TABLE_ID);
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
         "getExternalSheets",
@@ -6373,6 +6713,7 @@
         return;
       }
       if (!rows.length) {
+        DataTableModule.destroy(TABLE_ID);
         DataTableModule.showEmpty(TABLE_ID, "No external sheets configured.");
         return;
       }
@@ -6438,15 +6779,10 @@
       AppUtils.openModal(MODAL_ID, {
         size: "md",
         placement: "center",
-        header: `
-        <strong>
-          <i class="fa fa-file-excel-o me-2"></i>
-          Add External Sheet
-        </strong>
-      `,
+        header: `<div></div>`,
         body: `
+      <div id="main-modal-body">
         <form id="externalSheetForm">
-
           <div class="form-group mb-3">
             <label
               for="externalClientName"
@@ -6488,10 +6824,25 @@
               Enter project names separated by commas.
             </small>
           </div>
-
         </form>
-      `,
+      </div>
+
+      <div id="review-modal-body" class="d-none">
+        <h5 class="modal-title mb-2">
+          <strong>Do you want to proceed?</strong>
+        </h5>
+
+        <p>
+          Please review the external sheet configurations
+          before provisioning.
+        </p>
+      </div>
+    `,
         footer: `
+      <div
+        id="main-modal-footer"
+        class="d-flex gap-2"
+      >
         <button
           type="button"
           class="btn btn-secondary btn-cancel"
@@ -6506,14 +6857,38 @@
           <i class="fa fa-plus me-1"></i>
           Create External Sheet
         </button>
-      `,
+      </div>
+
+      <div
+        id="review-modal-footer"
+        class="d-flex gap-2 d-none"
+      >
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
         onOpen($modal) {
-          const ns = ".externalSheetModal";
-          $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
+          const namespace = ".externalSheetModal";
+          $modal.off(namespace).on(`click${namespace}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
-          }).on(`click${ns}`, ".btn-create", () => {
-            const $btn = $modal.find(".btn-create");
-            createExternalSheet($modal, $btn);
+          }).on(`click${namespace}`, ".btn-create", () => {
+            validateAndShowReview($modal);
+          }).on(`click${namespace}`, ".btn-back", () => {
+            showFormStep($modal);
+          }).on(`click${namespace}`, ".btn-proceed", () => {
+            const $button = $modal.find(".btn-proceed");
+            createExternalSheet($modal, $button);
           });
         },
         onClose($modal) {
@@ -6521,10 +6896,29 @@
         }
       });
     }
+    function validateAndShowReview($modal) {
+      const form = $modal.find("#externalSheetForm")[0];
+      if (!form) {
+        return;
+      }
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
+      $modal.find("#review-modal-body, #review-modal-footer").removeClass("d-none");
+    }
+    function showFormStep($modal) {
+      $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
+      $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
+    }
     function createExternalSheet($modal, $btn) {
       const form = $modal.find("#externalSheetForm")[0];
-      if (!form?.checkValidity()) {
-        form?.reportValidity();
+      if (!form) {
+        return;
+      }
+      if (!form.checkValidity()) {
+        form.reportValidity();
         return;
       }
       const loading = AppUtils.setButtonLoading(
@@ -6546,15 +6940,18 @@
         );
         AppUtils.cacheClear("allClientsData");
         AppUtils.cacheClear(CACHE_KEY);
-        google.script.run.withFailureHandler((err) => {
-          console.error("syncClientSheetList failed:", err);
+        google.script.run.withFailureHandler((error) => {
+          console.error(
+            "[ExternalSheets] syncClientSheetList failed:",
+            error
+          );
         }).syncClientSheetList();
         loadData(true);
-      }).withFailureHandler((err) => {
-        console.error("createExternalSheet failed:", err);
+      }).withFailureHandler((error) => {
+        console.error("[ExternalSheets] createExternalSheet failed:", error);
         loading.restore();
         AppUtils.showDashboardToast(
-          err?.message || "Failed to create external sheet.",
+          error?.message || "Failed to create external sheet.",
           "error"
         );
       }).createExternalSheet({
@@ -6563,22 +6960,25 @@
       });
     }
     function syncExternalSheets() {
-      const $btn = $("#sync-external-sheets");
-      const loading = AppUtils.setButtonLoading($btn[0], "Syncing...");
+      const $icon = $("#sync-external-sheets i");
+      $icon.addClass("fa-spin");
       google.script.run.withSuccessHandler((result) => {
-        loading.restore();
         AppUtils.cacheClear(CACHE_KEY);
         loadData(true);
         const count = Array.isArray(result) ? result.length : 0;
         AppUtils.showDashboardToast(
-          count ? `${count} external sheet(s) registered.` : "External sheets are already up to date.",
+          count ? `External sheets refreshed successfully` : "External sheets are already up to date.",
           "success"
         );
-      }).withFailureHandler((err) => {
-        console.error("reconcileExternalSheets failed:", err);
-        loading.restore();
+        $icon.removeClass("fa-spin");
+      }).withFailureHandler((error) => {
+        console.error(
+          "[ExternalSheets] reconcileExternalSheets failed:",
+          error
+        );
+        $icon.removeClass("fa-spin");
         AppUtils.showDashboardToast(
-          err?.message || "Failed to sync external sheets.",
+          error?.message || "Failed to sync external sheets.",
           "error"
         );
       }).reconcileExternalSheets();
@@ -6710,7 +7110,6 @@
         if (token !== pageToken) {
           return;
         }
-        AppUI.setupStaggerCards();
         page.init?.(token);
         currentModule = page;
         AppUI.activateNavigation(resolvedPageName);
@@ -6774,6 +7173,7 @@
           hamburger.classList.remove("is-active");
         }
       }
+      document.getElementById("app-main-inner-container").classList.add("opacity-0");
       RouterModule.go(page);
     }
     function shouldIgnore($btn) {

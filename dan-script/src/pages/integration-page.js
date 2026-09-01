@@ -160,18 +160,65 @@ const integrationsConfigurationPage = (() => {
       placement: "center",
 
       header: buildHeaderHtml(integration, config),
-      body: buildBodyHtml(config),
-      footer: buildFooterHtml(),
+
+      body: `
+      <!-- CONFIGURATION FORM ENTRY -->
+      <div id="main-modal-body">
+        ${buildBodyHtml(config)}
+      </div>
+
+      <!-- REVIEW / CONFIRMATION ALERT -->
+      <div id="review-modal-body" class="d-none">
+        <h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>
+        <p>Please review the integration settings before applying the updates.</p>
+      </div>
+    `,
+
+      footer: `
+      <!-- INITIAL SUBMIT FOOTER -->
+      <div id="main-modal-footer" class="d-flex gap-2">
+        ${buildFooterHtml()}
+      </div>
+
+      <!-- REVIEW ACTION FOOTER -->
+      <div id="review-modal-footer" class="d-flex gap-2 d-none">
+        <button type="button" class="btn btn-secondary btn-back">
+          Back
+        </button>
+        <button type="button" class="btn btn-success btn-proceed">
+          Proceed
+        </button>
+      </div>
+    `,
 
       onOpen($modal) {
         $modal
           .off(ns)
+          // Cancel Click -> Dismisses modal layout context
           .on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
           })
+          // Save Click -> Toggles UI to confirmation step
           .on(`click${ns}`, ".btn-save", (e) => {
-            const $btn = $modal.find(".btn-save");
-
+            $modal
+              .find("#main-modal-body, #main-modal-footer")
+              .addClass("d-none");
+            $modal
+              .find("#review-modal-body, #review-modal-footer")
+              .removeClass("d-none");
+          })
+          // Back Click -> Returns view back to configuration form fields
+          .on(`click${ns}`, ".btn-back", () => {
+            $modal
+              .find("#review-modal-body, #review-modal-footer")
+              .addClass("d-none");
+            $modal
+              .find("#main-modal-body, #main-modal-footer")
+              .removeClass("d-none");
+          })
+          // Proceed Click -> Runs original integration submission engine
+          .on(`click${ns}`, ".btn-proceed", () => {
+            const $btn = $modal.find(".btn-proceed");
             saveIntegration(integration, $modal, $btn);
           });
 

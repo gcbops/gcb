@@ -24,7 +24,7 @@ const ClientDataService = (() => {
       cacheKey,
     });
 
-    DataTableModule.showLoader(CLIENT_DATA_TABLE_ID, `Loading ${title.toLowerCase()}...`);
+    DataTableModule.showLoader(CLIENT_DATA_TABLE_ID);
 
     AppUtils.cachedGScriptCall(
       cacheKey,
@@ -69,7 +69,7 @@ const ClientDataService = (() => {
 
     log("[renderActivePaidOwedClients] loading");
 
-    DataTableModule.showLoader(tableId, "Loading active clients...");
+    DataTableModule.showLoader(tableId);
 
     AppUtils.cachedGScriptCall(
       cacheKey,

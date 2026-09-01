@@ -1,3 +1,4 @@
+import { AppUI } from "./app-ui.js";
 import { AppUtils } from "./utils.js";
 
 const PageLoaderModule = (() => {
@@ -173,7 +174,10 @@ const PageLoaderModule = (() => {
          * This keeps app-page-title and the rest
          * of the shell untouched.
          */
+
         pageContainer.innerHTML = pageHtml;
+
+        AppUI.setupStaggerCards();
 
         if (typeof done === "function") {
           done();

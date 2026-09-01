@@ -1,5 +1,6 @@
 import { AppUtils } from "../utils.js";
 import { DataTableModule } from "../tables/data-table.js";
+import { ReportActions } from "../reports/actions.js";
 
 const upsellOverviewPage = (() => {
   let bound = false;
@@ -57,7 +58,7 @@ const upsellOverviewPage = (() => {
 
         const loading = AppUtils.setButtonLoading(
           btn[0],
-          "Redirecting to the sheet...",
+          "Redirecting...",
         );
 
         google.script.run
@@ -86,7 +87,6 @@ const upsellOverviewPage = (() => {
         e.preventDefault();
 
         const $form = $(this);
-
         const $submitBtn = $form.find('button[type="submit"]');
 
         const fields = [
@@ -99,29 +99,33 @@ const upsellOverviewPage = (() => {
         ];
 
         const required = ["clientName", "upsellHours", "reportedDate"];
-
         const data = {};
 
         fields.forEach((id) => {
           const $el = $form.find(`#${id}`);
-
           data[id] = $el.length ? String($el.val() || "").trim() : "";
         });
 
         if (required.some((field) => !data[field])) {
           AppUtils.showError("Please fill out all required fields!");
-
           return;
         }
 
-        AppUtils.submitForm({
-          gscriptFunc: "addUpsellEntry",
-          data,
-          $btn: $submitBtn,
-          loadingText: "Saving upsell...",
-
-          onSuccess: handleUpsellSaveSuccess,
-        });
+        // Added confirmation step before submitting the upsell form data
+        ReportActions.confirmAction(
+          "submitUpsellForm",
+          "Submit Upsell Entry?",
+          `Are you sure you want to log an upsell entry of ${data.upsellHours} hours for ${data.clientName}?`,
+          () => {
+            AppUtils.submitForm({
+              gscriptFunc: "addUpsellEntry",
+              data,
+              $btn: $submitBtn,
+              loadingText: "Saving upsell...",
+              onSuccess: handleUpsellSaveSuccess,
+            });
+          },
+        );
       });
   }
 

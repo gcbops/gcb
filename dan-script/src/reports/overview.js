@@ -6,7 +6,7 @@ const ReportsOverview = (() => {
   const TABLE_TITLE = "Reports Overview";
 
   function loadReportsOverview() {
-    DataTableModule.showLoader(TABLE_ID, "Loading reports...");
+    DataTableModule.showLoader(TABLE_ID);
 
     AppUtils.cachedGScriptCall(
       "reportsOverview",

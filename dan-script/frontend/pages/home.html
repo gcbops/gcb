@@ -1,57 +1,150 @@
 <div class="row" id="hours-summary">
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-midnight-bloom">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Total Hours</div>
-                    <div class="widget-subheading">Cumulative Tracked Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
-            </div>
+
+  <!-- TOTAL HOURS -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Total Hours
+          </div>
+
+          <div class="h3 mb-0 font-weight-bold text-dark">
+            <span data-metric="total-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              hrs
+            </span>
+          </div>
         </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-happy-itmeo">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Paid Hours</div>
-                    <div class="widget-subheading">Client Paid Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
-            </div>
+
+        <div class="text-right">
+          <div
+            data-metric="lifetime"
+            class="text-primary font-weight-bold h4 mb-0"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7">
+            of lifetime vol
+          </div>
         </div>
+
+      </div>
     </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-night-sky">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Owed Hours</div>
-                    <div class="widget-subheading">Outstanding Work Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
-            </div>
+  </div>
+
+
+  <!-- COLLECTION RATE -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Collection Rate
+          </div>
+
+          <div class="h3 mb-0 font-weight-bold text-dark">
+            <span data-metric="paid-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              paid
+            </span>
+          </div>
         </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-malibu-beach">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Net Hours</div>
-                    <div class="widget-subheading">Net Tracked Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
-            </div>
+
+        <div class="text-right">
+          <div
+            data-metric="collection"
+            class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7 mt-1">
+            clearance rate
+          </div>
         </div>
+
+      </div>
     </div>
+  </div>
+
+
+  <!-- DEBT EXPOSURE -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Debt Exposure
+          </div>
+
+          <div class="h3 mb-0 font-weight-bold text-dark">
+            <span data-metric="owed-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              owed
+            </span>
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div
+            data-metric="debt"
+            class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7 mt-1">
+            invoice weight
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- NET HOURS YIELD -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Net Hours Yield
+          </div>
+
+          <div
+            data-metric="net-hours"
+            class="h3 mb-0 font-weight-bold"
+          >
+            0.0
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div
+            data-metric="yield"
+            class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7 mt-1">
+            net yield
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
 </div>
+
 <div class="row">
     <div class="col-md-12 col-lg-6">
         <div class="mb-3 card">
@@ -82,7 +175,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -97,7 +190,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -112,7 +205,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -127,7 +220,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -142,7 +235,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -157,7 +250,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -172,7 +265,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -187,7 +280,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -202,7 +295,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>
@@ -217,7 +310,7 @@
                                     <li class="list-group-item">
                                         <div class="widget-content p-0">
                                             <div class="widget-content-wrapper">
-                                                <div class="widget-content-left me-3">
+                                                <div class="widget-content-left me-2 me-lg-3">
                                                     <div class="avatar-circle swatch-holder swatch-holder-lg bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
                                                         style="width:42px; height:42px; font-weight:600;">GC</div>
                                                 </div>

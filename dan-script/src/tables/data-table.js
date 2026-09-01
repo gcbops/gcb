@@ -87,7 +87,7 @@ const DataTableModule = (() => {
      */
     const priorityMap = {
       "activity today": [0, -1],
-      clients: [1, -1],
+      clients: [0],
       "top paid accounts": [0, 1],
       "outstanding accounts": [0, 2],
       "active clients": [0, 1, -1],
@@ -277,11 +277,12 @@ const DataTableModule = (() => {
     const columnDefs = [];
 
     for (let i = 0; i < totalColumns; i++) {
+      const isPriority = prioritySet.has(i);
+
       columnDefs.push({
         targets: i,
-        responsivePriority: prioritySet.has(i)
-          ? priorityValue
-          : defaultPriority,
+        responsivePriority: isPriority ? priorityValue : defaultPriority,
+        ...(isPriority ? {} : { className: "dt-center" }),
       });
     }
 

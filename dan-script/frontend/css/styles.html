@@ -16,6 +16,10 @@
   overflow-y: hidden;
 }
 
+#app-main-inner-container {
+  margin-bottom: 60px;
+}
+
 @media (max-width: 767.98px) {
   .app-wrapper-footer {
     position: fixed;
@@ -24,6 +28,18 @@
     bottom: 0;
     width: 100%;
     z-index: 1030;
+
+    /* Enable smooth fade/slide */
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Hidden state: faded and slightly moved down */
+  .app-wrapper-footer.footer-hidden {
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none; /* optional: prevent clicks when hidden */
   }
 
   .app-main__inner {
@@ -51,6 +67,10 @@
 
 /* Display Utilities */
 .d-grid { display: grid !important; }   
+
+.font-size-sm {
+    font-size: clamp(10.0px, 6vw, 12.0px)
+}
 
 /* 
 What you'll see:
@@ -123,6 +143,12 @@ scale(0.96)	Remove or change for a different entrance feel
   100% { background-position: -200% 0; }
 }
 
+.avatar-circle.rounded-circle {
+  width:40px;
+  height:40px;
+  font-weight:600;
+}
+
 /* --- Core Drawer Styles --- */
 
 .drawer {
@@ -179,7 +205,7 @@ scale(0.96)	Remove or change for a different entrance feel
   right: 15px;
   background: transparent;
   border: none;
-  font-size: 20px;
+  font-size: clamp(16.0px, 3vw, 20.0px);
   cursor: pointer;
 }
 
@@ -249,6 +275,13 @@ scale(0.96)	Remove or change for a different entrance feel
   .drawer-bottom .drawer-grid-4 .form-inline > button:last-child {
     padding: 10px;
   }
+
+  .drawer-open.drawer-bottom.drawer-sm,
+  .drawer-open.drawer-bottom.drawer-md,
+  .drawer-open.drawer-bottom.drawer-lg {
+    max-width: 100%;
+    width: 100%;
+  }
 }   
 
 
@@ -315,7 +348,7 @@ table.table tbody .dt-loader-row td {
 .dataTable .highlight-row td:first-child span {
   background: #f2f2f2;
   color: #0D0D0D;
-  font-size: 12px;
+  font-size: clamp(11.0px, 3vw, 12.0px);
   margin-right: 5px;
   padding: 3px 7px;
 }

@@ -1,6 +1,7 @@
 import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
 import { DataTableModule } from "../tables/data-table.js";
+import { ReportActions } from "../reports/actions.js";
 
 const externalSheetsManagerPage = (() => {
   let bound = false;
@@ -40,11 +41,17 @@ const externalSheetsManagerPage = (() => {
 
     $(document)
       .off("click.externalSheetsPage", "#sync-external-sheets")
-      .on(
-        "click.externalSheetsPage",
-        "#sync-external-sheets",
-        syncExternalSheets,
-      );
+      .on("click.externalSheetsPage", "#sync-external-sheets", function () {
+        ReportActions.confirmAction(
+          "syncExternalSheets",
+          "Sync External Sheets?",
+          "This will pull down and reconcile all metadata records from registered external linked files. This process might take a few moments. Proceed?",
+          () => {
+            syncExternalSheets();
+          },
+        );
+      });
+
 
     $(document)
       .off("click.externalSheetsPage", ".external-sheet-view-btn")
@@ -54,7 +61,7 @@ const externalSheetsManagerPage = (() => {
   function loadData(reset = false) {
     HourSummary.loadHoursSummary("#hours-summary");
 
-    DataTableModule.showLoader(TABLE_ID, "Loading external sheets...");
+    DataTableModule.showLoader(TABLE_ID);
 
     AppUtils.cachedGScriptCall(
       CACHE_KEY,
@@ -70,7 +77,6 @@ const externalSheetsManagerPage = (() => {
 
   function renderTable(data) {
     const rows = Array.isArray(data) ? data : [];
-
     const $tbody = $(`${TABLE_ID} tbody`);
 
     if (!$tbody.length) {
@@ -78,6 +84,7 @@ const externalSheetsManagerPage = (() => {
     }
 
     if (!rows.length) {
+      DataTableModule.destroy(TABLE_ID);
       DataTableModule.showEmpty(TABLE_ID, "No external sheets configured.");
 
       return;
@@ -85,7 +92,7 @@ const externalSheetsManagerPage = (() => {
 
     /*
      * DataTables owns the table after initialization.
-     * Destroy the previous instance before replacing rows.
+     * Destroy the existing instance before replacing its rows.
      */
     DataTableModule.destroy(TABLE_ID);
 
@@ -96,7 +103,7 @@ const externalSheetsManagerPage = (() => {
     });
 
     /*
-     * Initialize only after the rows exist.
+     * Initialize DataTable only after all rows exist.
      */
     DataTableModule.init(TABLE_TITLE, TABLE_ID);
   }
@@ -169,16 +176,11 @@ const externalSheetsManagerPage = (() => {
       size: "md",
       placement: "center",
 
-      header: `
-        <strong>
-          <i class="fa fa-file-excel-o me-2"></i>
-          Add External Sheet
-        </strong>
-      `,
+      header: `<div></div>`,
 
       body: `
+      <div id="main-modal-body">
         <form id="externalSheetForm">
-
           <div class="form-group mb-3">
             <label
               for="externalClientName"
@@ -220,11 +222,26 @@ const externalSheetsManagerPage = (() => {
               Enter project names separated by commas.
             </small>
           </div>
-
         </form>
-      `,
+      </div>
+
+      <div id="review-modal-body" class="d-none">
+        <h5 class="modal-title mb-2">
+          <strong>Do you want to proceed?</strong>
+        </h5>
+
+        <p>
+          Please review the external sheet configurations
+          before provisioning.
+        </p>
+      </div>
+    `,
 
       footer: `
+      <div
+        id="main-modal-footer"
+        class="d-flex gap-2"
+      >
         <button
           type="button"
           class="btn btn-secondary btn-cancel"
@@ -239,20 +256,54 @@ const externalSheetsManagerPage = (() => {
           <i class="fa fa-plus me-1"></i>
           Create External Sheet
         </button>
-      `,
+      </div>
+
+      <div
+        id="review-modal-footer"
+        class="d-flex gap-2 d-none"
+      >
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
 
       onOpen($modal) {
-        const ns = ".externalSheetModal";
+        const namespace = ".externalSheetModal";
 
+        /*
+         * Remove any previous handlers before binding.
+         * This keeps modal re-opening from accumulating listeners.
+         */
         $modal
-          .off(ns)
-          .on(`click${ns}`, ".btn-cancel", () => {
+          .off(namespace)
+
+          .on(`click${namespace}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
           })
-          .on(`click${ns}`, ".btn-create", () => {
-            const $btn = $modal.find(".btn-create");
 
-            createExternalSheet($modal, $btn);
+          .on(`click${namespace}`, ".btn-create", () => {
+            validateAndShowReview($modal);
+          })
+
+          .on(`click${namespace}`, ".btn-back", () => {
+            showFormStep($modal);
+          })
+
+          .on(`click${namespace}`, ".btn-proceed", () => {
+            const $button = $modal.find(".btn-proceed");
+
+            createExternalSheet($modal, $button);
           });
       },
 
@@ -262,11 +313,48 @@ const externalSheetsManagerPage = (() => {
     });
   }
 
+  function validateAndShowReview($modal) {
+    const form = $modal.find("#externalSheetForm")[0];
+
+    if (!form) {
+      return;
+    }
+
+    /*
+     * Use the browser's native form validation.
+     */
+    if (!form.checkValidity()) {
+      form.reportValidity();
+
+      return;
+    }
+
+    /*
+     * Move from the input step to the review step.
+     */
+    $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
+
+    $modal
+      .find("#review-modal-body, #review-modal-footer")
+      .removeClass("d-none");
+  }
+
+  function showFormStep($modal) {
+    $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
+
+    $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
+  }
+
   function createExternalSheet($modal, $btn) {
     const form = $modal.find("#externalSheetForm")[0];
 
-    if (!form?.checkValidity()) {
-      form?.reportValidity();
+    if (!form) {
+      return;
+    }
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+
       return;
     }
 
@@ -295,33 +383,42 @@ const externalSheetsManagerPage = (() => {
         );
 
         /*
-         * Client list changed.
+         * Creating an external sheet changes both:
+         *
+         * 1. The client directory.
+         * 2. The external sheet directory.
          */
         AppUtils.cacheClear("allClientsData");
-
-        /*
-         * External sheet list changed.
-         */
         AppUtils.cacheClear(CACHE_KEY);
 
         /*
-         * Keep the client list synchronized.
+         * Keep the client sheet list synchronized.
+         *
+         * This operation is independent of the successful
+         * external-sheet creation, so its failure should not
+         * invalidate the creation result.
          */
         google.script.run
-          .withFailureHandler((err) => {
-            console.error("syncClientSheetList failed:", err);
+          .withFailureHandler((error) => {
+            console.error(
+              "[ExternalSheets] syncClientSheetList failed:",
+              error,
+            );
           })
           .syncClientSheetList();
 
+        /*
+         * Reload the external sheet directory using fresh data.
+         */
         loadData(true);
       })
-      .withFailureHandler((err) => {
-        console.error("createExternalSheet failed:", err);
+      .withFailureHandler((error) => {
+        console.error("[ExternalSheets] createExternalSheet failed:", error);
 
         loading.restore();
 
         AppUtils.showDashboardToast(
-          err?.message || "Failed to create external sheet.",
+          error?.message || "Failed to create external sheet.",
           "error",
         );
       })
@@ -332,14 +429,16 @@ const externalSheetsManagerPage = (() => {
   }
 
   function syncExternalSheets() {
-    const $btn = $("#sync-external-sheets");
+    const $icon = $("#sync-external-sheets i");
 
-    const loading = AppUtils.setButtonLoading($btn[0], "Syncing...");
+    $icon.addClass("fa-spin");
 
     google.script.run
       .withSuccessHandler((result) => {
-        loading.restore();
-
+        /*
+         * Reconciliation changes the external sheet directory,
+         * so invalidate the existing cache before reloading.
+         */
         AppUtils.cacheClear(CACHE_KEY);
 
         loadData(true);
@@ -348,18 +447,23 @@ const externalSheetsManagerPage = (() => {
 
         AppUtils.showDashboardToast(
           count
-            ? `${count} external sheet(s) registered.`
+            ? `External sheets refreshed successfully`
             : "External sheets are already up to date.",
           "success",
         );
-      })
-      .withFailureHandler((err) => {
-        console.error("reconcileExternalSheets failed:", err);
 
-        loading.restore();
+        $icon.removeClass("fa-spin");
+      })
+      .withFailureHandler((error) => {
+        console.error(
+          "[ExternalSheets] reconcileExternalSheets failed:",
+          error,
+        );
+
+        $icon.removeClass("fa-spin");
 
         AppUtils.showDashboardToast(
-          err?.message || "Failed to sync external sheets.",
+          error?.message || "Failed to sync external sheets.",
           "error",
         );
       })

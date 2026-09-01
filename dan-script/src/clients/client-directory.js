@@ -28,12 +28,6 @@ const ClientDirectory = (() => {
     initialized = false;
 
     unbindClientDirectoryEvents();
-
-    /*
-     * Destroy the DataTable instance so it does not
-     * remain active after leaving the page.
-     */
-    DataTableModule.destroy(TABLE_ID);
   }
 
   function loadClientDirectory(source = CACHE_KEY) {
@@ -41,28 +35,26 @@ const ClientDirectory = (() => {
 
     /*
      * Render cached data immediately when available.
+     * Then refresh in the background.
      */
-    if (Array.isArray(cached) && cached.length) {
+    if (Array.isArray(cached) && cached.length > 0) {
       renderClientDirectory(cached);
 
-      /*
-       * Check for fresh data in the background.
-       */
-      refreshClientDirectory(source, cached);
+      refreshClientDirectoryInBackground(source, cached);
 
       return;
     }
 
-    DataTableModule.showLoader(TABLE_ID, "Loading clients...");
-
     /*
      * No usable cache.
-     * Fetch from Apps Script.
+     * Show the table loader while fetching fresh data.
      */
+    DataTableModule.showLoader(TABLE_ID);
+
     fetchClientDirectory(source);
   }
 
-  function fetchClientDirectory(source) {
+  function fetchClientDirectory(source, callback = null) {
     AppUtils.cachedGScriptCall(
       source,
       "getClientDataWithNickname",
@@ -77,18 +69,61 @@ const ClientDirectory = (() => {
           return;
         }
 
-        renderClientDirectory(data);
+        renderClientDirectory(data, callback);
       },
     );
   }
 
-  function refreshClientDirectory(source, cached) {
+  /*
+   * Explicitly refresh the client directory.
+   *
+   * This is used by the manual Sync/Refresh action.
+   */
+  function refreshClientDirectory(source = CACHE_KEY, callback = null) {
+    DataTableModule.showLoader(TABLE_ID);
+
+    $("#sync-clients-list i").addClass("fa-spin");
+
     /*
-     * Force a fresh Apps Script request.
-     *
-     * cachedGScriptCall() normally stops when valid
-     * cache exists, so reset=true is required here.
+     * Clear the client cache so the next request
+     * cannot use stale client data.
      */
+    AppUtils.cacheClear(source);
+
+    AppUtils.cachedGScriptCall(
+      source,
+      "getClientDataWithNickname",
+      [source],
+      (data) => {
+        $("#sync-clients-list i").removeClass("fa-spin");
+
+        if (!Array.isArray(data)) {
+          AppUtils.showDashboardToast(
+            "Something went wrong refreshing clients!",
+            "error",
+          );
+
+          return;
+        }
+
+        renderClientDirectory(data, () => {
+          if (typeof callback === "function") {
+            callback();
+          }
+        });
+      },
+      false,
+      true,
+    );
+  }
+
+  /*
+   * Refresh the client directory in the background.
+   *
+   * Used after cached data has already been rendered.
+   * Does not show a loader or toast.
+   */
+  function refreshClientDirectoryInBackground(source, cached) {
     AppUtils.cachedGScriptCall(
       source,
       "getClientDataWithNickname",
@@ -98,27 +133,40 @@ const ClientDirectory = (() => {
           return;
         }
 
-        if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
-          renderClientDirectory(fresh);
+        /*
+         * Avoid rebuilding the DataTable when
+         * the server data has not changed.
+         */
+        if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+          return;
         }
+
+        renderClientDirectory(fresh);
       },
       false,
       true,
     );
   }
 
-  function renderClientDirectory(data) {
+  function renderClientDirectory(data, callback = null) {
     const tbody = document.getElementById(TABLE_BODY_ID);
 
     if (!tbody) {
       return;
     }
-    
+
     if (!Array.isArray(data) || data.length === 0) {
+      DataTableModule.destroy(TABLE_ID);
       DataTableModule.showEmpty(TABLE_ID, "No clients found.");
+
       return;
     }
-    
+
+    /*
+     * Destroy the existing instance before replacing its rows.
+     */
+    DataTableModule.destroy(TABLE_ID);
+
     tbody.innerHTML = "";
 
     data.forEach((client, index) => {
@@ -126,43 +174,45 @@ const ClientDirectory = (() => {
     });
 
     /*
-     * Initialize DataTable only after rows exist.
+     * Initialize DataTable only after all rows exist.
      */
-    DataTableModule.init(TABLE_TITLE, TABLE_ID);
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, callback);
   }
 
   function createClientDirectoryRow(client, index) {
     const row = document.createElement("tr");
 
-    const initials = AppUtils.getInitials(client.name);
+    const name = String(client?.name || "").trim();
+    const role = String(client?.role || "").trim();
+    const projects = String(client?.projects ?? "").trim();
+    const paid = String(client?.paid ?? "").trim();
+    const owed = String(client?.owed ?? "").trim();
+    const status = String(client?.status || "").trim();
 
-    const status = String(client.status || "").trim();
+    const initials = AppUtils.getInitials(name);
 
-    const statusHtml =
-      status.toLowerCase() === "inactive"
-        ? `
-          <span class="badge bg-danger text-center">
-            Inactive
-          </span>
-        `
-        : `
-          <span class="badge bg-success text-center">
-            ${AppUtils.escapeHtml(status || "Active")}
-          </span>
-        `;
+    const isInactive = status.toLowerCase() === "inactive";
+
+    const statusHtml = isInactive
+      ? `
+        <span class="badge bg-danger text-center">
+          Inactive
+        </span>
+      `
+      : `
+        <span class="badge bg-success text-center">
+          ${AppUtils.escapeHtml(status || "Active")}
+        </span>
+      `;
 
     row.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">
-        ${index + 1}
-      </td>
 
       <td>
         <div class="widget-content p-0">
           <div class="widget-content-wrapper">
-            <div class="widget-content-left me-3">
+            <div class="widget-content-left me-2 me-lg-3">
               <div
                 class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
-                style="width:40px;height:40px;font-weight:600;"
               >
                 ${AppUtils.escapeHtml(initials)}
               </div>
@@ -170,11 +220,11 @@ const ClientDirectory = (() => {
 
             <div class="widget-content-left flex2">
               <div class="widget-heading">
-                ${AppUtils.escapeHtml(client.name)}
+                ${AppUtils.escapeHtml(name)}
               </div>
 
               <div class="widget-subheading opacity-7">
-                ${AppUtils.escapeHtml(client.role)}
+                ${AppUtils.escapeHtml(role)}
               </div>
             </div>
           </div>
@@ -182,15 +232,15 @@ const ClientDirectory = (() => {
       </td>
 
       <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.projects)}
+        ${AppUtils.escapeHtml(projects)}
       </td>
 
       <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.paid)}
+        ${AppUtils.escapeHtml(paid)}
       </td>
 
       <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.owed)}
+        ${AppUtils.escapeHtml(owed)}
       </td>
 
       <td class="text-center">
@@ -202,6 +252,7 @@ const ClientDirectory = (() => {
           type="button"
           class="btn action-btn open-client-btn"
           title="Open Client Sheet"
+          aria-label="Open ${AppUtils.escapeHtml(name)} sheet"
         >
           <i class="pe-7s-note"></i>
         </button>
@@ -218,6 +269,10 @@ const ClientDirectory = (() => {
       return;
     }
 
+    /*
+     * Remove first so repeated initialization never
+     * accumulates duplicate handlers.
+     */
     tbody.removeEventListener("click", handleClientDirectoryClick);
 
     tbody.addEventListener("click", handleClientDirectoryClick);
@@ -233,14 +288,14 @@ const ClientDirectory = (() => {
     tbody.removeEventListener("click", handleClientDirectoryClick);
   }
 
-  function handleClientDirectoryClick(e) {
-    const btn = e.target.closest(".open-client-btn");
+  function handleClientDirectoryClick(event) {
+    const button = event.target.closest(".open-client-btn");
 
-    if (!btn) {
+    if (!button) {
       return;
     }
 
-    const row = btn.closest("tr");
+    const row = button.closest("tr");
 
     if (!row) {
       return;
@@ -258,14 +313,19 @@ const ClientDirectory = (() => {
 
     google.script.run
       .withSuccessHandler((url) => {
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-        } else {
-          AppUtils.showError(url);
+        const clientUrl = String(url || "").trim();
+
+        if (clientUrl.startsWith("http")) {
+          window.open(clientUrl, "_blank");
+          return;
         }
+
+        AppUtils.showError(url);
       })
-      .withFailureHandler((err) => {
-        AppUtils.showError(err);
+      .withFailureHandler((error) => {
+        console.error("[ClientDirectory] Failed to open client sheet:", error);
+
+        AppUtils.showError(error);
       })
       .goToPresentClient(clientName);
   }

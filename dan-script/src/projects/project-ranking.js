@@ -60,11 +60,10 @@ const ProjectRankings = (() => {
       <div class="widget-content p-0">
         <div class="widget-content-wrapper">
 
-          <div class="widget-content-left me-3">
+          <div class="widget-content-left me-2 me-lg-3">
             <div
               class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-              text-white rounded-circle d-flex align-items-center justify-content-center"
-              style="width:42px;height:42px;font-weight:600;">
+              text-white rounded-circle d-flex align-items-center justify-content-center">
               ${AppUtils.getInitials(client)}
             </div>
           </div>

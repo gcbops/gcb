@@ -2,6 +2,74 @@ const AppUI = (() => {
   function init() {
     initPerfectScrollbars();
     initLoadingState();
+    initScrollBehavior();
+  }
+
+  function initLoadingState() {
+    setTimeout(() => {
+      document.body.classList.add("loaded");
+
+      document.querySelectorAll(".drawer").forEach((drawer) => {
+        drawer.classList.add("reg");
+      });
+
+      const appContainer = document.querySelector(".app-container");
+
+      if (appContainer) {
+        appContainer.classList.remove("loading");
+        appContainer.classList.add("closed-sidebar");
+      }
+    }, 5000);
+  }
+
+  function initScrollBehavior() {
+    let lastScrollY = window.scrollY;
+    let ticking = false;
+
+    function handleScroll() {
+      const currentScrollY = window.scrollY;
+
+      /*
+       * Mobile-only scroll behavior.
+       */
+      if (window.innerWidth <= 768) {
+        handleMobileFooterScroll(currentScrollY, lastScrollY);
+      }
+
+      /*
+       * Add future scroll behaviors here.
+       *
+       * Example:
+       * handleMobileHeaderScroll(currentScrollY, lastScrollY);
+       * handleScrollProgress(currentScrollY);
+       */
+
+      lastScrollY = currentScrollY;
+      ticking = false;
+    }
+
+    function requestTick() {
+      if (!ticking) {
+        window.requestAnimationFrame(handleScroll);
+        ticking = true;
+      }
+    }
+
+    window.addEventListener("scroll", requestTick, {
+      passive: true,
+    });
+
+    /*
+     * Handle resize so the footer is restored
+     * when switching from mobile to desktop.
+     */
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 768) {
+        const footer = document.querySelector(".app-wrapper-footer");
+
+        footer?.classList.remove("footer-hidden");
+      }
+    });
   }
 
   function activateNavigation(pageName) {
@@ -38,21 +106,25 @@ const AppUI = (() => {
     });
   }
 
-  function initLoadingState() {
-    setTimeout(() => {
-      document.body.classList.add("loaded");
+  function handleMobileFooterScroll(currentScrollY, lastScrollY) {
+    const footer = document.querySelector(".app-wrapper-footer");
 
-      document.querySelectorAll(".drawer").forEach((drawer) => {
-        drawer.classList.add("reg");
-      });
+    if (!footer) {
+      return;
+    }
 
-      const appContainer = document.querySelector(".app-container");
+    /*
+     * Scrolling down → hide footer.
+     */
+    if (currentScrollY > lastScrollY && currentScrollY > 80) {
+      footer.classList.add("footer-hidden");
+    } else {
 
-      if (appContainer) {
-        appContainer.classList.remove("loading");
-        appContainer.classList.add("closed-sidebar");
-      }
-    }, 5000);
+    /*
+     * Scrolling up or near top → show footer.
+     */
+      footer.classList.remove("footer-hidden");
+    }
   }
 
   // Set up the initial skeleton/blur state on each card
@@ -81,6 +153,10 @@ const AppUI = (() => {
     if (!root) {
       return;
     }
+
+    document
+      .getElementById("app-main-inner-container")
+      .classList.remove("opacity-0");
 
     const cards = root.querySelectorAll(".card.stagger");
     const stagger = 350;

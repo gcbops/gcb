@@ -83,7 +83,19 @@ const ChartModule = (() => {
   // DATA LOADING
   // --------------------------------------------------
 
-  function loadChart(chartType, animated = false, year = "all") {
+  function loadChart(
+    chartType,
+    animated = false,
+    year = "all",
+    refresh = false,
+    log = false,
+  ) {
+    const logMessage = (...args) => {
+      if (log) {
+        console.log("[Charts]", ...args);
+      }
+    };
+
     const chartDiv = document.getElementById(`chart-${chartType}`);
 
     if (!chartDiv) {
@@ -100,8 +112,6 @@ const ChartModule = (() => {
       );
     }
 
-    // chartDiv.innerText = "Loading chart...";
-
     const cacheKey =
       typeof config.cacheKey === "function"
         ? config.cacheKey(year)
@@ -109,23 +119,43 @@ const ChartModule = (() => {
 
     const args = chartType === "yearly" ? [year] : [];
 
+    logMessage("Loading chart:", {
+      chartType,
+      year,
+      cacheKey,
+      args,
+      refresh,
+      animated,
+    });
+
     AppUtils.cachedGScriptCall(
       cacheKey,
       config.serverFunction,
       args,
       (data) => {
+        logMessage("Chart data received:", data);
 
         if (!document.body.contains(chartDiv)) {
+          logMessage("Chart container no longer exists.");
           return;
         }
 
         if (!Array.isArray(data) || !data.length) {
+          logMessage("No chart data found.");
+
           chartDiv.innerText = "No data found.";
           return;
         }
 
+        logMessage("Drawing chart:", {
+          chartType,
+          rows: data.length,
+        });
+
         drawChart(chartType, data, false, animated);
       },
+      log,
+      refresh,
     );
   }
 
@@ -156,27 +186,50 @@ const ChartModule = (() => {
     AppUtils.cachedGScriptCall(cacheKey, config.serverFunction, args, callback);
   }
 
-  function loadPrevYearCombinedChart() {
+  function loadPrevYearCombinedChart(refresh = false, log = false) {
     const chartId = "monthly-prev-merged";
 
-    loadChartData("monthly_prev", (prevData) => {
-      if (!Array.isArray(prevData)) {
-        AppUtils.showError("Invalid previous year chart data.");
-        return;
-      }
+    if (log) {
+      console.log("[Charts] Loading previous/current year combined chart:", {
+        refresh,
+      });
+    }
 
-      loadChartData("monthly", (currentData) => {
-        if (!Array.isArray(currentData)) {
-          AppUtils.showError("Invalid current year chart data.");
+    loadChartData(
+      "monthly_prev",
+      (prevData) => {
+        if (!Array.isArray(prevData)) {
+          AppUtils.showError("Invalid previous year chart data.");
           return;
         }
 
-        drawChart(chartId, {
-          prevYear: prevData,
-          currentYear: currentData,
-        });
-      });
-    });
+        loadChartData(
+          "monthly",
+          (currentData) => {
+            if (!Array.isArray(currentData)) {
+              AppUtils.showError("Invalid current year chart data.");
+              return;
+            }
+
+            if (log) {
+              console.log("[Charts] Combined chart data:", {
+                prevYear: prevData,
+                currentYear: currentData,
+              });
+            }
+
+            drawChart(chartId, {
+              prevYear: prevData,
+              currentYear: currentData,
+            });
+          },
+          refresh,
+          log,
+        );
+      },
+      refresh,
+      log,
+    );
   }
 
   // --------------------------------------------------
@@ -588,7 +641,7 @@ const ChartModule = (() => {
     const current = fillMonthlyData(data?.currentYear || []);
 
     chartInstances[type] = new Chart(ctx, {
-      type: "line",
+      type: "bar",
 
       data: {
         labels: REPORT_MONTHS,
@@ -598,52 +651,49 @@ const ChartModule = (() => {
             label: "Previous Year",
             data: prev,
 
-            // Same orange color/gradient as the bar chart
-            borderColor: "#f97316",
-
             backgroundColor: createGradient(
               ctx,
+              "rgba(249, 115, 22, 0.9)",
               "rgba(249, 115, 22, 0.5)",
-              "rgba(249, 115, 22, 0.05)",
             ),
 
-            fill: true,
-            tension: 0.4,
+            borderColor: "#f97316",
+            borderWidth: 1,
 
-            pointRadius: 3,
-            pointHoverRadius: 6,
+            borderRadius: 6,
+            borderSkipped: false,
 
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "#f97316",
-            pointBorderWidth: 2,
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
 
-            borderWidth: 2,
+            hoverBackgroundColor: "rgba(249, 115, 22, 1)",
+            hoverBorderColor: "#ea580c",
+            hoverBorderWidth: 1,
           },
 
           {
             label: "Current Year",
             data: current,
 
-            // Green gradient for the current year
-            borderColor: "#22c55e",
-
+            // Lighter, related orange/amber for current year
             backgroundColor: createGradient(
               ctx,
-              "rgba(34, 197, 94, 0.5)",
-              "rgba(34, 197, 94, 0.05)",
+              "rgba(251, 146, 60, 0.9)",
+              "rgba(251, 146, 60, 0.5)",
             ),
 
-            fill: true,
-            tension: 0.4,
+            borderColor: "#fb923c",
+            borderWidth: 1,
 
-            pointRadius: 3,
-            pointHoverRadius: 6,
+            borderRadius: 6,
+            borderSkipped: false,
 
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "#22c55e",
-            pointBorderWidth: 2,
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
 
-            borderWidth: 2,
+            hoverBackgroundColor: "rgba(251, 146, 60, 1)",
+            hoverBorderColor: "#f97316",
+            hoverBorderWidth: 1,
           },
         ],
       },
@@ -656,12 +706,10 @@ const ChartModule = (() => {
 
         ...(animated && {
           animations: {
-            tension: {
-              duration: 1500,
-              easing: "easeInOutQuart",
-              from: 1,
-              to: 0.4,
-              loop: true,
+            y: {
+              duration: 1200,
+              easing: "easeOutQuart",
+              from: 0,
             },
           },
         }),
@@ -683,13 +731,13 @@ const ChartModule = (() => {
             axis: "x",
             intersect: false,
 
-            backgroundColor: "rgba(255, 255, 255, 0.9)",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
 
             titleColor: "#111827",
             bodyColor: "#374151",
 
-            borderColor: "#d1d5db",
-            borderWidth: 0,
+            borderColor: "#e5e7eb",
+            borderWidth: 1,
 
             padding: 12,
             cornerRadius: 8,
@@ -734,6 +782,8 @@ const ChartModule = (() => {
               font: {
                 size: 10,
               },
+
+              callback: (value) => `${value}`,
             },
 
             border: {

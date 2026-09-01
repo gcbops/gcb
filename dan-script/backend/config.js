@@ -58,6 +58,7 @@ const CONFIG = {
       "Yearly Report PDF Generator",
       "Current Year Log",
       "External Sheets",
+      "Other Analytics",
     ]),
   },
 

@@ -9,7 +9,7 @@ const HomePage = (() => {
     HourSummary.loadHoursSummary("#hours-summary");
     ChartModule.loadChart("daily");
     ChartModule.loadChart("monthly");
-    ChartModule.loadChart("yearly", false, new Date().getFullYear());
+    ChartModule.loadChart("yearly");
     ChartModule.loadPrevYearCombinedChart();
     ClientRanking.renderTopPaidClients();
     ProjectRankings.renderTopProjects();

@@ -213,7 +213,6 @@ const AppUtils = (() => {
     log = false,
     reset = false,
   ) {
-
     const requestToken = RouterModule.getPageToken();
 
     const safeCallback = (data) => {
@@ -278,9 +277,8 @@ const AppUtils = (() => {
     safeRun(() => {
       google.script.run
         .withSuccessHandler((data) => {
-
           cacheSet(cacheKey, data);
-      
+
           safeCallback(data);
         })
         .withFailureHandler((err) => {
@@ -398,6 +396,55 @@ const AppUtils = (() => {
       .join("")
       .slice(0, 3);
   }
+
+  function formatHours(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return "0.0";
+    }
+
+    return number.toLocaleString(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+  }
+
+  function formatPercent(value) {
+    if (value === null || value === undefined || value === "") {
+      return "0%";
+    }
+
+    if (typeof value === "string" && value.includes("%")) {
+      return value;
+    }
+
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return "0%";
+    }
+
+    const percent = Math.abs(number) <= 1 ? number * 100 : number;
+
+    return `${percent.toFixed(2)}%`;
+  }
+
+  function parsePercent(value) {
+    if (typeof value === "string") {
+      value = value.replace("%", "").trim();
+    }
+
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return 0;
+    }
+
+    return Math.abs(number) <= 1 ? number * 100 : number;
+  }
+
+  // ---- OTHER UTILS ----
 
   function showDashboardToast(msg, type = "success") {
     if (typeof toastr === "undefined") {
@@ -903,6 +950,10 @@ const AppUtils = (() => {
     showError,
     playNotif,
     getInitials,
+    formatHours,
+    formatPercent,
+    parsePercent,
+
     showDashboardToast,
     initSelect2,
     submitForm,

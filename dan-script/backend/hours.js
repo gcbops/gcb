@@ -81,63 +81,34 @@ function validateManualHoursFormData(formData) {
 }
 
 function recordClientHoursToSheet(sheet, data) {
-  const {
-    type,
-    task,
-    hours,
-  } = data;
+  const { type, task, hours } = data;
 
   const startRow = 3;
   const lastRow = sheet.getLastRow();
 
-  const today = formatDateSafe(
-    new Date(),
-    "M/d/yyyy",
-  );
+  const today = formatDateSafe(new Date(), "M/d/yyyy");
 
-  const rowCount = Math.max(
-    1,
-    lastRow - startRow + 1,
-  );
+  const rowCount = Math.max(1, lastRow - startRow + 1);
 
-  const values = sheet
-    .getRange(startRow, 5, rowCount, 4)
-    .getValues();
+  const values = sheet.getRange(startRow, 5, rowCount, 4).getValues();
 
   /* ---------- Update existing entry ---------- */
 
   for (let i = 0; i < values.length; i++) {
-    const [
-      typeDev,
-      taskProject,
-      existingHours,
-      entryDate,
-    ] = values[i];
+    const [typeDev, taskProject, existingHours, entryDate] = values[i];
 
-    const sameType =
-      normalizeText(typeDev) ===
-      normalizeText(type);
+    const sameType = normalizeText(typeDev) === normalizeText(type);
 
-    const sameTask =
-      normalizeText(taskProject) ===
-      normalizeText(task);
+    const sameTask = normalizeText(taskProject) === normalizeText(task);
 
-    const sameDate =
-      formatDateSafe(
-        entryDate,
-        "M/d/yyyy",
-      ) === today;
+    const sameDate = formatDateSafe(entryDate, "M/d/yyyy") === today;
 
     if (sameType && sameTask && sameDate) {
-      const currentHours =
-        Number(existingHours) || 0;
+      const currentHours = Number(existingHours) || 0;
 
-      const newHours =
-        currentHours + hours;
+      const newHours = currentHours + hours;
 
-      sheet
-        .getRange(startRow + i, 7)
-        .setValue(newHours);
+      sheet.getRange(startRow + i, 7).setValue(newHours);
 
       return {
         success: true,
@@ -148,17 +119,9 @@ function recordClientHoursToSheet(sheet, data) {
 
   /* ---------- Create new entry ---------- */
 
-  const emptyRow = getFirstEmptyRow(
-    sheet,
-    5,
-    startRow,
-  );
+  const emptyRow = getFirstEmptyRow(sheet, 5, startRow);
 
-  sheet
-    .getRange(emptyRow, 5, 1, 4)
-    .setValues([
-      [type, task, hours, today],
-    ]);
+  sheet.getRange(emptyRow, 5, 1, 4).setValues([[type, task, hours, today]]);
 
   return {
     success: true,
@@ -168,26 +131,17 @@ function recordClientHoursToSheet(sheet, data) {
 
 function recordManualClientHoursFromForm(formData) {
   try {
-    const data =
-      validateManualHoursFormData(formData);
+    const data = validateManualHoursFormData(formData);
 
-    const clientSheet =
-      getSheetSafe(data.client);
+    const clientSheet = getSheetSafe(data.client);
 
     if (!clientSheet) {
-      throw new Error(
-        `Sheet "${data.client}" not found.`,
-      );
+      throw new Error(`Sheet "${data.client}" not found.`);
     }
 
-    return recordClientHoursToSheet(
-      clientSheet,
-      data,
-    );
+    return recordClientHoursToSheet(clientSheet, data);
   } catch (err) {
-    throw new Error(
-      err.message || String(err),
-    );
+    throw new Error(err.message || String(err));
   }
 }
 
@@ -404,16 +358,25 @@ function getDailyActivityData() {
 }
 
 function getHoursSummary() {
-  const sheet = getLabSheet();
-  if (!sheet) return {};
+  const sheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Other Analytics");
 
-  const values = sheet.getRange("AW3:AW6").getValues().flat();
+  if (!sheet) {
+    return {};
+  }
+
+  const values = sheet.getRange("A2:I2").getValues()[0];
 
   return {
-    totalHours: values[0],
-    totalPaid: values[1],
-    owedHours: values[2],
-    netHours: values[3],
+    totalHours: values[1] ?? 0,
+    totalPaid: values[2] ?? 0,
+    owedHours: values[3] ?? 0,
+    netHours: values[4] ?? 0,
+
+    lifetimePercent: values[5] ?? 0,
+    collectionRate: values[6] ?? 0,
+    debtExposureRate: values[7] ?? 0,
+    netHoursYield: values[8] ?? 0,
   };
 }
 
@@ -799,4 +762,62 @@ function deleteTodayRowsAndCompact(sheet, deleteRows, today, startRow) {
   rowsToClear.forEach((rowNumber) => {
     sheet.getRange(rowNumber, 5, 1, 4).clearContent();
   });
+}
+
+function getYearHoursSummary(year) {
+  const sheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Other Analytics");
+
+  if (!sheet) {
+    return null;
+  }
+
+  const data = sheet.getRange("A5:I").getValues();
+
+  const row = data.find((item) => Number(item[0]) === Number(year));
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    year: row[0],
+    hours: row[1],
+    paid: row[2],
+    owed: row[3],
+    netHours: row[4],
+    lifetime: row[5],
+    collection: row[6],
+    debt: row[7],
+    yield: row[8],
+  };
+}
+
+function addCurrMthTotalHrly(value) {
+  if (value === "" || value === null || value === undefined)
+    throw new Error("❌ No value provided.");
+
+  const sheet = getSheetSafe("Hourly History");
+  if (!sheet) throw new Error('❌ Sheet "Hourly History" not found.');
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 4) throw new Error("❌ Not enough data in Hourly History.");
+
+  const colE = sheet.getRange("E4:E" + lastRow).getValues();
+  const colF = sheet.getRange("F4:F" + lastRow).getValues();
+
+  const targetRow = colE.findIndex((e, i) => e[0] && !colF[i][0]);
+  if (targetRow === -1) throw new Error("⚠️ No empty F cell found to update.");
+
+  const rowNum = targetRow + 4;
+  const numVal = isNaN(Number(value)) ? value : Number(value);
+
+  sheet.getRange(`F${rowNum}`).setValue(numVal);
+  const monthYear = sheet.getRange(`E${rowNum}`).getValue();
+
+  return {
+    message: `✅ Added value to ${monthYear}`,
+    row: rowNum,
+    monthYear,
+  };
 }

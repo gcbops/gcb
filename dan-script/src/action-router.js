@@ -65,7 +65,9 @@ const ActionRouterModule = (() => {
       }
     }
 
-    
+    document
+      .getElementById("app-main-inner-container")
+      .classList.add("opacity-0");
 
     RouterModule.go(page);
   }

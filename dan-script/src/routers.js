@@ -277,8 +277,6 @@ const RouterModule = (() => {
         return;
       }
 
-      AppUI.setupStaggerCards();
-
       /*
        * Initialize page.
        */
