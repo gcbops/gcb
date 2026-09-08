@@ -33,32 +33,91 @@ function getP24Client() {
 }
 
 function getPerformanceSummary(yearType) {
-  const sheet = getLabSheet();
-  if (!sheet) return null;
+  const sheet = getSheetSafe("Other Analytics");
 
-  let valueRange;
-  let growthCell;
+  if (!sheet) {
+    throw new Error('Sheet "Other Analytics" was not found.');
+  }
 
-  if (yearType === "current") {
-    valueRange = "AU20:AU23";
-    growthCell = "AU24";
-  } else if (yearType === "previous") {
-    valueRange = "AT20:AT23";
-    growthCell = "AT24";
-  } else {
+  const currentYear = new Date().getFullYear();
+
+  const year =
+    yearType === "current"
+      ? currentYear
+      : yearType === "previous"
+        ? currentYear - 1
+        : null;
+
+  if (!year) {
     return null;
   }
 
-  const labels = sheet.getRange("AR20:AR23").getValues().flat();
-  const values = sheet.getRange(valueRange).getValues().flat();
-  const paidGrowth = sheet.getRange(growthCell).getValue();
+  const lastColumn = sheet.getLastColumn();
+  const lastRow = sheet.getLastRow();
 
-  const currentYear = new Date().getFullYear();
-  const year = yearType === "current" ? currentYear : currentYear - 1;
+  if (lastColumn < 1 || lastRow < 5) {
+    return {
+      year,
+      percentages: [],
+      paidGrowth: 0,
+    };
+  }
 
-  const percentages = labels.map((label, i) => [`${year} ${label}`, values[i]]);
+  const headers = sheet
+    .getRange(4, 1, 1, lastColumn)
+    .getValues()[0]
+    .map((header) => String(header).trim());
+
+  const data = sheet.getRange(5, 1, lastRow - 4, lastColumn).getValues();
+
+  const columnMap = {};
+
+  headers.forEach((header, index) => {
+    if (header) {
+      columnMap[header] = index;
+    }
+  });
+
+  const requiredMetrics = [
+    "Collection Rate",
+    "Debt Exposure Rate",
+    "Net Hours Yield",
+    "% of Lifetime Vol",
+  ];
+
+  const requiredColumns = ["Net Yr", ...requiredMetrics, "Paid vs Last Year"];
+
+  const missing = requiredColumns.filter(
+    (column) => columnMap[column] === undefined,
+  );
+
+  if (missing.length) {
+    throw new Error(
+      `Missing columns in Other Analytics: ${missing.join(", ")}`,
+    );
+  }
+
+  const yearRow = data.find((row) => Number(row[columnMap["Net Yr"]]) === year);
+
+  if (!yearRow) {
+    return {
+      year,
+      percentages: [],
+      paidGrowth: 0,
+    };
+  }
+
+  const percentages = requiredMetrics.map((metric) => {
+    const value = Number(yearRow[columnMap[metric]]) || 0;
+
+    return [metric, value * 100];
+  });
+
+  const paidGrowth =
+    (Number(yearRow[columnMap["Paid vs Last Year"]]) || 0) * 100;
 
   return {
+    year,
     percentages,
     paidGrowth,
   };
@@ -77,48 +136,3 @@ function getHourTotals() {
   };
 }
 
-function getTargetPercents() {
-  const sheet = getLabSheet();
-  if (!sheet) return null;
-
-  const values = sheet.getRange("AU29:AU31").getValues().flat();
-
-  return {
-    manual: values[0],
-    hourly: values[1],
-    combined: values[2],
-  };
-}
-
-function getCurrentYearTargetProgress() {
-  const sheet = getLabSheet();
-  if (!sheet) return null;
-
-  const values = sheet
-    .getRangeList(["AU20", "AU21", "AU24", "AU29:AU31"])
-    .getRanges()
-    .map((range) => range.getValues());
-
-  return {
-    monthAvg: values[0][0][0],
-    paidHr: values[1][0][0],
-    paidGrowth: values[2][0][0],
-    manual: values[3][0][0],
-    hourly: values[3][1][0],
-    combined: values[3][2][0],
-  };
-}
-
-function getPreviousYearTargetProgress() {
-  const sheet = getLabSheet();
-  if (!sheet) return null;
-
-  return {
-    monthAvg: sheet.getRange("AT20").getValue(),
-    paidHr: sheet.getRange("AT21").getValue(),
-    paidGrowth: sheet.getRange("AT24").getValue(),
-    manual: sheet.getRange("AU25").getValue(),
-    hourly: sheet.getRange("AU26").getValue(),
-    combined: sheet.getRange("AU27").getValue(),
-  };
-}

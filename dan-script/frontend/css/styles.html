@@ -1,4 +1,22 @@
 <style>
+/* global scope */
+:root {
+  --gc-primary-color: #0ea5e9; 
+}
+
+.btn-check:checked+.btn:focus-visible, 
+.btn.active:focus-visible, 
+.btn.show:focus-visible, 
+.btn:first-child:active:focus-visible, 
+:not(.btn-check)+.btn:active:focus-visible, 
+.btn-check:checked+.btn, 
+.btn.active, .btn.show, 
+.btn:first-child:active, 
+:not(.btn-check)+.btn:active {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+}
 
 /* --- Loading State --- */
 .app-container.loading {
@@ -149,8 +167,15 @@ scale(0.96)	Remove or change for a different entrance feel
   font-weight:600;
 }
 
-/* --- Core Drawer Styles --- */
+.status-icon-sm {
+  padding: 3px;
+}
 
+.status-icon-sm i {
+  font-size: 9px;
+}
+
+/* --- Core Drawer Styles --- */
 .drawer {
   opacity: 0;
   box-sizing: border-box;
@@ -159,30 +184,36 @@ scale(0.96)	Remove or change for a different entrance feel
   transition: transform 0.35s ease;
   backdrop-filter: blur(8px);
   background: rgba(255, 255, 255, 0.4);
+  inset: 0 0 0 0; /* cover full viewport for positioning */
 }
 
-.drawer.reg {
+/* Visible state */
+.drawer.reg,
+.drawer-open {
   opacity: 1;
 }
 
+/* Content container */
 .drawer .drawer-content {
   width: 90%;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 0; /* let header/body handle padding */
+  position: relative;
 }
 
 /* --- Positioning & States --- */
 .drawer-top {
   transform: translateY(-100%);
-  inset: 0 0 auto 0; /* top, right, bottom, left */
+  inset: 0 0 auto 0; /* top: 0 */
 }
 
 .drawer-bottom {
   transform: translateY(100%);
-  inset: auto 0 0 0;
+  inset: auto 0 0 0; /* bottom: 0 */
 }
 
+/* Open state (critical) */
 .drawer-open.drawer-top,
 .drawer-open.drawer-bottom {
   transform: translateY(0);
@@ -198,15 +229,88 @@ scale(0.96)	Remove or change for a different entrance feel
 .drawer-open.drawer-bottom.drawer-md { max-width: 700px; }
 .drawer-open.drawer-bottom.drawer-lg { max-width: 1200px; }
 
-/* --- Close Button --- */
-.drawer-close {
-  position: absolute;
-  top: 10px;
-  right: 15px;
+/* --- Header (for minimize feature) --- */
+.drawer-bottom .drawer-header {
+  display: flex;
+  align-items: center;        /* vertical center for title + actions */
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  cursor: pointer;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-width: 0;
+}
+
+.drawer-bottom .drawer-header .drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Actions: align buttons vertically centered */
+.drawer-bottom .drawer-header .drawer-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;        /* vertical alignment */
+  flex: 0 0 auto;
+  min-width: 64px;
+}
+
+/* Buttons: ensure icons are centered vertically */
+.drawer-bottom .drawer-header .drawer-actions button {
+  display: inline-flex;
+  align-items: center;        /* center icon inside button */
+  justify-content: center;
+  min-width: 28px;
+  padding: 4px 6px;
   background: transparent;
   border: none;
-  font-size: clamp(16.0px, 3vw, 20.0px);
   cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.drawer-bottom .drawer-header .drawer-actions button i {
+  font-size: 24px;
+  line-height: 1;
+  display: inline-block;
+}
+
+.drawer-bottom .drawer-header .drawer-actions button:hover {
+  opacity: 1;
+  color: #6d7ae0;
+}
+
+/* --- Body content --- */
+.drawer-bottom .drawer-body {
+  padding: 16px;
+}
+
+/* Hide body when minimized */
+.drawer-bottom.drawer-minimized .drawer-body {
+  display: none;
+}
+
+/* Minimized state: show only header bar */
+.drawer-bottom.drawer-minimized {
+  transform: translateY(calc(100% - 60px)); /* adjust to match header height */
+}
+
+/* --- Close Button (legacy absolute positioning still works if you keep it) --- */
+.drawer-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  font-size: clamp(16px, 3vw, 20px);
+  cursor: pointer;
+  z-index: 20;
 }
 
 .drawer-close:hover {
@@ -225,7 +329,6 @@ scale(0.96)	Remove or change for a different entrance feel
 }
 
 /* --- Responsive Form Grids (Combined 4 & 5) --- */
-/* Base Desktop Styles */
 .drawer-bottom .drawer-grid-5 .form-inline,
 .drawer-bottom .drawer-grid-4 .form-inline {
   display: flex;
@@ -255,7 +358,7 @@ scale(0.96)	Remove or change for a different entrance feel
 }
 
 /* Mobile Responsive */
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   .drawer-bottom .drawer-grid-5 .form-inline,
   .drawer-bottom .drawer-grid-4 .form-inline {
     flex-direction: column;
@@ -282,6 +385,10 @@ scale(0.96)	Remove or change for a different entrance feel
     max-width: 100%;
     width: 100%;
   }
+
+  .drawer .drawer-content {
+    width: 100%;
+  }
 }   
 
 
@@ -300,8 +407,9 @@ scale(0.96)	Remove or change for a different entrance feel
   padding-bottom: 18px;
 }
 
-.dataTable tbody tr:hover {
-  background: #f2f3ff !important;
+.dataTable tbody.simple td {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .dataTable .dt-center {
@@ -486,8 +594,51 @@ table.table tbody .dt-loader-row td {
 .btn-report-action.btn-discord-report:hover,
 .btn-report-action.btn-discord-report:focus { color: #794c8a; }   
 
+/* Smooth table row hover */
+.table-hovered > tbody > tr {
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease,
+    font-weight 0.25s ease;
+  background-color: #fafafa; /* default row bg, adjust as needed */
+}
+
+.table-hovered > tbody > tr:hover {
+  background-color: #f8f8f8  !important;
+  color: #0ea5e9;
+  font-weight: 600; /* or 700 */
+}
+
+/* In case your framework applies hover on cells instead of rows */
+.table-hovered > tbody > tr:hover > td,
+.table-hovered > tbody > tr:hover > th {
+  background-color: #f8f8f8  !important;
+  color: #0ea5e9;
+  font-weight: 600;
+}
+
+.datatable--chart-cell {
+  width: 220px;
+  min-width: 180px;
+  max-width: 260px;
+  overflow: hidden;
+}
+
+.datatable--row-chart {
+  position: relative;
+  width: 100%;
+  height: 90px;
+  overflow: hidden;
+}
+
+.datatable--row-chart canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Mobile Responsive */
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   .action-btn-group {
     text-align: left !important;
   }
@@ -497,10 +648,23 @@ table.table tbody .dt-loader-row td {
   #dashFilter span, #waitingFilter span {
     padding-bottom: 0
   }
-  .action-btn i {
+
+  /* Default for <i> inside .btn (covers PE 7 and others) */
+  tr td .btn i {
     font-weight: 900;
-    font-size: 18px
+    font-size: 20px;
   }
+
+  /* If it's a Font Awesome icon, override to 18px */
+  tr td .btn i.fa,
+  tr td .btn i.fas,
+  tr td .btn i.far,
+  tr td .btn i.fab,
+  tr td .btn i.fal,
+  tr td .btn i.fad {
+    font-size: 18px;
+  }
+
   #table-wrapper {
     width: 100%;
     overflow-x: auto;  
@@ -1017,6 +1181,101 @@ td .bar-loader span {
   color: #3ac47d;
 }
 
+.integration-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.integration-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+}
+
+.integration-list-item:hover {
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+  border-color: #d1d5db;
+}
+
+.integration-list-item-coming {
+  cursor: default;
+  opacity: 0.9;
+}
+
+.integration-list-item-coming:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #e5e7eb;
+}
+
+.integration-list-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.integration-list-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.integration-logo-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 1rem;
+}
+
+.integration-list-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.integration-list-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+  color: #111827;
+}
+
+.integration-list-desc {
+  font-size: 0.85rem;
+  color: #6b7280;
+  line-height: 1.35;
+}
+
+.integration-list-arrow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  color: #9ca3af;
+  font-size: 1.1rem;
+}
+
+.integration-list-item-coming .integration-list-arrow {
+  color: #9ca3af;
+}
+
+
 .cog-icon,
 .check-icon {
   display: inline-block;
@@ -1039,5 +1298,43 @@ td .bar-loader span {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* Pipeline Interface Styling */
+.pipeline-row {
+  background-color: #ffffff;
+  transition: all 0.15s ease-in-out;
+}
+.pipeline-row:hover {
+  background-color: #f8fafc;
+}
+.transition-all { transition: all 0.15s ease-in-out; }
+
+/* Responsive adjustments for narrow viewports */
+@media (max-width: 576px) {
+  .pipeline-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  .action-control-zone {
+    width: 100%;
+    margin-top: 1rem;
+    text-align: right;
+  }
+  .action-control-zone button {
+    width: 100%;
+  }
+}
+
+/* Base Light Themes Accents for Dashboard Runtimes */
+.bg-focus-light { background-color: rgba(64, 70, 76, 0.08) !important; }
+.text-focus { color: #40464c !important; }
+.btn-outline-focus { color: #40464c; border-color: #40464c; }
+.btn-outline-focus:hover { background-color: #40464c; color: #fff; }
+
+.bg-primary-light { background-color: rgba(63, 106, 216, 0.08) !important; }
+.bg-success-light { background-color: rgba(58, 196, 125, 0.08) !important; }
+.bg-danger-light { background-color: rgba(220, 53, 69, 0.1) !important; }
+.bg-warning-light { background-color: rgba(247, 185, 36, 0.09) !important; }
+
 
 </style>

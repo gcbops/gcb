@@ -26,6 +26,11 @@ const ChartModule = (() => {
       serverFunction: "getPrevYearMonthlyChartData",
       cacheKey: "chartData_monthly_prev",
     },
+
+    client_paid_owed_history: {
+      serverFunction: "getClientPaidOwedHistoryChart",
+      cacheKey: "chartData_client_paid_owed_history",
+    },
   };
 
   const chartInstances = {};
@@ -89,6 +94,7 @@ const ChartModule = (() => {
     year = "all",
     refresh = false,
     log = false,
+    chartOpts = {},
   ) {
     const logMessage = (...args) => {
       if (log) {
@@ -152,7 +158,7 @@ const ChartModule = (() => {
           rows: data.length,
         });
 
-        drawChart(chartType, data, false, animated);
+        drawChart(chartType, data, false, animated, chartOpts);
       },
       log,
       refresh,
@@ -236,7 +242,13 @@ const ChartModule = (() => {
   // MAIN DRAW ROUTER
   // --------------------------------------------------
 
-  function drawChart(type, data, debug = false, animated = false) {
+  function drawChart(
+    type,
+    data,
+    debug = false,
+    animated = false,
+    chartOpts = {},
+  ) {
     const chartDiv = document.getElementById(`chart-${type}`);
 
     if (!chartDiv) {
@@ -268,7 +280,10 @@ const ChartModule = (() => {
 
       case "daily":
       case "monthly":
-        return drawLineChart(ctx, type, data, animated, true);
+        return drawLineChart(ctx, type, data, animated, chartOpts);
+
+      case "client_paid_owed_history":
+        return drawClientPaidOwedHistoryChart(ctx, type, data, animated, chartOpts);
 
       default:
         return AppUtils.showError(`Unknown chart type: ${type}`);
@@ -820,15 +835,27 @@ const ChartModule = (() => {
   // DAILY / MONTHLY LINE
   // --------------------------------------------------
 
-  function drawLineChart(ctx, type, data, animated = false) {
+  function drawLineChart(ctx, type, data, animated = false, chartOpts = {}) {
+    const {
+      showLabel = true,
+      showPoints = true,
+      showTooltip = true,
+      showLegend = false,
+      showAxes = true,
+      showXAxis,
+      showYAxis,
+      showGrid = true,
+    } = chartOpts || {};
+
+    const displayX = showXAxis ?? showAxes;
+    const displayY = showYAxis ?? showAxes;
+
     const labels = data.map((row) => row?.[0] ?? "");
     const values = data.map((row) => Number(row?.[1]) || 0);
 
     const isMonthly = type === "monthly";
 
-    const lineColor = isMonthly
-      ? "#22c55e" // Green for monthly
-      : "#0ea5e9"; // Blue for daily
+    const lineColor = isMonthly ? "#22c55e" : "#0ea5e9";
 
     const gradientTopColor = isMonthly
       ? "rgba(34, 197, 94, 0.5)"
@@ -838,6 +865,9 @@ const ChartModule = (() => {
       ? "rgba(220, 252, 231, 0.2)"
       : "rgba(231, 246, 254, 0.2)";
 
+    const pointRadius = showPoints ? 2 : 0;
+    const pointHoverRadius = showPoints ? 5 : 0;
+
     chartInstances[type] = new Chart(ctx, {
       type: "line",
 
@@ -846,7 +876,13 @@ const ChartModule = (() => {
 
         datasets: [
           {
-            label: isMonthly ? "Monthly Data" : "Daily Data",
+            label:
+              showLabel || showLegend || showTooltip
+                ? isMonthly
+                  ? "Monthly Data"
+                  : "Daily Data"
+                : "",
+
             data: values,
 
             borderColor: lineColor,
@@ -860,8 +896,8 @@ const ChartModule = (() => {
             fill: true,
             tension: 0.4,
 
-            pointRadius: 2,
-            pointHoverRadius: 5,
+            pointRadius,
+            pointHoverRadius,
 
             pointBackgroundColor: "#ffffff",
             pointBorderColor: lineColor,
@@ -892,9 +928,7 @@ const ChartModule = (() => {
 
         scales: {
           x: {
-            grid: {
-              color: "rgba(0, 0, 0, 0.04)",
-            },
+            display: displayX,
 
             ticks: {
               font: {
@@ -904,15 +938,18 @@ const ChartModule = (() => {
 
             border: {
               display: false,
+            },
+
+            grid: {
+              display: showGrid,
+              color: "rgba(0, 0, 0, 0.04)",
             },
           },
 
           y: {
-            beginAtZero: true,
+            display: displayY,
 
-            grid: {
-              color: "rgba(0, 0, 0, 0.04)",
-            },
+            beginAtZero: true,
 
             ticks: {
               font: {
@@ -922,16 +959,23 @@ const ChartModule = (() => {
 
             border: {
               display: false,
+            },
+
+            grid: {
+              display: showGrid,
+              color: "rgba(0, 0, 0, 0.04)",
             },
           },
         },
 
         plugins: {
           legend: {
-            display: false,
+            display: !!showLegend,
           },
 
           tooltip: {
+            enabled: !!showTooltip,
+
             mode: "index",
             axis: "x",
             intersect: false,
@@ -951,6 +995,10 @@ const ChartModule = (() => {
 
             callbacks: {
               label: function (context) {
+                if (!showLabel && !showLegend) {
+                  return `${Number(context.parsed.y).toLocaleString()}`;
+                }
+
                 const value = Number(context.parsed.y) || 0;
 
                 return `${context.dataset.label}: ${value.toLocaleString()}`;
@@ -960,7 +1008,7 @@ const ChartModule = (() => {
         },
 
         interaction: {
-          mode: "index",
+          mode: showTooltip ? "index" : "none",
           axis: "x",
           intersect: false,
         },
@@ -968,119 +1016,130 @@ const ChartModule = (() => {
     });
   }
 
-  // --------------------------------------------------
-  // REALTIME ANIMATED CHART
-  // --------------------------------------------------
+  function drawClientPaidOwedHistoryChart(
+    ctx,
+    type,
+    yearlyData,
+    animated = false,
+    chartOpts = {},
+  ) {
+    const {
+      showLabel = true,
+      showTooltip = true,
+      showLegend = false,
+      showAxes = true,
+      showXAxis,
+      showYAxis,
+      showGrid = true,
+    } = chartOpts || {};
 
-  function drawRealtimeAnimatedChart() {
-    const type = "sample_realtime_animated";
-    const chartDiv = document.getElementById(`chart-${type}`);
+    const labels = yearlyData.map((item) => String(item?.year ?? ""));
 
-    if (!chartDiv) {
-      return;
-    }
+    const paidHours = yearlyData.map((item) => Number(item?.hoursPaid) || 0);
 
-    destroyRealtimeChart(type);
-
-    const canvas = createChartCanvas(chartDiv, type);
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) {
-      return;
-    }
+    const owedHours = yearlyData.map((item) => Number(item?.hoursOwed) || 0);
 
     chartInstances[type] = new Chart(ctx, {
-      type: "line",
+      type: "bar",
 
       data: {
+        labels,
+
         datasets: [
           {
-            label: "Dataset 1",
-            data: [],
-
-            borderColor: "#8b5cf6",
+            label: showLabel ? "Paid Hours" : "",
+            data: paidHours,
 
             backgroundColor: createGradient(
               ctx,
-              "rgba(139, 92, 246, 0.45)",
-              "rgba(237, 233, 254, 0.05)",
+              "rgba(14, 165, 233, 0.9)",
+              "rgba(14, 165, 233, 0.5)",
             ),
 
-            fill: true,
+            borderColor: "#0ea5e9",
+            borderWidth: 1,
 
-            borderDash: [8, 4],
-            borderWidth: 3,
+            borderRadius: 6,
+            borderSkipped: false,
 
-            pointRadius: 2,
-            pointHoverRadius: 5,
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
 
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "#8b5cf6",
-            pointBorderWidth: 2,
-
-            tension: 0.4,
+            hoverBackgroundColor: "rgba(14, 165, 233, 1)",
+            hoverBorderColor: "#0284c7",
+            hoverBorderWidth: 1,
           },
 
           {
-            label: "Dataset 2",
-            data: [],
-
-            borderColor: "#10b981",
+            label: showLabel ? "Owed Hours" : "",
+            data: owedHours,
 
             backgroundColor: createGradient(
               ctx,
-              "rgba(16, 185, 129, 0.45)",
-              "rgba(220, 252, 231, 0.05)",
+              "rgba(249, 115, 22, 0.9)",
+              "rgba(249, 115, 22, 0.5)",
             ),
 
-            fill: true,
+            borderColor: "#f97316",
+            borderWidth: 1,
 
-            borderWidth: 3,
+            borderRadius: 6,
+            borderSkipped: false,
 
-            pointRadius: 2,
-            pointHoverRadius: 5,
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
 
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: "#10b981",
-            pointBorderWidth: 2,
-
-            tension: 0.4,
+            hoverBackgroundColor: "rgba(249, 115, 22, 1)",
+            hoverBorderColor: "#ea580c",
+            hoverBorderWidth: 1,
           },
         ],
       },
 
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        indexAxis: "y", // <-- makes it horizontal
 
-        // Data is updated manually through requestAnimationFrame
-        animation: false,
+        responsive: true,
+        maintainAspectRatio: true,
+
+        animation: animated ? undefined : false,
+
+        ...(animated && {
+          animations: {
+            x: {
+              duration: 1200,
+              easing: "easeOutQuart",
+              from: 0,
+            },
+          },
+        }),
 
         interaction: {
-          mode: "nearest",
-          axis: "x",
+          mode: "index",
+          axis: "y", // match indexAxis
           intersect: false,
         },
 
         plugins: {
           legend: {
-            display: false,
+            display: !!showLegend,
           },
 
           tooltip: {
-            enabled: true,
+            enabled: !!showTooltip,
 
-            mode: "nearest",
-            axis: "x",
+            mode: "index",
+            axis: "y",
+
             intersect: false,
 
-            backgroundColor: "rgba(255, 255, 255, 0.9)",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
 
             titleColor: "#111827",
             bodyColor: "#374151",
 
-            borderColor: "#d1d5db",
-            borderWidth: 0,
+            borderColor: "#e5e7eb",
+            borderWidth: 1,
 
             padding: 12,
             cornerRadius: 8,
@@ -1088,20 +1147,12 @@ const ChartModule = (() => {
             displayColors: true,
 
             callbacks: {
-              title: (tooltipItems) => {
-                const timestamp = tooltipItems[0]?.parsed.x;
+              title: (items) => `Year: ${items[0]?.label || ""}`,
 
-                if (!timestamp) {
-                  return "";
-                }
+              label: (item) => {
+                const value = Number(item.parsed.x) || 0;
 
-                return new Date(timestamp).toLocaleTimeString();
-              },
-
-              label: (context) => {
-                const value = Number(context.parsed.y) || 0;
-
-                return `${context.dataset.label}: ${value.toFixed(2)}`;
+                return `${item.dataset.label}: ${value.toLocaleString()} hrs`;
               },
             },
           },
@@ -1109,36 +1160,30 @@ const ChartModule = (() => {
 
         scales: {
           x: {
-            type: "linear",
+            display: showXAxis ?? showAxes,
 
-            grid: {
-              color: "rgba(0, 0, 0, 0.04)",
-            },
+            beginAtZero: true,
 
             ticks: {
               font: {
                 size: 10,
               },
 
-              callback: (value) => {
-                return new Date(value).toLocaleTimeString([], {
-                  minute: "2-digit",
-                  second: "2-digit",
-                });
-              },
+              callback: (value) => `${value} hrs`,
             },
 
             border: {
               display: false,
+            },
+
+            grid: {
+              display: showGrid,
+              color: "rgba(0, 0, 0, 0.04)",
             },
           },
 
           y: {
-            beginAtZero: false,
-
-            grid: {
-              color: "rgba(0, 0, 0, 0.04)",
-            },
+            display: showYAxis ?? showAxes,
 
             ticks: {
               font: {
@@ -1148,80 +1193,105 @@ const ChartModule = (() => {
 
             border: {
               display: false,
+            },
+
+            grid: {
+              display: showGrid,
+              color: "rgba(0, 0, 0, 0.04)",
             },
           },
         },
       },
     });
-
-    let lastTime = 0;
-
-    let value1 = 20;
-    let value2 = 60;
-
-    let target1 = 20;
-    let target2 = 60;
-
-    function animate(time) {
-      const chart = chartInstances[type];
-
-      if (!chart) {
-        return;
-      }
-
-      if (time - lastTime > 80) {
-        const now = Date.now();
-
-        value1 += (target1 - value1) * 0.03;
-        value2 += (target2 - value2) * 0.03;
-
-        if (Math.abs(value1 - target1) < 2) {
-          target1 = Math.random() * 100;
-        }
-
-        if (Math.abs(value2 - target2) < 2) {
-          target2 = Math.random() * 100;
-        }
-
-        chart.data.datasets[0].data.push({
-          x: now,
-          y: value1,
-        });
-
-        chart.data.datasets[1].data.push({
-          x: now,
-          y: value2,
-        });
-
-        const cutoff = now - 30000;
-
-        chart.data.datasets.forEach((dataset) => {
-          dataset.data = dataset.data.filter((point) => {
-            return point.x >= cutoff;
-          });
-        });
-
-        chart.options.scales.x.min = cutoff;
-        chart.options.scales.x.max = now;
-
-        chart.update("none");
-
-        lastTime = time;
-      }
-
-      animationFrames[type] = requestAnimationFrame(animate);
-    }
-
-    animationFrames[type] = requestAnimationFrame(animate);
   }
 
-  function destroyRealtimeChart(type = "sample_realtime_animated") {
-    if (animationFrames[type]) {
-      cancelAnimationFrame(animationFrames[type]);
-      delete animationFrames[type];
+  function drawMonthlyTargetChart(ctx, chartId, data) {
+    const existing = Chart.getChart(ctx);
+
+    if (existing) {
+      existing.destroy();
     }
 
-    destroyChart(type);
+    return new Chart(ctx, {
+      type: "bar",
+
+      data: {
+        labels: data.map((item) => item.month),
+
+        datasets: [
+          {
+            label: "Actual Hours",
+
+            data: data.map((item) => item.actual),
+
+            borderWidth: 1,
+          },
+
+          {
+            label: "Monthly Target",
+
+            data: data.map((item) => item.target),
+
+            type: "line",
+
+            borderWidth: 2,
+
+            pointRadius: 3,
+
+            fill: false,
+          },
+        ],
+      },
+
+      options: {
+        responsive: true,
+
+        maintainAspectRatio: false,
+
+        interaction: {
+          mode: "index",
+          intersect: false,
+        },
+
+        plugins: {
+          legend: {
+            display: true,
+          },
+
+          tooltip: {
+            callbacks: {
+              label(context) {
+                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)} hrs`;
+              },
+            },
+          },
+        },
+
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: "Month",
+            },
+          },
+
+          y: {
+            beginAtZero: true,
+
+            title: {
+              display: true,
+              text: "Hours",
+            },
+
+            ticks: {
+              callback(value) {
+                return `${value} hrs`;
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   // --------------------------------------------------
@@ -1299,12 +1369,12 @@ const ChartModule = (() => {
   return {
     loadChart,
     loadPrevYearCombinedChart,
+    drawClientPaidOwedHistoryChart,
+    drawMonthlyTargetChart,
 
     drawChart,
     resizeAllCharts,
 
-    drawRealtimeAnimatedChart,
-    destroyRealtimeChart,
     destroyAllCharts,
   };
 })();

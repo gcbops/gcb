@@ -5,7 +5,7 @@ import { ProjectRankings } from "../projects/project-ranking.js";
 
 const monthlyOverviewPage = (() => {
   function init() {
-    HourSummary.loadHoursSummary("#hours-summary");
+    HourSummary.loadMonthlyHoursSummary("#monthly-hours-summary");
     ChartModule.loadChart("monthly");
     ClientRanking.renderTopPaidClients();
     ProjectRankings.renderTopProjects();

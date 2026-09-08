@@ -772,7 +772,24 @@ function getYearHoursSummary(year) {
     return null;
   }
 
-  const data = sheet.getRange("A5:I").getValues();
+  /*
+   * A:M
+   *
+   * A = Net Yr
+   * B = Hours
+   * C = Net Paid
+   * D = Net Owed
+   * E = Net Hrs
+   * F = % of Lifetime Vol
+   * G = Collection Rate
+   * H = Debt Exposure Rate
+   * I = Net Hours Yield
+   * J = Hours vs Last Year
+   * K = Collection Rate vs Last Year
+   * L = Debt Exposure Rate vs Last Year
+   * M = Net Hours Yield vs Last Year
+   */
+  const data = sheet.getRange("A5:M").getValues();
 
   const row = data.find((item) => Number(item[0]) === Number(year));
 
@@ -782,14 +799,23 @@ function getYearHoursSummary(year) {
 
   return {
     year: row[0],
+
+    // Current year metrics
     hours: row[1],
     paid: row[2],
     owed: row[3],
     netHours: row[4],
+
     lifetime: row[5],
     collection: row[6],
     debt: row[7],
     yield: row[8],
+
+    // Year-over-year metrics
+    hoursYoY: row[9],
+    collectionYoY: row[10],
+    debtYoY: row[11],
+    yieldYoY: row[12],
   };
 }
 
@@ -820,4 +846,410 @@ function addCurrMthTotalHrly(value) {
     row: rowNum,
     monthYear,
   };
+}
+
+function getDailyOverviewSummary() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const metricsSheet = ss.getSheetByName("Daily Activities Metrics");
+
+  if (!metricsSheet) {
+    return null;
+  }
+
+  const values = metricsSheet.getRange("R2:R29").getValues();
+
+  return {
+    overall: values[0][0],
+    overallTotalHours: values[3][0],
+
+    currentMonth: values[6][0],
+    currentMonthAverage: values[9][0],
+
+    activeClientsToday: values[12][0],
+    activeClientsYesterday: values[15][0],
+
+    todayHours: values[18][0],
+    yesterdayHours: values[21][0],
+    hoursVsYesterday: values[24][0],
+    monthVsPreviousMonth: values[27][0],
+  };
+}
+
+function getTodayChargedHours() {
+  const sheet = getSheetSafe("Daily Activities Metrics");
+
+  if (!sheet) return null;
+
+  const values = sheet.getRange("R35:R41").getValues();
+
+  return {
+    todayHours: Number(values[0][0]) || 0,
+    yesterdayHours: Number(values[3][0]) || 0,
+    change:
+      values[6][0] === "" || values[6][0] === null
+        ? null
+        : Number(values[6][0]),
+  };
+}
+
+function getMonthlyHoursSummary() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const monthlySheet = ss.getSheetByName("Monthly Hours Log");
+  const currentSheet = ss.getSheetByName("Current Month Log");
+
+  if (!monthlySheet) {
+    return {};
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-based
+
+  /*
+   * ---------------------------------------------------------
+   * Monthly Hours Log
+   * Row 1 = month labels
+   * Row 2 = total hours
+   * Starting at column M
+   * ---------------------------------------------------------
+   */
+
+  const monthlyLastColumn = monthlySheet.getLastColumn();
+
+  if (monthlyLastColumn < 13) {
+    return {};
+  }
+
+  const monthHeaders = monthlySheet
+    .getRange(1, 13, 1, monthlyLastColumn - 12)
+    .getValues()[0];
+
+  const monthTotals = monthlySheet
+    .getRange(2, 13, 1, monthlyLastColumn - 12)
+    .getValues()[0];
+
+  const monthlyData = [];
+
+  monthHeaders.forEach((header, index) => {
+    if (!header) {
+      return;
+    }
+
+    const date = header instanceof Date ? header : new Date(header);
+
+    if (isNaN(date.getTime())) {
+      return;
+    }
+
+    monthlyData.push({
+      date,
+      year: date.getFullYear(),
+      month: date.getMonth(),
+      label: Utilities.formatDate(
+        date,
+        Session.getScriptTimeZone(),
+        "MMMM yyyy",
+      ),
+      hours: Number(monthTotals[index]) || 0,
+    });
+  });
+
+  /*
+   * Current month.
+   */
+  const currentMonthData = monthlyData.find(
+    (item) => item.year === currentYear && item.month === currentMonth,
+  );
+
+  /*
+   * Previous month.
+   */
+  const previousMonthDate = new Date(currentYear, currentMonth - 1, 1);
+
+  const previousMonthData = monthlyData.find(
+    (item) =>
+      item.year === previousMonthDate.getFullYear() &&
+      item.month === previousMonthDate.getMonth(),
+  );
+
+  /*
+   * Same month last year.
+   */
+  const lastYearData = monthlyData.find(
+    (item) => item.year === currentYear - 1 && item.month === currentMonth,
+  );
+
+  const currentHours = currentMonthData?.hours || 0;
+  const previousHours = previousMonthData?.hours || 0;
+  const lastYearHours = lastYearData?.hours || 0;
+
+  /*
+   * Percentage change helper.
+   *
+   * Returns null when there is no comparison value,
+   * preventing divide-by-zero errors.
+   */
+  const percentageChange = (current, previous) => {
+    if (!previous) {
+      return null;
+    }
+
+    return ((current - previous) / Math.abs(previous)) * 100;
+  };
+
+  /*
+   * ---------------------------------------------------------
+   * Current Month Log
+   *
+   * AR:AV = Week 1 -> Week 5
+   * Row 2 contains the totals.
+   * ---------------------------------------------------------
+   */
+
+  let chargedHours = 0;
+  let activeWeeks = 0;
+
+  if (currentSheet) {
+    const weeklyTotals = currentSheet
+      .getRange("AR2:AV2")
+      .getValues()[0]
+      .map((value) => Number(value) || 0);
+
+    chargedHours = weeklyTotals.reduce((total, value) => total + value, 0);
+
+    activeWeeks = weeklyTotals.filter((value) => value > 0).length;
+  }
+
+  const chargedRate =
+    currentHours > 0 ? (chargedHours / currentHours) * 100 : null;
+
+  const averageWeekly = activeWeeks > 0 ? chargedHours / activeWeeks : 0;
+
+  return {
+    currentMonth: currentMonthData
+      ? {
+          label: currentMonthData.label,
+          hours: currentHours,
+        }
+      : {
+          label: Utilities.formatDate(
+            now,
+            Session.getScriptTimeZone(),
+            "MMMM yyyy",
+          ),
+          hours: 0,
+        },
+
+    previousMonth: previousMonthData
+      ? {
+          label: previousMonthData.label,
+          hours: previousHours,
+        }
+      : {
+          label: "",
+          hours: 0,
+        },
+
+    lastYear: lastYearData
+      ? {
+          label: lastYearData.label,
+          hours: lastYearHours,
+        }
+      : {
+          label: "",
+          hours: 0,
+        },
+
+    previousMonthChange: percentageChange(currentHours, previousHours),
+
+    lastYearChange: percentageChange(currentHours, lastYearHours),
+
+    chargedHours,
+    chargedRate,
+    averageWeekly,
+    activeWeeks,
+  };
+}
+
+function getGrowthComparisonSummary(currentYear, comparisonYear) {
+  const sheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Other Analytics");
+
+  if (!sheet) {
+    return null;
+  }
+
+  currentYear = Number(currentYear);
+  comparisonYear = Number(comparisonYear);
+
+  if (!currentYear || !comparisonYear) {
+    return null;
+  }
+
+  /*
+   * Row 4 = headers
+   * Row 5+ = yearly data
+   */
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 5) {
+    return null;
+  }
+
+  const data = sheet.getRange(5, 1, lastRow - 4, 14).getValues();
+
+  const current = data.find((row) => Number(row[0]) === currentYear);
+
+  const previous = data.find((row) => Number(row[0]) === comparisonYear);
+
+  if (!current || !previous) {
+    return null;
+  }
+
+  return {
+    currentYear,
+    comparisonYear,
+
+    current: {
+      hours: Number(current[1]) || 0,
+      paid: Number(current[2]) || 0,
+      owed: Number(current[3]) || 0,
+      netHours: Number(current[4]) || 0,
+      lifetime: Number(current[5]) || 0,
+      collection: Number(current[6]) || 0,
+      debt: Number(current[7]) || 0,
+      yield: Number(current[8]) || 0,
+      monthlyAverage: Number(current[13]) || 0,
+    },
+
+    previous: {
+      hours: Number(previous[1]) || 0,
+      paid: Number(previous[2]) || 0,
+      owed: Number(previous[3]) || 0,
+      netHours: Number(previous[4]) || 0,
+      lifetime: Number(previous[5]) || 0,
+      collection: Number(previous[6]) || 0,
+      debt: Number(previous[7]) || 0,
+      yield: Number(previous[8]) || 0,
+      monthlyAverage: Number(previous[13]) || 0,
+    },
+  };
+}
+
+function getCurrentTargetProgress() {
+  try {
+    const sheet = getSheetSafe("Other Analytics");
+
+    if (!sheet) {
+      throw new Error('Sheet "Other Analytics" was not found.');
+    }
+
+    const values = sheet.getRange("P1:X2").getValues();
+
+    const headers = values[0];
+    const data = values[1];
+
+    const getValue = (header) => {
+      const index = headers.indexOf(header);
+
+      if (index === -1) {
+        return null;
+      }
+
+      return data[index];
+    };
+
+    const toNumber = (value) => {
+      if (value === null || value === "" || value === undefined) {
+        return null;
+      }
+
+      const number = Number(value);
+
+      return Number.isFinite(number) ? number : null;
+    };
+
+    const currentYear = toNumber(getValue("Target Year"));
+
+    const currentMonth = getValue("Current Month");
+
+    const monthlyTarget = toNumber(getValue("Monthly Target")) || 340;
+
+    const dailyTarget = toNumber(getValue("Daily Target")) || 30;
+
+    const workingDays = toNumber(getValue("Working Days")) || 0;
+
+    const currentMonthHours = toNumber(getValue("Current Month Hours"));
+
+    const ytdHours = toNumber(getValue("YTD Hours")) || 0;
+
+    const annualTarget =
+      toNumber(getValue("Annual Target")) || monthlyTarget * 12;
+
+    const projectedAnnualHours =
+      toNumber(getValue("Projected Annual Hours")) || 0;
+
+    const monthsElapsed = new Date().getMonth() + 1;
+
+    const ytdTarget = monthlyTarget * monthsElapsed;
+
+    const dailyElapsedTarget = dailyTarget * workingDays;
+
+    /*
+     * Monthly progress.
+     *
+     * null means there is no current-month
+     * record yet.
+     */
+    const monthlyProgress =
+      currentMonthHours === null
+        ? null
+        : monthlyTarget > 0
+          ? (currentMonthHours / monthlyTarget) * 100
+          : 0;
+
+    const dailyProgress =
+      currentMonthHours === null
+        ? null
+        : dailyElapsedTarget > 0
+          ? (currentMonthHours / dailyElapsedTarget) * 100
+          : 0;
+
+    const ytdProgress = ytdTarget > 0 ? (ytdHours / ytdTarget) * 100 : 0;
+
+    const annualProgress =
+      annualTarget > 0 ? (ytdHours / annualTarget) * 100 : 0;
+
+    const projectedProgress =
+      annualTarget > 0 ? (projectedAnnualHours / annualTarget) * 100 : 0;
+
+    return {
+      currentYear,
+      currentMonth,
+
+      monthlyTarget,
+      dailyTarget,
+      workingDays,
+
+      currentMonthHours,
+
+      dailyElapsedTarget,
+
+      ytdHours,
+      ytdTarget,
+
+      annualTarget,
+      projectedAnnualHours,
+
+      monthlyProgress,
+      dailyProgress,
+      ytdProgress,
+      annualProgress,
+      projectedProgress,
+    };
+  } catch (err) {
+    throw new Error(err.message || String(err));
+  }
 }

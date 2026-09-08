@@ -158,6 +158,8 @@ const TableModule = (() => {
 
     const $taskSelect = $("#task");
 
+    const $submitBtn = $("#submit-new-hours");
+
     if (!$taskSelect.length) {
       return;
     }
@@ -169,6 +171,8 @@ const TableModule = (() => {
       .html('<option value="">Loading...</option>')
       .val("")
       .trigger("change");
+
+    $submitBtn.prop("disabled", true);
 
     AppUtils.cachedGScriptCall(
       `getTaskOptions_${clientName}`,
@@ -211,6 +215,7 @@ const TableModule = (() => {
         const firstValue = $taskSelect.find("option:first").val();
 
         $taskSelect.val(firstValue || "").trigger("change");
+        $submitBtn.prop("disabled", false);
       },
     );
   }

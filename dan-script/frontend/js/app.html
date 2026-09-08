@@ -322,8 +322,9 @@
         return;
       }
       const $content = $drawer.find(".drawer-content");
-      $drawer.off("click.AppUtilsDrawerClose");
-      $drawer.addClass("drawer-open");
+      $drawer.off("click.AppUtilsDrawerClose").off("click.AppUtilsDrawerMinimize");
+      $drawer.removeClass("drawer-minimized").addClass("drawer-open");
+      $drawer.find(".drawer-minimize i").removeClass("pe-7s-angle-up").addClass("pe-7s-angle-down");
       if (contentClass) {
         $content.addClass(contentClass);
       }
@@ -334,6 +335,21 @@
         e.preventDefault();
         closeDrawer($drawer, $content, onClose);
       });
+      $drawer.on(
+        "click.AppUtilsDrawerMinimize",
+        ".drawer-minimize",
+        function(e) {
+          e.preventDefault();
+          const $btn = $(this);
+          const isMinimized = $drawer.toggleClass("drawer-minimized").hasClass("drawer-minimized");
+          const $icon = $btn.find("i");
+          if (isMinimized) {
+            $icon.removeClass("pe-7s-angle-down").addClass("pe-7s-angle-up");
+          } else {
+            $icon.removeClass("pe-7s-angle-up").addClass("pe-7s-angle-down");
+          }
+        }
+      );
     }
     function closeDrawer($drawer, $content = null, onClose = null) {
       const $drawerElement = $drawer instanceof jQuery ? $drawer : $($drawer);
@@ -341,11 +357,12 @@
         return;
       }
       const $contentElement = $content ? $content instanceof jQuery ? $content : $($content) : $drawerElement.find(".drawer-content");
-      $drawerElement.off("click.AppUtilsDrawerClose");
+      $drawerElement.off("click.AppUtilsDrawerClose").off("click.AppUtilsDrawerMinimize");
       if (!$drawerElement.hasClass("drawer-open")) {
         return;
       }
-      $drawerElement.removeClass("drawer-open");
+      $drawerElement.removeClass("drawer-open drawer-minimized");
+      $drawerElement.find(".drawer-minimize i").removeClass("pe-7s-angle-up").addClass("pe-7s-angle-down");
       if (typeof onClose === "function") {
         onClose($drawerElement, $contentElement);
       }
@@ -646,155 +663,6 @@
     };
   })();
 
-  // src/clients/client-ranking.js
-  var ClientRanking = /* @__PURE__ */ (() => {
-    function renderTopPaidClients() {
-      renderClientRanking({
-        cacheKey: "topPaidClients",
-        listSelector: "#top-paid-clients",
-        avatarClass: "bg-malibu-beach",
-        sortFn: sortTopPaid,
-        rightContentFn: getTopPaidRightContent
-      });
-    }
-    function renderLowestPaidClients() {
-      renderClientRanking({
-        cacheKey: "lowestPaidClients",
-        listSelector: "#lowest-paid-clients",
-        avatarClass: "bg-love-kiss",
-        sortFn: sortLowestPaid,
-        rightContentFn: getLowestPaidRightContent
-      });
-    }
-    function renderClientRanking(config) {
-      AppUtils.cachedGScriptCall(
-        config.cacheKey,
-        "getTopPaidClients",
-        [],
-        (data) => {
-          if (!Array.isArray(data) || !data.length) {
-            return;
-          }
-          const ul = document.querySelector(config.listSelector);
-          if (!ul) {
-            return;
-          }
-          ul.innerHTML = "";
-          const sorted = config.sortFn([...data]);
-          renderRankingList(ul, sorted, config);
-        }
-      );
-    }
-    function renderRankingList(ul, clients, config) {
-      clients.forEach((client) => {
-        createRankingItem(ul, client, config);
-      });
-    }
-    function createRankingItem(ul, client, config) {
-      const [name, paid, owed] = client;
-      AppUtils.cachedGScriptCall(
-        `role_${name}`,
-        "getRoleFromSheet",
-        [name],
-        (role) => {
-          role = role || "";
-          const li = document.createElement("li");
-          li.className = "list-group-item";
-          li.innerHTML = `
-          <div class="widget-content p-0">
-            <div class="widget-content-wrapper">
-
-              <div class="widget-content-left me-2 me-lg-3">
-                <div
-                  class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-                  text-white rounded-circle d-flex align-items-center justify-content-center">
-                  ${AppUtils.getInitials(name)}
-                </div>
-              </div>
-
-              <div class="widget-content-left">
-                <div class="widget-heading">${name}</div>
-                <div class="widget-subheading">${role}</div>
-              </div>
-
-              <div class="widget-content-right font-weight-bold">
-                ${config.rightContentFn(paid, owed)}
-              </div>
-
-            </div>
-          </div>
-        `;
-          ul.appendChild(li);
-        }
-      );
-    }
-    function sortTopPaid(data) {
-      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
-    }
-    function sortLowestPaid(data) {
-      return data.sort((a, b) => {
-        const paidDiff = (a[1] || 0) - (b[1] || 0);
-        if (paidDiff !== 0) {
-          return paidDiff;
-        }
-        return (b[2] || 0) - (a[2] || 0);
-      }).slice(0, 10);
-    }
-    function getTopPaidRightContent(paid, owed) {
-      if (owed === 0) {
-        return `
-        <div class="font-size-xs text-muted">
-          <small class="opacity-5 pe-1">$</small>
-          <span>${paid}</span>
-          <small class="text-warning ps-2">
-            <i class="fa fa-dot-circle"></i>
-          </small>
-        </div>
-      `;
-      }
-      return `
-      <div class="font-size-xs text-muted">
-        <span>${paid}</span>
-        <small class="text-success ps-2">
-          <i class="fa fa-angle-up"></i>
-        </small>
-      </div>
-
-      <div class="font-size-xs text-muted">
-        <span>${owed}</span>
-        <small class="text-danger ps-2">
-          <i class="fa fa-angle-down"></i>
-        </small>
-      </div>
-    `;
-    }
-    function getLowestPaidRightContent(paid, owed) {
-      let html = `
-      <div class="font-size-xs text-muted">
-        <span>${paid}</span>
-        <small class="text-danger ps-2">
-          <i class="fa fa-angle-down"></i>
-        </small>
-      </div>
-    `;
-      if (owed > 0) {
-        html += `
-        <div class="font-size-xs text-muted">
-          <span>${owed}</span>
-          <small class="text-warning ps-2">
-            <i class="fa fa-exclamation-circle"></i>
-          </small>
-        </div>
-      `;
-      }
-      return html;
-    }
-    return {
-      renderTopPaidClients,
-      renderLowestPaidClients
-    };
-  })();
-
   // src/hours/hour-summary.js
   var HourSummary = /* @__PURE__ */ (() => {
     function loadHoursSummary(containerSelector) {
@@ -870,6 +738,135 @@
         isRefresh
       );
     }
+    function loadDailyOverviewSummary() {
+      AppUtils.cachedGScriptCall(
+        "dailyOverviewSummary",
+        "getDailyOverviewSummary",
+        [],
+        (data) => {
+          if (!data) {
+            AppUtils.showError("No daily analytics found.");
+            return;
+          }
+          renderDailyOverviewSummary(data);
+        }
+      );
+    }
+    function renderDailyOverviewSummary(data) {
+      const $container = $("#daily-overview-summary");
+      if (!$container.length || !data) {
+        return;
+      }
+      $container.find('[data-metric="today-hours"]').text(AppUtils.formatHours(data.todayHours));
+      $container.find('[data-metric="active-clients"]').text(data.activeClientsToday ?? 0);
+      $container.find('[data-metric="month-hours"]').text(AppUtils.formatHours(data.currentMonth));
+      $container.find('[data-metric="month-average"]').text(AppUtils.formatHours(data.currentMonthAverage));
+      $container.find('[data-metric="overall-hours"]').text(AppUtils.formatHours(data.overallTotalHours));
+      $container.find('[data-metric="yesterday-hours"]').text(AppUtils.formatHours(data.yesterdayHours));
+      renderDailyTrend(
+        $container.find('[data-metric="hours-yesterday"]'),
+        data.hoursVsYesterday,
+        "hours"
+      );
+      renderDailyTrend(
+        $container.find('[data-metric="clients-yesterday"]'),
+        calculateChange(data.activeClientsToday, data.activeClientsYesterday),
+        "clients"
+      );
+      renderDailyTrend(
+        $container.find('[data-metric="month-previous"]'),
+        data.monthVsPreviousMonth,
+        "month"
+      );
+    }
+    function renderDailyTrend($element, value, type) {
+      if (!$element?.length) {
+        return;
+      }
+      if (value === null || value === void 0 || value === "" || !Number.isFinite(Number(value))) {
+        $element.removeClass("text-success text-danger text-warning").html(`
+        <span class="text-muted">
+          No comparison available
+        </span>
+      `);
+        return;
+      }
+      const numericValue = Number(value);
+      if (numericValue === 0) {
+        $element.removeClass("text-success text-danger text-warning").html(`
+        <i class="fa fa-minus me-1"></i>
+        No change
+      `);
+        return;
+      }
+      const isPositive = numericValue > 0;
+      let text;
+      switch (type) {
+        case "hours":
+          text = isPositive ? `${formatTrendPercent(numericValue)} more hours vs yesterday` : `${formatTrendPercent(numericValue)} fewer hours vs yesterday`;
+          break;
+        case "clients":
+          text = isPositive ? `${formatTrendPercent(numericValue)} more active clients vs yesterday` : `${formatTrendPercent(numericValue)} fewer active clients vs yesterday`;
+          break;
+        case "month":
+          text = isPositive ? `${formatTrendPercent(numericValue)} more hours vs last month` : `${formatTrendPercent(numericValue)} fewer hours vs last month`;
+          break;
+        default:
+          text = `${formatTrendPercent(numericValue)} vs previous period`;
+      }
+      $element.removeClass("text-success text-danger text-warning").addClass(isPositive ? "text-success" : "text-danger").html(`
+      <i class="fa ${isPositive ? "fa-arrow-up" : "fa-arrow-down"} me-1"></i>
+      ${text}
+    `);
+    }
+    function loadMonthlyHoursSummary(containerSelector) {
+      AppUtils.cachedGScriptCall(
+        "monthlyHoursSummary",
+        "getMonthlyHoursSummary",
+        [],
+        (data) => {
+          if (!data) {
+            AppUtils.showError("No monthly analytics found.");
+            return;
+          }
+          renderMonthlyHoursSummary(containerSelector, data);
+        }
+      );
+    }
+    function renderMonthlyHoursSummary(containerSelector, data) {
+      const $container = $(containerSelector);
+      if (!$container.length || !data) {
+        return;
+      }
+      $container.find('[data-metric="current-hours"]').text(AppUtils.formatHours(data.currentMonth?.hours ?? 0));
+      $container.find('[data-metric="current-month-label"]').text(data.currentMonth?.label || "\u2014");
+      $container.find('[data-metric="previous-hours"]').text(AppUtils.formatHours(data.previousMonth?.hours ?? 0));
+      $container.find('[data-metric="previous-month-total"]').text(AppUtils.formatHours(data.previousMonth?.hours ?? 0));
+      $container.find('[data-metric="previous-month-label"]').text(data.previousMonth?.label || "\u2014");
+      $container.find('[data-metric="last-year-hours"]').text(AppUtils.formatHours(data.lastYear?.hours ?? 0));
+      const previousChange = data.previousMonthChange;
+      const lastYearChange = data.lastYearChange;
+      $container.find('[data-metric="previous-month-change"]').text(
+        previousChange === null || previousChange === void 0 ? "\u2014" : formatTrendPercent(previousChange)
+      );
+      $container.find('[data-metric="last-year-change"]').text(
+        lastYearChange === null || lastYearChange === void 0 ? "\u2014" : formatTrendPercent(lastYearChange)
+      );
+      $container.find('[data-metric="charged-hours"]').text(AppUtils.formatHours(data.chargedHours ?? 0));
+      $container.find('[data-metric="charged-rate"]').text(
+        data.chargedRate === null || data.chargedRate === void 0 ? "\u2014" : AppUtils.formatPercent(data.chargedRate)
+      );
+      $container.find('[data-metric="average-weekly"]').text(AppUtils.formatHours(data.averageWeekly ?? 0));
+      $container.find('[data-metric="weeks-count"]').text(data.activeWeeks ?? 0);
+      setTrendColor(
+        $container.find('[data-metric="previous-month-change"]'),
+        previousChange
+      );
+      setTrendColor(
+        $container.find('[data-metric="last-year-change"]'),
+        lastYearChange
+      );
+    }
     function loadYearHoursSummary(containerSelector) {
       const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
       AppUtils.cachedGScriptCall(
@@ -888,16 +885,40 @@
     function renderYearHoursSummary(containerSelector, data) {
       const $container = $(containerSelector);
       if (!$container.length || !data) {
+        console.warn("[HoursSummary] Yearly summary container/data missing.", {
+          containerSelector,
+          data
+        });
         return;
       }
       $container.find('[data-metric="total-hours"]').text(AppUtils.formatHours(data.hours));
-      $container.find('[data-metric="paid-hours"]').text(AppUtils.formatHours(data.paid));
-      $container.find('[data-metric="owed-hours"]').text(AppUtils.formatHours(data.owed));
-      $container.find('[data-metric="net-hours"]').text(AppUtils.formatHours(data.netHours));
       $container.find('[data-metric="lifetime"]').text(AppUtils.formatPercent(data.lifetime));
+      $container.find('[data-metric="paid-hours"]').text(AppUtils.formatHours(data.paid));
       $container.find('[data-metric="collection"]').text(AppUtils.formatPercent(data.collection));
+      $container.find('[data-metric="owed-hours"]').text(AppUtils.formatHours(data.owed));
       $container.find('[data-metric="debt"]').text(AppUtils.formatPercent(data.debt));
+      $container.find('[data-metric="net-hours"]').text(AppUtils.formatHours(data.netHours));
       $container.find('[data-metric="yield"]').text(AppUtils.formatPercent(data.yield));
+      renderYearlyTrend(
+        $container.find('[data-metric="hours-yoy"]'),
+        data.hoursYoY,
+        "hours"
+      );
+      renderYearlyTrend(
+        $container.find('[data-metric="collection-yoy"]'),
+        data.collectionYoY,
+        "collection"
+      );
+      renderYearlyTrend(
+        $container.find('[data-metric="debt-yoy"]'),
+        data.debtYoY,
+        "debt"
+      );
+      renderYearlyTrend(
+        $container.find('[data-metric="yield-yoy"]'),
+        data.yieldYoY,
+        "yield"
+      );
       setRateColor(
         $container.find('[data-metric="collection"]'),
         data.collection,
@@ -913,6 +934,130 @@
         $container.find('[data-metric="net-hours"]'),
         data.netHours
       );
+    }
+    function renderYearlyTrend($element, value, type) {
+      if (!$element?.length) {
+        return;
+      }
+      if (value === null || value === void 0 || value === "" || !Number.isFinite(Number(value))) {
+        $element.removeClass("text-success text-danger text-warning").html(`
+        <span class="text-muted">
+          No prior-year comparison
+        </span>
+      `);
+        return;
+      }
+      const numericValue = Number(value);
+      if (numericValue === 0) {
+        $element.removeClass("text-success text-danger text-warning").html(`
+        <i class="fa fa-minus me-1"></i>
+        No change vs last year
+      `);
+        return;
+      }
+      const isPositive = numericValue > 0;
+      const icon = isPositive ? "fa-arrow-up" : "fa-arrow-down";
+      let text;
+      let isGood;
+      switch (type) {
+        case "hours":
+          text = isPositive ? `${formatTrendPercent(numericValue)} more hours vs last year` : `${formatTrendPercent(numericValue)} fewer hours vs last year`;
+          isGood = isPositive;
+          break;
+        case "collection":
+          text = isPositive ? `${formatTrendPercent(numericValue)} improvement vs last year` : `${formatTrendPercent(numericValue)} drop since last year`;
+          isGood = isPositive;
+          break;
+        case "debt":
+          text = isPositive ? `${formatTrendPercent(numericValue)} risk spike vs last year` : `${formatTrendPercent(numericValue)} lower exposure vs last year`;
+          isGood = !isPositive;
+          break;
+        case "yield":
+          text = isPositive ? `${formatTrendPercent(numericValue)} stronger yield vs last year` : `${formatTrendPercent(numericValue)} lost margin yield vs last year`;
+          isGood = isPositive;
+          break;
+        default:
+          text = `${formatTrendPercent(numericValue)} vs last year`;
+          isGood = isPositive;
+      }
+      const colorClass = isGood ? "text-success" : "text-danger";
+      $element.removeClass("text-success text-danger text-warning").addClass(colorClass).html(`
+      <i class="fa ${icon} me-1"></i>
+      ${text}
+    `);
+    }
+    function loadTodayChargedHours() {
+      AppUtils.cachedGScriptCall(
+        "todayChargedHours",
+        "getTodayChargedHours",
+        [],
+        (data) => {
+          if (!data) {
+            AppUtils.showError("Unable to load today's hours.");
+            return;
+          }
+          renderTodayChargedHours(data);
+        },
+        false,
+        true
+      );
+    }
+    function renderTodayChargedHours(data) {
+      const $container = $("#today-hours-summary");
+      if (!$container.length) {
+        return;
+      }
+      const todayHours = Number(data.todayHours) || 0;
+      const change = data.change;
+      $container.find('[data-metric="today-hours"]').text(AppUtils.formatHours(todayHours));
+      renderTodayHoursTrend($container, change);
+    }
+    function renderTodayHoursTrend($container, change) {
+      const $status = $container.find('[data-metric="today-hours-status"]');
+      const $change = $container.find('[data-metric="today-hours-change"]');
+      if (!$status.length || !$change.length) {
+        return;
+      }
+      const $icon = $status.find("i");
+      $status.removeClass(
+        "bg-success-subtle bg-danger-subtle bg-warning-subtle bg-secondary-subtle text-success text-danger text-warning text-secondary"
+      );
+      $icon.removeClass("fa-arrow-up fa-arrow-down fa-arrow-right fa-minus");
+      if (change === null || change === void 0) {
+        $status.addClass("bg-secondary-subtle text-secondary");
+        $icon.addClass("fa-minus");
+        $change.text("\u2014");
+        return;
+      }
+      const number = Number(change);
+      if (!Number.isFinite(number)) {
+        $status.addClass("bg-secondary-subtle text-secondary");
+        $icon.addClass("fa-minus");
+        $change.text("\u2014");
+        return;
+      }
+      const percent = AppUtils.formatPercent(Math.abs(number * 100));
+      if (number > 0) {
+        $status.addClass("bg-success-subtle text-success");
+        $icon.addClass("fa-arrow-up");
+        $change.text(`+${percent}`);
+      } else if (number < 0) {
+        $status.addClass("bg-danger-subtle text-danger");
+        $icon.addClass("fa-arrow-down");
+        $change.text(`-${percent}`);
+      } else {
+        $status.addClass("bg-warning-subtle text-warning");
+        $icon.addClass("fa-arrow-right");
+        $change.text("0%");
+      }
+    }
+    function formatTrendPercent(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return "\u2014";
+      }
+      const sign = number > 0 ? "+" : "";
+      return `${sign}${AppUtils.formatPercent(Math.abs(number))}`;
     }
     function setRateColor($element, value, type) {
       const number = AppUtils.parsePercent(value);
@@ -949,6 +1094,23 @@
         }
       }
     }
+    function setTrendColor($element, value) {
+      if (!$element?.length) {
+        return;
+      }
+      $element.removeClass("text-success text-danger text-warning text-muted");
+      if (value === null || value === void 0) {
+        $element.addClass("text-muted");
+        return;
+      }
+      if (value > 0) {
+        $element.addClass("text-success");
+      } else if (value < 0) {
+        $element.addClass("text-danger");
+      } else {
+        $element.addClass("text-warning");
+      }
+    }
     function setNetHoursColor($element, value) {
       const number = Number(value);
       $element.removeClass("text-success text-warning text-danger");
@@ -964,10 +1126,21 @@
         $element.addClass("text-danger");
       }
     }
+    function calculateChange(current, previous) {
+      const currentValue = Number(current);
+      const previousValue = Number(previous);
+      if (!Number.isFinite(currentValue) || !Number.isFinite(previousValue) || previousValue === 0) {
+        return null;
+      }
+      return currentValue / previousValue - 1;
+    }
     return {
       loadHoursSummary,
       loadHourTotals,
-      loadYearHoursSummary
+      loadYearHoursSummary,
+      loadMonthlyHoursSummary,
+      loadDailyOverviewSummary,
+      loadTodayChargedHours
     };
   })();
 
@@ -1371,14 +1544,15 @@
       "top paid accounts",
       "outstanding accounts"
     ]);
-    function init(title, tableId, debug = false, callback = null) {
+    function init(title, tableId, debug = false, callback = null, simple = false) {
       const log = (...args) => debug && console.log(...args);
       const error = (...args) => debug && console.error(...args);
       const cleanTitle = String(title || "").toLowerCase().trim();
       log("DataTableModule.init()", {
         title,
         tableId,
-        cleanTitle
+        cleanTitle,
+        simple
       });
       const $table = $(tableId);
       if (!$table.length) {
@@ -1414,6 +1588,22 @@
           }
         }
       };
+      if (simple) {
+        Object.assign(tableOptions, {
+          searching: false,
+          lengthChange: false,
+          info: false,
+          paging: false,
+          scrollCollapse: true,
+          scrollY: "50dvh",
+          layout: {
+            topStart: null,
+            topEnd: null,
+            bottomStart: null,
+            bottomEnd: null
+          }
+        });
+      }
       const priorityMap = {
         "activity today": [0, -1],
         clients: [0],
@@ -1900,12 +2090,28 @@
       if (!button) {
         return;
       }
-      const row = button.closest("tr");
-      if (!row) {
+      const immediateRow = button.closest("tr");
+      if (!immediateRow) {
         return;
       }
-      const clientName = row.querySelector(".widget-heading")?.textContent?.trim();
+      const table = $(immediateRow).closest("table")[0];
+      const api = $(table).DataTable();
+      let rowNode;
+      if (immediateRow.classList.contains("child")) {
+        rowNode = immediateRow.previousElementSibling;
+      } else {
+        rowNode = immediateRow;
+      }
+      if (!rowNode) {
+        return;
+      }
+      const rowData = api.row(rowNode).data();
+      let clientName = rowData?.clientName || rowData?.name || rowData?.Client;
       if (!clientName) {
+        clientName = rowNode.querySelector(".widget-heading")?.textContent?.trim();
+      }
+      if (!clientName) {
+        console.warn("[ClientDirectory] Could not determine client name");
         return;
       }
       AppUtils.showDashboardToast("Redirecting to sheet!", "info");
@@ -1925,100 +2131,6 @@
       init,
       destroy,
       refreshClientDirectory
-    };
-  })();
-
-  // src/projects/project-ranking.js
-  var ProjectRankings = /* @__PURE__ */ (() => {
-    function renderTopProjects() {
-      renderProjectRanking({
-        cacheKey: "topProjects",
-        method: "getTopProjects",
-        listSelector: "#top-projects",
-        avatarClass: "bg-malibu-beach",
-        sortFn: sortTopProjects,
-        iconClass: "fas fa-briefcase",
-        iconColor: "text-warning"
-      });
-    }
-    function renderLowestProjects() {
-      renderProjectRanking({
-        cacheKey: "lowestProjects",
-        method: "getTopProjects",
-        listSelector: "#lowest-projects",
-        avatarClass: "bg-love-kiss",
-        sortFn: sortLowestProjects,
-        iconClass: "fas fa-exclamation-circle",
-        iconColor: "text-danger"
-      });
-    }
-    function renderProjectRanking(config) {
-      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
-        if (!Array.isArray(data) || !data.length) {
-          return;
-        }
-        const list = document.querySelector(config.listSelector);
-        if (!list) {
-          return;
-        }
-        list.innerHTML = "";
-        renderProjectList(list, config.sortFn([...data]), config);
-      });
-    }
-    function renderProjectList(list, projects, config) {
-      projects.forEach((project) => {
-        list.appendChild(createProjectItem(project, config));
-      });
-    }
-    function createProjectItem(project, config) {
-      const [projectName, hours, client] = project;
-      const li = document.createElement("li");
-      li.className = "list-group-item";
-      li.innerHTML = `
-      <div class="widget-content p-0">
-        <div class="widget-content-wrapper">
-
-          <div class="widget-content-left me-2 me-lg-3">
-            <div
-              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-              text-white rounded-circle d-flex align-items-center justify-content-center">
-              ${AppUtils.getInitials(client)}
-            </div>
-          </div>
-
-          <div class="widget-content-left">
-            <div class="widget-heading">
-              ${projectName}
-            </div>
-
-            <div class="widget-subheading">
-              ${client}
-            </div>
-          </div>
-
-          <div class="widget-content-right font-weight-bold">
-            <div class="font-size-xs text-muted">
-              <span>${hours}</span>
-              <small class="${config.iconColor} ps-2">
-                <i class="${config.iconClass}"></i>
-              </small>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    `;
-      return li;
-    }
-    function sortTopProjects(data) {
-      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
-    }
-    function sortLowestProjects(data) {
-      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
-    }
-    return {
-      renderTopProjects,
-      renderLowestProjects
     };
   })();
 
@@ -2550,10 +2662,12 @@
         return;
       }
       const $taskSelect = $("#task");
+      const $submitBtn = $("#submit-new-hours");
       if (!$taskSelect.length) {
         return;
       }
       $taskSelect.html('<option value="">Loading...</option>').val("").trigger("change");
+      $submitBtn.prop("disabled", true);
       AppUtils.cachedGScriptCall(
         `getTaskOptions_${clientName}`,
         "getTaskOptions",
@@ -2575,6 +2689,7 @@
           });
           const firstValue = $taskSelect.find("option:first").val();
           $taskSelect.val(firstValue || "").trigger("change");
+          $submitBtn.prop("disabled", false);
         }
       );
     }
@@ -3363,8 +3478,6 @@
     };
     const loadData = () => {
       ClientDirectory.init("allClientsData");
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
     };
     return { init, destroy };
   })();
@@ -3581,6 +3694,10 @@
       monthly_prev: {
         serverFunction: "getPrevYearMonthlyChartData",
         cacheKey: "chartData_monthly_prev"
+      },
+      client_paid_owed_history: {
+        serverFunction: "getClientPaidOwedHistoryChart",
+        cacheKey: "chartData_client_paid_owed_history"
       }
     };
     const chartInstances = {};
@@ -3625,7 +3742,12 @@
         });
       });
     }
-    function loadChart(chartType, animated = false, year = "all") {
+    function loadChart(chartType, animated = false, year = "all", refresh = false, log = false, chartOpts = {}) {
+      const logMessage = (...args2) => {
+        if (log) {
+          console.log("[Charts]", ...args2);
+        }
+      };
       const chartDiv = document.getElementById(`chart-${chartType}`);
       if (!chartDiv) {
         return AppUtils.showError(
@@ -3640,20 +3762,37 @@
       }
       const cacheKey = typeof config.cacheKey === "function" ? config.cacheKey(year) : config.cacheKey;
       const args = chartType === "yearly" ? [year] : [];
+      logMessage("Loading chart:", {
+        chartType,
+        year,
+        cacheKey,
+        args,
+        refresh,
+        animated
+      });
       AppUtils.cachedGScriptCall(
         cacheKey,
         config.serverFunction,
         args,
         (data) => {
+          logMessage("Chart data received:", data);
           if (!document.body.contains(chartDiv)) {
+            logMessage("Chart container no longer exists.");
             return;
           }
           if (!Array.isArray(data) || !data.length) {
+            logMessage("No chart data found.");
             chartDiv.innerText = "No data found.";
             return;
           }
-          drawChart(chartType, data, false, animated);
-        }
+          logMessage("Drawing chart:", {
+            chartType,
+            rows: data.length
+          });
+          drawChart(chartType, data, false, animated, chartOpts);
+        },
+        log,
+        refresh
       );
     }
     function loadChartData(chartType, callback) {
@@ -3673,26 +3812,47 @@
       const args = chartType === "yearly" ? ["all"] : [];
       AppUtils.cachedGScriptCall(cacheKey, config.serverFunction, args, callback);
     }
-    function loadPrevYearCombinedChart() {
+    function loadPrevYearCombinedChart(refresh = false, log = false) {
       const chartId = "monthly-prev-merged";
-      loadChartData("monthly_prev", (prevData) => {
-        if (!Array.isArray(prevData)) {
-          AppUtils.showError("Invalid previous year chart data.");
-          return;
-        }
-        loadChartData("monthly", (currentData) => {
-          if (!Array.isArray(currentData)) {
-            AppUtils.showError("Invalid current year chart data.");
+      if (log) {
+        console.log("[Charts] Loading previous/current year combined chart:", {
+          refresh
+        });
+      }
+      loadChartData(
+        "monthly_prev",
+        (prevData) => {
+          if (!Array.isArray(prevData)) {
+            AppUtils.showError("Invalid previous year chart data.");
             return;
           }
-          drawChart(chartId, {
-            prevYear: prevData,
-            currentYear: currentData
-          });
-        });
-      });
+          loadChartData(
+            "monthly",
+            (currentData) => {
+              if (!Array.isArray(currentData)) {
+                AppUtils.showError("Invalid current year chart data.");
+                return;
+              }
+              if (log) {
+                console.log("[Charts] Combined chart data:", {
+                  prevYear: prevData,
+                  currentYear: currentData
+                });
+              }
+              drawChart(chartId, {
+                prevYear: prevData,
+                currentYear: currentData
+              });
+            },
+            refresh,
+            log
+          );
+        },
+        refresh,
+        log
+      );
     }
-    function drawChart(type, data, debug = false, animated = false) {
+    function drawChart(type, data, debug = false, animated = false, chartOpts = {}) {
       const chartDiv = document.getElementById(`chart-${type}`);
       if (!chartDiv) {
         return AppUtils.showError(`chart-${type} not found`);
@@ -3715,7 +3875,9 @@
           return drawMonthlyComparisonChart(ctx, type, data, true);
         case "daily":
         case "monthly":
-          return drawLineChart(ctx, type, data, animated, true);
+          return drawLineChart(ctx, type, data, animated, chartOpts);
+        case "client_paid_owed_history":
+          return drawClientPaidOwedHistoryChart(ctx, type, data, animated, chartOpts);
         default:
           return AppUtils.showError(`Unknown chart type: ${type}`);
       }
@@ -4126,20 +4288,34 @@
       });
       return values;
     }
-    function drawLineChart(ctx, type, data, animated = false) {
+    function drawLineChart(ctx, type, data, animated = false, chartOpts = {}) {
+      const {
+        showLabel = true,
+        showPoints = true,
+        showTooltip = true,
+        showLegend = false,
+        showAxes = true,
+        showXAxis,
+        showYAxis,
+        showGrid = true
+      } = chartOpts || {};
+      const displayX = showXAxis ?? showAxes;
+      const displayY = showYAxis ?? showAxes;
       const labels = data.map((row) => row?.[0] ?? "");
       const values = data.map((row) => Number(row?.[1]) || 0);
       const isMonthly = type === "monthly";
       const lineColor = isMonthly ? "#22c55e" : "#0ea5e9";
       const gradientTopColor = isMonthly ? "rgba(34, 197, 94, 0.5)" : "rgba(14, 165, 233, 0.5)";
       const gradientBottomColor = isMonthly ? "rgba(220, 252, 231, 0.2)" : "rgba(231, 246, 254, 0.2)";
+      const pointRadius = showPoints ? 2 : 0;
+      const pointHoverRadius = showPoints ? 5 : 0;
       chartInstances[type] = new Chart(ctx, {
         type: "line",
         data: {
           labels,
           datasets: [
             {
-              label: isMonthly ? "Monthly Data" : "Daily Data",
+              label: showLabel || showLegend || showTooltip ? isMonthly ? "Monthly Data" : "Daily Data" : "",
               data: values,
               borderColor: lineColor,
               backgroundColor: createGradient(
@@ -4149,8 +4325,8 @@
               ),
               fill: true,
               tension: 0.4,
-              pointRadius: 2,
-              pointHoverRadius: 5,
+              pointRadius,
+              pointHoverRadius,
               pointBackgroundColor: "#ffffff",
               pointBorderColor: lineColor,
               pointBorderWidth: 2,
@@ -4175,9 +4351,7 @@
           },
           scales: {
             x: {
-              grid: {
-                color: "rgba(0, 0, 0, 0.04)"
-              },
+              display: displayX,
               ticks: {
                 font: {
                   size: 10
@@ -4185,13 +4359,15 @@
               },
               border: {
                 display: false
+              },
+              grid: {
+                display: showGrid,
+                color: "rgba(0, 0, 0, 0.04)"
               }
             },
             y: {
+              display: displayY,
               beginAtZero: true,
-              grid: {
-                color: "rgba(0, 0, 0, 0.04)"
-              },
               ticks: {
                 font: {
                   size: 10
@@ -4199,14 +4375,19 @@
               },
               border: {
                 display: false
+              },
+              grid: {
+                display: showGrid,
+                color: "rgba(0, 0, 0, 0.04)"
               }
             }
           },
           plugins: {
             legend: {
-              display: false
+              display: !!showLegend
             },
             tooltip: {
+              enabled: !!showTooltip,
               mode: "index",
               axis: "x",
               intersect: false,
@@ -4220,6 +4401,9 @@
               displayColors: true,
               callbacks: {
                 label: function(context) {
+                  if (!showLabel && !showLegend) {
+                    return `${Number(context.parsed.y).toLocaleString()}`;
+                  }
                   const value = Number(context.parsed.y) || 0;
                   return `${context.dataset.label}: ${value.toLocaleString()}`;
                 }
@@ -4227,136 +4411,136 @@
             }
           },
           interaction: {
-            mode: "index",
+            mode: showTooltip ? "index" : "none",
             axis: "x",
             intersect: false
           }
         }
       });
     }
-    function drawRealtimeAnimatedChart() {
-      const type = "sample_realtime_animated";
-      const chartDiv = document.getElementById(`chart-${type}`);
-      if (!chartDiv) {
-        return;
-      }
-      destroyRealtimeChart(type);
-      const canvas = createChartCanvas(chartDiv, type);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        return;
-      }
+    function drawClientPaidOwedHistoryChart(ctx, type, yearlyData, animated = false, chartOpts = {}) {
+      const {
+        showLabel = true,
+        showTooltip = true,
+        showLegend = false,
+        showAxes = true,
+        showXAxis,
+        showYAxis,
+        showGrid = true
+      } = chartOpts || {};
+      const labels = yearlyData.map((item) => String(item?.year ?? ""));
+      const paidHours = yearlyData.map((item) => Number(item?.hoursPaid) || 0);
+      const owedHours = yearlyData.map((item) => Number(item?.hoursOwed) || 0);
       chartInstances[type] = new Chart(ctx, {
-        type: "line",
+        type: "bar",
         data: {
+          labels,
           datasets: [
             {
-              label: "Dataset 1",
-              data: [],
-              borderColor: "#8b5cf6",
+              label: showLabel ? "Paid Hours" : "",
+              data: paidHours,
               backgroundColor: createGradient(
                 ctx,
-                "rgba(139, 92, 246, 0.45)",
-                "rgba(237, 233, 254, 0.05)"
+                "rgba(14, 165, 233, 0.9)",
+                "rgba(14, 165, 233, 0.5)"
               ),
-              fill: true,
-              borderDash: [8, 4],
-              borderWidth: 3,
-              pointRadius: 2,
-              pointHoverRadius: 5,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "#8b5cf6",
-              pointBorderWidth: 2,
-              tension: 0.4
+              borderColor: "#0ea5e9",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75,
+              hoverBackgroundColor: "rgba(14, 165, 233, 1)",
+              hoverBorderColor: "#0284c7",
+              hoverBorderWidth: 1
             },
             {
-              label: "Dataset 2",
-              data: [],
-              borderColor: "#10b981",
+              label: showLabel ? "Owed Hours" : "",
+              data: owedHours,
               backgroundColor: createGradient(
                 ctx,
-                "rgba(16, 185, 129, 0.45)",
-                "rgba(220, 252, 231, 0.05)"
+                "rgba(249, 115, 22, 0.9)",
+                "rgba(249, 115, 22, 0.5)"
               ),
-              fill: true,
-              borderWidth: 3,
-              pointRadius: 2,
-              pointHoverRadius: 5,
-              pointBackgroundColor: "#ffffff",
-              pointBorderColor: "#10b981",
-              pointBorderWidth: 2,
-              tension: 0.4
+              borderColor: "#f97316",
+              borderWidth: 1,
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75,
+              hoverBackgroundColor: "rgba(249, 115, 22, 1)",
+              hoverBorderColor: "#ea580c",
+              hoverBorderWidth: 1
             }
           ]
         },
         options: {
+          indexAxis: "y",
+          // <-- makes it horizontal
           responsive: true,
-          maintainAspectRatio: false,
-          // Data is updated manually through requestAnimationFrame
-          animation: false,
+          maintainAspectRatio: true,
+          animation: animated ? void 0 : false,
+          ...animated && {
+            animations: {
+              x: {
+                duration: 1200,
+                easing: "easeOutQuart",
+                from: 0
+              }
+            }
+          },
           interaction: {
-            mode: "nearest",
-            axis: "x",
+            mode: "index",
+            axis: "y",
+            // match indexAxis
             intersect: false
           },
           plugins: {
             legend: {
-              display: false
+              display: !!showLegend
             },
             tooltip: {
-              enabled: true,
-              mode: "nearest",
-              axis: "x",
+              enabled: !!showTooltip,
+              mode: "index",
+              axis: "y",
               intersect: false,
-              backgroundColor: "rgba(255, 255, 255, 0.9)",
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
               titleColor: "#111827",
               bodyColor: "#374151",
-              borderColor: "#d1d5db",
-              borderWidth: 0,
+              borderColor: "#e5e7eb",
+              borderWidth: 1,
               padding: 12,
               cornerRadius: 8,
               displayColors: true,
               callbacks: {
-                title: (tooltipItems) => {
-                  const timestamp = tooltipItems[0]?.parsed.x;
-                  if (!timestamp) {
-                    return "";
-                  }
-                  return new Date(timestamp).toLocaleTimeString();
-                },
-                label: (context) => {
-                  const value = Number(context.parsed.y) || 0;
-                  return `${context.dataset.label}: ${value.toFixed(2)}`;
+                title: (items) => `Year: ${items[0]?.label || ""}`,
+                label: (item) => {
+                  const value = Number(item.parsed.x) || 0;
+                  return `${item.dataset.label}: ${value.toLocaleString()} hrs`;
                 }
               }
             }
           },
           scales: {
             x: {
-              type: "linear",
-              grid: {
-                color: "rgba(0, 0, 0, 0.04)"
-              },
+              display: showXAxis ?? showAxes,
+              beginAtZero: true,
               ticks: {
                 font: {
                   size: 10
                 },
-                callback: (value) => {
-                  return new Date(value).toLocaleTimeString([], {
-                    minute: "2-digit",
-                    second: "2-digit"
-                  });
-                }
+                callback: (value) => `${value} hrs`
               },
               border: {
                 display: false
+              },
+              grid: {
+                display: showGrid,
+                color: "rgba(0, 0, 0, 0.04)"
               }
             },
             y: {
-              beginAtZero: false,
-              grid: {
-                color: "rgba(0, 0, 0, 0.04)"
-              },
+              display: showYAxis ?? showAxes,
               ticks: {
                 font: {
                   size: 10
@@ -4364,60 +4548,82 @@
               },
               border: {
                 display: false
+              },
+              grid: {
+                display: showGrid,
+                color: "rgba(0, 0, 0, 0.04)"
               }
             }
           }
         }
       });
-      let lastTime = 0;
-      let value1 = 20;
-      let value2 = 60;
-      let target1 = 20;
-      let target2 = 60;
-      function animate(time) {
-        const chart = chartInstances[type];
-        if (!chart) {
-          return;
-        }
-        if (time - lastTime > 80) {
-          const now = Date.now();
-          value1 += (target1 - value1) * 0.03;
-          value2 += (target2 - value2) * 0.03;
-          if (Math.abs(value1 - target1) < 2) {
-            target1 = Math.random() * 100;
-          }
-          if (Math.abs(value2 - target2) < 2) {
-            target2 = Math.random() * 100;
-          }
-          chart.data.datasets[0].data.push({
-            x: now,
-            y: value1
-          });
-          chart.data.datasets[1].data.push({
-            x: now,
-            y: value2
-          });
-          const cutoff = now - 3e4;
-          chart.data.datasets.forEach((dataset) => {
-            dataset.data = dataset.data.filter((point) => {
-              return point.x >= cutoff;
-            });
-          });
-          chart.options.scales.x.min = cutoff;
-          chart.options.scales.x.max = now;
-          chart.update("none");
-          lastTime = time;
-        }
-        animationFrames[type] = requestAnimationFrame(animate);
-      }
-      animationFrames[type] = requestAnimationFrame(animate);
     }
-    function destroyRealtimeChart(type = "sample_realtime_animated") {
-      if (animationFrames[type]) {
-        cancelAnimationFrame(animationFrames[type]);
-        delete animationFrames[type];
+    function drawMonthlyTargetChart(ctx, chartId, data) {
+      const existing = Chart.getChart(ctx);
+      if (existing) {
+        existing.destroy();
       }
-      destroyChart(type);
+      return new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: data.map((item) => item.month),
+          datasets: [
+            {
+              label: "Actual Hours",
+              data: data.map((item) => item.actual),
+              borderWidth: 1
+            },
+            {
+              label: "Monthly Target",
+              data: data.map((item) => item.target),
+              type: "line",
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true
+            },
+            tooltip: {
+              callbacks: {
+                label(context) {
+                  return `${context.dataset.label}: ${context.parsed.y.toFixed(2)} hrs`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "Month"
+              }
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "Hours"
+              },
+              ticks: {
+                callback(value) {
+                  return `${value} hrs`;
+                }
+              }
+            }
+          }
+        }
+      });
     }
     function createGradient(ctx, startColor, endColor) {
       if (!startColor || !endColor) {
@@ -4466,10 +4672,10 @@
     return {
       loadChart,
       loadPrevYearCombinedChart,
+      drawClientPaidOwedHistoryChart,
+      drawMonthlyTargetChart,
       drawChart,
       resizeAllCharts,
-      drawRealtimeAnimatedChart,
-      destroyRealtimeChart,
       destroyAllCharts
     };
   })();
@@ -4530,7 +4736,7 @@
                   "success"
                 );
                 $fValue.val("");
-                ChartModule.loadChart("hourly");
+                ChartModule.loadChart("hourly", false, false, true);
                 loadTotalHourlyHours();
               }
             });
@@ -4946,8 +5152,7 @@
     let initialized = false;
     const loadedTabs = /* @__PURE__ */ new Set();
     const tabHandlers = {
-      "#tab-content-2": loadIntegrationStatus,
-      "#tab-content-3": loadAppearanceSettings
+      // "#tab-content-2": loadIntegrationSettings,
     };
     function clearCache(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Clearing cache...");
@@ -4972,33 +5177,6 @@
         loading.restore();
       }).syncClientSheetList();
     }
-    function loadIntegrationStatus() {
-      google.script.run.withSuccessHandler((data) => {
-        const fields = {
-          notifEmailStatus: data.notifEmail,
-          notifDiscordStatus: data.notifDiscord,
-          spreadsheetIdStatus: data.spreadsheetId,
-          reportFolderIdStatus: data.reportFolderId
-        };
-        Object.entries(fields).forEach(([id, config]) => {
-          const element = document.getElementById(id);
-          if (!element) {
-            return;
-          }
-          const configured = Boolean(config?.configured);
-          element.classList.toggle("is-inactive", !configured);
-          element.textContent = configured ? `\u2713 Configured \u2014 ${config.masked}` : "Not configured";
-        });
-      }).withFailureHandler((err) => {
-        console.error("getConfigStatus failed:", err);
-        AppUtils.showDashboardToast(
-          "Failed to load integration settings.",
-          "error"
-        );
-      }).getIntegrationStatus();
-    }
-    function loadAppearanceSettings() {
-    }
     function handleClick(e) {
       const btn = e.target.closest(
         "#btnClearCache, #btnSyncClient, #btnBackupAllSheets, #btnAddMasterFormula"
@@ -5008,6 +5186,7 @@
       }
       e.preventDefault();
       switch (btn.id) {
+        //main tab click
         case "btnClearCache":
           AppUtils.openConfirmationModal({
             ns: "clearCache",
@@ -5044,6 +5223,7 @@
             }
           });
           break;
+        //other click events
         default:
           break;
       }
@@ -5171,6 +5351,21 @@
         }
       });
     }
+    function handleIntegrationListClick(e) {
+      const item = e.target.closest(".integration-list-item");
+      if (!item) {
+        return;
+      }
+      if (item.classList.contains("integration-list-item-coming")) {
+        return;
+      }
+      const integration = item.getAttribute("data-integration");
+      if (!integration) {
+        return;
+      }
+      AppUtils.cacheSet("selectedIntegration", integration);
+      RouterModule.go("integrationsConfiguration");
+    }
     function isValidCellRef(ref) {
       return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
     }
@@ -5234,46 +5429,6 @@
     }
     function handleSubmit(e) {
       e.preventDefault();
-      if (e.target.id === "settingsIntegrationForm") {
-        const form = e.target;
-        const $btn = $(form).find('button[type="submit"], input[type="submit"]');
-        ReportActions.confirmAction(
-          "saveGlobalIntegrationSettings",
-          "Save Integration Settings?",
-          "Are you sure you want to update the master integration connections, alert directories, and pipeline destination paths?",
-          () => {
-            saveIntegrationSettings(form, $btn);
-          }
-        );
-      }
-    }
-    function saveIntegrationSettings(form, $btn) {
-      const data = {
-        notifEmail: form.notifEmail.value.trim(),
-        notifDiscord: form.notifDiscord.value.trim(),
-        spreadsheetId: form.spreadsheetId.value.trim(),
-        reportFolderId: form.reportFolderId.value.trim()
-      };
-      AppUtils.submitForm({
-        gscriptFunc: "saveIntegrationSettings",
-        data,
-        $btn,
-        loadingText: "Saving integration settings...",
-        onSuccess: (result) => {
-          AppUtils.showDashboardToast(
-            result?.message || "Integration settings saved successfully!",
-            "success"
-          );
-          loadIntegrationStatus();
-        },
-        onError: (err) => {
-          console.error("saveIntegrationSettings failed:", err);
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to save integration settings.",
-            "error"
-          );
-        }
-      });
     }
     function init() {
       if (initialized) {
@@ -5281,6 +5436,7 @@
       }
       initialized = true;
       document.addEventListener("click", handleClick);
+      document.addEventListener("click", handleIntegrationListClick);
       document.addEventListener("shown.bs.tab", handleTabShown);
       document.addEventListener("submit", handleSubmit);
     }
@@ -5296,6 +5452,111 @@
     return {
       init,
       destroy
+    };
+  })();
+
+  // src/clients/client-table-service.js
+  var ClientTableService = /* @__PURE__ */ (() => {
+    let filterInitialized = false;
+    let dropdownGroup = null;
+    let menu = null;
+    let items = [];
+    let toggleBtn = null;
+    let filterHandler = null;
+    function applyStatusFilter(tableId, selectedValue) {
+      const table = document.getElementById(tableId);
+      if (!table) {
+        return;
+      }
+      const rows = table.querySelectorAll("tbody tr");
+      let visibleIndex = 1;
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll("td");
+        if (!cells.length) {
+          return;
+        }
+        const statusCell = cells[cells.length - 1];
+        const status = statusCell.textContent.trim();
+        const shouldShow = selectedValue === "Show All" || status.toLowerCase() === selectedValue.toLowerCase();
+        row.style.display = shouldShow ? "" : "none";
+        if (shouldShow) {
+          cells[0].textContent = visibleIndex++;
+        }
+      });
+    }
+    function resetDropdownState() {
+      if (!toggleBtn || !items.length) {
+        return;
+      }
+      toggleBtn.textContent = "Show All";
+      items.forEach((item) => {
+        item.classList.remove("disabled");
+        item.removeAttribute("aria-disabled");
+        item.removeAttribute("disabled");
+      });
+    }
+    function initStatusFilter(dropdownId, tableId, defaultValue = "Show All") {
+      if (filterInitialized) {
+        return;
+      }
+      dropdownGroup = document.getElementById(dropdownId);
+      if (!dropdownGroup) {
+        return;
+      }
+      toggleBtn = dropdownGroup.querySelector(
+        '[data-bs-toggle="dropdown"] > span'
+      );
+      menu = dropdownGroup.querySelector(".dropdown-menu");
+      if (!toggleBtn || !menu) {
+        return;
+      }
+      items = Array.from(menu.querySelectorAll(".dropdown-item"));
+      if (!items.length) {
+        return;
+      }
+      function setSelected(value) {
+        toggleBtn.textContent = value;
+        items.forEach((item) => {
+          const text = item.textContent.trim();
+          const isSelected = text === value;
+          item.classList.toggle("disabled", isSelected);
+          if (isSelected) {
+            item.setAttribute("aria-disabled", "true");
+          } else {
+            item.removeAttribute("aria-disabled");
+          }
+        });
+        applyStatusFilter(tableId, value);
+      }
+      filterHandler = (e) => {
+        const item = e.target.closest(".dropdown-item");
+        if (!item || item.classList.contains("disabled")) {
+          return;
+        }
+        const value = item.textContent.trim();
+        item.blur();
+        setSelected(value);
+      };
+      menu.addEventListener("click", filterHandler);
+      filterInitialized = true;
+      setSelected(defaultValue);
+    }
+    function destroyStatusFilter() {
+      if (menu && filterHandler) {
+        menu.removeEventListener("click", filterHandler);
+      }
+      filterHandler = null;
+      resetDropdownState();
+      filterInitialized = false;
+      dropdownGroup = null;
+      menu = null;
+      items = [];
+      toggleBtn = null;
+    }
+    return {
+      applyStatusFilter,
+      initStatusFilter,
+      destroyStatusFilter
     };
   })();
 
@@ -5336,7 +5597,7 @@
     function getCacheKey(category) {
       return `cache_${category.replace(/\s+/g, "")}`;
     }
-    function renderActivePaidOwedClients(debug = false, reset = false) {
+    function renderActivePaidOwedClients(isSimple = false, debug = false, reset = false) {
       const log = (...args) => debug && console.log(...args);
       const cacheKey = "paidOwedClients";
       const tableId = "#active-clients";
@@ -5352,17 +5613,18 @@
             AppUtils.showError("\u26A0\uFE0F Invalid paid & owed data.");
             return;
           }
-          renderPaidOwedTable(data);
+          renderPaidOwedTable(data, isSimple);
         },
         debug,
         reset
       );
     }
-    function renderPaidOwedTable(data) {
+    function renderPaidOwedTable(data, isSimple) {
       const tbody = document.querySelector(`${ACTIVE_CLIENTS_TABLE_ID} tbody`);
       if (!tbody) {
         return;
       }
+      tbody.classList.add("simple");
       if (!data.length) {
         DataTableModule.showEmpty(
           ACTIVE_CLIENTS_TABLE_ID,
@@ -5374,35 +5636,96 @@
       data.forEach((row, index) => {
         tbody.appendChild(createPaidOwedRow(row, index));
       });
-      DataTableModule.init(ACTIVE_CLIENTS_TITLE, ACTIVE_CLIENTS_TABLE_ID);
+      DataTableModule.init(
+        ACTIVE_CLIENTS_TITLE,
+        ACTIVE_CLIENTS_TABLE_ID,
+        false,
+        null,
+        isSimple
+      );
+      if (document.getElementById("categoryDtFilter")) {
+        ClientTableService.initStatusFilter("categoryDtFilter", "active-clients");
+      }
     }
     function createPaidOwedRow(row, index) {
       const tr = document.createElement("tr");
+      const chartCanvasId = `clientHoursChart-${index}`;
+      const status = String(row?.today || "").trim();
+      const isIdle = status.toLowerCase() === "idle";
+      const statusValue = isIdle ? "Idle" : "Online";
+      const statusHtml = isIdle ? `
+      <span class="badge bg-danger text-center">
+        Idle
+      </span>
+    ` : `
+      <span class="badge bg-success text-center">
+        Online
+      </span>
+    `;
       tr.innerHTML = `
-      <td class="text-center">
+      <td class="text-center align-middle">
         ${index + 1}
       </td>
 
-      <td>
-        ${AppUtils.escapeHtml(row.client ?? "")}
+      <td class="align-middle">
+        ${AppUtils.escapeHtml(row?.client ?? "")}
       </td>
 
-      <td class="text-center">
-        ${formatAmount(row.totalOwed)}
+      <td class="align-middle datatable--chart-cell">
+        <div class="datatable--row-chart">
+          <canvas id="${chartCanvasId}"></canvas>
+        </div>
       </td>
 
-      <td class="text-center">
-        ${formatAmount(row.currentMonthOwed)}
+      <td class="text-center align-middle">
+        ${formatAmount(row?.totalOwed)}
       </td>
 
-      <td class="text-center">
-        ${formatAmount(row.totalPaid)}
+      <td class="text-center align-middle">
+        ${formatAmount(row?.currentMonthOwed)}
       </td>
 
-      <td class="text-center">
-        ${AppUtils.escapeHtml(row.today ?? "")}
+      <td class="text-center align-middle">
+        ${formatAmount(row?.totalPaid)}
       </td>
-    `;
+
+    <td
+      class="text-center align-middle"
+      data-search="${statusValue}"
+    >
+      ${statusHtml}
+    </td>
+  `;
+      setTimeout(() => {
+        const canvas = document.getElementById(chartCanvasId);
+        if (!canvas) {
+          return;
+        }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return;
+        }
+        const existing = Chart.getChart(canvas);
+        if (existing) {
+          existing.destroy();
+        }
+        ChartModule.drawClientPaidOwedHistoryChart(
+          ctx,
+          `client_paid_owed_history_${index}`,
+          // unique type/key per row
+          row?.paidOwedHistory || [],
+          false,
+          // animated
+          {
+            showLabel: false,
+            showTooltip: true,
+            showLegend: false,
+            showXAxis: false,
+            showYAxis: true,
+            showGrid: false
+          }
+        );
+      }, 0);
       return tr;
     }
     function formatAmount(value) {
@@ -5417,14 +5740,363 @@
     };
   })();
 
+  // src/clients/client-ranking.js
+  var ClientRanking = /* @__PURE__ */ (() => {
+    function renderTopPaidClients() {
+      renderClientRanking({
+        cacheKey: "topPaidClients",
+        listSelector: "#top-paid-clients",
+        avatarClass: "bg-malibu-beach",
+        sortFn: sortTopPaid,
+        rightContentFn: getTopPaidRightContent
+      });
+    }
+    function renderLowestPaidClients() {
+      renderClientRanking({
+        cacheKey: "lowestPaidClients",
+        listSelector: "#lowest-paid-clients",
+        avatarClass: "bg-love-kiss",
+        sortFn: sortLowestPaid,
+        rightContentFn: getLowestPaidRightContent
+      });
+    }
+    function renderClientRanking(config) {
+      AppUtils.cachedGScriptCall(
+        config.cacheKey,
+        "getTopPaidClients",
+        [],
+        (data) => {
+          if (!Array.isArray(data) || !data.length) {
+            return;
+          }
+          const ul = document.querySelector(config.listSelector);
+          if (!ul) {
+            return;
+          }
+          ul.innerHTML = "";
+          const sorted = config.sortFn([...data]);
+          renderRankingList(ul, sorted, config);
+        }
+      );
+    }
+    function renderRankingList(ul, clients, config) {
+      clients.forEach((client) => {
+        createRankingItem(ul, client, config);
+      });
+    }
+    function createRankingItem(ul, client, config) {
+      const [name, paid, owed] = client;
+      AppUtils.cachedGScriptCall(
+        `role_${name}`,
+        "getRoleFromSheet",
+        [name],
+        (role) => {
+          role = role || "";
+          const li = document.createElement("li");
+          li.className = "list-group-item";
+          li.innerHTML = `
+          <div class="widget-content p-0">
+            <div class="widget-content-wrapper">
+
+              <div class="widget-content-left me-2 me-lg-3">
+                <div
+                  class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
+                  text-white rounded-circle d-flex align-items-center justify-content-center">
+                  ${AppUtils.getInitials(name)}
+                </div>
+              </div>
+
+              <div class="widget-content-left">
+                <div class="widget-heading">${name}</div>
+                <div class="widget-subheading">${role}</div>
+              </div>
+
+              <div class="widget-content-right font-weight-bold">
+                ${config.rightContentFn(paid, owed)}
+              </div>
+
+            </div>
+          </div>
+        `;
+          ul.appendChild(li);
+        }
+      );
+    }
+    function sortTopPaid(data) {
+      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
+    }
+    function sortLowestPaid(data) {
+      return data.sort((a, b) => {
+        const paidDiff = (a[1] || 0) - (b[1] || 0);
+        if (paidDiff !== 0) {
+          return paidDiff;
+        }
+        return (b[2] || 0) - (a[2] || 0);
+      }).slice(0, 10);
+    }
+    function getTopPaidRightContent(paid, owed) {
+      if (owed === 0) {
+        return `
+        <div class="font-size-xs text-muted">
+          <small class="opacity-5 pe-1">$</small>
+          <span>${paid}</span>
+          <small class="text-warning ps-2">
+            <i class="fa fa-dot-circle"></i>
+          </small>
+        </div>
+      `;
+      }
+      return `
+      <div class="font-size-xs text-muted">
+        <span>${paid}</span>
+        <small class="text-success ps-2">
+          <i class="fa fa-angle-up"></i>
+        </small>
+      </div>
+
+      <div class="font-size-xs text-muted">
+        <span>${owed}</span>
+        <small class="text-danger ps-2">
+          <i class="fa fa-angle-down"></i>
+        </small>
+      </div>
+    `;
+    }
+    function getLowestPaidRightContent(paid, owed) {
+      let html = `
+      <div class="font-size-xs text-muted">
+        <span>${paid}</span>
+        <small class="text-danger ps-2">
+          <i class="fa fa-angle-down"></i>
+        </small>
+      </div>
+    `;
+      if (owed > 0) {
+        html += `
+        <div class="font-size-xs text-muted">
+          <span>${owed}</span>
+          <small class="text-warning ps-2">
+            <i class="fa fa-exclamation-circle"></i>
+          </small>
+        </div>
+      `;
+      }
+      return html;
+    }
+    return {
+      renderTopPaidClients,
+      renderLowestPaidClients
+    };
+  })();
+
+  // src/projects/project-ranking.js
+  var ProjectRankings = /* @__PURE__ */ (() => {
+    function renderTopProjects() {
+      renderProjectRanking({
+        cacheKey: "topProjects",
+        method: "getTopProjects",
+        listSelector: "#top-projects",
+        avatarClass: "bg-malibu-beach",
+        sortFn: sortTopProjects,
+        iconClass: "fas fa-briefcase",
+        iconColor: "text-warning"
+      });
+    }
+    function renderLowestProjects() {
+      renderProjectRanking({
+        cacheKey: "lowestProjects",
+        method: "getTopProjects",
+        listSelector: "#lowest-projects",
+        avatarClass: "bg-love-kiss",
+        sortFn: sortLowestProjects,
+        iconClass: "fas fa-exclamation-circle",
+        iconColor: "text-danger"
+      });
+    }
+    function renderProjectRanking(config) {
+      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
+        if (!Array.isArray(data) || !data.length) {
+          return;
+        }
+        const list = document.querySelector(config.listSelector);
+        if (!list) {
+          return;
+        }
+        list.innerHTML = "";
+        renderProjectList(list, config.sortFn([...data]), config);
+      });
+    }
+    function renderProjectList(list, projects, config) {
+      projects.forEach((project) => {
+        list.appendChild(createProjectItem(project, config));
+      });
+    }
+    function createProjectItem(project, config) {
+      const [projectName, hours, client] = project;
+      const li = document.createElement("li");
+      li.className = "list-group-item";
+      li.innerHTML = `
+      <div class="widget-content p-0">
+        <div class="widget-content-wrapper">
+
+          <div class="widget-content-left me-2 me-lg-3">
+            <div
+              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
+              text-white rounded-circle d-flex align-items-center justify-content-center">
+              ${AppUtils.getInitials(client)}
+            </div>
+          </div>
+
+          <div class="widget-content-left">
+            <div class="widget-heading">
+              ${projectName}
+            </div>
+
+            <div class="widget-subheading">
+              ${client}
+            </div>
+          </div>
+
+          <div class="widget-content-right font-weight-bold">
+            <div class="font-size-xs text-muted">
+              <span>${hours}</span>
+              <small class="${config.iconColor} ps-2">
+                <i class="${config.iconClass}"></i>
+              </small>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+      return li;
+    }
+    function sortTopProjects(data) {
+      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
+    }
+    function sortLowestProjects(data) {
+      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
+    }
+    return {
+      renderTopProjects,
+      renderLowestProjects
+    };
+  })();
+
   // src/pages/active-clients-page.js
   var activeClientsPage = /* @__PURE__ */ (() => {
+    let filterInitialized = false;
+    let dropdownGroup = null;
+    let menu = null;
+    let items = [];
+    let toggleBtn = null;
+    const filterConfig = {
+      dropdownId: "categoryDtFilter",
+      tableId: "active-clients",
+      statusColumnIndex: null
+      // null = last column; or set e.g. 6
+    };
+    function applyStatusFilterOnActiveClients(selectedValue) {
+      const table = document.getElementById(filterConfig.tableId);
+      if (!table) {
+        return;
+      }
+      const rows = table.querySelectorAll("tbody tr");
+      let visibleIndex = 1;
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll("td");
+        if (!cells.length) {
+          return;
+        }
+        const statusCell = cells[cells.length - 1];
+        const status = statusCell.textContent.trim();
+        const shouldShow = selectedValue === "Show All" || status.toLowerCase() === selectedValue.toLowerCase();
+        row.style.display = shouldShow ? "" : "none";
+        if (shouldShow) {
+          cells[0].textContent = visibleIndex++;
+        }
+      });
+    }
+    function resetDropdownState() {
+      if (!toggleBtn || !items.length) {
+        return;
+      }
+      toggleBtn.textContent = "Show All";
+      items.forEach((item) => {
+        item.classList.remove("disabled");
+        item.removeAttribute("aria-disabled");
+        item.removeAttribute("disabled");
+      });
+    }
+    function initStatusFilter() {
+      if (filterInitialized) {
+        return;
+      }
+      dropdownGroup = document.getElementById(filterConfig.dropdownId);
+      if (!dropdownGroup) {
+        return;
+      }
+      toggleBtn = dropdownGroup.querySelector(
+        '[data-bs-toggle="dropdown"] > span'
+      );
+      menu = dropdownGroup.querySelector(".dropdown-menu");
+      if (!toggleBtn || !menu) {
+        return;
+      }
+      items = Array.from(menu.querySelectorAll(".dropdown-item"));
+      if (!items.length) {
+        return;
+      }
+      function setSelected(value) {
+        toggleBtn.textContent = value;
+        items.forEach((item) => {
+          const text = item.textContent.trim();
+          if (text === value) {
+            item.classList.add("disabled");
+            item.setAttribute("aria-disabled", "true");
+          } else {
+            item.classList.remove("disabled");
+            item.removeAttribute("aria-disabled");
+          }
+        });
+        applyStatusFilterOnActiveClients(value);
+      }
+      function onItemClick(e) {
+        const item = e.target.closest(".dropdown-item");
+        if (!item || item.classList.contains("disabled")) {
+          return;
+        }
+        const value = item.textContent.trim();
+        item.blur();
+        setSelected(value);
+      }
+      menu.addEventListener("click", onItemClick);
+      menu._activeClientsFilterHandler = onItemClick;
+      filterInitialized = true;
+    }
+    function destroy() {
+      if (!filterInitialized || !menu) {
+        return;
+      }
+      const handler = menu._activeClientsFilterHandler;
+      if (handler) {
+        menu.removeEventListener("click", handler);
+        menu._activeClientsFilterHandler = null;
+      }
+      applyStatusFilterOnActiveClients("Show All");
+      resetDropdownState();
+      filterInitialized = false;
+      dropdownGroup = null;
+      menu = null;
+      items = [];
+      toggleBtn = null;
+    }
     function init() {
       ClientDataService.renderActivePaidOwedClients();
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
     }
-    return { init };
+    return { init, initStatusFilter, destroy };
   })();
 
   // src/pages/add-manual-hours-page.js
@@ -5629,7 +6301,7 @@
   // src/pages/daily-overview-page.js
   var dailyOverviewPage = /* @__PURE__ */ (() => {
     function init() {
-      HourSummary.loadHoursSummary("#hours-summary");
+      HourSummary.loadDailyOverviewSummary();
       ChartModule.loadChart("daily");
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
@@ -5639,12 +6311,212 @@
 
   // src/pages/growth-comparison-overview-page.js
   var growthComparisonOverviewPage = /* @__PURE__ */ (() => {
+    const CACHE_KEY = "growthComparison";
     function init() {
-      HourSummary.loadHoursSummary("#hours-summary");
+      loadGrowthComparison("#growth-comparison");
       ChartModule.loadPrevYearCombinedChart();
       ChartModule.loadChart("yearly");
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
+    }
+    function loadGrowthComparison(containerSelector, currentYear = (/* @__PURE__ */ new Date()).getFullYear(), comparisonYear = (/* @__PURE__ */ new Date()).getFullYear() - 1, refresh = false, log = false) {
+      const cacheKey = `${CACHE_KEY}_${currentYear}_${comparisonYear}`;
+      if (log) {
+        console.log(
+          "[GrowthComparison] Loading:",
+          currentYear,
+          "vs",
+          comparisonYear
+        );
+      }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getGrowthComparisonSummary",
+        [currentYear, comparisonYear],
+        (data) => {
+          if (!data) {
+            AppUtils.showError(
+              `No growth comparison data found for ${currentYear} vs ${comparisonYear}.`
+            );
+            return;
+          }
+          if (log) {
+            console.log("[GrowthComparison] Data:", data);
+          }
+          renderGrowthComparison(containerSelector, data);
+        },
+        log,
+        refresh
+      );
+    }
+    function renderGrowthComparison(containerSelector, data) {
+      const $container = $(containerSelector);
+      if (!$container.length || !data) {
+        return;
+      }
+      $container.find('[data-metric="hours"]').text(AppUtils.formatHours(data.current.hours));
+      $container.find('[data-metric="paid"]').text(AppUtils.formatHours(data.current.paid));
+      $container.find('[data-metric="owed"]').text(AppUtils.formatHours(data.current.owed));
+      $container.find('[data-metric="net-hours"]').text(AppUtils.formatHours(data.current.netHours));
+      $container.find('[data-metric="monthly-average"]').text(AppUtils.formatHours(data.current.monthlyAverage));
+      $container.find('[data-metric="collection"]').text(AppUtils.formatPercent(data.current.collection));
+      const hoursChange = calculatePercentChange(
+        data.current.hours,
+        data.previous.hours
+      );
+      const paidChange = calculatePercentChange(
+        data.current.paid,
+        data.previous.paid
+      );
+      const owedChange = calculatePercentChange(
+        data.current.owed,
+        data.previous.owed
+      );
+      const netHoursChange = calculatePercentChange(
+        data.current.netHours,
+        data.previous.netHours
+      );
+      const monthlyAverageChange = calculatePercentChange(
+        data.current.monthlyAverage,
+        data.previous.monthlyAverage
+      );
+      const collectionChange = data.current.collection - data.previous.collection;
+      renderTrend(
+        $container.find('[data-trend="hours"]'),
+        hoursChange,
+        data.current.hours,
+        data.previous.hours,
+        "hours"
+      );
+      renderTrend(
+        $container.find('[data-trend="paid"]'),
+        paidChange,
+        data.current.paid,
+        data.previous.paid,
+        "paid"
+      );
+      renderTrend(
+        $container.find('[data-trend="owed"]'),
+        owedChange,
+        data.current.owed,
+        data.previous.owed,
+        "owed"
+      );
+      renderTrend(
+        $container.find('[data-trend="net-hours"]'),
+        netHoursChange,
+        data.current.netHours,
+        data.previous.netHours,
+        "net"
+      );
+      renderTrend(
+        $container.find('[data-trend="monthly-average"]'),
+        monthlyAverageChange,
+        data.current.monthlyAverage,
+        data.previous.monthlyAverage,
+        "average"
+      );
+      renderRateTrend(
+        $container.find('[data-trend="collection"]'),
+        collectionChange
+      );
+      setGrowthColor(
+        $container.find('[data-trend="hours"]'),
+        hoursChange,
+        "positive"
+      );
+      setGrowthColor(
+        $container.find('[data-trend="paid"]'),
+        paidChange,
+        "positive"
+      );
+      setGrowthColor(
+        $container.find('[data-trend="owed"]'),
+        owedChange,
+        "negative"
+      );
+      setGrowthColor(
+        $container.find('[data-trend="net-hours"]'),
+        netHoursChange,
+        "positive"
+      );
+      setGrowthColor(
+        $container.find('[data-trend="monthly-average"]'),
+        monthlyAverageChange,
+        "positive"
+      );
+      setGrowthColor(
+        $container.find('[data-trend="collection"]'),
+        collectionChange,
+        "positive"
+      );
+    }
+    function calculatePercentChange(current, previous) {
+      current = Number(current) || 0;
+      previous = Number(previous) || 0;
+      if (previous === 0) {
+        return null;
+      }
+      return (current - previous) / Math.abs(previous) * 100;
+    }
+    function renderTrend($element, change, current, previous, type) {
+      if (!$element.length) {
+        return;
+      }
+      const yearText = $element.data("comparison-label") || "vs last year";
+      if (change === null) {
+        $element.html(`
+        <span class="text-muted font-weight-bold">
+          \u2014
+        </span>
+        ${yearText}
+      `);
+        return;
+      }
+      const direction = change > 0 ? "up" : change < 0 ? "down" : "right";
+      const formattedChange = `${Math.abs(change).toFixed(2)}%`;
+      $element.html(`
+      <span class="font-weight-bold me-1">
+        <i class="fa fa-arrow-${direction} me-1"></i>
+        ${formattedChange}
+      </span>
+      ${yearText}
+    `);
+    }
+    function renderRateTrend($element, change) {
+      if (!$element.length) {
+        return;
+      }
+      const yearText = $element.data("comparison-label") || "vs last year";
+      if (change === 0) {
+        $element.html(`
+        <span class="text-muted font-weight-bold">
+          \u2014
+        </span>
+        ${yearText}
+      `);
+        return;
+      }
+      const direction = change > 0 ? "up" : "down";
+      $element.html(`
+      <span class="font-weight-bold me-1">
+        <i class="fa fa-arrow-${direction} me-1"></i>
+        ${Math.abs(change).toFixed(2)} pts
+      </span>
+      ${yearText}
+    `);
+    }
+    function setGrowthColor($element, change, goodDirection) {
+      if (!$element.length) {
+        return;
+      }
+      $element.removeClass("text-success text-danger text-warning");
+      if (change === null || change === 0) {
+        $element.addClass("text-muted");
+        return;
+      }
+      const isGood = goodDirection === "positive" ? change > 0 : change < 0;
+      $element.addClass(isGood ? "text-success" : "text-danger");
     }
     return { init };
   })();
@@ -5657,16 +6529,16 @@
     };
     const COLORS = {
       current: [
-        "bg-arielle-smile",
+        "bg-grow-early",
+        "bg-love-kiss",
         "bg-sunny-morning",
-        "bg-ripe-malin",
-        "bg-grow-early"
+        "bg-ripe-malin"
       ],
       previous: [
-        "bg-deep-blue",
         "bg-tempting-azure",
+        "bg-deep-blue",
         "bg-ripe-malin",
-        "bg-grow-early"
+        "bg-amy-crisp"
       ]
     };
     function loadPerformanceSummary(containerId, growthId, yearType) {
@@ -5733,17 +6605,21 @@
         const percentEl = document.getElementById(percentId);
         const labelEl = document.getElementById(labelId);
         const progressEl = document.getElementById(progressId);
-        const percent = parseFloat(value || 0).toFixed(1);
+        const numericValue = Number(value) || 0;
+        const displayValue = numericValue.toFixed(1);
+        const progressValue = Math.max(0, Math.min(100, numericValue));
         if (percentEl) {
-          percentEl.textContent = `${percent}%`;
+          percentEl.textContent = `${displayValue}%`;
         }
         if (labelEl) {
-          labelEl.textContent = index >= 2 ? label.split(" ").slice(1).join(" ") : label;
+          labelEl.textContent = label;
         }
         if (progressEl) {
           const color = colors[index % colors.length];
-          progressEl.style.width = `${percent}%`;
-          progressEl.setAttribute("aria-valuenow", percent);
+          progressEl.style.width = `${progressValue}%`;
+          progressEl.setAttribute("aria-valuenow", displayValue);
+          progressEl.setAttribute("aria-valuemin", "0");
+          progressEl.setAttribute("aria-valuemax", "100");
           progressEl.className = `progress-bar ${color}`;
         }
       });
@@ -5753,7 +6629,8 @@
       if (!growthEl) {
         return;
       }
-      const growthValue = parseFloat(paidGrowth || 0).toFixed(2);
+      const growthValue = Number(paidGrowth) || 0;
+      const displayValue = growthValue.toFixed(2);
       let growthClass;
       let growthIcon;
       if (growthValue > 0) {
@@ -5768,7 +6645,7 @@
       }
       growthEl.classList.remove("text-success", "text-danger", "text-warning");
       growthEl.classList.add(growthClass);
-      growthEl.innerHTML = `${growthIcon} ${growthValue}%`;
+      growthEl.innerHTML = `${growthIcon} ${displayValue}%`;
     }
     return {
       loadPerformanceSummary
@@ -5779,12 +6656,16 @@
   var HomePage = /* @__PURE__ */ (() => {
     function init() {
       HourSummary.loadHoursSummary("#hours-summary");
-      ChartModule.loadChart("daily");
+      ChartModule.loadChart("daily", false, false, false, false, {
+        showAxes: false,
+        showGrid: false,
+        showPoints: false,
+        showTooltip: false,
+        showLegend: false,
+        showLabel: false
+      });
       ChartModule.loadChart("monthly");
-      ChartModule.loadChart("yearly");
       ChartModule.loadPrevYearCombinedChart();
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
       PerformanceMetrics.loadPerformanceSummary(
         "current-performance-summary",
         "current-paid-growth",
@@ -5795,14 +6676,21 @@
         "previous-paid-growth",
         "previous"
       );
+      HourSummary.loadTodayChargedHours();
+      ClientRanking.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+      ClientDataService.renderActivePaidOwedClients(true);
     }
-    return { init };
+    function destroy() {
+      ClientTableService.destroyStatusFilter();
+    }
+    return { init, destroy };
   })();
 
   // src/pages/monthly-overview-page.js
   var monthlyOverviewPage = /* @__PURE__ */ (() => {
     function init() {
-      HourSummary.loadHoursSummary("#hours-summary");
+      HourSummary.loadMonthlyHoursSummary("#monthly-hours-summary");
       ChartModule.loadChart("monthly");
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
@@ -5835,84 +6723,223 @@
 
   // src/hours/hour-target-progress.js
   var HourTargetProgress = /* @__PURE__ */ (() => {
-    function loadTargetProgress(cacheKey, functionName, containerSuffix, enableProgressColors = false) {
-      AppUtils.cachedGScriptCall(cacheKey, functionName, [], (data) => {
-        if (!data) {
-          return;
-        }
-        renderTargetProgress(data, containerSuffix, enableProgressColors);
-      });
-    }
-    function renderTargetProgress(data, containerSuffix, enableProgressColors) {
-      Object.entries(data).forEach(([id, value]) => {
-        updateTargetBox(id, value, containerSuffix, enableProgressColors);
-      });
-    }
-    function updateTargetBox(id, value, containerSuffix, enableProgressColors) {
-      if (typeof value !== "number") {
-        return;
+    const TARGET_CONFIG = [
+      {
+        id: "monthly-target",
+        valueKey: "monthlyProgress",
+        actualKey: "currentMonthHours",
+        targetKey: "monthlyTarget",
+        suffix: " hrs"
+      },
+      {
+        id: "daily-target",
+        valueKey: "dailyProgress",
+        actualKey: "currentMonthHours",
+        targetKey: "dailyElapsedTarget",
+        suffix: " hrs"
+      },
+      {
+        id: "ytd-target",
+        valueKey: "ytdProgress",
+        actualKey: "ytdHours",
+        targetKey: "ytdTarget",
+        suffix: " hrs"
+      },
+      {
+        id: "annual-target",
+        valueKey: "annualProgress",
+        actualKey: "ytdHours",
+        targetKey: "annualTarget",
+        suffix: " hrs"
+      },
+      {
+        id: "projected-target",
+        valueKey: "projectedProgress",
+        actualKey: "projectedAnnualHours",
+        targetKey: "annualTarget",
+        suffix: " hrs"
       }
-      const box = document.querySelector(`#${id}-${containerSuffix}`);
+    ];
+    function loadTargetProgress(cacheKey = "targetProgress", functionName = "getCurrentTargetProgress", debug = false, reset = false) {
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        functionName,
+        [],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            AppUtils.showError("\u26A0\uFE0F Invalid target data.");
+            return;
+          }
+          if (debug) {
+            console.log("[HourTargetProgress] data:", data);
+          }
+          renderTargetProgress(data);
+        },
+        debug,
+        reset
+      );
+    }
+    function renderTargetProgress(data) {
+      TARGET_CONFIG.forEach((config) => {
+        updateTargetBox(config, data);
+      });
+      updateCurrentMonthHours(data);
+    }
+    function updateTargetBox(config, data) {
+      const box = document.getElementById(config.id);
       if (!box) {
         return;
       }
+      const value = data[config.valueKey];
+      const actual = data[config.actualKey];
+      const target = data[config.targetKey];
       const number = box.querySelector(".widget-numbers");
+      const actualElement = box.querySelector(".target-actual");
+      const goalElement = box.querySelector(".target-goal");
+      const progressBar = box.querySelector(".progress-bar");
+      if ((config.id === "monthly-target" || config.id === "daily-target") && data.currentMonthHours === null) {
+        if (number) {
+          number.textContent = "\u2014";
+        }
+        if (actualElement) {
+          actualElement.textContent = "No current-month data";
+        }
+        if (goalElement) {
+          goalElement.textContent = "";
+        }
+        if (progressBar) {
+          progressBar.style.width = "0%";
+          progressBar.setAttribute("aria-valuenow", "0");
+          progressBar.classList.remove(
+            "bg-success",
+            "bg-info",
+            "bg-warning",
+            "bg-danger"
+          );
+        }
+        return;
+      }
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return;
+      }
       if (number) {
         number.textContent = `${value.toFixed(2)}%`;
       }
-      const progressBar = box.querySelector(".progress-bar");
+      if (actualElement && typeof actual === "number") {
+        actualElement.textContent = `${actual.toFixed(2)} hrs`;
+      }
+      if (goalElement && typeof target === "number") {
+        goalElement.textContent = `${target.toFixed(2)} hrs`;
+      }
       if (!progressBar) {
         return;
       }
-      updateProgressBar(progressBar, value, enableProgressColors);
+      const progress = Math.max(0, Math.min(100, value));
+      progressBar.style.width = `${progress}%`;
+      progressBar.setAttribute("aria-valuenow", String(progress));
+      updateProgressColor(progressBar, value);
     }
-    function updateProgressBar(progressBar, value, enableProgressColors) {
-      progressBar.style.width = `${value}%`;
-      progressBar.setAttribute("aria-valuenow", value);
-      if (!enableProgressColors) {
+    function updateCurrentMonthHours(data) {
+      const element = document.getElementById("current-month-target-hours");
+      const status = document.getElementById("current-month-target-status");
+      if (!element) {
         return;
       }
+      if (data.currentMonthHours === null) {
+        element.textContent = "\u2014";
+        if (status) {
+          status.textContent = "No current-month data";
+        }
+        return;
+      }
+      element.textContent = `${data.currentMonthHours.toFixed(2)} hrs`;
+      if (status) {
+        status.textContent = `${data.currentMonth}`;
+      }
+    }
+    function updateProgressColor(progressBar, value) {
       progressBar.classList.remove(
         "bg-success",
         "bg-info",
         "bg-warning",
         "bg-danger"
       );
-      progressBar.classList.add(getProgressColor(value));
-    }
-    function getProgressColor(value) {
       if (value >= 100) {
-        return "bg-success";
+        progressBar.classList.add("bg-success");
+      } else if (value >= 75) {
+        progressBar.classList.add("bg-info");
+      } else if (value >= 50) {
+        progressBar.classList.add("bg-warning");
+      } else {
+        progressBar.classList.add("bg-danger");
       }
-      if (value >= 75) {
-        return "bg-info";
+    }
+    function loadTargetChart(cacheKey = "targetChart", functionName = "getCurrentYearTargetChartData", debug = false, reset = false) {
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        functionName,
+        [],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showError("\u26A0\uFE0F Invalid target chart data.");
+            return;
+          }
+          if (debug) {
+            console.log("[HourTargetProgress] chart data:", data);
+          }
+          renderTargetChart(data);
+        },
+        debug,
+        reset
+      );
+    }
+    function renderTargetChart(data) {
+      const container = document.getElementById("chart-monthly-targets");
+      if (!container) {
+        console.warn(
+          "[HourTargetProgress] Chart container not found:",
+          "chart-monthly-targets"
+        );
+        return;
       }
-      if (value >= 50) {
-        return "bg-warning";
+      if (!data.length) {
+        container.innerHTML = `
+        <div class="text-center text-muted py-5">
+          No monthly hours data available.
+        </div>
+      `;
+        return;
       }
-      return "bg-danger";
+      container.innerHTML = "";
+      const canvas = document.createElement("canvas");
+      canvas.id = "monthly-target-hours-chart";
+      container.appendChild(canvas);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return;
+      }
+      const existing = Chart.getChart(canvas);
+      if (existing) {
+        existing.destroy();
+      }
+      ChartModule.drawMonthlyTargetChart(ctx, "monthly_target_hours", data);
     }
     return {
-      loadTargetProgress
+      loadTargetProgress,
+      loadTargetChart
     };
   })();
 
   // src/pages/performance-target-page.js
   var performanceTargetPage = /* @__PURE__ */ (() => {
     function init() {
-      ChartModule.drawRealtimeAnimatedChart();
-      ChartModule.loadPrevYearCombinedChart();
-      HourTargetProgress.loadTargetProgress(
-        "targetPercentsCurrentYear",
-        "getCurrentYearTargetProgress",
-        "curr-target-hrs",
-        true
+      HourTargetProgress.loadTargetChart(
+        "targetChart",
+        "getCurrentYearTargetChartData"
       );
       HourTargetProgress.loadTargetProgress(
-        "targetPercentsPreviousYear",
-        "getPreviousYearTargetProgress",
-        "prev-target-hrs",
-        true
+        "targetProgress",
+        "getCurrentTargetProgress"
       );
     }
     return { init };
@@ -6492,8 +7519,13 @@
         }
         const configured = Boolean(config?.configured);
         statusEl.classList.toggle("is-inactive", !configured);
-        statusEl.textContent = configured ? `\u2713 Configured${config.masked ? ` \u2014 ${config.masked}` : ""}` : "Not configured";
+        statusEl.textContent = configured ? "Configured" : "Not configured";
       });
+      const selected = AppUtils.cacheGet("selectedIntegration");
+      if (selected) {
+        openIntegrationModal(selected);
+        AppUtils.cacheClear("selectedIntegration");
+      }
     }
     function openIntegrationModal(integration) {
       const config = getIntegrationConfig(integration);
@@ -6693,7 +7725,6 @@
       $(document).off("click.externalSheetsPage", ".external-sheet-view-btn").on("click.externalSheetsPage", ".external-sheet-view-btn", handleView);
     }
     function loadData(reset = false) {
-      HourSummary.loadHoursSummary("#hours-summary");
       DataTableModule.showLoader(TABLE_ID);
       AppUtils.cachedGScriptCall(
         CACHE_KEY,

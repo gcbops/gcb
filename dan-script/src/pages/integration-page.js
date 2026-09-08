@@ -142,9 +142,16 @@ const integrationsConfigurationPage = (() => {
       statusEl.classList.toggle("is-inactive", !configured);
 
       statusEl.textContent = configured
-        ? `✓ Configured${config.masked ? ` — ${config.masked}` : ""}`
+        ? "Configured"
         : "Not configured";
     });
+
+    const selected = AppUtils.cacheGet("selectedIntegration");
+
+    if (selected) {
+      openIntegrationModal(selected);
+      AppUtils.cacheClear("selectedIntegration");
+    }
   }
 
   function openIntegrationModal(integration) {

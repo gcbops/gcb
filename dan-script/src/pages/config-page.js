@@ -1,4 +1,5 @@
 import { ReportActions } from "../reports/actions.js";
+import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
 
 const settingsConfigurationPage = (() => {
@@ -6,8 +7,7 @@ const settingsConfigurationPage = (() => {
   const loadedTabs = new Set();
 
   const tabHandlers = {
-    "#tab-content-2": loadIntegrationStatus,
-    "#tab-content-3": loadAppearanceSettings,
+    // "#tab-content-2": loadIntegrationSettings,
   };
 
   function clearCache(btn) {
@@ -44,47 +44,6 @@ const settingsConfigurationPage = (() => {
       .syncClientSheetList();
   }
 
-  function loadIntegrationStatus() {
-    google.script.run
-      .withSuccessHandler((data) => {
-        const fields = {
-          notifEmailStatus: data.notifEmail,
-          notifDiscordStatus: data.notifDiscord,
-          spreadsheetIdStatus: data.spreadsheetId,
-          reportFolderIdStatus: data.reportFolderId,
-        };
-
-        Object.entries(fields).forEach(([id, config]) => {
-          const element = document.getElementById(id);
-
-          if (!element) {
-            return;
-          }
-
-          const configured = Boolean(config?.configured);
-
-          element.classList.toggle("is-inactive", !configured);
-
-          element.textContent = configured
-            ? `✓ Configured — ${config.masked}`
-            : "Not configured";
-        });
-      })
-      .withFailureHandler((err) => {
-        console.error("getConfigStatus failed:", err);
-
-        AppUtils.showDashboardToast(
-          "Failed to load integration settings.",
-          "error",
-        );
-      })
-      .getIntegrationStatus();
-  }
-
-  function loadAppearanceSettings() {
-    // Load appearance settings here.
-  }
-
   function handleClick(e) {
     const btn = e.target.closest(
       "#btnClearCache, #btnSyncClient, #btnBackupAllSheets, #btnAddMasterFormula",
@@ -97,6 +56,7 @@ const settingsConfigurationPage = (() => {
     e.preventDefault();
 
     switch (btn.id) {
+      //main tab click
       case "btnClearCache":
         AppUtils.openConfirmationModal({
           ns: "clearCache",
@@ -139,6 +99,8 @@ const settingsConfigurationPage = (() => {
           },
         });
         break;
+
+      //other click events
 
       default:
         // Unknown button; ignore or log if needed
@@ -310,6 +272,23 @@ const settingsConfigurationPage = (() => {
     });
   }
 
+  function handleIntegrationListClick(e) {
+    const item = e.target.closest(".integration-list-item");
+    if (!item) {return;}
+
+    // Ignore "Coming soon" item
+    if (item.classList.contains("integration-list-item-coming")) {return;}
+
+    const integration = item.getAttribute("data-integration");
+    if (!integration) {return;}
+
+    // Store which integration was clicked
+    AppUtils.cacheSet("selectedIntegration", integration);
+
+    // Navigate to integrations page
+    RouterModule.go("integrationsConfiguration");
+  }
+
   function isValidCellRef(ref) {
     return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
   }
@@ -404,53 +383,9 @@ const settingsConfigurationPage = (() => {
   function handleSubmit(e) {
     e.preventDefault();
 
-    if (e.target.id === "settingsIntegrationForm") {
-      const form = e.target;
-      const $btn = $(form).find('button[type="submit"], input[type="submit"]');
-
-      ReportActions.confirmAction(
-        "saveGlobalIntegrationSettings",
-        "Save Integration Settings?",
-        "Are you sure you want to update the master integration connections, alert directories, and pipeline destination paths?",
-        () => {
-          saveIntegrationSettings(form, $btn);
-        },
-      );
-    }
-  }
-
-  function saveIntegrationSettings(form, $btn) {
-    const data = {
-      notifEmail: form.notifEmail.value.trim(),
-      notifDiscord: form.notifDiscord.value.trim(),
-      spreadsheetId: form.spreadsheetId.value.trim(),
-      reportFolderId: form.reportFolderId.value.trim(),
-    };
-
-    AppUtils.submitForm({
-      gscriptFunc: "saveIntegrationSettings",
-      data,
-      $btn,
-      loadingText: "Saving integration settings...",
-
-      onSuccess: (result) => {
-        AppUtils.showDashboardToast(
-          result?.message || "Integration settings saved successfully!",
-          "success",
-        );
-
-        loadIntegrationStatus();
-      },
-
-      onError: (err) => {
-        console.error("saveIntegrationSettings failed:", err);
-
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to save integration settings.",
-          "error",
-        );
-      },
-    });
+    // if (e.target.id === "settingsIntegrationForm") {
+      
+    // }
   }
 
   function init() {
@@ -461,6 +396,7 @@ const settingsConfigurationPage = (() => {
     initialized = true;
 
     document.addEventListener("click", handleClick);
+    document.addEventListener("click", handleIntegrationListClick);
     document.addEventListener("shown.bs.tab", handleTabShown);
     document.addEventListener("submit", handleSubmit);
   }

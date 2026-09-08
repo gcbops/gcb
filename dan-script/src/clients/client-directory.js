@@ -295,17 +295,45 @@ const ClientDirectory = (() => {
       return;
     }
 
-    const row = button.closest("tr");
+    // Get the <tr> that directly contains the button (could be child row or main row)
+    const immediateRow = button.closest("tr");
 
-    if (!row) {
+    if (!immediateRow) {
       return;
     }
 
-    const clientName = row
-      .querySelector(".widget-heading")
-      ?.textContent?.trim();
+    const table = $(immediateRow).closest("table")[0];
+    const api = $(table).DataTable();
+
+    let rowNode;
+
+    // If the row is a Responsive child row, get its parent data row
+    if (immediateRow.classList.contains("child")) {
+      // The previous <tr> is the parent data row
+      rowNode = immediateRow.previousElementSibling;
+    } else {
+      rowNode = immediateRow;
+    }
+
+    if (!rowNode) {
+      return;
+    }
+
+    // Get DataTables row data using the row node
+    const rowData = api.row(rowNode).data();
+
+    // Prefer data from rowData if your object has clientName there
+    let clientName = rowData?.clientName || rowData?.name || rowData?.Client;
+
+    // Fallback to DOM if needed
+    if (!clientName) {
+      clientName = rowNode
+        .querySelector(".widget-heading")
+        ?.textContent?.trim();
+    }
 
     if (!clientName) {
+      console.warn("[ClientDirectory] Could not determine client name");
       return;
     }
 
@@ -324,7 +352,6 @@ const ClientDirectory = (() => {
       })
       .withFailureHandler((error) => {
         console.error("[ClientDirectory] Failed to open client sheet:", error);
-
         AppUtils.showError(error);
       })
       .goToPresentClient(clientName);

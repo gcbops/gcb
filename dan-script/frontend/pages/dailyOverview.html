@@ -1,57 +1,165 @@
-<div class="row" id="hours-summary">
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-midnight-bloom">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Total Hours</div>
-                    <div class="widget-subheading">Cumulative Tracked Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
+<div class="row" id="daily-overview-summary">
+
+  <!-- TODAY'S HOURS -->
+  <div class="col-md-6 col-xl-4 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Hours Today
             </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-happy-itmeo">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Paid Hours</div>
-                    <div class="widget-subheading">Client Paid Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-metric="today-hours">0.0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                hrs
+              </span>
             </div>
+          </div>
         </div>
+
+        <div
+          data-metric="hours-yesterday"
+          class="pt-2 mt-2 border-top font-size-xs"
+        >
+          No comparison available
+        </div>
+
+      </div>
     </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-night-sky">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Owed Hours</div>
-                    <div class="widget-subheading">Outstanding Work Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
+  </div>
+
+
+  <!-- ACTIVE CLIENTS -->
+  <div class="col-md-6 col-xl-4 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Active Clients
             </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card mb-3 widget-content bg-malibu-beach">
-            <div class="widget-content-wrapper text-white">
-                <div class="widget-content-left">
-                    <div class="widget-heading">Net Hours</div>
-                    <div class="widget-subheading">Net Tracked Hours</div>
-                </div>
-                <div class="widget-content-right">
-                    <div class="widget-numbers text-white"><span></span></div>
-                </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-metric="active-clients">0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                clients
+              </span>
             </div>
+          </div>
         </div>
+
+        <div
+          data-metric="clients-yesterday"
+          class="pt-2 mt-2 border-top font-size-xs"
+        >
+          No comparison available
+        </div>
+
+      </div>
     </div>
+  </div>
+
+
+  <!-- MONTHLY HOURS -->
+  <div class="col-md-6 col-xl-4 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Monthly Hours
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-metric="month-hours">0.0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                hrs
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          data-metric="month-previous"
+          class="pt-2 mt-2 border-top font-size-xs"
+        >
+          No comparison available
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DAILY AVERAGE -->
+  <div class="col-md-6 col-xl-4 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+          Daily Average
+        </div>
+
+        <div class="h3 mb-0 font-weight-bold text-dark">
+          <span data-metric="month-average">0.0</span>
+          <span class="font-size-sm font-weight-normal text-secondary">
+            hrs/day
+          </span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- YESTERDAY -->
+  <div class="col-md-6 col-xl-4 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+          Yesterday
+        </div>
+
+        <div class="h3 mb-0 font-weight-bold text-dark">
+          <span data-metric="yesterday-hours">0.0</span>
+          <span class="font-size-sm font-weight-normal text-secondary">
+            hrs
+          </span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- OVERALL HOURS -->
+  <div class="col-md-6 col-xl-4 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+          Overall Working Hours
+        </div>
+
+        <div class="h3 mb-0 font-weight-bold text-dark">
+          <span data-metric="overall-hours">0.0</span>
+          <span class="font-size-sm font-weight-normal text-secondary">
+            hrs
+          </span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
 </div>
+
 <div class="row">
     <div class="col-md-12"> 
         <div class="main-card mb-3 card">

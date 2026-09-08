@@ -59,6 +59,9 @@ const CONFIG = {
       "Current Year Log",
       "External Sheets",
       "Other Analytics",
+      "Team Sheet",
+      "Daily Activities Metrics",
+      "Daily Charged Hours"
     ]),
   },
 

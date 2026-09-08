@@ -1,8 +1,6 @@
 import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
-import { ClientRanking } from "../clients/client-ranking.js";
 import { ClientDirectory } from "../clients/client-directory.js";
-import { ProjectRankings } from "../projects/project-ranking.js";
 import { TableClientSelector } from "../tables/client-selector.js";
 import { ReportActions } from "../reports/actions.js";
 
@@ -111,8 +109,6 @@ const allClientsPage = (() => {
 
   const loadData = () => {
     ClientDirectory.init("allClientsData");
-    ClientRanking.renderTopPaidClients();
-    ProjectRankings.renderTopProjects();
   };
 
   return { init, destroy };

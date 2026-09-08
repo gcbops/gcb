@@ -1,22 +1,13 @@
-import { ClientDataService } from "../clients/client-data-service";
-import { ClientRanking } from "../clients/client-ranking.js";
-import { ProjectRankings } from "../projects/project-ranking.js";
-
-const activeClientsPage = (() => {
+const ClientTableService = (() => {
   let filterInitialized = false;
   let dropdownGroup = null;
   let menu = null;
   let items = [];
   let toggleBtn = null;
+  let filterHandler = null;
 
-  const filterConfig = {
-    dropdownId: "categoryDtFilter",
-    tableId: "active-clients",
-    statusColumnIndex: null, // null = last column; or set e.g. 6
-  };
-
-  function applyStatusFilterOnActiveClients(selectedValue) {
-    const table = document.getElementById(filterConfig.tableId);
+  function applyStatusFilter(tableId, selectedValue) {
+    const table = document.getElementById(tableId);
 
     if (!table) {
       return;
@@ -47,7 +38,6 @@ const activeClientsPage = (() => {
         cells[0].textContent = visibleIndex++;
       }
     });
-
   }
 
   function resetDropdownState() {
@@ -64,12 +54,12 @@ const activeClientsPage = (() => {
     });
   }
 
-  function initStatusFilter() {
+  function initStatusFilter(dropdownId, tableId, defaultValue = "Show All") {
     if (filterInitialized) {
       return;
     }
 
-    dropdownGroup = document.getElementById(filterConfig.dropdownId);
+    dropdownGroup = document.getElementById(dropdownId);
 
     if (!dropdownGroup) {
       return;
@@ -96,20 +86,21 @@ const activeClientsPage = (() => {
 
       items.forEach((item) => {
         const text = item.textContent.trim();
+        const isSelected = text === value;
 
-        if (text === value) {
-          item.classList.add("disabled");
+        item.classList.toggle("disabled", isSelected);
+
+        if (isSelected) {
           item.setAttribute("aria-disabled", "true");
         } else {
-          item.classList.remove("disabled");
           item.removeAttribute("aria-disabled");
         }
       });
 
-      applyStatusFilterOnActiveClients(value);
+      applyStatusFilter(tableId, value);
     }
 
-    function onItemClick(e) {
+    filterHandler = (e) => {
       const item = e.target.closest(".dropdown-item");
 
       if (!item || item.classList.contains("disabled")) {
@@ -122,29 +113,22 @@ const activeClientsPage = (() => {
       item.blur();
 
       setSelected(value);
-    }
+    };
 
-    menu.addEventListener("click", onItemClick);
-
-    menu._activeClientsFilterHandler = onItemClick;
+    menu.addEventListener("click", filterHandler);
 
     filterInitialized = true;
+
+    // Apply initial state
+    setSelected(defaultValue);
   }
 
-  function destroy() {
-    if (!filterInitialized || !menu) {
-      return;
+  function destroyStatusFilter() {
+    if (menu && filterHandler) {
+      menu.removeEventListener("click", filterHandler);
     }
 
-    const handler = menu._activeClientsFilterHandler;
-
-    if (handler) {
-      menu.removeEventListener("click", handler);
-      menu._activeClientsFilterHandler = null;
-    }
-
-    // Reset all table rows
-    applyStatusFilterOnActiveClients("Show All");
+    filterHandler = null;
 
     resetDropdownState();
 
@@ -155,14 +139,11 @@ const activeClientsPage = (() => {
     toggleBtn = null;
   }
 
-  function init() {
-    ClientDataService.renderActivePaidOwedClients();
-
-    ClientRanking.renderTopPaidClients();
-    ProjectRankings.renderTopProjects();
-  }
-
-  return { init, initStatusFilter, destroy };
+  return {
+    applyStatusFilter,
+    initStatusFilter,
+    destroyStatusFilter,
+  };
 })();
 
-export { activeClientsPage };
+export { ClientTableService };

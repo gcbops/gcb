@@ -146,13 +146,17 @@ function getActiveClientsPaidOwed() {
 
     return values
       .filter((row) => row.some((value) => value !== ""))
-      .map((row) => ({
-        client: row[0],
-        totalOwed: Number(row[1]) || 0,
-        currentMonthOwed: Number(row[2]) || 0,
-        totalPaid: Number(row[3]) || 0,
-        today: Number(row[4]) || 0,
-      }));
+      .map((row) => {
+        const client = row[0] ?? "";
+        return {
+          client,
+          totalOwed: Number(row[1]) || 0,
+          currentMonthOwed: Number(row[2]) || 0,
+          totalPaid: Number(row[3]) || 0,
+          today: row[4] ?? "",
+          paidOwedHistory: getClientPaidOwedDataHistory(client),
+        };
+      });
   } catch (err) {
     throw new Error(err.message || String(err));
   }
@@ -338,4 +342,45 @@ function createClientSheet(input) {
 
   ss.setActiveSheet(newSheet);
   ss.moveActiveSheet(1);
+}
+
+function getClientPaidOwedDataHistory(clientName) {
+  try {
+    const sheet = getSheetSafe(clientName);
+    if (!sheet) return [];
+
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow < 51) {
+      return [];
+    }
+
+    const currentYear = new Date().getFullYear();
+    const previousYear = currentYear - 1;
+
+    const dataRange = sheet.getRange(51, 11, lastRow - 50, 4);
+
+    const values = dataRange.getValues();
+
+    return values
+      .filter((r) => {
+        if (!r.some((v) => v !== "" && v !== null)) {
+          return false;
+        }
+
+        const year = Number(r[0]);
+
+        return year === currentYear || year === previousYear;
+      })
+      .map((r) => ({
+        year: Number(r[0]),
+        hoursPaid: Number(r[1]) || 0,
+        hoursOwed: Number(r[2]) || 0,
+        netHours: Number(r[3]) || 0,
+      }));
+  } catch (e) {
+    console.warn("Failed to load sales for client:", clientName, e);
+
+    return [];
+  }
 }

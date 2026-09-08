@@ -506,67 +506,72 @@ const AppUtils = (() => {
 
   function openDrawer(drawerSelector, options = {}) {
     const { contentClass = "", onOpen = null, onClose = null } = options;
-
     const $drawer = $(drawerSelector);
-
-    if (!$drawer.length) {
-      return;
-    }
-
+    if (!$drawer.length) {return;}
     const $content = $drawer.find(".drawer-content");
 
-    /*
-     * Remove previous close handler first.
-     * This prevents duplicate handlers if openDrawer()
-     * is called multiple times.
-     */
-    $drawer.off("click.AppUtilsDrawerClose");
+    $drawer
+      .off("click.AppUtilsDrawerClose")
+      .off("click.AppUtilsDrawerMinimize");
+    $drawer.removeClass("drawer-minimized").addClass("drawer-open");
 
-    $drawer.addClass("drawer-open");
+    // Set initial minimize icon to angle-down
+    $drawer
+      .find(".drawer-minimize i")
+      .removeClass("pe-7s-angle-up")
+      .addClass("pe-7s-angle-down");
 
-    if (contentClass) {
-      $content.addClass(contentClass);
-    }
-
-    if (typeof onOpen === "function") {
-      onOpen($drawer, $content);
-    }
+    if (contentClass) {$content.addClass(contentClass);}
+    if (typeof onOpen === "function") {onOpen($drawer, $content);}
 
     $drawer.on("click.AppUtilsDrawerClose", ".drawer-close", function (e) {
       e.preventDefault();
-
       closeDrawer($drawer, $content, onClose);
     });
+
+    $drawer.on(
+      "click.AppUtilsDrawerMinimize",
+      ".drawer-minimize",
+      function (e) {
+        e.preventDefault();
+        const $btn = $(this);
+        const isMinimized = $drawer
+          .toggleClass("drawer-minimized")
+          .hasClass("drawer-minimized");
+        const $icon = $btn.find("i");
+
+        if (isMinimized) {
+          $icon.removeClass("pe-7s-angle-down").addClass("pe-7s-angle-up");
+        } else {
+          $icon.removeClass("pe-7s-angle-up").addClass("pe-7s-angle-down");
+        }
+      },
+    );
   }
 
   function closeDrawer($drawer, $content = null, onClose = null) {
     const $drawerElement = $drawer instanceof jQuery ? $drawer : $($drawer);
-
-    if (!$drawerElement.length) {
-      return;
-    }
-
+    if (!$drawerElement.length) {return;}
     const $contentElement = $content
       ? $content instanceof jQuery
         ? $content
         : $($content)
       : $drawerElement.find(".drawer-content");
 
-    /*
-     * Remove the namespaced handler so reopening the drawer
-     * doesn't stack handlers.
-     */
-    $drawerElement.off("click.AppUtilsDrawerClose");
+    $drawerElement
+      .off("click.AppUtilsDrawerClose")
+      .off("click.AppUtilsDrawerMinimize");
+    if (!$drawerElement.hasClass("drawer-open")) {return;}
 
-    if (!$drawerElement.hasClass("drawer-open")) {
-      return;
-    }
+    $drawerElement.removeClass("drawer-open drawer-minimized");
 
-    $drawerElement.removeClass("drawer-open");
+    // Reset icon to angle-down when closing
+    $drawerElement
+      .find(".drawer-minimize i")
+      .removeClass("pe-7s-angle-up")
+      .addClass("pe-7s-angle-down");
 
-    if (typeof onClose === "function") {
-      onClose($drawerElement, $contentElement);
-    }
+    if (typeof onClose === "function") {onClose($drawerElement, $contentElement);}
   }
 
   function submitForm({

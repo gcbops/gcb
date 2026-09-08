@@ -8,17 +8,16 @@ const PerformanceMetrics = (() => {
 
   const COLORS = {
     current: [
-      "bg-arielle-smile",
+      "bg-grow-early",
+      "bg-love-kiss",
       "bg-sunny-morning",
       "bg-ripe-malin",
-      "bg-grow-early",
     ],
-
     previous: [
-      "bg-deep-blue",
       "bg-tempting-azure",
+      "bg-deep-blue",
       "bg-ripe-malin",
-      "bg-grow-early",
+      "bg-amy-crisp",
     ],
   };
 
@@ -47,7 +46,6 @@ const PerformanceMetrics = (() => {
       "getPerformanceSummary",
       [yearType],
       (data) => {
-
         if (!data || !Array.isArray(data.percentages)) {
           console.warn("[PerformanceMetrics] Invalid data:", data);
 
@@ -110,23 +108,37 @@ const PerformanceMetrics = (() => {
 
       const progressEl = document.getElementById(progressId);
 
-      const percent = parseFloat(value || 0).toFixed(1);
+      const numericValue = Number(value) || 0;
+
+      const displayValue = numericValue.toFixed(1);
+
+      /*
+       * Progress bars must stay between
+       * 0% and 100%.
+       *
+       * The displayed number can still
+       * be negative.
+       */
+      const progressValue = Math.max(0, Math.min(100, numericValue));
 
       if (percentEl) {
-        percentEl.textContent = `${percent}%`;
+        percentEl.textContent = `${displayValue}%`;
       }
 
       if (labelEl) {
-        labelEl.textContent =
-          index >= 2 ? label.split(" ").slice(1).join(" ") : label;
+        labelEl.textContent = label;
       }
 
       if (progressEl) {
         const color = colors[index % colors.length];
 
-        progressEl.style.width = `${percent}%`;
+        progressEl.style.width = `${progressValue}%`;
 
-        progressEl.setAttribute("aria-valuenow", percent);
+        progressEl.setAttribute("aria-valuenow", displayValue);
+
+        progressEl.setAttribute("aria-valuemin", "0");
+
+        progressEl.setAttribute("aria-valuemax", "100");
 
         progressEl.className = `progress-bar ${color}`;
       }
@@ -140,19 +152,24 @@ const PerformanceMetrics = (() => {
       return;
     }
 
-    const growthValue = parseFloat(paidGrowth || 0).toFixed(2);
+    const growthValue = Number(paidGrowth) || 0;
+
+    const displayValue = growthValue.toFixed(2);
 
     let growthClass;
     let growthIcon;
 
     if (growthValue > 0) {
       growthClass = "text-success";
+
       growthIcon = '<i class="fa fa-angle-up"></i>';
     } else if (growthValue < 0) {
       growthClass = "text-danger";
+
       growthIcon = '<i class="fa fa-angle-down"></i>';
     } else {
       growthClass = "text-warning";
+
       growthIcon = '<i class="fa fa-dot-circle"></i>';
     }
 
@@ -160,7 +177,7 @@ const PerformanceMetrics = (() => {
 
     growthEl.classList.add(growthClass);
 
-    growthEl.innerHTML = `${growthIcon} ${growthValue}%`;
+    growthEl.innerHTML = `${growthIcon} ${displayValue}%`;
   }
 
   return {

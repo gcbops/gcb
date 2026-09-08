@@ -1,287 +1,258 @@
 <ul class="body-tabs body-tabs-layout tabs-animated body-tabs-animated nav" role="tablist">
     <li class="nav-item" role="presentation">
-        <a role="tab" class="nav-link active" id="tab-1" data-bs-toggle="tab" href="#tab-content-1"
+        <a role="tab" class="nav-link active" id="main-tab" data-bs-toggle="tab" href="#main-tab-content"
             aria-selected="true">
             <span>General</span></a>
     </li>
     <li class="nav-item" role="presentation">
-        <a role="tab" class="nav-link" id="tab-2" data-bs-toggle="tab" href="#tab-content-2" aria-selected="false"
+        <a role="tab" class="nav-link" id="integration-tab" data-bs-toggle="tab" href="#integration-tab-content" aria-selected="false"
             tabindex="-1">
-            <span>Integration</span>
-        </a>
-    </li>
-    <li class="nav-item" role="presentation">
-        <a role="tab" class="nav-link" id="tab-3" data-bs-toggle="tab" href="#tab-content-3" aria-selected="false"
-            tabindex="-1">
-            <span>Appearance</span>
+            <span>Integrations</span>
         </a>
     </li>
 </ul>
 
 <div class="tab-content">
-    <div class="tab-pane tabs-animation fade active show" id="tab-content-1" role="tabpanel" aria-labelledby="tab-1">
-        <div class="row">
-            <div class="col-md-3">
-                <div class="mb-3 text-center card card-body">
-                    <h5 class="card-title">Clear Cache</h5>
-                    <button class="btn btn-focus" id="btnClearCache">Refresh Now</button>
+    <div class="tab-pane tabs-animation fade active show" id="main-tab-content" role="tabpanel" aria-labelledby="tab-1">
+        <!-- SYSTEM ACTIONS DASHBOARD WORKSPACE -->
+        <div class="card card-shadow-sm border-0 bg-white mb-4">
+
+            <!-- HORIZONTAL PIPELINE CONTROL STACK -->
+            <div class="card-body p-0">
+                <div class="d-flex flex-column split-rows-container">
+                <!-- ROW 1: CLEAR CACHE -->
+                <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
+                    <div class="d-flex align-items-center me-3">
+                    <div
+                        class="icon-square-wrapper d-flex align-items-center justify-content-center bg-focus-light text-focus rounded p-2 me-3"
+                        style="width: 42px; height: 42px; min-width: 42px"
+                    >
+                        <i class="fa fa-refresh font-size-md" id="icon-btnClearCache"></i>
+                    </div>
+                    <div>
+                        <div class="font-weight-bold text-dark font-size-sm mb-0">Application Local Storage Cache</div>
+                        <div class="text-muted font-size-xs">
+                        Purges isolated browser state variables and refetches the configuration architecture profile.
+                        </div>
+                    </div>
+                    </div>
+                    <div class="action-control-zone">
+                    <button class="btn btn-outline-focus btn-sm font-weight-bold px-3 btn-action-trigger" id="btnClearCache">
+                        Run Clean
+                    </button>
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="mb-3 text-center card card-body">
-                    <h5 class="card-title">Sync Client List</h5>
-                    <button class="btn btn-focus" id="btnSyncClient">Sync Now</button>
+
+                <!-- ROW 2: SYNC CLIENT LIST -->
+                <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
+                    <div class="d-flex align-items-center me-3">
+                    <div
+                        class="icon-square-wrapper d-flex align-items-center justify-content-center bg-primary-light text-primary rounded p-2 me-3"
+                        style="width: 42px; height: 42px; min-width: 42px"
+                    >
+                        <i class="fa fa-users font-size-md" id="icon-btnSyncClient"></i>
+                    </div>
+                    <div>
+                        <div class="font-weight-bold text-dark font-size-sm mb-0">Client Registry Synchronization</div>
+                        <div class="text-muted font-size-xs">
+                        Reconciles structural indices and refreshes missing client names from the core active sheets ledger.
+                        </div>
+                    </div>
+                    </div>
+                    <div class="action-control-zone">
+                    <button class="btn btn-outline-primary btn-sm font-weight-bold px-3 btn-action-trigger" id="btnSyncClient">
+                        Sync Directory
+                    </button>
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="mb-3 text-center card card-body">
-                    <h5 class="card-title">Add Master Formula</h5>
-                    <button class="btn btn-focus" id="btnAddMasterFormula">Add Now</button>
+
+                <!-- ROW 3: ADD MASTER FORMULA -->
+                <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
+                    <div class="d-flex align-items-center me-3">
+                    <div
+                        class="icon-square-wrapper d-flex align-items-center justify-content-center bg-success-light text-success rounded p-2 me-3"
+                        style="width: 42px; height: 42px; min-width: 42px"
+                    >
+                        <i class="fa fa-calculator font-size-md" id="icon-btnAddMasterFormula"></i>
+                    </div>
+                    <div>
+                        <div class="font-weight-bold text-dark font-size-sm mb-0">Master Spreadsheet Formula Deployment</div>
+                        <div class="text-muted font-size-xs">
+                        Injects and updates centralized parsing calculations instantly into individual multi-client project
+                        matrices.
+                        </div>
+                    </div>
+                    </div>
+                    <div class="action-control-zone">
+                    <button
+                        class="btn btn-outline-success btn-sm font-weight-bold px-3 btn-action-trigger"
+                        id="btnAddMasterFormula"
+                    >
+                        Deploy Formula
+                    </button>
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="mb-3 text-center card card-body">
-                    <h5 class="card-title">Manual Sheets Backup</h5>
-                    <button class="btn btn-focus" id="btnBackupAllSheets">Backup Now</button>
+
+                <!-- ROW 4: MANUAL SHEETS BACKUP -->
+                <div class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all">
+                    <div class="d-flex align-items-center me-3">
+                    <div
+                        class="icon-square-wrapper d-flex align-items-center justify-content-center bg-warning-light text-warning rounded p-2 me-3"
+                        style="width: 42px; height: 42px; min-width: 42px"
+                    >
+                        <i class="fa fa-cloud-upload font-size-md" id="icon-btnBackupAllSheets"></i>
+                    </div>
+                    <div>
+                        <div class="font-weight-bold text-dark font-size-sm mb-0">Global Cloud Spreadsheet Snapshots</div>
+                        <div class="text-muted font-size-xs">
+                        Triggers a forced manual compilation point, backing up all registered operational ledger assets safely.
+                        </div>
+                    </div>
+                    </div>
+                    <div class="action-control-zone">
+                    <button
+                        class="btn btn-outline-warning btn-sm font-weight-bold px-3 btn-action-trigger"
+                        id="btnBackupAllSheets"
+                    >
+                        Run Backup
+                    </button>
+                    </div>
+                </div>
                 </div>
             </div>
         </div>
     </div>
-    <div
-        class="tab-pane tabs-animation fade"
-        id="tab-content-2"
-        role="tabpanel"
-        aria-labelledby="tab-2"
-    >
-        <div class="main-card mb-3 card">
-            <div class="card-body">
-                <div class="card-title">Integration Settings</div>
-                <form id="settingsIntegrationForm">
-
-                    <!-- NOTIFICATION EMAIL -->
-                    <div class="position-relative form-group mb-3">
-                        <label for="notifEmail">
-                            Notification Email
-                        </label>
-
-                        <div
-                            class="secret-status mb-2"
-                            id="notifEmailStatus"
-                        >
-                            Not configured. Enter an email address below to configure notifications.
-                        </div>
-
-                        <input
-                            name="notifEmail"
-                            id="notifEmail"
-                            placeholder="Enter notification email"
-                            type="email"
-                            class="form-control"
-                            autocomplete="off"
-                        >
-
-                        <small class="form-text text-muted">
-                            Leave blank to keep the current email.
-                        </small>
-                    </div>
-
-                    <!-- DISCORD WEBHOOK -->
-                    <div class="position-relative form-group mb-3">
-                        <label for="notifDiscord">
-                            Discord Webhook
-                        </label>
-
-                        <div
-                            class="secret-status mb-2"
-                            id="notifDiscordStatus"
-                        >
-                            Not configured. Create a Discord webhook and enter the URL below.
-                        </div>
-
-                        <input
-                            name="notifDiscord"
-                            id="notifDiscord"
-                            placeholder="Enter Discord webhook URL"
-                            type="url"
-                            class="form-control"
-                            autocomplete="new-password"
-                        >
-
-                        <small class="form-text text-muted">
-                            In Discord, go to your server → Edit Channel →
-                            Integrations → Webhooks → Create Webhook →
-                            Copy Webhook URL.
-                        </small>
-                    </div>
-
-                    <!-- GOOGLE SPREADSHEET -->
-                    <div class="position-relative form-group mb-3">
-                        <label for="spreadsheetId">
-                            Google Spreadsheet
-                        </label>
-
-                        <div
-                            class="secret-status mb-2"
-                            id="spreadsheetIdStatus"
-                        >
-                            Not configured. Enter the Google Spreadsheet ID below.
-                        </div>
-
-                        <input
-                            name="spreadsheetId"
-                            id="spreadsheetId"
-                            placeholder="Enter Spreadsheet ID"
-                            type="text"
-                            class="form-control"
-                            autocomplete="off"
-                        >
-
-                        <small class="form-text text-muted">
-                            Leave blank to keep the current Spreadsheet ID.
-                        </small>
-                    </div>
-
-                    <!-- REPORT FOLDER -->
-                    <div class="position-relative form-group mb-3">
-                        <label for="reportFolderId">
-                            Report Folder
-                        </label>
-
-                        <div
-                            class="secret-status mb-2"
-                            id="reportFolderIdStatus"
-                        >
-                            Not configured. Enter the Google Drive folder ID below.
-                        </div>
-
-                        <input
-                            name="reportFolderId"
-                            id="reportFolderId"
-                            placeholder="Enter Google Drive Folder ID"
-                            type="text"
-                            class="form-control"
-                            autocomplete="off"
-                        >
-
-                        <small class="form-text text-muted">
-                            Leave blank to keep the current Report Folder ID.
-                        </small>
-                    </div>
-
-                    <div class="text-end mt-3">
-                        <button
-                            type="submit"
-                            class="mt-1 btn btn-primary"
-                        >
-                            Save Integration Settings
-                        </button>
-                    </div>
-
-                </form>
-            </div>
-        </div>
-
-    </div>
-    <div class="tab-pane tabs-animation fade" id="tab-content-3" role="tabpanel" aria-labelledby="tab-3">
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card-shadow-primary border mb-3 card card-body border-primary">
-                    <h5 class="card-title">Primary Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
+    <div class="tab-pane tabs-animation fade" id="integration-tab-content" role="tabpanel" aria-labelledby="tab-2">
+        <div class="py-4">
+            <!-- List-style integrations -->
+            <div class="integration-list">
+            <!-- GMAIL -->
+            <div
+                class="integration-list-item"
+                data-integration="gmail"
+            >
+                <div class="integration-list-icon">
+                <img
+                    src="https://s13.gifyu.com/images/bnmHx.png"
+                    alt="Gmail"
+                >
                 </div>
-                <div class="card-shadow-secondary border mb-3 card card-body border-secondary">
-                    <h5 class="card-title">Secondary Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
+                <div class="integration-list-content">
+                <div class="integration-list-title">Gmail</div>
+                <div class="integration-list-desc">
+                    Send and manage email notifications.
                 </div>
-                <div class="card-shadow-warning border mb-3 card card-body border-warning">
-                    <h5 class="card-title">Warning Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
                 </div>
-                <div class="card-shadow-danger border mb-3 card card-body border-danger">
-                    <h5 class="card-title">Danger Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-shadow-success border mb-3 card card-body border-success">
-                    <h5 class="card-title">Success Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-shadow-info border mb-3 card card-body border-info">
-                    <h5 class="card-title">Info Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-shadow-focus border mb-3 card card-body border-focus">
-                    <h5 class="card-title">Focus Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-shadow-alternate border mb-3 card card-body border-alternate">
-                    <h5 class="card-title">Alternate Card Shadow</h5>With supporting text below as a natural lead-in to
-                    additional content.
+                <div class="integration-list-arrow">
+                <i class="pe-7s-angle-right"></i>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card-border mb-3 card card-body border-primary">
-                    <h5 class="card-title">Primary Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
+
+            <!-- GOOGLE DRIVE -->
+            <div
+                class="integration-list-item"
+                data-integration="drive"
+            >
+                <div class="integration-list-icon">
+                <img
+                    src="https://s13.gifyu.com/images/bnmHK.png"
+                    alt="Google Drive"
+                >
                 </div>
-                <div class="card-border mb-3 card card-body border-secondary">
-                    <h5 class="card-title">Secondary Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
+                <div class="integration-list-content">
+                <div class="integration-list-title">Google Drive</div>
+                <div class="integration-list-desc">
+                    Store and manage generated reports and files.
                 </div>
-                <div class="card-border mb-3 card card-body border-warning">
-                    <h5 class="card-title">Warning Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
                 </div>
-                <div class="card-border mb-3 card card-body border-danger">
-                    <h5 class="card-title">Danger Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-border mb-3 card card-body border-success">
-                    <h5 class="card-title">Success Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-border mb-3 card card-body border-info">
-                    <h5 class="card-title">Info Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-border mb-3 card card-body border-focus">
-                    <h5 class="card-title">Focus Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
-                </div>
-                <div class="card-border mb-3 card card-body border-alternate">
-                    <h5 class="card-title">Alternate Card Border</h5>With supporting text below as a natural lead-in to
-                    additional content.
+                <div class="integration-list-arrow">
+                <i class="pe-7s-angle-right"></i>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="mb-3 card text-white bg-primary">
-                    <div class="card-header">Header</div>
-                    <div class="card-body">With supporting text below as a natural lead-in to additional content.</div>
-                    <div class="card-footer">Footer</div>
+
+            <!-- GOOGLE SHEETS -->
+            <div
+                class="integration-list-item"
+                data-integration="sheets"
+            >
+                <div class="integration-list-icon">
+                <img
+                    src="https://s13.gifyu.com/images/bnmHH.png"
+                    alt="Google Sheets"
+                >
                 </div>
-                <div class="mb-3 card text-white card-body card-dark">
-                    <h5 class="text-white card-title">Special Title Treatment</h5>With supporting text below as a
-                    natural lead-in to additional content.
+                <div class="integration-list-content">
+                <div class="integration-list-title">Google Sheets</div>
+                <div class="integration-list-desc">
+                    Connect and synchronize spreadsheet data.
                 </div>
-                <div class="mb-3 card text-white card-body bg-primary">
-                    <h5 class="text-white card-title">Special Title Treatment</h5>With supporting text below as a
-                    natural lead-in to additional content.
                 </div>
-                <div class="mb-3 card text-white card-body bg-success">
-                    <h5 class="text-white card-title">Special Title Treatment</h5>With supporting text below as a
-                    natural lead-in to additional content.
+                <div class="integration-list-arrow">
+                <i class="pe-7s-angle-right"></i>
                 </div>
-                <div class="mb-3 card text-white card-body bg-danger">
-                    <h5 class="text-white card-title">Special Title Treatment</h5>With supporting text below as a
-                    natural lead-in to additional content.
+            </div>
+
+            <!-- GOOGLE CALENDAR -->
+            <div
+                class="integration-list-item"
+                data-integration="calendar"
+            >
+                <div class="integration-list-icon">
+                <img
+                    src="https://s13.gifyu.com/images/bnmHq.png"
+                    alt="Google Calendar"
+                >
                 </div>
-                <div class="mb-3 card text-white card-body bg-info">
-                    <h5 class="text-white card-title">Special Title Treatment</h5>With supporting text below as a
-                    natural lead-in to additional content.
+                <div class="integration-list-content">
+                <div class="integration-list-title">Google Calendar</div>
+                <div class="integration-list-desc">
+                    Create and manage calendar events.
                 </div>
-                <div class="mb-3 card text-white card-body bg-warning">
-                    <h5 class="text-white card-title">Special Title Treatment</h5>With supporting text below as a
-                    natural lead-in to additional content.
                 </div>
+                <div class="integration-list-arrow">
+                <i class="pe-7s-angle-right"></i>
+                </div>
+            </div>
+
+            <!-- DISCORD -->
+            <div
+                class="integration-list-item"
+                data-integration="discord"
+            >
+                <div class="integration-list-icon">
+                <img
+                    src="https://s13.gifyu.com/images/bnmHv.png"
+                    alt="Discord"
+                >
+                </div>
+                <div class="integration-list-content">
+                <div class="integration-list-title">Discord</div>
+                <div class="integration-list-desc">
+                    Send application notifications to Discord.
+                </div>
+                </div>
+                <div class="integration-list-arrow">
+                <i class="pe-7s-angle-right"></i>
+                </div>
+            </div>
+
+            <!-- MORE (non-clickable) -->
+            <div class="integration-list-item integration-list-item-coming">
+                <div class="integration-list-icon">
+                <div class="integration-logo-placeholder">
+                    <i class="pe-7s-plus"></i>
+                </div>
+                </div>
+                <div class="integration-list-content">
+                <div class="integration-list-title">More Integrations</div>
+                <div class="integration-list-desc">
+                    More integrations will be available soon.
+                </div>
+                </div>
+                <div class="integration-list-arrow">
+                <span class="badge bg-secondary">Coming soon</span>
+                </div>
+            </div>
             </div>
         </div>
     </div>

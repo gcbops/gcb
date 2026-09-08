@@ -1,4 +1,3 @@
-import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
 import { DataTableModule } from "../tables/data-table.js";
 import { ReportActions } from "../reports/actions.js";
@@ -59,8 +58,6 @@ const externalSheetsManagerPage = (() => {
   }
 
   function loadData(reset = false) {
-    HourSummary.loadHoursSummary("#hours-summary");
-
     DataTableModule.showLoader(TABLE_ID);
 
     AppUtils.cachedGScriptCall(

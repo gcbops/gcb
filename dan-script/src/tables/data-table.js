@@ -9,7 +9,13 @@ const DataTableModule = (() => {
     "outstanding accounts",
   ]);
 
-  function init(title, tableId, debug = false, callback = null) {
+  function init(
+    title,
+    tableId,
+    debug = false,
+    callback = null,
+    simple = false,
+  ) {
     const log = (...args) => debug && console.log(...args);
     const error = (...args) => debug && console.error(...args);
 
@@ -21,6 +27,7 @@ const DataTableModule = (() => {
       title,
       tableId,
       cleanTitle,
+      simple,
     });
 
     const $table = $(tableId);
@@ -81,6 +88,24 @@ const DataTableModule = (() => {
         }
       },
     };
+
+    if (simple) {
+      Object.assign(tableOptions, {
+        searching: false,
+        lengthChange: false,
+        info: false,
+        paging: false,
+        scrollCollapse: true,
+        scrollY: '50dvh',
+
+        layout: {
+          topStart: null,
+          topEnd: null,
+          bottomStart: null,
+          bottomEnd: null,
+        },
+      });
+    }
 
     /*
      * Priority columns for responsive behavior.
