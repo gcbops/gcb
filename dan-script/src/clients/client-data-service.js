@@ -138,6 +138,110 @@ const ClientDataService = (() => {
     }
   }
 
+  function renderActiveClients(debug = false, reset = false) {
+    const log = (...args) => debug && console.log(...args);
+
+    const cacheKey = "paidOwedClients";
+
+    AppUtils.cachedGScriptCall(
+      cacheKey,
+      "getActiveClientsPaidOwed",
+      [],
+      (data) => {
+        log("[renderActiveClients] callback:", data);
+
+        if (!Array.isArray(data)) {
+          AppUtils.showError("⚠️ Invalid active client data.");
+          return;
+        }
+
+        renderActiveClientList(data);
+      },
+      debug,
+      reset,
+    );
+  }
+
+  function renderActiveClientList(data) {
+    const container = document.getElementById("active-clients-list");
+
+    if (!container) {
+      return;
+    }
+
+    container.innerHTML = "";
+
+    if (!data.length) {
+      container.innerHTML = `
+      <div class="text-muted text-center py-3">
+        No active clients found.
+      </div>
+    `;
+
+      return;
+    }
+
+    data.slice(0, 4).forEach((client) => {
+      container.appendChild(createActiveClientItem(client));
+    });
+
+    if (data.length > 6) {
+      const remaining = data.length - 6;
+
+      const more = document.createElement("div");
+
+      more.className = "text-center text-muted fs-7 mt-3";
+
+      more.textContent = `+${remaining} more active clients`;
+
+      container.appendChild(more);
+    }
+  }
+
+  function createActiveClientItem(client) {
+    const item = document.createElement("div");
+
+    item.className =
+      "client-activity-active-client d-flex align-items-center mb-1";
+
+    const status = String(client?.today || "").trim();
+
+    const isIdle = status.toLowerCase() === "idle";
+
+    const statusClass = isIdle ? "bg-danger" : "bg-success";
+
+    const name = AppUtils.escapeHtml(String(client?.client || "").trim());
+
+    const initials = AppUtils.escapeHtml(
+      AppUtils.getInitials(client?.client || ""),
+    );
+
+    item.innerHTML = `
+    <div class="avatar-circle bg-light text-info rounded-circle
+                d-flex align-items-center justify-content-center me-2">
+      ${initials}
+    </div>
+
+    <div class="flex-grow-1 text-truncate">
+      <div class="fw-normal text-truncate">
+        ${name}
+      </div>
+
+      <div class="text-muted fs-8">
+        ${formatAmount(client?.totalPaid)} paid
+      </div>
+    </div>
+
+    <span
+      class="rounded-circle ${statusClass}"
+      style="width:8px;height:8px;"
+      title="${isIdle ? "Idle" : "Online"}"
+    ></span>
+  `;
+
+    return item;
+  }
+
   function createPaidOwedRow(row, index) {
     const tr = document.createElement("tr");
 
@@ -232,8 +336,6 @@ const ClientDataService = (() => {
     return tr;
   }
 
-
-
   function formatAmount(value) {
     return (Number(value) || 0).toLocaleString("en-PH", {
       minimumFractionDigits: 2,
@@ -244,6 +346,7 @@ const ClientDataService = (() => {
   return {
     renderClientDataByStatus,
     renderActivePaidOwedClients,
+    renderActiveClients,
   };
 })();
 

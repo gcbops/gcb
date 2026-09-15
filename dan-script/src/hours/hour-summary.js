@@ -83,37 +83,6 @@ const HourSummary = (() => {
       );
     }
 
-    function loadHourTotals(isRefresh) {
-      AppUtils.cachedGScriptCall(
-        "hourTotals",
-        "getHourTotals",
-        [],
-        (data) => {
-          if (!data) {
-            return;
-          }
-
-          const dailyEl = document.getElementById("daily-hour-total");
-          const monthlyEl = document.getElementById("monthly-hour-total");
-          const yearlyEl = document.getElementById("yearly-hour-total");
-
-          if (dailyEl) {
-            dailyEl.textContent = data.daily;
-          }
-
-          if (monthlyEl) {
-            monthlyEl.textContent = data.monthly;
-          }
-
-          if (yearlyEl) {
-            yearlyEl.textContent = data.yearly;
-          }
-        },
-        false,
-        isRefresh,
-      );
-    }
-
     function loadDailyOverviewSummary() {
       AppUtils.cachedGScriptCall(
         "dailyOverviewSummary",
@@ -792,7 +761,6 @@ const HourSummary = (() => {
 
     return {
       loadHoursSummary,
-      loadHourTotals,
       loadYearHoursSummary,
       loadMonthlyHoursSummary,
       loadDailyOverviewSummary,

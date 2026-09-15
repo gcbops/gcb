@@ -9,35 +9,20 @@ const PageLoaderModule = (() => {
   };
 
   const pageMeta = {
-    activeClients: {
-      title: "Active Clients",
-      desc: "View all clients currently active.",
+    clientDirectory: {
+      title: "Client Directory",
+      desc: "Browse and manage all clients in one place.",
       icon: "pe-7s-users icon-gradient bg-malibu-beach",
     },
-    topClients: {
-      title: "Top Clients",
-      desc: "Check highest performing clients.",
-      icon: "pe-7s-users icon-gradient bg-malibu-beach",
-    },
-    allClients: {
-      title: "All Clients",
-      desc: "See every client in one place.",
-      icon: "pe-7s-users icon-gradient bg-malibu-beach",
-    },
-    outstandingClients: {
-      title: "Outstanding Clients",
-      desc: "See clients with pending or unpaid items.",
-      icon: "pe-7s-users icon-gradient bg-malibu-beach",
-    },
-    addManualHours: {
-      title: "Add Manual Hours",
-      desc: "Log manual hours and track entries in real time.",
+    clientActivity: {
+      title: "Client Activity",
+      desc: "Monitor client activity and recent work in real time.",
       icon: "pe-7s-hourglass icon-gradient bg-malibu-beach",
     },
-    externalSheetsManager: {
-      title: "External Sheets Manager",
-      desc: "Manage and sync external Google Sheets used by the system.",
-      icon: "pe-7s-folder icon-gradient bg-malibu-beach",
+    clientRanking: {
+      title: "Client Ranking",
+      desc: "Performance leaders across your client portfolio.",
+      icon: "pe-7s-medal icon-gradient bg-malibu-beach",
     },
     upsellOverview: {
       title: "Upsell Entries",

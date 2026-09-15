@@ -1,0 +1,290 @@
+<div class="row">
+
+    <!-- =====================================================
+         MAIN ACTIVITY
+         ===================================================== -->
+
+    <div class="col-md-12 col-lg-9">
+
+        <div class="mb-3 card">
+
+            <div class="card-body">
+
+                <div class="d-flex align-items-center mb-3">
+
+                    <i class="fa fa-list-check fs-4 me-2 text-info"></i>
+
+                    <h5 class="card-title mb-0">
+                        Activity Today
+                    </h5>
+
+                    <div class="ms-auto d-flex justify-content-end activity-filter-buttons">
+
+                        <!-- DESKTOP ACTIONS -->
+                        <div class="responsive-desktop-actions d-flex">
+
+                            <button
+                                type="button"
+                                class="mb-2 me-2 btn btn-light not-done-div"
+                                id="dashFilter"
+                            >
+                                Pending
+                                <span class="badge rounded-pill bg-light text-dark not-done-text">
+                                    0
+                                </span>
+                            </button>
+
+                            <button
+                                type="button"
+                                class="mb-2 me-2 btn btn-light special-div"
+                                id="waitingFilter"
+                            >
+                                Waiting
+                                <span class="badge rounded-pill bg-light text-dark special-count">
+                                    0
+                                </span>
+                            </button>
+
+                            <button
+                                type="button"
+                                class="btn btn-light mb-2"
+                                id="selectClient-a-m"
+                            >
+                                <i class="fa fa-plus"></i>
+                            </button>
+
+                        </div>
+
+                        <!-- MOBILE ACTIONS -->
+                        <div class="responsive-mobile-actions dropdown mb-2">
+
+                            <button
+                                type="button"
+                                class="btn btn-light"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Activity options"
+                                title="Activity options"
+                            >
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+
+                                <!-- FILTERS -->
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        View
+                                    </h6>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item not-done-div"
+                                        data-activity-action="pending"
+                                    >
+                                        Pending
+                                        <span class="badge rounded-pill bg-light text-dark not-done-text ms-2">
+                                            0
+                                        </span>
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item special-div"
+                                        data-activity-action="waiting"
+                                    >
+                                        Waiting
+                                        <span class="badge rounded-pill bg-light text-dark special-count ms-2">
+                                            0
+                                        </span>
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <hr class="dropdown-divider">
+                                </li>
+
+                                <!-- OTHER -->
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        Other
+                                    </h6>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        id="mobile-selectClient-a-m"
+                                        data-activity-action="add"
+                                    >
+                                        <i class="fa fa-plus me-2"></i>
+                                        Add Activity
+                                    </button>
+                                </li>
+
+                            </ul>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div id="table-wrapper" class="mt-4">
+                    <table id="table" class="table table-hovered nowrap" style="width:100%">
+                        <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Status</th>
+                            <th>Member</th>
+                            <th>Work Hour</th>
+                            <th>Charged Hour</th>
+                            <th>Report Status</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                        </thead>   
+                        <tbody id="data-table-body"></tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         SIDEBAR
+         ===================================================== -->
+
+    <div class="col-md-12 col-lg-3">
+
+        <!-- HOURS TODAY -->
+
+        <div class="mb-3 card" id="today-hours-summary">
+
+            <div class="card-body p-4">
+
+                <h5 class="card-title widget-card-title mb-2">
+                    Hours Today
+                </h5>
+
+                <div class="row gy-0">
+                    <div class="col-12">
+                        <h4 class="mb-0" data-metric="today-hours">0.0</h4>
+                    </div>
+
+                    <div class="col-12 mt-2">
+                        <div class="d-flex align-items-center">
+                        <span
+                            class="fs-6 bsb-w-25 bsb-h-25 rounded-circle d-flex align-items-center justify-content-center me-2 status-icon-sm"
+                            data-metric="today-hours-status"
+                        >
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
+
+                        <div>
+                            <span
+                            class="fs-7"
+                            data-metric="today-hours-change"
+                            >
+                            0%
+                            </span>
+
+                            <span
+                            class="fs-8 text-muted ms-1"
+                            data-metric="today-hours-label"
+                            >
+                            vs yesterday
+                            </span>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="chart-daily" style="height:150px;">
+                    <div class="bar-loader">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ACTIVE CLIENTS -->
+
+        <div class="mb-3 card">
+
+            <div class="card-body p-4">
+
+                <div class="d-flex align-items-center mb-3">
+
+                    <div>
+                        <h5 class="card-title mb-1">
+                            Active Clients
+                        </h5>
+
+                        <p class="text-secondary m-0 fs-7">
+                            This month
+                        </p>
+                    </div>
+
+                    <div class="ms-auto">
+                        <!-- All / Online / Idle -->
+                    </div>
+
+                </div>
+
+                <div id="active-clients-list">
+                    <!-- JS -->
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         ACTIVITY TRENDS
+         ===================================================== -->
+
+    <div class="col-12">
+
+        <div class="mb-3 card">
+
+            <div class="card-body p-4">
+
+                <div class="mb-4">
+                    <h5 class="card-title mb-1">
+                        Client Activity Trends
+                    </h5>
+
+                    <p class="text-secondary m-0 fs-7">
+                        Recent changes across all clients
+                    </p>
+                </div>
+
+                <div
+                    id="client-activity-trends"
+                    class="client-activity-trends-grid"
+                >
+                    <!-- JS -->
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

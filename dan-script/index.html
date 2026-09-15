@@ -62,6 +62,11 @@
     crossorigin="anonymous"
   />
 
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+  />
+
   <!-- Application CSS -->
 
   <?!= include('styles'); ?>
@@ -127,26 +132,26 @@
           </div>
           <ul class="header-menu nav">
             <li class="nav-item">
-              <a data-page="home" class="nav-link">
-                <i class="nav-link-icon fa fa-chart-line"></i>
-                Overview
+              <a data-page="reportsExportData" class="nav-link">
+                <i class="nav-link-icon fa pe-7s-graph3"></i>
+                Reports
               </a>
             </li>
             <li class="nav-item">
               <a data-page="growthComparisonOverview" class="nav-link">
-                <i class="nav-link-icon fa fa-database"></i>
+                <i class="nav-link-icon fs-4 pe-7s-graph1"></i>
                 Statistics
               </a>
             </li>
             <li class="nav-item">
               <a data-page="allManualProjects" class="nav-link">
-                <i class="nav-link-icon fa fa-briefcase"></i>
+                <i class="nav-link-icon fs-4 pe-7s-portfolio"></i>
                 Projects
               </a>
             </li>
             <li class="nav-item">
-              <a data-page="allClients" class="nav-link">
-                <i class="nav-link-icon fa fa-user-friends"></i>
+              <a data-page="clientDirectory" class="nav-link">
+                <i class="nav-link-icon fs-4 pe-7s-users"></i>
                 Clients
               </a>
             </li>
@@ -196,14 +201,6 @@
                 <div class="widget-content-left ms-3 header-user-info">
                   <div class="widget-heading">Dan Maxwel Vocal</div>
                   <div class="widget-subheading">Web Dev Project Manager</div>
-                </div>
-                <div class="widget-content-right header-user-info ms-3">
-                  <button
-                    type="button"
-                    class="btn-shadow p-1 btn btn-primary btn-sm show-toastr-example"
-                  >
-                    <i class="fa text-white fa-calendar pe-1 ps-1"></i>
-                  </button>
                 </div>
               </div>
             </div>
@@ -273,10 +270,10 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="dailyOverview"><i class="metismenu-icon"></i>Daily Overview</a></li>
-                    <li><a data-page="monthlyOverview"><i class="metismenu-icon"></i>Monthly Overview</a></li>
-                    <li><a data-page="yearlyOverview"><i class="metismenu-icon"></i>Yearly Overview</a></li>
-                    <li><a data-page="growthComparisonOverview"><i class="metismenu-icon"></i>Growth Comparison</a></li>
+                      <li><a data-page="dailyOverview"><i class="metismenu-icon"></i>Daily Overview</a></li>
+                      <li><a data-page="monthlyOverview"><i class="metismenu-icon"></i>Monthly Overview</a></li>
+                      <li><a data-page="yearlyOverview"><i class="metismenu-icon"></i>Yearly Overview</a></li>
+                      <li><a data-page="growthComparisonOverview"><i class="metismenu-icon"></i>Growth Comparison</a></li>
                     </ul>
                 </li>
                 <li>
@@ -286,12 +283,10 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="allClients"><i class="metismenu-icon"></i>Client Directory</a></li>
-                    <li><a data-page="topClients"><i class="metismenu-icon"></i>Top Clients</a></li>
-                    <li><a data-page="activeClients"><i class="metismenu-icon"></i>Active Clients</a></li>
-                    <li><a data-page="externalSheetsManager"><i class="metismenu-icon"></i>Other Clients</a></li>
-                    <li><a data-page="upsellOverview"><i class="metismenu-icon"></i>Upsell</a></li>
-                    <li><a data-page="outstandingClients"><i class="metismenu-icon"></i>Outstanding</a></li>
+                      <li><a data-page="clientDirectory"><i class="metismenu-icon"></i>Client Directory</a></li>
+                      <li><a data-page="clientActivity"><i class="metismenu-icon"></i>Client Activity</a></li>
+                      <li><a data-page="clientRanking"><i class="metismenu-icon"></i>Client Ranking</a></li>
+                      <li><a data-page="upsellOverview"><i class="metismenu-icon"></i>Upsell</a></li>
                     </ul>
                 </li>
 
@@ -391,7 +386,7 @@
                 <button
                   type="button"
                   class="btn-shadow me-3 btn btn-light"
-                  data-page="addManualHours"
+                  data-page="clientActivity"
                 >
                   <i class="fa fa-star"></i>
                 </button>
@@ -408,12 +403,12 @@
                   <div tabindex="-1" role="menu" aria-hidden="true" class="dropdown-menu dropdown-menu-end">
                     <ul class="nav flex-column">
                       <li class="nav-item">
-                        <a data-page="allClients" class="nav-link">
+                        <a data-page="clientDirectory" class="nav-link">
                           <i class="pe-7s-add-user me-2"></i> <span>Add Project</span>
                         </a>
                       </li>
                       <li class="nav-item">
-                        <a data-page="addManualHours" class="nav-link">
+                        <a data-page="clientActivity" class="nav-link">
                           <i class="pe-7s-plus me-2"></i> <span>Add Hours</span>
                         </a>
                       </li>
@@ -527,13 +522,6 @@
   ========================== -->
 
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" 
-    integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" 
-    crossorigin="anonymous" 
-    referrerpolicy="no-referrer">
-  </script>
-
-  <script 
     src="https://cdn.jsdelivr.net/npm/chart.js" 
     integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" 
     crossorigin="anonymous"
@@ -557,6 +545,10 @@
     integrity="sha384-Si3HKTyQYGU+NC4aAF3ThcOSvK+ZQiyEKlYyfjiIFKMqsnCmfHjGa1VK1kYP9UdS" 
     crossorigin="anonymous"
     referrerpolicy="no-referrer">
+  </script>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/flatpickr">
   </script>
 
 

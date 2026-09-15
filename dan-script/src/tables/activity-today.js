@@ -1,5 +1,5 @@
-import { AppUtils } from "../utils.js";
 import { HourSummary } from "../hours/hour-summary.js";
+import { AppUtils } from "../utils.js";
 
 const ActivityToday = (() => {
   const ACTIVITY_TABLE_ID = "#table";
@@ -8,15 +8,13 @@ const ActivityToday = (() => {
 
   const SPECIAL_STATUSES = [
     "Moved to PM",
-    "Revision Done",
+    "Revisions Done",
     "Complete",
     "For QA",
   ];
 
   const resetableCacheKeyForUpdatingHours = [
     "cache_ActiveClients",
-    "cache_OutstandingAccounts",
-    "topPaidClients",
     "topProjects",
     "hoursSummary",
     "hourTotals",
@@ -40,14 +38,15 @@ const ActivityToday = (() => {
 
     updateFilterCounts(dataTable);
 
-    const $wrapper = $(".main-card");
+    const $wrapper = $(".activity-filter-buttons");
 
     setupFilterButton(
       $wrapper,
       ".not-done-div",
       ".not-done-text",
       "#dashFilter",
-      (row) => row[5] === "-",
+      '[data-activity-action="pending"]',
+      (row) => row[5] === "PENDING",
       dataTable,
     );
 
@@ -56,7 +55,8 @@ const ActivityToday = (() => {
       ".special-div",
       ".special-count",
       "#waitingFilter",
-      (row) => SPECIAL_STATUSES.includes(row[1]) && row[5] === "-",
+      '[data-activity-action="waiting"]',
+      (row) => SPECIAL_STATUSES.includes(row[1]) && row[5] === "PENDING",
       dataTable,
     );
   }
@@ -66,6 +66,7 @@ const ActivityToday = (() => {
     containerSelector,
     countSelector,
     buttonSelector,
+    mobileSelector,
     filter,
     dataTable,
   ) {
@@ -77,36 +78,77 @@ const ActivityToday = (() => {
 
     $wrapper.find(countSelector).text(count);
 
+    /*
+     * Desktop button.
+     */
     $(document)
       .off(`click.activityToday`, buttonSelector)
       .on(`click.activityToday`, buttonSelector, () => {
-        const $table = $(ACTIVITY_TABLE_ID);
+        toggleActivityFilter(dataTable, filter);
+      });
 
-        if (!$table.hasClass("gc-table-filtered")) {
-          $("#resetFilterCustom").show();
+    /*
+     * Mobile button.
+     */
+    $(document)
+      .off(`click.activityToday`, mobileSelector)
+      .on(`click.activityToday`, mobileSelector, function () {
+        toggleActivityFilter(dataTable, filter);
 
-          applyFilter(dataTable, filter);
+        /*
+         * Close mobile dropdown after selection.
+         */
+        this.blur();
 
-          $table.addClass("gc-table-filtered");
+        const dropdown = this.closest(".dropdown");
 
-          return;
+        if (dropdown) {
+          const dropdownButton = dropdown.querySelector(
+            '[data-bs-toggle="dropdown"]',
+          );
+
+          if (dropdownButton) {
+            const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+
+            if (instance) {
+              instance.hide();
+            }
+          }
         }
-
-        resetFilters(dataTable);
-
-        $table.removeClass("gc-table-filtered");
       });
   }
 
+  function toggleActivityFilter(dataTable, filter) {
+    const $table = $(ACTIVITY_TABLE_ID);
+
+    if (!$table.hasClass("gc-table-filtered")) {
+      $("#resetFilterCustom").show();
+
+      applyFilter(dataTable, filter);
+
+      $table.addClass("gc-table-filtered");
+
+      return;
+    }
+
+    resetFilters(dataTable);
+
+    $table.removeClass("gc-table-filtered");
+  }
+
   function applyFilter(dataTable, filter) {
-    $.fn.dataTable.ext.search = [filter];
+    $.fn.dataTable.ext.search = [(settings, rowData) => filter(rowData)];
 
     dataTable.draw();
   }
 
   function resetFilters(dataTable) {
     $.fn.dataTable.ext.search = [];
+
     dataTable.search("").columns().search("").draw();
+
+    $(ACTIVITY_TABLE_ID).removeClass("gc-table-filtered");
+
     $("#resetFilterCustom").hide();
   }
 
@@ -133,11 +175,11 @@ const ActivityToday = (() => {
           return;
         }
 
-        if (row[5] === "-") {
+        if (row[5] === "PENDING") {
           notDone++;
         }
 
-        if (SPECIAL_STATUSES.includes(row[1]) && row[5] === "-") {
+        if (SPECIAL_STATUSES.includes(row[1]) && row[5] === "PENDING") {
           special++;
         }
       });
@@ -187,9 +229,34 @@ const ActivityToday = (() => {
 
     setupClientSelector($selectClient, $taskForm);
 
-    // $taskForm
-    //   .off("submit.activityToday")
-    //   .on("submit.activityToday", handleTaskSubmit);
+    // Mobile Add Activity
+    $(document)
+      .off("click.activityToday", '[data-activity-action="add"]')
+      .on(
+        "click.activityToday",
+        '[data-activity-action="add"]',
+        function (event) {
+          event.preventDefault();
+
+          openClientSelector($(this), $taskForm);
+
+          const dropdown = this.closest(".dropdown");
+
+          if (dropdown) {
+            const dropdownButton = dropdown.querySelector(
+              '[data-bs-toggle="dropdown"]',
+            );
+
+            if (dropdownButton) {
+              const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+
+              if (instance) {
+                instance.hide();
+              }
+            }
+          }
+        },
+      );
 
     $("#submit-new-hours")
       .off("click.activityToday")
@@ -208,26 +275,30 @@ const ActivityToday = (() => {
       .on("click.activityToday", function (event) {
         event.preventDefault();
 
-        const $drawer = $taskForm.parents(".drawer-content");
-        const $firstGroup = $taskForm.find(".form-group").first();
-        const $icon = $selectClient.find("i");
-
-        $drawer
-          .toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5"))
-          .toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
-
-        $firstGroup.toggleClass("element-hidden");
-
-        $icon
-          .toggleClass("fa-plus", function () {
-            return $(this).hasClass("fa-minus");
-          })
-          .toggleClass("fa-minus", function () {
-            return $(this).hasClass("fa-plus");
-          });
-
-        AppUtils.openDrawer("#drawerManualAdd");
+        openClientSelector($(this), $taskForm);
       });
+  }
+
+  function openClientSelector($selectClient, $taskForm) {
+    const $drawer = $taskForm.parents(".drawer-content");
+    const $firstGroup = $taskForm.find(".form-group").first();
+    const $icon = $selectClient.find("i");
+
+    $drawer
+      .toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5"))
+      .toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
+
+    $firstGroup.toggleClass("element-hidden");
+
+    $icon
+      .toggleClass("fa-plus", function () {
+        return $(this).hasClass("fa-minus");
+      })
+      .toggleClass("fa-minus", function () {
+        return $(this).hasClass("fa-plus");
+      });
+
+    AppUtils.openDrawer("#drawerManualAdd");
   }
 
   function handleTaskSubmit(event) {
@@ -241,7 +312,7 @@ const ActivityToday = (() => {
       $submitBtn = $("#submit-new-hours");
     }
 
-    const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
+    const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
 
     const formData = {
       client: String($("#client").val() || "").trim(),
@@ -295,7 +366,7 @@ const ActivityToday = (() => {
         gscriptFunc,
         data: formData,
         $btn: $submitBtn,
-        loadingText: "Saving ...",
+        loadingText: "Saving",
 
         onSuccess: () => {
           handleTaskSaveSuccess(formData);
@@ -310,9 +381,9 @@ const ActivityToday = (() => {
       "success",
     );
 
-    google.script.run.pullClientProjects();
+    HourSummary.loadTodayChargedHours();
 
-    HourSummary.loadHourTotals(true);
+    google.script.run.syncClientProjects();
 
     clearClientCaches(formData.client);
 
@@ -368,7 +439,7 @@ const ActivityToday = (() => {
       return;
     }
 
-    const loading = AppUtils.setButtonLoading(btn, "Redirecting...");
+    const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
     google.script.run
       .withSuccessHandler((url) => {
@@ -475,6 +546,7 @@ const ActivityToday = (() => {
 
         updateActivityTable(data, dataTable);
         updateFilterCounts(dataTable);
+        HourSummary.loadTodayChargedHours();
 
         callback?.();
       })

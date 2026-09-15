@@ -91,12 +91,13 @@ const DataTableModule = (() => {
 
     if (simple) {
       Object.assign(tableOptions, {
+        responsive: false,
         searching: false,
         lengthChange: false,
         info: false,
         paging: false,
         scrollCollapse: true,
-        scrollY: '50dvh',
+        scrollY: "50dvh",
 
         layout: {
           topStart: null,
@@ -112,7 +113,7 @@ const DataTableModule = (() => {
      */
     const priorityMap = {
       "activity today": [0, -1],
-      clients: [0],
+      clients: [0, 1, 2],
       "top paid accounts": [0, 1],
       "outstanding accounts": [0, 2],
       "active clients": [0, 1, -1],
@@ -142,7 +143,6 @@ const DataTableModule = (() => {
       });
     }
 
-    // 3) UPSELL
     if (cleanTitle === "upsell") {
       Object.assign(tableOptions, {
         pageLength: 5,
@@ -160,7 +160,14 @@ const DataTableModule = (() => {
       });
     }
 
-    // 4) ACTIVITY TODAY – extra action column
+    if (cleanTitle === "clients" || cleanTitle === "activity today") {
+      log("Initializing Client Directory");
+
+      tableOptions.paging = false;
+      tableOptions.scrollCollapse = true;
+      tableOptions.scrollY = "400px";
+    }
+
     if (cleanTitle === "activity today") {
       log("Initializing Activity Today");
 

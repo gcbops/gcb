@@ -24,6 +24,7 @@ const ActionRouterModule = (() => {
   }
 
   function handleNavigationClick(e) {
+    
     const pageBtn = e.target.closest("[data-page]");
 
     if (!pageBtn) {

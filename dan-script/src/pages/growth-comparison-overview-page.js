@@ -1,6 +1,4 @@
 import { ChartModule } from "../charts.js";
-import { ClientRanking } from "../clients/client-ranking.js";
-import { ProjectRankings } from "../projects/project-ranking.js";
 import { AppUtils } from "../utils.js";
 
 const growthComparisonOverviewPage = (() => {
@@ -9,11 +7,107 @@ const growthComparisonOverviewPage = (() => {
   function init() {
     loadGrowthComparison("#growth-comparison");
 
-    ChartModule.loadPrevYearCombinedChart();
-    ChartModule.loadChart("yearly");
+    initMonthlyHoursChart();
 
-    ClientRanking.renderTopPaidClients();
-    ProjectRankings.renderTopProjects();
+    ChartModule.loadChart("yearly");
+  }
+
+  function destroy() {
+    $(document).off(".monthlyHoursByYear");
+
+    const $year = $("#monthlyHoursYearFilter");
+
+    if ($year.hasClass("select2-hidden-accessible")) {
+      $year.select2("destroy");
+    }
+
+    hideMonthlyHoursChartLoading();
+
+    ChartModule.destroyChart?.("monthly_hours_by_year");
+  }
+
+  function initMonthlyHoursFilters() {
+    const currentYear = new Date().getFullYear();
+
+    const $year = $("#monthlyHoursYearFilter");
+
+    $year.empty();
+
+    for (let year = 2024; year <= currentYear; year++) {
+      $year.append(`<option value="${year}">${year}</option>`);
+    }
+
+    // Default: previous year + current year
+    $year.val([currentYear - 1, currentYear]);
+
+    AppUtils.initSelect2($year, {
+      closeOnSelect: false,
+      placeholder: "Select years",
+    });
+  }
+
+  function bindMonthlyHoursFilters() {
+    $(document)
+      .off("click.monthlyHoursByYear", "#monthlyHoursFilterSubmit")
+      .on("click.monthlyHoursByYear", "#monthlyHoursFilterSubmit", function () {
+        loadMonthlyHoursChart();
+      });
+  }
+
+  function loadMonthlyHoursChart(showLoading = true) {
+    const selectedYears = $("#monthlyHoursYearFilter")
+      .val()
+      ?.map(Number)
+      .filter(Boolean);
+
+    if (!selectedYears?.length) {
+      return;
+    }
+
+    if (showLoading) {
+      showMonthlyHoursChartLoading();
+    }
+
+    ChartModule.loadChart(
+      "monthly_hours_by_year",
+      false,
+      selectedYears,
+      false,
+      false,
+      {},
+      undefined,
+      hideMonthlyHoursChartLoading,
+    );
+  }
+
+  function initMonthlyHoursChart() {
+    initMonthlyHoursFilters();
+
+    bindMonthlyHoursFilters();
+
+    loadMonthlyHoursChart(false);
+  }
+
+  function showMonthlyHoursChartLoading() {
+    $("#chart-monthly_hours_by_year-loading").removeClass("d-none");
+
+    $("#monthlyHoursYearFilter, #monthlyHoursFilterSubmit").prop(
+      "disabled",
+      true,
+    );
+
+    ChartModule.animateChart("monthly_hours_by_year", true, 1800);
+  }
+
+  function hideMonthlyHoursChartLoading() {
+    ChartModule.animateChart("monthly_hours_by_year", false);
+
+    $("#monthlyHoursYearFilter, #monthlyHoursFilterSubmit").prop(
+      "disabled",
+      false,
+    );
+
+    $("#chart-monthly_hours_by_year-loading").addClass("d-none");
   }
 
   function loadGrowthComparison(
@@ -312,7 +406,7 @@ const growthComparisonOverviewPage = (() => {
     $element.addClass(isGood ? "text-success" : "text-danger");
   }
 
-  return { init };
+  return { init, destroy };
 })();
 
 export { growthComparisonOverviewPage };

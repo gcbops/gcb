@@ -507,7 +507,9 @@ const AppUtils = (() => {
   function openDrawer(drawerSelector, options = {}) {
     const { contentClass = "", onOpen = null, onClose = null } = options;
     const $drawer = $(drawerSelector);
-    if (!$drawer.length) {return;}
+    if (!$drawer.length) {
+      return;
+    }
     const $content = $drawer.find(".drawer-content");
 
     $drawer
@@ -521,8 +523,12 @@ const AppUtils = (() => {
       .removeClass("pe-7s-angle-up")
       .addClass("pe-7s-angle-down");
 
-    if (contentClass) {$content.addClass(contentClass);}
-    if (typeof onOpen === "function") {onOpen($drawer, $content);}
+    if (contentClass) {
+      $content.addClass(contentClass);
+    }
+    if (typeof onOpen === "function") {
+      onOpen($drawer, $content);
+    }
 
     $drawer.on("click.AppUtilsDrawerClose", ".drawer-close", function (e) {
       e.preventDefault();
@@ -551,7 +557,9 @@ const AppUtils = (() => {
 
   function closeDrawer($drawer, $content = null, onClose = null) {
     const $drawerElement = $drawer instanceof jQuery ? $drawer : $($drawer);
-    if (!$drawerElement.length) {return;}
+    if (!$drawerElement.length) {
+      return;
+    }
     const $contentElement = $content
       ? $content instanceof jQuery
         ? $content
@@ -561,7 +569,9 @@ const AppUtils = (() => {
     $drawerElement
       .off("click.AppUtilsDrawerClose")
       .off("click.AppUtilsDrawerMinimize");
-    if (!$drawerElement.hasClass("drawer-open")) {return;}
+    if (!$drawerElement.hasClass("drawer-open")) {
+      return;
+    }
 
     $drawerElement.removeClass("drawer-open drawer-minimized");
 
@@ -571,7 +581,15 @@ const AppUtils = (() => {
       .removeClass("pe-7s-angle-up")
       .addClass("pe-7s-angle-down");
 
-    if (typeof onClose === "function") {onClose($drawerElement, $contentElement);}
+    if (typeof onClose === "function") {
+      onClose($drawerElement, $contentElement);
+    }
+  }
+
+  function closeAllDrawers() {
+    $(".drawer-open").each(function () {
+      closeDrawer($(this));
+    });
   }
 
   function submitForm({
@@ -580,7 +598,7 @@ const AppUtils = (() => {
     onSuccess,
     onError,
     $btn,
-    loadingText = "Saving...",
+    loadingText = "Saving",
   }) {
     if (!gscriptFunc) {
       showError("No Google Apps Script function provided");
@@ -629,11 +647,21 @@ const AppUtils = (() => {
     }
   }
 
-  function setButtonLoading(btn, loadingText = "Loading...") {
+  function setButtonLoading(btn, loadingText = "Loading") {
     const $button = $(btn);
 
     if (!$button.data("original-text")) {
       $button.data("original-text", $button.html());
+    }
+
+    // Detect and swap outline -> solid variant
+    const outlineMatch = $button[0].className.match(/\bbtn-outline-(\w+)\b/);
+    if (outlineMatch) {
+      const originalOutlineClass = outlineMatch[0]; // e.g. "btn-outline-primary"
+      const solidClass = "btn-" + outlineMatch[1]; // e.g. "btn-primary"
+
+      $button.data("original-outline-class", originalOutlineClass);
+      $button.removeClass(originalOutlineClass).addClass(solidClass);
     }
 
     const getLoadingHtml = (text) => `
@@ -665,6 +693,14 @@ const AppUtils = (() => {
     const restore = () => {
       $button.prop("disabled", false).html($button.data("original-text"));
       $button.removeData("original-text");
+
+      // Restore outline class if it was swapped
+      const originalOutlineClass = $button.data("original-outline-class");
+      if (originalOutlineClass) {
+        const solidClass = originalOutlineClass.replace("btn-outline-", "btn-");
+        $button.removeClass(solidClass).addClass(originalOutlineClass);
+        $button.removeData("original-outline-class");
+      }
     };
 
     setText(loadingText);
@@ -685,8 +721,7 @@ const AppUtils = (() => {
       header = "",
       body = "",
       footer = "",
-      backdrop = "static",
-      keyboard = true,
+      footerActions = {},
       closable = true,
       scrollable = false,
       centered = false,
@@ -695,7 +730,6 @@ const AppUtils = (() => {
     } = options;
 
     const $modal = $(modalSelector);
-
     const $opener = $(document.activeElement);
 
     if (!$modal.length) {
@@ -703,8 +737,139 @@ const AppUtils = (() => {
     }
 
     const modalEl = $modal[0];
+
+    if (!modalEl.id) {
+      console.error(
+        "AppUtils.openModal: Modal element must have an ID.",
+        modalEl,
+      );
+      return;
+    }
+
     const $dialog = $modal.find(".modal-dialog");
     const $content = $modal.find(".modal-content");
+
+    /*
+     * ------------------------------------------------------------
+     * Footer action helpers
+     * ------------------------------------------------------------
+     */
+
+    /*
+     * Normalize:
+     *
+     * footerActions: {
+     *   main: [...],
+     *   review: [...]
+     * }
+     *
+     * Each step can also technically receive a single object.
+     */
+    const normalizeActions = (actions) => {
+      if (!actions) {
+        return [];
+      }
+
+      return Array.isArray(actions) ? actions : [actions];
+    };
+
+    /*
+     * Build custom footer actions.
+     *
+     * 0 actions
+     *   -> nothing
+     *
+     * 1 action
+     *   -> normal button
+     *
+     * 2+ actions
+     *   -> More dropdown
+     */
+    const buildFooterActions = (step) => {
+      const actions = normalizeActions(footerActions[step]);
+
+      if (!actions.length) {
+        return "";
+      }
+
+      /*
+       * ----------------------------------------------------------
+       * Single action
+       * ----------------------------------------------------------
+       */
+      if (actions.length === 1) {
+        const action = actions[0];
+
+        const {
+          label = "Action",
+          icon = "",
+          className = "btn-primary",
+          disabled = false,
+        } = action;
+
+        return `
+        <button
+          type="button"
+          class="btn ${className} btn-custom-footer-action"
+          data-footer-action-step="${step}"
+          data-footer-action-index="0"
+          ${disabled ? "disabled" : ""}
+        >
+          ${icon ? `<i class="${icon} me-1"></i>` : ""}
+          ${label}
+        </button>
+      `;
+      }
+
+      /*
+       * ----------------------------------------------------------
+       * Multiple actions
+       * ----------------------------------------------------------
+       */
+      const menuItems = actions
+        .map((action, index) => {
+          const {
+            label = `Action ${index + 1}`,
+            icon = "",
+            dividerBefore = false,
+            disabled = false,
+          } = action;
+
+          return `
+          ${dividerBefore ? `<div class="dropdown-divider"></div>` : ""}
+
+          <button
+            type="button"
+            class="dropdown-item btn-custom-footer-action"
+            data-footer-action-step="${step}"
+            data-footer-action-index="${index}"
+            ${disabled ? "disabled" : ""}
+          >
+            ${icon ? `<i class="${icon} me-2"></i>` : ""}
+            ${label}
+          </button>
+        `;
+        })
+        .join("");
+
+      return `
+      <div class="dropdown">
+        <button
+          type="button"
+          class="btn btn-primary dropdown-toggle"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <i class="pe-7s-menu me-1"></i>
+          More
+        </button>
+
+        <div class="dropdown-menu">
+          ${menuItems}
+        </div>
+      </div>
+    `;
+    };
 
     /*
      * Reset modal classes.
@@ -782,6 +947,25 @@ const AppUtils = (() => {
       $content.addClass(contentClass);
     }
 
+    /*
+     * Build footer action elements.
+     */
+    const mainFooterActions = buildFooterActions("main");
+    const reviewFooterActions = buildFooterActions("review");
+
+    /*
+     * Insert footer actions into the supplied footer HTML.
+     *
+     * Place these markers inside your footer:
+     *
+     *   <!-- APP-MODAL-MAIN-ACTIONS -->
+     *
+     *   <!-- APP-MODAL-REVIEW-ACTIONS -->
+     */
+    const processedFooter = footer
+      .replace("<!-- APP-MODAL-MAIN-ACTIONS -->", mainFooterActions)
+      .replace("<!-- APP-MODAL-REVIEW-ACTIONS -->", reviewFooterActions);
+
     $content.html(`
     ${
       header
@@ -811,10 +995,10 @@ const AppUtils = (() => {
     </div>
 
     ${
-      footer
+      processedFooter
         ? `
       <div class="modal-footer justify-content-center">
-        ${footer}
+        ${processedFooter}
       </div>
     `
         : ""
@@ -826,18 +1010,59 @@ const AppUtils = (() => {
      */
     $modal.off(".AppUtilsModal");
 
-    $modal.one("shown.bs.modal.AppUtilsModal", function () {
-      if (typeof onOpen === "function") {
-        onOpen($modal, $dialog, $content);
-      }
-    });
+    /*
+     * ------------------------------------------------------------
+     * Custom footer action callbacks
+     * ------------------------------------------------------------
+     */
+    $modal.on(
+      "click.AppUtilsModal",
+      ".btn-custom-footer-action",
+      function (event) {
+        event.preventDefault();
 
+        const $btn = $(this);
+
+        const step = $btn.attr("data-footer-action-step");
+
+        const index = Number($btn.attr("data-footer-action-index"));
+
+        const actions = normalizeActions(footerActions[step]);
+
+        const action = actions[index];
+
+        if (!action) {
+          return;
+        }
+
+        if (typeof action.onClick === "function") {
+          action.onClick($modal, $btn);
+        }
+      },
+    );
+
+    /*
+     * Initialize modal interactions immediately.
+     *
+     * Do not wait for shown.bs.modal.
+     * DashboardPack's Bootstrap bundle handles the actual
+     * modal transition separately.
+     */
+    if (typeof onOpen === "function") {
+      onOpen($modal, $dialog, $content);
+    }
+
+    /*
+     * Modal closed.
+     */
     $modal.one("hidden.bs.modal.AppUtilsModal", function () {
       if (typeof onClose === "function") {
         onClose($modal, $dialog, $content);
       }
 
-      // Focus the opener if it still exists
+      /*
+       * Focus the opener if it still exists.
+       */
       if (
         $opener &&
         $opener.length &&
@@ -849,21 +1074,77 @@ const AppUtils = (() => {
         document.body.focus();
       }
 
+      /*
+       * Clear dynamic modal content after Bootstrap
+       * has completely finished hiding the modal.
+       */
       $content.empty();
-
-      const instance = bootstrap.Modal.getInstance(modalEl);
-      if (instance) {
-        instance.dispose();
-      }
     });
 
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
-      backdrop,
-      keyboard,
-    });
+    /*
+     * DashboardPack bundles Bootstrap internally but does not
+     * expose window.bootstrap.
+     *
+     * Use Bootstrap's native data API.
+     */
+    const $trigger = $(`
+    <button
+      type="button"
+      class="d-none"
+      data-bs-toggle="modal"
+      data-bs-target="#${modalEl.id}">
+    </button>
+  `);
 
-    modal.show();
+    $("body").append($trigger);
+
+    /*
+     * Let DashboardPack's Bootstrap instance open the modal.
+     */
+    $trigger.trigger("click");
+
+    /*
+     * The temporary trigger is no longer needed.
+     */
+    $trigger.remove();
   }
+
+  /*
+     * ----------------------------------------------------------
+     * OPTIONAL CUSTOM ACTIONS
+     * ----------------------------------------------------------
+     */
+    // footerActions: {
+    //   main: [
+    //     {
+    //       label: "Clone",
+    //       icon: "pe-7s-copy",
+    //       className: "btn-info",
+
+    //       onClick: ($modal, $btn) => {
+    //         cloneProjects($btn);
+    //       },
+    //     },
+    //   ],
+
+    //   review: [
+    //     {
+    //       label: "Save Draft",
+    //       icon: "pe-7s-diskette",
+    //       onClick: ($modal, $btn) => {
+    //         saveFormulaDraft($modal, $btn);
+    //       },
+    //     },
+
+    //     {
+    //       label: "Clone",
+    //       icon: "pe-7s-copy",
+    //       onClick: ($modal, $btn) => {
+    //         cloneProjects($btn);
+    //       },
+    //     },
+    //   ],
+    // },
 
   function closeModal(modalSelector) {
     const modalEl = document.querySelector(modalSelector);
@@ -873,67 +1154,324 @@ const AppUtils = (() => {
     }
 
     const focusedInside = modalEl.querySelector(":focus");
+
     if (focusedInside) {
       focusedInside.blur();
     }
 
     document.body.focus();
 
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) {
-      modal.hide();
-    }
+    /*
+     * DashboardPack bundles Bootstrap internally but does not expose
+     * window.bootstrap.
+     *
+     * Use Bootstrap's native data API instead of bootstrap.Modal.
+     */
+    const $closeTrigger = $(`
+    <button
+      type="button"
+      class="d-none"
+      data-bs-dismiss="modal">
+    </button>
+  `);
+
+    $(modalEl).append($closeTrigger);
+
+    /*
+     * Let DashboardPack's Bootstrap instance hide the modal.
+     */
+    $closeTrigger.trigger("click");
+
+    /*
+     * The temporary trigger is no longer needed.
+     */
+    $closeTrigger.remove();
   }
 
-  function openConfirmationModal({ ns, title, message, onProceed }) {
-    // Ensure the namespace string starts with a dot if not provided
+  function openConfirmationModal({
+    ns,
+    title,
+    message,
+    onProceed,
+    onBack,
+    customActions = [],
+  }) {
     const eventNs = ns ? (ns.startsWith(".") ? ns : `.${ns}`) : ".confirmation";
 
-    AppUtils.openModal("#app-modal", {
-      size: "md",
-      placement: "center",
+    const transitionNs = ".AppUtilsConfirmationTransition";
 
-      header: "<div></div>",
+    const $appModal = $("#app-modal");
 
-      body: `
-      <div id="review-modal-body">
-        <h5 class="modal-title mb-2"><strong>${title}</strong></h5>
-        <p>${message}</p>
-      </div>
-    `,
+    /*
+     * Normalize customActions so a single object can also be passed.
+     */
+    const actions = Array.isArray(customActions)
+      ? customActions
+      : customActions
+        ? [customActions]
+        : [];
 
-      footer: `
-      <div id="review-modal-footer" class="d-flex gap-2">
-        <button type="button" class="btn btn-secondary btn-back">
-          Back
+    /*
+     * Build the custom action UI.
+     *
+     * 1 action  = normal button
+     * 2+ actions = More dropdown
+     */
+    const buildCustomActions = () => {
+      if (!actions.length) {
+        return "";
+      }
+
+      /*
+       * Single custom action.
+       */
+      if (actions.length === 1) {
+        const action = actions[0];
+
+        const {
+          label = "Action",
+          icon = "",
+          className = "btn-primary",
+          disabled = false,
+        } = action;
+
+        return `
+        <button
+          type="button"
+          class="btn ${className} btn-custom-action"
+          data-custom-action-index="0"
+          ${disabled ? "disabled" : ""}
+        >
+          ${icon ? `<i class="${icon} me-1"></i>` : ""}
+          ${label}
         </button>
-        <button type="button" class="btn btn-success btn-proceed">
-          Proceed
+      `;
+      }
+
+      /*
+       * Multiple custom actions.
+       *
+       * Use Bootstrap's native data API so we don't need
+       * window.bootstrap / bootstrap.Dropdown.
+       */
+      const menuItems = actions
+        .map((action, index) => {
+          const {
+            label = `Action ${index + 1}`,
+            icon = "",
+            dividerBefore = false,
+            disabled = false,
+          } = action;
+
+          return `
+          ${dividerBefore ? `<div class="dropdown-divider"></div>` : ""}
+
+          <button
+            type="button"
+            class="dropdown-item btn-custom-action"
+            data-custom-action-index="${index}"
+            ${disabled ? "disabled" : ""}
+          >
+            ${icon ? `<i class="${icon} me-2"></i>` : ""}
+            ${label}
+          </button>
+        `;
+        })
+        .join("");
+
+      return `
+      <div class="dropdown">
+        <button
+          type="button"
+          class="btn btn-primary dropdown-toggle"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <i class="pe-7s-menu me-1"></i>
+          More
         </button>
+
+        <div class="dropdown-menu">
+          ${menuItems}
+        </div>
       </div>
-    `,
+    `;
+    };
 
-      onOpen($modal) {
-        $modal
-          .off(eventNs)
-          // Back Click -> Closes or handles navigation back
-          .on(`click${eventNs}`, ".btn-back", () => {
-            AppUtils.closeModal("#app-modal");
-          })
-          // Proceed Click -> Triggers the passed callback submission function
-          .on(`click${eventNs}`, ".btn-proceed", () => {
-            const $btn = $modal.find(".btn-proceed");
-            if (typeof onProceed === "function") {
-              onProceed($modal, $btn);
-            }
-          });
-      },
+    const openModal = () => {
+      AppUtils.openModal("#app-modal", {
+        size: "md",
+        placement: "center",
 
-      onClose($modal) {
-        $modal.off(eventNs);
-      },
-    });
+        header: "<div></div>",
+
+        body: `
+        <div id="review-modal-body">
+          <h5 class="modal-title mb-2">
+            <strong>${title}</strong>
+          </h5>
+
+          <p>${message}</p>
+        </div>
+      `,
+
+        footer: `
+        <div
+          id="review-modal-footer"
+          class="d-flex gap-2 flex-wrap justify-content-center"
+        >
+
+          ${buildCustomActions()}
+
+          <button
+            type="button"
+            class="btn btn-secondary btn-back"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-success btn-proceed"
+          >
+            Proceed
+          </button>
+
+        </div>
+      `,
+      });
+
+      /*
+       * Clean up previous confirmation handlers.
+       */
+      $appModal
+        .off(`click${eventNs}`, ".btn-back")
+        .off(`click${eventNs}`, ".btn-proceed")
+        .off(`click${eventNs}`, ".btn-custom-action");
+
+      /*
+       * Cancel / Back.
+       */
+      $appModal.on(`click${eventNs}`, ".btn-back", function (event) {
+        event.preventDefault();
+
+        if (typeof onBack === "function") {
+          onBack($appModal);
+        } else {
+          AppUtils.closeModal("#app-modal");
+        }
+      });
+
+      /*
+       * Proceed.
+       */
+      $appModal.on(`click${eventNs}`, ".btn-proceed", function (event) {
+        event.preventDefault();
+
+        const $btn = $(this);
+
+        if (typeof onProceed === "function") {
+          onProceed($appModal, $btn);
+        }
+      });
+
+      /*
+       * Custom actions.
+       *
+       * Works for both:
+       *
+       * 1 custom action:
+       *   [ Clone ]
+       *
+       * Multiple:
+       *   [ More ▼ ]
+       */
+      $appModal.on(`click${eventNs}`, ".btn-custom-action", function (event) {
+        event.preventDefault();
+
+        const index = Number($(this).attr("data-custom-action-index"));
+
+        const action = actions[index];
+
+        if (!action) {
+          return;
+        }
+
+        const $btn = $(this);
+
+        if (typeof action.onClick === "function") {
+          action.onClick($appModal, $btn);
+        }
+      });
+    };
+
+    /*
+     * If #app-modal is currently open, wait until Bootstrap
+     * has completely finished hiding it before opening again.
+     */
+    if ($appModal.hasClass("show")) {
+      $appModal
+        .off(`hidden.bs.modal${transitionNs}`)
+        .one(`hidden.bs.modal${transitionNs}`, () => {
+          openModal();
+        });
+
+      AppUtils.closeModal("#app-modal");
+      return;
+    }
+
+    openModal();
   }
+
+//   sample use case:
+//   customActions: [
+//   {
+//     label: "Clone",
+//     icon: "pe-7s-copy",
+//     onClick: cloneProjects,
+//   },
+//   {
+//     label: "Archive",
+//     icon: "pe-7s-box2",
+//     onClick: archiveProjects,
+//   },
+//   {
+//     label: "Delete",
+//     icon: "pe-7s-trash",
+//     dividerBefore: true,
+//     onClick: deleteProjects,
+//   },
+// ],
+
+// AppUtils.openConfirmationModal({
+//   ns: "syncProject",
+
+//   title: "Update Project List?",
+
+//   message:
+//     "This will refresh the overall project list.",
+
+//   customActions: [
+//     {
+//       label: "Clone",
+//       icon: "pe-7s-copy",
+//       onClick: ($modal, $btn) => {
+//         cloneProjects($btn);
+//       },
+//     },
+//     {
+//       label: "Archive",
+//       icon: "pe-7s-box2",
+//       onClick: ($modal, $btn) => {
+//         archiveProjects($btn);
+//       },
+//     },
+//   ],
+
+//   onProceed: ($modal, $btn) => {
+//     syncClientProjectsFromMain($btn);
+//   },
+// });
 
   return {
     // cache
@@ -967,6 +1505,7 @@ const AppUtils = (() => {
     // drawer and modal helpers
     openDrawer,
     closeDrawer,
+    closeAllDrawers,
     openModal,
     closeModal,
     openConfirmationModal,

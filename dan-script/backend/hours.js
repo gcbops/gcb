@@ -149,9 +149,9 @@ function recordExternalClientHoursFromForm(formData) {
   try {
     const data = validateManualHoursFormData(formData);
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
 
-    const registrySheet = ss.getSheetByName("External Sheets");
+    const registrySheet = getSheetSafe("External Sheets");
 
     if (!registrySheet || registrySheet.getLastRow() < 2) {
       throw new Error("External Sheets registry not found.");
@@ -358,8 +358,7 @@ function getDailyActivityData() {
 }
 
 function getHoursSummary() {
-  const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Other Analytics");
+  const sheet = getSheetSafe("Other Analytics");
 
   if (!sheet) {
     return {};
@@ -765,8 +764,7 @@ function deleteTodayRowsAndCompact(sheet, deleteRows, today, startRow) {
 }
 
 function getYearHoursSummary(year) {
-  const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Other Analytics");
+  const sheet = getSheetSafe("Other Analytics");
 
   if (!sheet) {
     return null;
@@ -849,9 +847,7 @@ function addCurrMthTotalHrly(value) {
 }
 
 function getDailyOverviewSummary() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const metricsSheet = ss.getSheetByName("Daily Activities Metrics");
+  const metricsSheet = getSheetSafe("Daily Activities Metrics");
 
   if (!metricsSheet) {
     return null;
@@ -894,10 +890,8 @@ function getTodayChargedHours() {
 }
 
 function getMonthlyHoursSummary() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const monthlySheet = ss.getSheetByName("Monthly Hours Log");
-  const currentSheet = ss.getSheetByName("Current Month Log");
+  const monthlySheet = getSheetSafe("Monthly Hours Log");
+  const currentSheet = getSheetSafe("Current Month Log");
 
   if (!monthlySheet) {
     return {};
@@ -1074,8 +1068,7 @@ function getMonthlyHoursSummary() {
 }
 
 function getGrowthComparisonSummary(currentYear, comparisonYear) {
-  const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Other Analytics");
+  const sheet = getSheetSafe("Other Analytics");
 
   if (!sheet) {
     return null;

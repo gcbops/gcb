@@ -1,9 +1,13 @@
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-}
+  const ssId =
+    PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
 
-function getActiveSpreadsheet() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  if (ssId) {
+    return SpreadsheetApp.openById(ssId);
+  }
+
+  // Fallback: use the active spreadsheet (e.g., for bound scripts / initial setup)
+  return getSpreadsheet();
 }
 
 function getSheet(name) {
@@ -34,63 +38,200 @@ function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
   return index >= 0 ? index + startRow : lastRow + 1;
 }
 
-function applyFormulaToSheets(cellRef, formula) {
+function applyFormulaToMainSheets(cellRef, formula) {
   // requireAuthorizedUser();
 
   try {
-    const ss = getActiveSpreadsheet();
+    const ss = getSpreadsheet();
 
-    /*
-     * Main spreadsheet
-     */
+    let updated = 0;
+
     ss.getSheets().forEach((sheet) => {
       const name = sheet.getName();
 
       if (!CONFIG.SHEETS.EXCLUDED.has(name) || name === "BLANK") {
         sheet.getRange(cellRef).setFormula(formula);
+
+        updated++;
+      }
+    });
+
+    logResponse(
+      `Main formula update complete. Cell: ${cellRef}, Sheets updated: ${updated}`,
+    );
+
+    return {
+      success: true,
+      cellRef,
+      updated,
+    };
+  } catch (err) {
+    logResponse(`applyFormulaToMainSheets failed: ${err.message}`);
+
+    throw new Error(`Failed to apply formula to main sheets: ${err.message}`);
+  }
+}
+
+function applyFormulaToExternalProjects(cellRef, formula) {
+  // requireAuthorizedUser();
+
+  try {
+    const externalSheets = getExternalSheets();
+
+    const spreadsheetIds = new Set();
+
+    externalSheets.forEach((external) => {
+      if (external.spreadsheetId) {
+        spreadsheetIds.add(external.spreadsheetId);
       }
     });
 
     /*
-     * External spreadsheets
-     *
-     * Only update their "Projects" sheet.
+     * Always include the external template.
      */
-    const externalSheets = getExternalSheets();
+    const templateId = PropertiesService.getScriptProperties().getProperty(
+      EXTERNAL_SHEETS_CONFIG.templateProperty,
+    );
 
-    externalSheets.forEach((external) => {
-      const spreadsheetId = external.spreadsheetId;
+    if (templateId) {
+      spreadsheetIds.add(templateId);
+    }
 
-      if (!spreadsheetId) {
-        return;
-      }
+    let updated = 0;
+    let failed = 0;
 
+    spreadsheetIds.forEach((spreadsheetId) => {
       try {
         const externalSS = SpreadsheetApp.openById(spreadsheetId);
 
         const projectsSheet = externalSS.getSheetByName("Projects");
 
         if (!projectsSheet) {
-          console.warn(
-            `External spreadsheet "${spreadsheetId}" has no Projects sheet.`,
-          );
+          console.warn(`No Projects sheet found in "${externalSS.getName()}".`);
 
+          failed++;
           return;
         }
 
         projectsSheet.getRange(cellRef).setFormula(formula);
+
+        updated++;
+
+        logResponse(
+          `Formula applied to ${externalSS.getName()} → Projects!${cellRef}`,
+        );
       } catch (err) {
+        failed++;
+
         console.warn(
-          `Unable to update external spreadsheet "${spreadsheetId}":`,
+          `Unable to update external Projects sheet "${spreadsheetId}":`,
           err,
         );
       }
     });
 
-    return `Formula applied at ${cellRef}`;
+    return {
+      success: true,
+      cellRef,
+      updated,
+      failed,
+    };
   } catch (err) {
-    logResponse(err);
+    logResponse(`applyFormulaToExternalProjects failed: ${err.message}`);
 
-    return `Error: ${err.message}`;
+    throw new Error(
+      `Failed to update external Projects sheets: ${err.message}`,
+    );
+  }
+}
+
+function applyFormulaToExternalProjectSheets(cellRef, formula) {
+  // requireAuthorizedUser();
+
+  try {
+    const externalSheets = getExternalSheets();
+
+    const spreadsheetIds = new Set();
+
+    externalSheets.forEach((external) => {
+      if (external.spreadsheetId) {
+        spreadsheetIds.add(external.spreadsheetId);
+      }
+    });
+
+    /*
+     * Always include the external template.
+     */
+    const templateId = PropertiesService.getScriptProperties().getProperty(
+      EXTERNAL_SHEETS_CONFIG.templateProperty,
+    );
+
+    if (templateId) {
+      spreadsheetIds.add(templateId);
+    }
+
+    let updated = 0;
+    let failed = 0;
+
+    spreadsheetIds.forEach((spreadsheetId) => {
+      try {
+        const externalSS = SpreadsheetApp.openById(spreadsheetId);
+
+        externalSS.getSheets().forEach((sheet) => {
+          const sheetName = sheet.getName();
+
+          /*
+           * Projects is handled separately by
+           * applyFormulaToExternalProjects().
+           */
+          if (sheetName === "Projects") {
+            return;
+          }
+
+          /*
+           * Include BLANK.
+           *
+           * BLANK is the template used when creating
+           * new project sheets, so the formula must be
+           * kept in sync here as well.
+           */
+
+          try {
+            sheet.getRange(cellRef).setFormula(formula);
+
+            updated++;
+
+            logResponse(
+              `Formula applied to ${externalSS.getName()} → ${sheetName}!${cellRef}`,
+            );
+          } catch (err) {
+            failed++;
+
+            console.warn(
+              `Unable to update ${externalSS.getName()} → ${sheetName}:`,
+              err,
+            );
+          }
+        });
+      } catch (err) {
+        failed++;
+
+        console.warn(
+          `Unable to open external spreadsheet "${spreadsheetId}":`,
+          err,
+        );
+      }
+    });
+
+    return {
+      success: true,
+      cellRef,
+      updated,
+      failed,
+    };
+  } catch (err) {
+    logResponse(`applyFormulaToExternalProjectSheets failed: ${err.message}`);
+
+    throw new Error(`Failed to update external project sheets: ${err.message}`);
   }
 }

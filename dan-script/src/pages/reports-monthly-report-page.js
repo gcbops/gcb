@@ -67,7 +67,7 @@ const reportsMonthlyReportPage = (() => {
 
       .on("click.reportsMonthly", "#download-latest-pdf", function () {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading");
         ReportActions.downloadLatestPDF(btn, loading);
       })
 

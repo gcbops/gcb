@@ -1,8 +1,10 @@
+import { ChartModule } from "../charts.js";
+import { ClientActivityTrends } from "../clients/client-activity-trends.js";
 import { ClientDataService } from "../clients/client-data-service.js";
 import { HourSummary } from "../hours/hour-summary.js";
 import { TableClientSelector } from "../tables/client-selector.js";
 
-const addManualHoursPage = (() => {
+const clientActivityPage = (() => {
   let bound = false;
 
   function init() {
@@ -12,8 +14,6 @@ const addManualHoursPage = (() => {
 
     bound = true;
 
-    HourSummary.loadHourTotals();
-
     ClientDataService.renderClientDataByStatus(
       "Client Tracker - Today",
       "Activity Today",
@@ -21,6 +21,19 @@ const addManualHoursPage = (() => {
     );
 
     TableClientSelector.init();
+
+    ClientDataService.renderActiveClients();
+    
+    HourSummary.loadTodayChargedHours();
+    ChartModule.loadChart("daily", false, false, false, false, {
+      showAxes: false,
+      showGrid: false,
+      showPoints: false,
+      showTooltip: false,
+      showLegend: false,
+      showLabel: false,
+    });
+    ClientActivityTrends.init();
   }
 
   function destroy() {
@@ -39,4 +52,4 @@ const addManualHoursPage = (() => {
   };
 })();
 
-export { addManualHoursPage };
+export { clientActivityPage };

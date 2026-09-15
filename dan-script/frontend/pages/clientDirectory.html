@@ -1,0 +1,295 @@
+<div class="row">
+
+    <!-- =====================================================
+         SUMMARY
+         ===================================================== -->
+
+    <div class="col-md-3 col-sm-6">
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+
+                    <div class="client-summary-icon client-icon-primary me-3">
+                        <i class="fa fa-users"></i>
+                    </div>
+
+                    <div>
+                        <div class="text-muted text-uppercase small">
+                            Total Clients
+                        </div>
+
+                        <div
+                            class="h4 mb-0"
+                            data-metric="total-clients"
+                        >
+                            —
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+
+                    <div class="client-summary-icon client-icon-info me-3">
+                        <i class="fa fa-clock"></i>
+                    </div>
+
+                    <div>
+                        <div class="text-muted text-uppercase small">
+                            Total Hours
+                        </div>
+
+                        <div
+                            class="h4 mb-0"
+                            data-metric="total-hours"
+                        >
+                            —
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+
+                    <div class="client-summary-icon client-icon-success me-3">
+                        <i class="fa fa-money-bill-wave"></i>
+                    </div>
+
+                    <div>
+                        <div class="text-muted text-uppercase small">
+                            Total Paid
+                        </div>
+
+                        <div
+                            class="h4 mb-0"
+                            data-metric="total-paid"
+                        >
+                            —
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+        <div class="main-card mb-3 card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+
+                    <div class="client-summary-icon client-icon-danger me-3">
+                        <i class="fa fa-credit-card"></i>
+                    </div>
+
+                    <div>
+                        <div class="text-muted text-uppercase small">
+                            Outstanding
+                        </div>
+
+                        <div
+                            class="h4 mb-0"
+                            data-metric="total-owed"
+                        >
+                            —
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- =====================================================
+         CLIENT DIRECTORY
+         ===================================================== -->
+
+    <div class="col-md-12">
+
+        <div class="main-card mb-3 card">
+
+            <div class="card-body">
+
+                <div class="d-flex align-items-center mb-3">
+
+                    <i class="fa fa-address-book fs-4 me-2 text-info"></i>
+
+                    <h5 class="card-title mb-0">
+                        Client Directory
+                    </h5>
+
+                    <div class="ms-auto d-flex justify-content-end">
+
+                        <!-- DESKTOP CONTROLS -->
+                        <div class="responsive-desktop-actions d-flex">
+
+                            <button
+                                type="button"
+                                class="btn btn-light mb-2 me-2"
+                                id="sync-clients-list"
+                                data-client-action="sync"
+                                title="Refresh Client Directory"
+                                aria-label="Refresh Client Directory"
+                            >
+                                <i class="fa fa-sync"></i>
+                            </button>
+
+                            <button
+                                type="button"
+                                class="btn btn-light mb-2 me-2"
+                                id="add-external-sheet"
+                                data-client-action="add-external"
+                                title="Add External Client"
+                                aria-label="Add External Client"
+                            >
+                                <i class="fa fa-external-link-alt"></i>
+                            </button>
+
+                            <button
+                                type="button"
+                                class="btn btn-light mb-2"
+                                id="add-new-client-sheet"
+                                data-client-action="add-normal"
+                                title="Add Client"
+                                aria-label="Add Client"
+                            >
+                                <i class="fa fa-plus"></i>
+                            </button>
+
+                        </div>
+
+
+                        <!-- MOBILE CONTROLS -->
+                        <div class="responsive-mobile-actions dropdown mb-2">
+
+                            <button
+                                type="button"
+                                class="btn btn-light"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Client options"
+                                title="Client options"
+                            >
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        Client Actions
+                                    </h6>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-client-action="sync"
+                                    >
+                                        <i class="fa fa-sync me-2"></i>
+                                        Refresh
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-client-action="add-external"
+                                    >
+                                        <i class="fa fa-external-link-alt me-2"></i>
+                                        Add External Client
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-client-action="add-normal"
+                                    >
+                                        <i class="fa fa-plus me-2"></i>
+                                        Add Client
+                                    </button>
+                                </li>
+
+                            </ul>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div id="table-wrapper" class="mt-4">
+
+                    <table
+                        id="clientsTable"
+                        class="table table-hovered nowrap"
+                        style="width:100%"
+                    >
+
+                        <thead>
+                            <tr>
+
+                                <th>Client</th>
+
+                                <th class="text-center">
+                                    Projects
+                                </th>
+
+                                <th class="text-center">
+                                    Hours
+                                </th>
+
+                                <th class="text-center">
+                                    Paid
+                                </th>
+
+                                <th class="text-center">
+                                    Owed
+                                </th>
+
+                                <th class="text-center">
+                                    Collection
+                                </th>
+
+                                <th class="text-center">
+                                    Debt Exposure
+                                </th>
+
+                                <th class="text-center">
+                                    Action
+                                </th>
+
+                            </tr>
+                        </thead>
+
+                        <tbody id="dataBody"></tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>

@@ -25,7 +25,7 @@ const hourlyOverviewPage = (() => {
 
     $("#addtoSheet-hourly").on("click", function () {
       const btn = $(this);
-      const loading = AppUtils.setButtonLoading(btn[0], "Redirecting...");
+      const loading = AppUtils.setButtonLoading(btn[0], "Redirecting");
 
       google.script.run
         .withSuccessHandler(function (url) {
@@ -63,7 +63,7 @@ const hourlyOverviewPage = (() => {
               gscriptFunc: "addCurrMthTotalHrly",
               data: fValueVal,
               $btn: $submitBtn,
-              loadingText: "Saving ...",
+              loadingText: "Saving",
               onSuccess: () => {
                 AppUtils.showDashboardToast(
                   "Successfully added Total!",

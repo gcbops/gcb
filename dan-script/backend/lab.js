@@ -123,16 +123,4 @@ function getPerformanceSummary(yearType) {
   };
 }
 
-function getHourTotals() {
-  const sheet = getLabSheet();
-  if (!sheet) return null;
-
-  const values = sheet.getRange("AW7:AW9").getValues().flat();
-
-  return {
-    daily: values[0],
-    monthly: values[1],
-    yearly: values[2],
-  };
-}
 

@@ -1,3 +1,4 @@
+import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
 
 const TodayHoursEditor = (() => {
@@ -367,7 +368,7 @@ const TodayHoursEditor = (() => {
       },
 
       $btn: $saveButton,
-      loadingText: "Saving changes...",
+      loadingText: "Saving changes",
 
       onSuccess: (response) => {
         /*
@@ -385,6 +386,8 @@ const TodayHoursEditor = (() => {
           "Today's hours updated successfully!",
           "success",
         );
+
+        HourSummary.loadTodayChargedHours();
 
         AppUtils.closeModal(MODAL_ID);
       },

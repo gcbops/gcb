@@ -9,14 +9,7 @@ import { ClientTableService } from "../clients/client-table-service.js";
 const HomePage = (() => {
   function init() {
     HourSummary.loadHoursSummary("#hours-summary");
-    ChartModule.loadChart("daily", false, false, false, false, {
-      showAxes: false,
-      showGrid: false,
-      showPoints: false,
-      showTooltip: false,
-      showLegend: false,
-      showLabel: false,
-    });
+    
     ChartModule.loadChart("monthly");
     ChartModule.loadPrevYearCombinedChart();
     PerformanceMetrics.loadPerformanceSummary(
@@ -32,6 +25,14 @@ const HomePage = (() => {
     );
 
     HourSummary.loadTodayChargedHours();
+    ChartModule.loadChart("daily", false, false, false, false, {
+      showAxes: false,
+      showGrid: false,
+      showPoints: false,
+      showTooltip: false,
+      showLegend: false,
+      showLabel: false,
+    });
     ClientRanking.renderTopPaidClients();
     ProjectRankings.renderTopProjects();
 

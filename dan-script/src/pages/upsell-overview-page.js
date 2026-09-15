@@ -58,7 +58,7 @@ const upsellOverviewPage = (() => {
 
         const loading = AppUtils.setButtonLoading(
           btn[0],
-          "Redirecting...",
+          "Redirecting",
         );
 
         google.script.run
@@ -121,7 +121,7 @@ const upsellOverviewPage = (() => {
               gscriptFunc: "addUpsellEntry",
               data,
               $btn: $submitBtn,
-              loadingText: "Saving upsell...",
+              loadingText: "Saving upsell",
               onSuccess: handleUpsellSaveSuccess,
             });
           },

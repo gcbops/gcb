@@ -307,8 +307,7 @@ function updateCustomReportPDF(type, month, year) {
 }
 
 function isReportReady(type = "monthly") {
-  const ss = SpreadsheetApp.getActive();
-  const settings = ss.getSheetByName("Settings");
+  const settings = getSheetSafe("Settings");
 
   const configs = {
     monthly: {
@@ -331,8 +330,8 @@ function isReportReady(type = "monthly") {
     throw new Error(`Unknown report type: ${type}`);
   }
 
-  const generator = ss.getSheetByName(config.generatorSheet);
-  const pdf = ss.getSheetByName(config.pdfSheet);
+  const generator = getSheetSafe(config.generatorSheet);
+  const pdf = getSheetSafe(config.pdfSheet);
 
   if (!generator || !pdf) {
     throw new Error(`Required sheets for "${type}" report not found.`);
@@ -738,8 +737,6 @@ function validateCustomYearlyReport(year) {
 }
 
 function getReportLogs() {
-  const ss = getSpreadsheet();
-
   const sources = [
     { sheet: "MonthlyReport_Log", type: "Monthly" },
     { sheet: "YearlyReport_Log", type: "Yearly" },
@@ -748,7 +745,7 @@ function getReportLogs() {
   const logs = [];
 
   sources.forEach(({ sheet: sheetName, type }) => {
-    const sheet = ss.getSheetByName(sheetName);
+    const sheet = getSheetSafe(sheetName);
 
     if (!sheet) return;
 

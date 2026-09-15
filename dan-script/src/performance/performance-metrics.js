@@ -11,13 +11,13 @@ const PerformanceMetrics = (() => {
       "bg-grow-early",
       "bg-love-kiss",
       "bg-sunny-morning",
-      "bg-ripe-malin",
+      "bg-night-sky",
     ],
     previous: [
-      "bg-tempting-azure",
-      "bg-deep-blue",
-      "bg-ripe-malin",
-      "bg-amy-crisp",
+      "bg-grow-early",
+      "bg-love-kiss",
+      "bg-sunny-morning",
+      "bg-night-sky",
     ],
   };
 

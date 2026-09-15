@@ -43,8 +43,6 @@ function syncClientSheetList() {
       .setValues(names.map((name) => [name]));
   }
 
-  pullClientProjects();
-
   return names;
 }
 
@@ -83,7 +81,7 @@ function getDirectCellValueSafe(sheetName, cellRange) {
 }
 
 function goToPresentClient(sheetName) {
-  const ss = getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   const labSheet = getLabSheet();
 
   if (!labSheet) {
@@ -98,7 +96,7 @@ function goToPresentClient(sheetName) {
     }
   }
 
-  const sheet = ss.getSheetByName(sheetName);
+  const sheet = getSheetSafe(sheetName);
 
   if (!sheet) {
     return `⚠️ Sheet "${sheetName}" not found`;
@@ -223,8 +221,8 @@ function getClientSheetUrl(name) {
     throw new Error("No sheet name provided");
   }
 
-  const ss = getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(name);
+  const ss = getSpreadsheet();
+  const sheet = getSheetSafe(name);
 
   if (!sheet) {
     throw new Error(`Sheet "${name}" not found`);
@@ -235,83 +233,6 @@ function getClientSheetUrl(name) {
   }
 
   return `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
-}
-
-function getClientDataWithNickname(dt) {
-  const ss = getActiveSpreadsheet();
-  const logSheet = ss.getSheetByName("Paid & Owed Log");
-  const clientNamesSheet = ss.getSheetByName("Client Names");
-
-  if (!logSheet) {
-    throw new Error('Sheet "Paid & Owed Log" not found.');
-  }
-
-  if (!clientNamesSheet) {
-    throw new Error('Sheet "Client Names" not found.');
-  }
-
-  const lastRow = logSheet.getLastRow();
-
-  if (lastRow < 2) {
-    return [];
-  }
-
-  const data =
-    dt === "activeClientsData"
-      ? logSheet.getRange(2, 15, lastRow - 1, 4).getValues()
-      : logSheet.getRange(2, 10, lastRow - 1, 4).getValues();
-
-  /*
-   * Client Names:
-   * A = Client Name
-   * E = Number of Projects
-   * H = Nickname
-   */
-  const clientNamesLastRow = clientNamesSheet.getLastRow();
-
-  const clientMap = new Map();
-
-  if (clientNamesLastRow >= 2) {
-    const clientNamesData = clientNamesSheet
-      .getRange(2, 1, clientNamesLastRow - 1, 8)
-      .getValues();
-
-    clientNamesData.forEach((row) => {
-      const name = String(row[0] ?? "").trim();
-
-      if (!name) {
-        return;
-      }
-
-      const projects = Number(row[4]) || 0;
-      const nickname = String(row[7] ?? "").trim();
-
-      clientMap.set(normalizeText(name), {
-        projects,
-        nickname,
-      });
-    });
-  }
-
-  return data
-    .filter((row) => row[0] !== "" && row[0] !== null && row[0] !== undefined)
-    .map((row) => {
-      const name = String(row[0] ?? "").trim();
-
-      const clientInfo = clientMap.get(normalizeText(name)) || {
-        projects: 0,
-        nickname: "",
-      };
-
-      return {
-        name,
-        paid: row[1],
-        owed: row[2],
-        status: row[3],
-        role: clientInfo.nickname,
-        projects: clientInfo.projects,
-      };
-    });
 }
 
 function createClientSheet(input) {
@@ -342,6 +263,119 @@ function createClientSheet(input) {
 
   ss.setActiveSheet(newSheet);
   ss.moveActiveSheet(1);
+}
+
+function getClientDirectoryData() {
+  const analyticsSheet = getSheetSafe("Client Analytics");
+
+  if (!analyticsSheet) {
+    return [];
+  }
+
+  const lastRow = analyticsSheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  const analytics = analyticsSheet
+    .getRange(2, 1, lastRow - 1, 8)
+    .getValues()
+    .filter((row) => row[0] !== "" && row[0] !== null);
+
+  return analytics.map((row) => {
+    const name = String(row[0] || "").trim();
+
+    return {
+      name,
+
+      paid: Number(row[1]) || 0,
+      owed: Number(row[2]) || 0,
+      netPaid: Number(row[3]) || 0,
+      collectionRate: Number(row[4]) || 0,
+      hours: Number(row[5]) || 0,
+      projects: Number(row[6]) || 0,
+      debtExposure: Number(row[7]) || 0,
+
+      /*
+       * Directory information can be added here.
+       *
+       * These will need to come from the existing
+       * client-directory source.
+       */
+      role: "",
+      status: "",
+      category: "",
+      externalUrl: "",
+    };
+  });
+}
+
+function getClientDirectoryAnalytics() {
+  const sheet = getSheetSafe("Client Analytics");
+
+  if (!sheet) {
+    return {
+      summary: {
+        totalClients: 0,
+        totalHours: 0,
+        totalPaid: 0,
+        totalOwed: 0,
+        activeClients: 0,
+      },
+      clients: [],
+    };
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return {
+      summary: {
+        totalClients: 0,
+        totalHours: 0,
+        totalPaid: 0,
+        totalOwed: 0,
+        activeClients: 0,
+      },
+      clients: [],
+    };
+  }
+
+  const values = sheet
+    .getRange(2, 1, lastRow - 1, 8)
+    .getValues()
+    .filter((row) => row[0] !== "" && row[0] !== null);
+
+  const clients = values.map((row) => ({
+    client: String(row[0] || ""),
+    paid: Number(row[1]) || 0,
+    owed: Number(row[2]) || 0,
+    netPaid: Number(row[3]) || 0,
+    collectionRate: Number(row[4]) || 0,
+    hours: Number(row[5]) || 0,
+    projects: Number(row[6]) || 0,
+    debtExposure: Number(row[7]) || 0,
+  }));
+
+  const totalPaid = clients.reduce((sum, client) => sum + client.paid, 0);
+
+  const totalOwed = clients.reduce((sum, client) => sum + client.owed, 0);
+
+  const totalHours = clients.reduce((sum, client) => sum + client.hours, 0);
+
+  return {
+    summary: {
+      totalClients: clients.length,
+      totalHours,
+      totalPaid,
+      totalOwed,
+      collectionRate:
+        totalPaid + totalOwed > 0 ? totalPaid / (totalPaid + totalOwed) : 0,
+    },
+
+    clients,
+  };
 }
 
 function getClientPaidOwedDataHistory(clientName) {
@@ -383,4 +417,136 @@ function getClientPaidOwedDataHistory(clientName) {
 
     return [];
   }
+}
+
+function getClientActivityTrends() {
+  try {
+    const sheet = getSheetSafe("Other Analytics");
+
+    if (!sheet) {
+      throw new Error("Other Analytics sheet not found.");
+    }
+
+    // P8:U8
+    // P = Active Clients
+    // Q = Hours Logged
+    // R = Tasks Completed
+    // S = Projects Active
+    // T = New Clients
+    // U = New Projects
+    const values = sheet.getRange("P8:U8").getValues()[0];
+
+    return {
+      activeClients: Number(values[0]) || 0,
+      hoursLogged: Number(values[1]) || 0,
+      tasksCompleted: Number(values[2]) || 0,
+      projectsActive: Number(values[3]) || 0,
+      newClients: Number(values[4]) || 0,
+      newProjects: Number(values[5]) || 0,
+    };
+  } catch (err) {
+    console.error("[getClientActivityTrends]", err);
+
+    throw new Error(err.message || "Failed to load client activity trends.");
+  }
+}
+
+function getClientRankings() {
+  const sheet = getSheetSafe("Client Analytics");
+
+  if (!sheet) {
+    return {
+      overview: {
+        totalClients: 0,
+        totalHours: 0,
+        collectionRate: 0,
+      },
+      rankings: {},
+    };
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return {
+      overview: {
+        totalClients: 0,
+        totalHours: 0,
+        collectionRate: 0,
+      },
+      rankings: {},
+    };
+  }
+
+  /*
+   * Client Analytics
+   *
+   * A = Client
+   * B = Paid
+   * C = Owed
+   * D = Net Paid
+   * E = Collection Rate
+   * F = Hours
+   * G = Projects
+   * H = Debt Exposure
+   */
+  const values = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+
+  const clients = values
+    .filter((row) => row[0] !== "" && row[0] !== null)
+    .map((row) => ({
+      client: row[0] ?? "",
+      paid: Number(row[1]) || 0,
+      owed: Number(row[2]) || 0,
+      netPaid: Number(row[3]) || 0,
+      collectionRate: Number(row[4]) || 0,
+      hours: Number(row[5]) || 0,
+      projects: Number(row[6]) || 0,
+      debtExposure: Number(row[7]) || 0,
+    }));
+
+  if (!clients.length) {
+    return {
+      overview: {
+        totalClients: 0,
+        totalHours: 0,
+        collectionRate: 0,
+      },
+      rankings: {},
+    };
+  }
+
+  const sortDesc = (key) =>
+    [...clients].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10);
+
+  const totalPaid = clients.reduce((total, client) => total + client.paid, 0);
+
+  const totalOwed = clients.reduce((total, client) => total + client.owed, 0);
+
+  const totalHours = clients.reduce((total, client) => total + client.hours, 0);
+
+  const collectionClients = clients.filter(
+    (client) => client.paid > 0 && client.owed > 0,
+  );
+
+  const sortDescFrom = (data, key) =>
+    [...data].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10);
+
+  return {
+    overview: {
+      totalClients: clients.length,
+      totalHours,
+      collectionRate:
+        totalPaid + totalOwed > 0 ? totalPaid / (totalPaid + totalOwed) : 0,
+    },
+
+    rankings: {
+      topClients: sortDesc("netPaid"),
+      topPaid: sortDesc("paid"),
+      highestHours: sortDesc("hours"),
+      highestOwed: sortDesc("owed"),
+      bestCollection: sortDescFrom(collectionClients, "collectionRate"),
+      highestDebtExposure: sortDescFrom(collectionClients, "debtExposure"),
+    },
+  };
 }

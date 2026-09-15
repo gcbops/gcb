@@ -7,7 +7,8 @@ const ClientDirectory = (() => {
   const TABLE_ID = "#clientsTable";
   const TABLE_TITLE = "Clients";
   const TABLE_BODY_ID = "dataBody";
-  const CACHE_KEY = "allClientsData";
+  const CACHE_KEY = "clientDirectoryData";
+  const SERVER_FUNCTION = "getClientDirectoryData";
 
   function init(source = CACHE_KEY) {
     if (initialized) {
@@ -55,23 +56,18 @@ const ClientDirectory = (() => {
   }
 
   function fetchClientDirectory(source, callback = null) {
-    AppUtils.cachedGScriptCall(
-      source,
-      "getClientDataWithNickname",
-      [source],
-      (data) => {
-        if (!Array.isArray(data)) {
-          AppUtils.showDashboardToast(
-            "Something went wrong loading clients!",
-            "error",
-          );
+    AppUtils.cachedGScriptCall(source, SERVER_FUNCTION, [], (data) => {
+      if (!Array.isArray(data)) {
+        AppUtils.showDashboardToast(
+          "Something went wrong loading clients!",
+          "error",
+        );
 
-          return;
-        }
+        return;
+      }
 
-        renderClientDirectory(data, callback);
-      },
-    );
+      renderClientDirectory(data, callback);
+    });
   }
 
   /*
@@ -92,8 +88,8 @@ const ClientDirectory = (() => {
 
     AppUtils.cachedGScriptCall(
       source,
-      "getClientDataWithNickname",
-      [source],
+      SERVER_FUNCTION,
+      [],
       (data) => {
         $("#sync-clients-list i").removeClass("fa-spin");
 
@@ -126,8 +122,8 @@ const ClientDirectory = (() => {
   function refreshClientDirectoryInBackground(source, cached) {
     AppUtils.cachedGScriptCall(
       source,
-      "getClientDataWithNickname",
-      [source],
+      SERVER_FUNCTION,
+      [],
       (fresh) => {
         if (!Array.isArray(fresh)) {
           return;
@@ -155,6 +151,8 @@ const ClientDirectory = (() => {
       return;
     }
 
+    renderSummary(data);
+
     if (!Array.isArray(data) || data.length === 0) {
       DataTableModule.destroy(TABLE_ID);
       DataTableModule.showEmpty(TABLE_ID, "No clients found.");
@@ -169,50 +167,92 @@ const ClientDirectory = (() => {
 
     tbody.innerHTML = "";
 
-    data.forEach((client, index) => {
-      tbody.appendChild(createClientDirectoryRow(client, index));
+    data.forEach((client) => {
+      tbody.appendChild(createClientDirectoryRow(client));
     });
 
-    /*
-     * Initialize DataTable only after all rows exist.
-     */
     DataTableModule.init(TABLE_TITLE, TABLE_ID, false, callback);
   }
 
-  function createClientDirectoryRow(client, index) {
+  function renderSummary(data) {
+    if (!Array.isArray(data) || !data.length) {
+      setMetric("total-clients", 0);
+      setMetric("total-hours", 0, "h");
+      setMetric("total-paid", 0);
+      setMetric("total-owed", 0);
+
+      return;
+    }
+
+    const totalClients = data.length;
+
+    const totalHours = data.reduce(
+      (total, client) => total + (Number(client?.hours) || 0),
+      0,
+    );
+
+    const totalPaid = data.reduce(
+      (total, client) => total + (Number(client?.paid) || 0),
+      0,
+    );
+
+    const totalOwed = data.reduce(
+      (total, client) => total + (Number(client?.owed) || 0),
+      0,
+    );
+
+    setMetric("total-clients", totalClients);
+    setMetric("total-hours", totalHours, "h");
+    setMetric("total-paid", totalPaid);
+    setMetric("total-owed", totalOwed);
+  }
+
+  function setMetric(name, value, suffix = "") {
+    const element = document.querySelector(`[data-metric="${name}"]`);
+
+    if (!element) {
+      return;
+    }
+
+    const number = Number(value) || 0;
+
+    element.textContent = `${number.toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}${suffix}`;
+  }
+
+  function createClientDirectoryRow(client) {
     const row = document.createElement("tr");
 
     const name = String(client?.name || "").trim();
     const role = String(client?.role || "").trim();
-    const projects = String(client?.projects ?? "").trim();
-    const paid = String(client?.paid ?? "").trim();
-    const owed = String(client?.owed ?? "").trim();
-    const status = String(client?.status || "").trim();
+
+    const projects = Number(client?.projects) || 0;
+    const hours = Number(client?.hours) || 0;
+    const paid = Number(client?.paid) || 0;
+    const owed = Number(client?.owed) || 0;
+    const collectionRate = Number(client?.collectionRate) || 0;
+    const debtExposure = Number(client?.debtExposure) || 0;
+
+    const externalUrl = String(client?.externalUrl || "").trim();
 
     const initials = AppUtils.getInitials(name);
-
-    const isInactive = status.toLowerCase() === "inactive";
-
-    const statusHtml = isInactive
-      ? `
-        <span class="badge bg-danger text-center">
-          Inactive
-        </span>
-      `
-      : `
-        <span class="badge bg-success text-center">
-          ${AppUtils.escapeHtml(status || "Active")}
-        </span>
-      `;
+    const safeName = AppUtils.escapeHtml(name);
+    const safeRole = AppUtils.escapeHtml(role);
+    const safeExternalUrl = AppUtils.escapeHtml(externalUrl);
 
     row.innerHTML = `
-
-      <td>
+    <td class="client-name-cell">
+      <!-- Desktop version -->
+      <div class="client-name-desktop">
         <div class="widget-content p-0">
           <div class="widget-content-wrapper">
             <div class="widget-content-left me-2 me-lg-3">
               <div
-                class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
+                class="avatar-circle bg-light text-info rounded-circle
+                       d-flex align-items-center justify-content-center"
+                aria-hidden="true"
               >
                 ${AppUtils.escapeHtml(initials)}
               </div>
@@ -220,44 +260,59 @@ const ClientDirectory = (() => {
 
             <div class="widget-content-left flex2">
               <div class="widget-heading">
-                ${AppUtils.escapeHtml(name)}
+                ${safeName}
               </div>
 
               <div class="widget-subheading opacity-7">
-                ${AppUtils.escapeHtml(role)}
+                ${safeRole}
               </div>
             </div>
           </div>
         </div>
-      </td>
+      </div>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(projects)}
-      </td>
+      <!-- Mobile version -->
+      <span class="client-name-mobile">
+        ${safeName}
+      </span>
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(paid)}
-      </td>
+    <td class="text-center text-muted">
+      ${projects}
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(owed)}
-      </td>
+    <td class="text-center text-muted">
+      ${formatHours(hours)}
+    </td>
 
-      <td class="text-center">
-        ${statusHtml}
-      </td>
+    <td class="text-center text-muted">
+      ${formatAmount(paid)}
+    </td>
 
-      <td class="text-center action-btn-group">
-        <button
-          type="button"
-          class="btn action-btn open-client-btn"
-          title="Open Client Sheet"
-          aria-label="Open ${AppUtils.escapeHtml(name)} sheet"
-        >
-          <i class="pe-7s-note"></i>
-        </button>
-      </td>
-    `;
+    <td class="text-center text-muted">
+      ${formatAmount(owed)}
+    </td>
+
+    <td class="text-center text-muted">
+      ${formatPercent(collectionRate)}
+    </td>
+
+    <td class="text-center text-muted">
+      ${formatPercent(debtExposure)}
+    </td>
+
+    <td class="text-center action-btn-group">
+      <button
+        type="button"
+        class="btn action-btn open-client-btn"
+        title="Open Client Sheet"
+        aria-label="Open ${safeName} sheet"
+        data-external-url="${safeExternalUrl}"
+      >
+        <i class="pe-7s-note"></i>
+      </button>
+    </td>
+  `;
 
     return row;
   }
@@ -337,6 +392,19 @@ const ClientDirectory = (() => {
       return;
     }
 
+    const externalUrl = button.dataset.externalUrl?.trim();
+
+    if (externalUrl) {
+      AppUtils.showDashboardToast(
+        "Redirecting to external client sheet!",
+        "info",
+      );
+
+      window.open(externalUrl, "_blank");
+
+      return;
+    }
+
     AppUtils.showDashboardToast("Redirecting to sheet!", "info");
 
     google.script.run
@@ -355,6 +423,24 @@ const ClientDirectory = (() => {
         AppUtils.showError(error);
       })
       .goToPresentClient(clientName);
+  }
+
+  function formatAmount(value) {
+    return (Number(value) || 0).toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+  }
+
+  function formatHours(value) {
+    return `${(Number(value) || 0).toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}h`;
+  }
+
+  function formatPercent(value) {
+    return `${((Number(value) || 0) * 100).toFixed(2)}%`;
   }
 
   return {

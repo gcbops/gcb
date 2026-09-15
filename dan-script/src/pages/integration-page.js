@@ -332,7 +332,7 @@ const integrationsConfigurationPage = (() => {
       return;
     }
 
-    const loading = AppUtils.setButtonLoading($btn[0], "Saving...");
+    const loading = AppUtils.setButtonLoading($btn[0], "Saving");
 
     const config = getIntegrationConfig(integration);
     const title = config?.title || "Integration";

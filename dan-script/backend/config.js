@@ -31,10 +31,8 @@ const CONFIG = {
 
   SHEETS: {
     EXCLUDED: new Set([
-      "Lab 2.0",
       "Lab 3.0",
       "Client Names",
-      "Client Sheet Copy Template",
       "Monthly Hours Log",
       "Current Month Log",
       "Client Tracker - Today",
@@ -52,16 +50,18 @@ const CONFIG = {
       "Yearly Report PDF",
       "YearlyReport_Log",
       "Settings",
+      "Current Year Log",
+      "External Sheets",
+      "Other Analytics",
+      "Client Analytics",
+      "Team Sheet Generator",
+      "Daily Activities Metrics",
+      "Current Month Log Generator",
       "Month Log Generator",
       "Monthly Report PDF Generator",
       "Year Log Generator",
       "Yearly Report PDF Generator",
-      "Current Year Log",
-      "External Sheets",
-      "Other Analytics",
-      "Team Sheet",
-      "Daily Activities Metrics",
-      "Daily Charged Hours"
+      "Data Generator For Chart",
     ]),
   },
 

@@ -7,7 +7,6 @@ const ProjectRankings = (() => {
       cacheKey: "topProjects",
       method: "getTopProjects",
       listSelector: "#top-projects",
-      avatarClass: "bg-malibu-beach",
       sortFn: sortTopProjects,
       iconClass: "fas fa-briefcase",
       iconColor: "text-warning",
@@ -19,7 +18,6 @@ const ProjectRankings = (() => {
       cacheKey: "lowestProjects",
       method: "getTopProjects",
       listSelector: "#lowest-projects",
-      avatarClass: "bg-love-kiss",
       sortFn: sortLowestProjects,
       iconClass: "fas fa-exclamation-circle",
       iconColor: "text-danger",
@@ -62,8 +60,8 @@ const ProjectRankings = (() => {
 
           <div class="widget-content-left me-2 me-lg-3">
             <div
-              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-              text-white rounded-circle d-flex align-items-center justify-content-center">
+              class="avatar-circle swatch-holder swatch-holder-lg bg-light
+              text-info rounded-circle d-flex align-items-center justify-content-center">
               ${AppUtils.getInitials(client)}
             </div>
           </div>

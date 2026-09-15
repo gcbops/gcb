@@ -101,12 +101,17 @@
 
     <!-- Header with minimize + close -->
     <div class="drawer-header">
-      <span class="drawer-title">Add manual Hours</span>
+      <span class="drawer-title">
+        <i class="pe-7s-clock icon-gradient bg-tempting-azure"></i>
+        ADD HOURS
+      </span>
+
       <div class="drawer-actions">
         <!-- Minimize: dynamic angle-down / angle-up -->
         <button class="drawer-minimize" aria-label="Minimize">
           <i class="pe-7s-angle-down"></i>
         </button>
+
         <!-- Close -->
         <button class="drawer-close" aria-label="Close">
           <i class="pe-7s-close"></i>
@@ -120,7 +125,7 @@
         <div class="card-body pt-0 pb-0">
           <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom: 10px;">
             <!-- Optional: hide duplicate title if you want -->
-            <h5 class="card-title" style="display:none;">Add manual Hours</h5>
+            <h5 class="card-title" style="display:none;">ADD HOURS</h5>
             <div style="flex:1"></div>
             <button id="submit-new-hours" type="submit" class="btn btn-primary">Add</button>
           </div>
@@ -150,24 +155,6 @@
       </div>
     </div>
 
-  </div>
-</div>
-
-<div class="drawer drawer-bottom drawer-boxed drawer-sm" id="drawerClientAdd">
-  <div class="drawer-content p-3">
-    <button class="drawer-close" aria-label="Close">✕</button>
-    <div class="main-card card shadow-none">
-      <div class="card-body pt-0 pb-0">
-        <h5 class="card-title">Add Client Sheet</h5>
-        <form id="addClientForm" class="form-inline">
-          <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
-            <label for="sheet_name" class="mr-sm-2">Sheet Name</label>
-            <input type="text" name="sheet_name" id="sheet_name" class="form-control" required="" />
-          </div>
-          <button type="submit" class="btn btn-primary">Add</button>
-        </form>
-      </div>
-    </div>
   </div>
 </div>
 

@@ -367,13 +367,18 @@
         onClose($drawerElement, $contentElement);
       }
     }
+    function closeAllDrawers() {
+      $(".drawer-open").each(function() {
+        closeDrawer($(this));
+      });
+    }
     function submitForm({
       gscriptFunc,
       data = {},
       onSuccess,
       onError,
       $btn,
-      loadingText = "Saving..."
+      loadingText = "Saving"
     }) {
       if (!gscriptFunc) {
         showError("No Google Apps Script function provided");
@@ -411,10 +416,17 @@
         showError(err);
       }
     }
-    function setButtonLoading(btn, loadingText = "Loading...") {
+    function setButtonLoading(btn, loadingText = "Loading") {
       const $button = $(btn);
       if (!$button.data("original-text")) {
         $button.data("original-text", $button.html());
+      }
+      const outlineMatch = $button[0].className.match(/\bbtn-outline-(\w+)\b/);
+      if (outlineMatch) {
+        const originalOutlineClass = outlineMatch[0];
+        const solidClass = "btn-" + outlineMatch[1];
+        $button.data("original-outline-class", originalOutlineClass);
+        $button.removeClass(originalOutlineClass).addClass(solidClass);
       }
       const getLoadingHtml = (text) => `
     ${text}
@@ -440,6 +452,12 @@
       const restore = () => {
         $button.prop("disabled", false).html($button.data("original-text"));
         $button.removeData("original-text");
+        const originalOutlineClass = $button.data("original-outline-class");
+        if (originalOutlineClass) {
+          const solidClass = originalOutlineClass.replace("btn-outline-", "btn-");
+          $button.removeClass(solidClass).addClass(originalOutlineClass);
+          $button.removeData("original-outline-class");
+        }
       };
       setText(loadingText);
       return {
@@ -457,8 +475,7 @@
         header = "",
         body = "",
         footer = "",
-        backdrop = "static",
-        keyboard = true,
+        footerActions = {},
         closable = true,
         scrollable = false,
         centered = false,
@@ -471,8 +488,87 @@
         return;
       }
       const modalEl = $modal[0];
+      if (!modalEl.id) {
+        console.error(
+          "AppUtils.openModal: Modal element must have an ID.",
+          modalEl
+        );
+        return;
+      }
       const $dialog = $modal.find(".modal-dialog");
       const $content = $modal.find(".modal-content");
+      const normalizeActions = (actions) => {
+        if (!actions) {
+          return [];
+        }
+        return Array.isArray(actions) ? actions : [actions];
+      };
+      const buildFooterActions = (step) => {
+        const actions = normalizeActions(footerActions[step]);
+        if (!actions.length) {
+          return "";
+        }
+        if (actions.length === 1) {
+          const action = actions[0];
+          const {
+            label = "Action",
+            icon = "",
+            className = "btn-primary",
+            disabled = false
+          } = action;
+          return `
+        <button
+          type="button"
+          class="btn ${className} btn-custom-footer-action"
+          data-footer-action-step="${step}"
+          data-footer-action-index="0"
+          ${disabled ? "disabled" : ""}
+        >
+          ${icon ? `<i class="${icon} me-1"></i>` : ""}
+          ${label}
+        </button>
+      `;
+        }
+        const menuItems = actions.map((action, index) => {
+          const {
+            label = `Action ${index + 1}`,
+            icon = "",
+            dividerBefore = false,
+            disabled = false
+          } = action;
+          return `
+          ${dividerBefore ? `<div class="dropdown-divider"></div>` : ""}
+
+          <button
+            type="button"
+            class="dropdown-item btn-custom-footer-action"
+            data-footer-action-step="${step}"
+            data-footer-action-index="${index}"
+            ${disabled ? "disabled" : ""}
+          >
+            ${icon ? `<i class="${icon} me-2"></i>` : ""}
+            ${label}
+          </button>
+        `;
+        }).join("");
+        return `
+      <div class="dropdown">
+        <button
+          type="button"
+          class="btn btn-primary dropdown-toggle"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <i class="pe-7s-menu me-1"></i>
+          More
+        </button>
+
+        <div class="dropdown-menu">
+          ${menuItems}
+        </div>
+      </div>
+    `;
+      };
       $modal.removeClass(
         [
           "modal-top",
@@ -525,6 +621,9 @@
       if (contentClass) {
         $content.addClass(contentClass);
       }
+      const mainFooterActions = buildFooterActions("main");
+      const reviewFooterActions = buildFooterActions("review");
+      const processedFooter = footer.replace("<!-- APP-MODAL-MAIN-ACTIONS -->", mainFooterActions).replace("<!-- APP-MODAL-REVIEW-ACTIONS -->", reviewFooterActions);
       $content.html(`
     ${header ? `
       <div class="modal-header">
@@ -545,18 +644,34 @@
       ${body}
     </div>
 
-    ${footer ? `
+    ${processedFooter ? `
       <div class="modal-footer justify-content-center">
-        ${footer}
+        ${processedFooter}
       </div>
     ` : ""}
   `);
       $modal.off(".AppUtilsModal");
-      $modal.one("shown.bs.modal.AppUtilsModal", function() {
-        if (typeof onOpen === "function") {
-          onOpen($modal, $dialog, $content);
+      $modal.on(
+        "click.AppUtilsModal",
+        ".btn-custom-footer-action",
+        function(event) {
+          event.preventDefault();
+          const $btn = $(this);
+          const step = $btn.attr("data-footer-action-step");
+          const index = Number($btn.attr("data-footer-action-index"));
+          const actions = normalizeActions(footerActions[step]);
+          const action = actions[index];
+          if (!action) {
+            return;
+          }
+          if (typeof action.onClick === "function") {
+            action.onClick($modal, $btn);
+          }
         }
-      });
+      );
+      if (typeof onOpen === "function") {
+        onOpen($modal, $dialog, $content);
+      }
       $modal.one("hidden.bs.modal.AppUtilsModal", function() {
         if (typeof onClose === "function") {
           onClose($modal, $dialog, $content);
@@ -567,16 +682,18 @@
           document.body.focus();
         }
         $content.empty();
-        const instance = bootstrap.Modal.getInstance(modalEl);
-        if (instance) {
-          instance.dispose();
-        }
       });
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
-        backdrop,
-        keyboard
-      });
-      modal.show();
+      const $trigger = $(`
+    <button
+      type="button"
+      class="d-none"
+      data-bs-toggle="modal"
+      data-bs-target="#${modalEl.id}">
+    </button>
+  `);
+      $("body").append($trigger);
+      $trigger.trigger("click");
+      $trigger.remove();
     }
     function closeModal(modalSelector) {
       const modalEl = document.querySelector(modalSelector);
@@ -588,47 +705,168 @@
         focusedInside.blur();
       }
       document.body.focus();
-      const modal = bootstrap.Modal.getInstance(modalEl);
-      if (modal) {
-        modal.hide();
-      }
+      const $closeTrigger = $(`
+    <button
+      type="button"
+      class="d-none"
+      data-bs-dismiss="modal">
+    </button>
+  `);
+      $(modalEl).append($closeTrigger);
+      $closeTrigger.trigger("click");
+      $closeTrigger.remove();
     }
-    function openConfirmationModal({ ns, title, message, onProceed }) {
+    function openConfirmationModal({
+      ns,
+      title,
+      message,
+      onProceed,
+      onBack,
+      customActions = []
+    }) {
       const eventNs = ns ? ns.startsWith(".") ? ns : `.${ns}` : ".confirmation";
-      AppUtils.openModal("#app-modal", {
-        size: "md",
-        placement: "center",
-        header: "<div></div>",
-        body: `
-      <div id="review-modal-body">
-        <h5 class="modal-title mb-2"><strong>${title}</strong></h5>
-        <p>${message}</p>
-      </div>
-    `,
-        footer: `
-      <div id="review-modal-footer" class="d-flex gap-2">
-        <button type="button" class="btn btn-secondary btn-back">
-          Back
-        </button>
-        <button type="button" class="btn btn-success btn-proceed">
-          Proceed
-        </button>
-      </div>
-    `,
-        onOpen($modal) {
-          $modal.off(eventNs).on(`click${eventNs}`, ".btn-back", () => {
-            AppUtils.closeModal("#app-modal");
-          }).on(`click${eventNs}`, ".btn-proceed", () => {
-            const $btn = $modal.find(".btn-proceed");
-            if (typeof onProceed === "function") {
-              onProceed($modal, $btn);
-            }
-          });
-        },
-        onClose($modal) {
-          $modal.off(eventNs);
+      const transitionNs = ".AppUtilsConfirmationTransition";
+      const $appModal = $("#app-modal");
+      const actions = Array.isArray(customActions) ? customActions : customActions ? [customActions] : [];
+      const buildCustomActions = () => {
+        if (!actions.length) {
+          return "";
         }
-      });
+        if (actions.length === 1) {
+          const action = actions[0];
+          const {
+            label = "Action",
+            icon = "",
+            className = "btn-primary",
+            disabled = false
+          } = action;
+          return `
+        <button
+          type="button"
+          class="btn ${className} btn-custom-action"
+          data-custom-action-index="0"
+          ${disabled ? "disabled" : ""}
+        >
+          ${icon ? `<i class="${icon} me-1"></i>` : ""}
+          ${label}
+        </button>
+      `;
+        }
+        const menuItems = actions.map((action, index) => {
+          const {
+            label = `Action ${index + 1}`,
+            icon = "",
+            dividerBefore = false,
+            disabled = false
+          } = action;
+          return `
+          ${dividerBefore ? `<div class="dropdown-divider"></div>` : ""}
+
+          <button
+            type="button"
+            class="dropdown-item btn-custom-action"
+            data-custom-action-index="${index}"
+            ${disabled ? "disabled" : ""}
+          >
+            ${icon ? `<i class="${icon} me-2"></i>` : ""}
+            ${label}
+          </button>
+        `;
+        }).join("");
+        return `
+      <div class="dropdown">
+        <button
+          type="button"
+          class="btn btn-primary dropdown-toggle"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <i class="pe-7s-menu me-1"></i>
+          More
+        </button>
+
+        <div class="dropdown-menu">
+          ${menuItems}
+        </div>
+      </div>
+    `;
+      };
+      const openModal2 = () => {
+        AppUtils.openModal("#app-modal", {
+          size: "md",
+          placement: "center",
+          header: "<div></div>",
+          body: `
+        <div id="review-modal-body">
+          <h5 class="modal-title mb-2">
+            <strong>${title}</strong>
+          </h5>
+
+          <p>${message}</p>
+        </div>
+      `,
+          footer: `
+        <div
+          id="review-modal-footer"
+          class="d-flex gap-2 flex-wrap justify-content-center"
+        >
+
+          ${buildCustomActions()}
+
+          <button
+            type="button"
+            class="btn btn-secondary btn-back"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-success btn-proceed"
+          >
+            Proceed
+          </button>
+
+        </div>
+      `
+        });
+        $appModal.off(`click${eventNs}`, ".btn-back").off(`click${eventNs}`, ".btn-proceed").off(`click${eventNs}`, ".btn-custom-action");
+        $appModal.on(`click${eventNs}`, ".btn-back", function(event) {
+          event.preventDefault();
+          if (typeof onBack === "function") {
+            onBack($appModal);
+          } else {
+            AppUtils.closeModal("#app-modal");
+          }
+        });
+        $appModal.on(`click${eventNs}`, ".btn-proceed", function(event) {
+          event.preventDefault();
+          const $btn = $(this);
+          if (typeof onProceed === "function") {
+            onProceed($appModal, $btn);
+          }
+        });
+        $appModal.on(`click${eventNs}`, ".btn-custom-action", function(event) {
+          event.preventDefault();
+          const index = Number($(this).attr("data-custom-action-index"));
+          const action = actions[index];
+          if (!action) {
+            return;
+          }
+          const $btn = $(this);
+          if (typeof action.onClick === "function") {
+            action.onClick($appModal, $btn);
+          }
+        });
+      };
+      if ($appModal.hasClass("show")) {
+        $appModal.off(`hidden.bs.modal${transitionNs}`).one(`hidden.bs.modal${transitionNs}`, () => {
+          openModal2();
+        });
+        AppUtils.closeModal("#app-modal");
+        return;
+      }
+      openModal2();
     }
     return {
       // cache
@@ -657,6 +895,7 @@
       // drawer and modal helpers
       openDrawer,
       closeDrawer,
+      closeAllDrawers,
       openModal,
       closeModal,
       openConfirmationModal
@@ -710,32 +949,6 @@
       setNetHoursColor(
         $container.find('[data-metric="net-hours"]'),
         data.netHours
-      );
-    }
-    function loadHourTotals(isRefresh) {
-      AppUtils.cachedGScriptCall(
-        "hourTotals",
-        "getHourTotals",
-        [],
-        (data) => {
-          if (!data) {
-            return;
-          }
-          const dailyEl = document.getElementById("daily-hour-total");
-          const monthlyEl = document.getElementById("monthly-hour-total");
-          const yearlyEl = document.getElementById("yearly-hour-total");
-          if (dailyEl) {
-            dailyEl.textContent = data.daily;
-          }
-          if (monthlyEl) {
-            monthlyEl.textContent = data.monthly;
-          }
-          if (yearlyEl) {
-            yearlyEl.textContent = data.yearly;
-          }
-        },
-        false,
-        isRefresh
       );
     }
     function loadDailyOverviewSummary() {
@@ -1136,7 +1349,6 @@
     }
     return {
       loadHoursSummary,
-      loadHourTotals,
       loadYearHoursSummary,
       loadMonthlyHoursSummary,
       loadDailyOverviewSummary,
@@ -1151,7 +1363,7 @@
     const REFRESH_INTERVAL = 1e4;
     const SPECIAL_STATUSES = [
       "Moved to PM",
-      "Revision Done",
+      "Revisions Done",
       "Complete",
       "For QA"
     ];
@@ -1174,13 +1386,14 @@
         return;
       }
       updateFilterCounts(dataTable);
-      const $wrapper = $(".main-card");
+      const $wrapper = $(".activity-filter-buttons");
       setupFilterButton(
         $wrapper,
         ".not-done-div",
         ".not-done-text",
         "#dashFilter",
-        (row) => row[5] === "-",
+        '[data-activity-action="pending"]',
+        (row) => row[5] === "PENDING",
         dataTable
       );
       setupFilterButton(
@@ -1188,35 +1401,56 @@
         ".special-div",
         ".special-count",
         "#waitingFilter",
-        (row) => SPECIAL_STATUSES.includes(row[1]) && row[5] === "-",
+        '[data-activity-action="waiting"]',
+        (row) => SPECIAL_STATUSES.includes(row[1]) && row[5] === "PENDING",
         dataTable
       );
     }
-    function setupFilterButton($wrapper, containerSelector, countSelector, buttonSelector, filter, dataTable) {
+    function setupFilterButton($wrapper, containerSelector, countSelector, buttonSelector, mobileSelector, filter, dataTable) {
       if (!$wrapper.find(containerSelector).length) {
         return;
       }
       const count = countRows(dataTable, filter);
       $wrapper.find(countSelector).text(count);
       $(document).off(`click.activityToday`, buttonSelector).on(`click.activityToday`, buttonSelector, () => {
-        const $table = $(ACTIVITY_TABLE_ID);
-        if (!$table.hasClass("gc-table-filtered")) {
-          $("#resetFilterCustom").show();
-          applyFilter(dataTable, filter);
-          $table.addClass("gc-table-filtered");
-          return;
+        toggleActivityFilter(dataTable, filter);
+      });
+      $(document).off(`click.activityToday`, mobileSelector).on(`click.activityToday`, mobileSelector, function() {
+        toggleActivityFilter(dataTable, filter);
+        this.blur();
+        const dropdown = this.closest(".dropdown");
+        if (dropdown) {
+          const dropdownButton = dropdown.querySelector(
+            '[data-bs-toggle="dropdown"]'
+          );
+          if (dropdownButton) {
+            const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+            if (instance) {
+              instance.hide();
+            }
+          }
         }
-        resetFilters(dataTable);
-        $table.removeClass("gc-table-filtered");
       });
     }
+    function toggleActivityFilter(dataTable, filter) {
+      const $table = $(ACTIVITY_TABLE_ID);
+      if (!$table.hasClass("gc-table-filtered")) {
+        $("#resetFilterCustom").show();
+        applyFilter(dataTable, filter);
+        $table.addClass("gc-table-filtered");
+        return;
+      }
+      resetFilters(dataTable);
+      $table.removeClass("gc-table-filtered");
+    }
     function applyFilter(dataTable, filter) {
-      $.fn.dataTable.ext.search = [filter];
+      $.fn.dataTable.ext.search = [(settings, rowData) => filter(rowData)];
       dataTable.draw();
     }
     function resetFilters(dataTable) {
       $.fn.dataTable.ext.search = [];
       dataTable.search("").columns().search("").draw();
+      $(ACTIVITY_TABLE_ID).removeClass("gc-table-filtered");
       $("#resetFilterCustom").hide();
     }
     function updateFilterCounts(dataTable) {
@@ -1236,10 +1470,10 @@
           if (!row) {
             return;
           }
-          if (row[5] === "-") {
+          if (row[5] === "PENDING") {
             notDone++;
           }
-          if (SPECIAL_STATUSES.includes(row[1]) && row[5] === "-") {
+          if (SPECIAL_STATUSES.includes(row[1]) && row[5] === "PENDING") {
             special++;
           }
         });
@@ -1276,6 +1510,26 @@
         return;
       }
       setupClientSelector($selectClient, $taskForm);
+      $(document).off("click.activityToday", '[data-activity-action="add"]').on(
+        "click.activityToday",
+        '[data-activity-action="add"]',
+        function(event) {
+          event.preventDefault();
+          openClientSelector($(this), $taskForm);
+          const dropdown = this.closest(".dropdown");
+          if (dropdown) {
+            const dropdownButton = dropdown.querySelector(
+              '[data-bs-toggle="dropdown"]'
+            );
+            if (dropdownButton) {
+              const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+              if (instance) {
+                instance.hide();
+              }
+            }
+          }
+        }
+      );
       $("#submit-new-hours").off("click.activityToday").on("click.activityToday", handleTaskSubmit);
       AppUtils.initSelect2("#drawerManualAdd .drawer-content");
     }
@@ -1285,18 +1539,21 @@
       }
       $selectClient.off("click.activityToday").on("click.activityToday", function(event) {
         event.preventDefault();
-        const $drawer = $taskForm.parents(".drawer-content");
-        const $firstGroup = $taskForm.find(".form-group").first();
-        const $icon = $selectClient.find("i");
-        $drawer.toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5")).toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
-        $firstGroup.toggleClass("element-hidden");
-        $icon.toggleClass("fa-plus", function() {
-          return $(this).hasClass("fa-minus");
-        }).toggleClass("fa-minus", function() {
-          return $(this).hasClass("fa-plus");
-        });
-        AppUtils.openDrawer("#drawerManualAdd");
+        openClientSelector($(this), $taskForm);
       });
+    }
+    function openClientSelector($selectClient, $taskForm) {
+      const $drawer = $taskForm.parents(".drawer-content");
+      const $firstGroup = $taskForm.find(".form-group").first();
+      const $icon = $selectClient.find("i");
+      $drawer.toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5")).toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
+      $firstGroup.toggleClass("element-hidden");
+      $icon.toggleClass("fa-plus", function() {
+        return $(this).hasClass("fa-minus");
+      }).toggleClass("fa-minus", function() {
+        return $(this).hasClass("fa-plus");
+      });
+      AppUtils.openDrawer("#drawerManualAdd");
     }
     function handleTaskSubmit(event) {
       event.preventDefault();
@@ -1305,7 +1562,7 @@
       if (!$submitBtn.length) {
         $submitBtn = $("#submit-new-hours");
       }
-      const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
+      const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
       const formData = {
         client: String($("#client").val() || "").trim(),
         hour: String($("#hour").val() || "").trim(),
@@ -1337,7 +1594,7 @@
           gscriptFunc,
           data: formData,
           $btn: $submitBtn,
-          loadingText: "Saving ...",
+          loadingText: "Saving",
           onSuccess: () => {
             handleTaskSaveSuccess(formData);
           }
@@ -1349,8 +1606,8 @@
         "Hours have been successfully recorded!",
         "success"
       );
-      google.script.run.pullClientProjects();
-      HourSummary.loadHourTotals(true);
+      HourSummary.loadTodayChargedHours();
+      google.script.run.syncClientProjects();
       clearClientCaches(formData.client);
       AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
       resetYearlyChartCaches();
@@ -1385,7 +1642,7 @@
         AppUtils.showError("Please select a client first.");
         return;
       }
-      const loading = AppUtils.setButtonLoading(btn, "Redirecting...");
+      const loading = AppUtils.setButtonLoading(btn, "Redirecting");
       google.script.run.withSuccessHandler((url) => {
         if (url) {
           window.open(url, "_blank");
@@ -1462,6 +1719,7 @@
         isRefreshing = false;
         updateActivityTable(data, dataTable);
         updateFilterCounts(dataTable);
+        HourSummary.loadTodayChargedHours();
         callback?.();
       }).withFailureHandler((error) => {
         isRefreshing = false;
@@ -1590,6 +1848,7 @@
       };
       if (simple) {
         Object.assign(tableOptions, {
+          responsive: false,
           searching: false,
           lengthChange: false,
           info: false,
@@ -1606,7 +1865,7 @@
       }
       const priorityMap = {
         "activity today": [0, -1],
-        clients: [0],
+        clients: [0, 1, 2],
         "top paid accounts": [0, 1],
         "outstanding accounts": [0, 2],
         "active clients": [0, 1, -1],
@@ -1642,6 +1901,12 @@
           targets: [1, 2],
           className: "dt-center"
         });
+      }
+      if (cleanTitle === "clients" || cleanTitle === "activity today") {
+        log("Initializing Client Directory");
+        tableOptions.paging = false;
+        tableOptions.scrollCollapse = true;
+        tableOptions.scrollY = "400px";
       }
       if (cleanTitle === "activity today") {
         log("Initializing Activity Today");
@@ -1891,7 +2156,8 @@
     const TABLE_ID = "#clientsTable";
     const TABLE_TITLE = "Clients";
     const TABLE_BODY_ID = "dataBody";
-    const CACHE_KEY = "allClientsData";
+    const CACHE_KEY = "clientDirectoryData";
+    const SERVER_FUNCTION = "getClientDirectoryData";
     function init(source = CACHE_KEY) {
       if (initialized) {
         return;
@@ -1918,21 +2184,16 @@
       fetchClientDirectory(source);
     }
     function fetchClientDirectory(source, callback = null) {
-      AppUtils.cachedGScriptCall(
-        source,
-        "getClientDataWithNickname",
-        [source],
-        (data) => {
-          if (!Array.isArray(data)) {
-            AppUtils.showDashboardToast(
-              "Something went wrong loading clients!",
-              "error"
-            );
-            return;
-          }
-          renderClientDirectory(data, callback);
+      AppUtils.cachedGScriptCall(source, SERVER_FUNCTION, [], (data) => {
+        if (!Array.isArray(data)) {
+          AppUtils.showDashboardToast(
+            "Something went wrong loading clients!",
+            "error"
+          );
+          return;
         }
-      );
+        renderClientDirectory(data, callback);
+      });
     }
     function refreshClientDirectory(source = CACHE_KEY, callback = null) {
       DataTableModule.showLoader(TABLE_ID);
@@ -1940,8 +2201,8 @@
       AppUtils.cacheClear(source);
       AppUtils.cachedGScriptCall(
         source,
-        "getClientDataWithNickname",
-        [source],
+        SERVER_FUNCTION,
+        [],
         (data) => {
           $("#sync-clients-list i").removeClass("fa-spin");
           if (!Array.isArray(data)) {
@@ -1964,8 +2225,8 @@
     function refreshClientDirectoryInBackground(source, cached) {
       AppUtils.cachedGScriptCall(
         source,
-        "getClientDataWithNickname",
-        [source],
+        SERVER_FUNCTION,
+        [],
         (fresh) => {
           if (!Array.isArray(fresh)) {
             return;
@@ -1984,6 +2245,7 @@
       if (!tbody) {
         return;
       }
+      renderSummary(data);
       if (!Array.isArray(data) || data.length === 0) {
         DataTableModule.destroy(TABLE_ID);
         DataTableModule.showEmpty(TABLE_ID, "No clients found.");
@@ -1991,38 +2253,74 @@
       }
       DataTableModule.destroy(TABLE_ID);
       tbody.innerHTML = "";
-      data.forEach((client, index) => {
-        tbody.appendChild(createClientDirectoryRow(client, index));
+      data.forEach((client) => {
+        tbody.appendChild(createClientDirectoryRow(client));
       });
       DataTableModule.init(TABLE_TITLE, TABLE_ID, false, callback);
     }
-    function createClientDirectoryRow(client, index) {
+    function renderSummary(data) {
+      if (!Array.isArray(data) || !data.length) {
+        setMetric("total-clients", 0);
+        setMetric("total-hours", 0, "h");
+        setMetric("total-paid", 0);
+        setMetric("total-owed", 0);
+        return;
+      }
+      const totalClients = data.length;
+      const totalHours = data.reduce(
+        (total, client) => total + (Number(client?.hours) || 0),
+        0
+      );
+      const totalPaid = data.reduce(
+        (total, client) => total + (Number(client?.paid) || 0),
+        0
+      );
+      const totalOwed = data.reduce(
+        (total, client) => total + (Number(client?.owed) || 0),
+        0
+      );
+      setMetric("total-clients", totalClients);
+      setMetric("total-hours", totalHours, "h");
+      setMetric("total-paid", totalPaid);
+      setMetric("total-owed", totalOwed);
+    }
+    function setMetric(name, value, suffix = "") {
+      const element = document.querySelector(`[data-metric="${name}"]`);
+      if (!element) {
+        return;
+      }
+      const number = Number(value) || 0;
+      element.textContent = `${number.toLocaleString("en-PH", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      })}${suffix}`;
+    }
+    function createClientDirectoryRow(client) {
       const row = document.createElement("tr");
       const name = String(client?.name || "").trim();
       const role = String(client?.role || "").trim();
-      const projects = String(client?.projects ?? "").trim();
-      const paid = String(client?.paid ?? "").trim();
-      const owed = String(client?.owed ?? "").trim();
-      const status = String(client?.status || "").trim();
+      const projects = Number(client?.projects) || 0;
+      const hours = Number(client?.hours) || 0;
+      const paid = Number(client?.paid) || 0;
+      const owed = Number(client?.owed) || 0;
+      const collectionRate = Number(client?.collectionRate) || 0;
+      const debtExposure = Number(client?.debtExposure) || 0;
+      const externalUrl = String(client?.externalUrl || "").trim();
       const initials = AppUtils.getInitials(name);
-      const isInactive = status.toLowerCase() === "inactive";
-      const statusHtml = isInactive ? `
-        <span class="badge bg-danger text-center">
-          Inactive
-        </span>
-      ` : `
-        <span class="badge bg-success text-center">
-          ${AppUtils.escapeHtml(status || "Active")}
-        </span>
-      `;
+      const safeName = AppUtils.escapeHtml(name);
+      const safeRole = AppUtils.escapeHtml(role);
+      const safeExternalUrl = AppUtils.escapeHtml(externalUrl);
       row.innerHTML = `
-
-      <td>
+    <td class="client-name-cell">
+      <!-- Desktop version -->
+      <div class="client-name-desktop">
         <div class="widget-content p-0">
           <div class="widget-content-wrapper">
             <div class="widget-content-left me-2 me-lg-3">
               <div
-                class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
+                class="avatar-circle bg-light text-info rounded-circle
+                       d-flex align-items-center justify-content-center"
+                aria-hidden="true"
               >
                 ${AppUtils.escapeHtml(initials)}
               </div>
@@ -2030,44 +2328,59 @@
 
             <div class="widget-content-left flex2">
               <div class="widget-heading">
-                ${AppUtils.escapeHtml(name)}
+                ${safeName}
               </div>
 
               <div class="widget-subheading opacity-7">
-                ${AppUtils.escapeHtml(role)}
+                ${safeRole}
               </div>
             </div>
           </div>
         </div>
-      </td>
+      </div>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(projects)}
-      </td>
+      <!-- Mobile version -->
+      <span class="client-name-mobile">
+        ${safeName}
+      </span>
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(paid)}
-      </td>
+    <td class="text-center text-muted">
+      ${projects}
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(owed)}
-      </td>
+    <td class="text-center text-muted">
+      ${formatHours(hours)}
+    </td>
 
-      <td class="text-center">
-        ${statusHtml}
-      </td>
+    <td class="text-center text-muted">
+      ${formatAmount(paid)}
+    </td>
 
-      <td class="text-center action-btn-group">
-        <button
-          type="button"
-          class="btn action-btn open-client-btn"
-          title="Open Client Sheet"
-          aria-label="Open ${AppUtils.escapeHtml(name)} sheet"
-        >
-          <i class="pe-7s-note"></i>
-        </button>
-      </td>
-    `;
+    <td class="text-center text-muted">
+      ${formatAmount(owed)}
+    </td>
+
+    <td class="text-center text-muted">
+      ${formatPercent(collectionRate)}
+    </td>
+
+    <td class="text-center text-muted">
+      ${formatPercent(debtExposure)}
+    </td>
+
+    <td class="text-center action-btn-group">
+      <button
+        type="button"
+        class="btn action-btn open-client-btn"
+        title="Open Client Sheet"
+        aria-label="Open ${safeName} sheet"
+        data-external-url="${safeExternalUrl}"
+      >
+        <i class="pe-7s-note"></i>
+      </button>
+    </td>
+  `;
       return row;
     }
     function bindClientDirectoryEvents() {
@@ -2114,6 +2427,15 @@
         console.warn("[ClientDirectory] Could not determine client name");
         return;
       }
+      const externalUrl = button.dataset.externalUrl?.trim();
+      if (externalUrl) {
+        AppUtils.showDashboardToast(
+          "Redirecting to external client sheet!",
+          "info"
+        );
+        window.open(externalUrl, "_blank");
+        return;
+      }
       AppUtils.showDashboardToast("Redirecting to sheet!", "info");
       google.script.run.withSuccessHandler((url) => {
         const clientUrl = String(url || "").trim();
@@ -2126,6 +2448,21 @@
         console.error("[ClientDirectory] Failed to open client sheet:", error);
         AppUtils.showError(error);
       }).goToPresentClient(clientName);
+    }
+    function formatAmount(value) {
+      return (Number(value) || 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+    }
+    function formatHours(value) {
+      return `${(Number(value) || 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      })}h`;
+    }
+    function formatPercent(value) {
+      return `${((Number(value) || 0) * 100).toFixed(2)}%`;
     }
     return {
       init,
@@ -2532,7 +2869,7 @@
           records
         },
         $btn: $saveButton,
-        loadingText: "Saving changes...",
+        loadingText: "Saving changes",
         onSuccess: (response) => {
           AppUtils.cacheClear(`${CACHE_PREFIX}${clientName}`);
           AppUtils.cacheClear(`getClientHourLogData_${clientName}`);
@@ -2542,6 +2879,7 @@
             "Today's hours updated successfully!",
             "success"
           );
+          HourSummary.loadTodayChargedHours();
           AppUtils.closeModal(MODAL_ID);
         }
       });
@@ -2857,8 +3195,8 @@
 
   // src/tables/client-selector.js
   var TableClientSelector = /* @__PURE__ */ (() => {
-    const CLIENTS_CACHE_KEY = "allClientsData";
-    const CLIENTS_SERVER_FUNCTION = "getClientDataWithNickname";
+    const CLIENTS_CACHE_KEY = "clientDirectoryData";
+    const CLIENTS_SERVER_FUNCTION = "getClientDirectoryData";
     let initialized = false;
     let currentSelectId = "#client";
     function init(selectId = "#client", isForProject = false) {
@@ -3125,7 +3463,7 @@
         AppUtils.showError(err);
       }).withSuccessHandler((result) => {
         if (!result.exists) {
-          loading.setText("Generating Report...");
+          loading.setText("Generating Report");
           requestReportGeneration(cfg, type, btn, params, loading);
           return;
         }
@@ -3170,7 +3508,7 @@
             }
           }).on(`click${ns}`, ".btn-generate", () => {
             if (loading) {
-              loading.setText("Generating Annual Report...");
+              loading.setText("Generating Annual Report");
             }
             requestReportGeneration(cfg, type, btn, params, loading);
             AppUtils.closeModal("#app-modal");
@@ -3398,9 +3736,257 @@
     };
   })();
 
-  // src/pages/all-clients-page.js
-  var allClientsPage = /* @__PURE__ */ (() => {
+  // src/clients/client-table-service.js
+  var ClientTableService = /* @__PURE__ */ (() => {
+    let filterInitialized = false;
+    let dropdownGroup = null;
+    let menu = null;
+    let items = [];
+    let toggleBtn = null;
+    let filterHandler = null;
+    function applyStatusFilter(tableId, selectedValue) {
+      const table = document.getElementById(tableId);
+      if (!table) {
+        return;
+      }
+      const rows = table.querySelectorAll("tbody tr");
+      let visibleIndex = 1;
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll("td");
+        if (!cells.length) {
+          return;
+        }
+        const statusCell = cells[cells.length - 1];
+        const status = statusCell.textContent.trim();
+        const shouldShow = selectedValue === "Show All" || status.toLowerCase() === selectedValue.toLowerCase();
+        row.style.display = shouldShow ? "" : "none";
+        if (shouldShow) {
+          cells[0].textContent = visibleIndex++;
+        }
+      });
+    }
+    function resetDropdownState() {
+      if (!toggleBtn || !items.length) {
+        return;
+      }
+      toggleBtn.textContent = "Show All";
+      items.forEach((item) => {
+        item.classList.remove("disabled");
+        item.removeAttribute("aria-disabled");
+        item.removeAttribute("disabled");
+      });
+    }
+    function initStatusFilter(dropdownId, tableId, defaultValue = "Show All") {
+      if (filterInitialized) {
+        return;
+      }
+      dropdownGroup = document.getElementById(dropdownId);
+      if (!dropdownGroup) {
+        return;
+      }
+      toggleBtn = dropdownGroup.querySelector(
+        '[data-bs-toggle="dropdown"] > span'
+      );
+      menu = dropdownGroup.querySelector(".dropdown-menu");
+      if (!toggleBtn || !menu) {
+        return;
+      }
+      items = Array.from(
+        document.querySelectorAll(".dropdown-item[data-client-status]")
+      );
+      if (!items.length) {
+        return;
+      }
+      function setSelected(value) {
+        if (toggleBtn) {
+          toggleBtn.textContent = value;
+        }
+        items.forEach((item) => {
+          const rawValue = item.dataset.clientStatus || "";
+          const itemValue = rawValue === "all" ? "Show All" : item.textContent.trim();
+          const isSelected = itemValue.toLowerCase() === value.toLowerCase();
+          item.classList.toggle("disabled", isSelected);
+          if (isSelected) {
+            item.setAttribute("aria-disabled", "true");
+          } else {
+            item.removeAttribute("aria-disabled");
+          }
+        });
+        applyStatusFilter(tableId, value);
+      }
+      filterHandler = (e) => {
+        const item = e.target.closest(".dropdown-item[data-client-status]");
+        if (!item) {
+          return;
+        }
+        if (item.classList.contains("disabled")) {
+          return;
+        }
+        const belongsToDesktop = dropdownGroup.contains(item);
+        const belongsToMobile = item.closest(".responsive-mobile-actions");
+        if (!belongsToDesktop && !belongsToMobile) {
+          return;
+        }
+        const rawValue = item.dataset.clientStatus || "";
+        const value = rawValue === "all" ? "Show All" : item.textContent.trim();
+        item.blur();
+        setSelected(value);
+        const dropdownMenu = item.closest(".dropdown-menu");
+        if (dropdownMenu) {
+          const dropdown = dropdownMenu.closest(".dropdown");
+          if (dropdown) {
+            const dropdownButton = dropdown.querySelector(
+              '[data-bs-toggle="dropdown"]'
+            );
+            if (dropdownButton) {
+              const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+              if (instance) {
+                instance.hide();
+              }
+            }
+          }
+        }
+      };
+      document.addEventListener("click", filterHandler);
+      filterInitialized = true;
+      setSelected(defaultValue);
+    }
+    function destroyStatusFilter() {
+      if (filterHandler) {
+        document.removeEventListener("click", filterHandler);
+      }
+      filterHandler = null;
+      resetDropdownState();
+      filterInitialized = false;
+      dropdownGroup = null;
+      menu = null;
+      items = [];
+      toggleBtn = null;
+    }
+    function initCategoryFilter(dropdownId, tableId, categoryColumn = 6, defaultValue = "All") {
+      const dropdownGroup2 = document.getElementById(dropdownId);
+      if (!dropdownGroup2) {
+        return;
+      }
+      const tableElement = document.getElementById(tableId);
+      if (!tableElement) {
+        return;
+      }
+      const table = $(tableElement).DataTable();
+      const toggleBtn2 = dropdownGroup2.querySelector(
+        '[data-bs-toggle="dropdown"] > span'
+      );
+      const items2 = Array.from(
+        document.querySelectorAll(".dropdown-item[data-client-category]")
+      );
+      if (!items2.length) {
+        return;
+      }
+      function setSelected(value) {
+        if (toggleBtn2) {
+          toggleBtn2.textContent = value;
+        }
+        items2.forEach((item) => {
+          const itemValue = item.dataset.clientCategory || "";
+          const selectedValue = itemValue === "all" ? "All" : item.textContent.trim();
+          const isSelected = selectedValue.toLowerCase() === value.toLowerCase();
+          item.classList.toggle("disabled", isSelected);
+          if (isSelected) {
+            item.setAttribute("aria-disabled", "true");
+          } else {
+            item.removeAttribute("aria-disabled");
+          }
+        });
+        if (value === "All") {
+          table.column(categoryColumn).search("");
+        } else {
+          table.column(categoryColumn).search(value, {
+            exact: true
+          });
+        }
+        table.draw();
+      }
+      const handler = (e) => {
+        const item = e.target.closest(".dropdown-item[data-client-category]");
+        if (!item) {
+          return;
+        }
+        if (item.classList.contains("disabled")) {
+          return;
+        }
+        const belongsToDesktopDropdown = dropdownGroup2.contains(item);
+        const belongsToMobileClientControls = item.closest(
+          ".responsive-mobile-actions"
+        );
+        if (!belongsToDesktopDropdown && !belongsToMobileClientControls) {
+          return;
+        }
+        const rawValue = item.dataset.clientCategory || "";
+        const selectedValue = rawValue === "all" ? "All" : item.textContent.trim();
+        item.blur();
+        setSelected(selectedValue);
+        const dropdownMenu = item.closest(".dropdown-menu");
+        if (dropdownMenu) {
+          const dropdown = dropdownMenu.closest(".dropdown");
+          if (dropdown) {
+            const dropdownButton = dropdown.querySelector(
+              '[data-bs-toggle="dropdown"]'
+            );
+            if (dropdownButton) {
+              const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+              if (instance) {
+                instance.hide();
+              }
+            }
+          }
+        }
+      };
+      if (dropdownGroup2._categoryFilterHandler) {
+        document.removeEventListener(
+          "click",
+          dropdownGroup2._categoryFilterHandler
+        );
+      }
+      document.addEventListener("click", handler);
+      dropdownGroup2._categoryFilterHandler = handler;
+      setSelected(defaultValue);
+    }
+    function destroyCategoryFilter(dropdownId) {
+      const dropdownGroup2 = document.getElementById(dropdownId);
+      if (!dropdownGroup2) {
+        return;
+      }
+      if (dropdownGroup2._categoryFilterHandler) {
+        document.removeEventListener(
+          "click",
+          dropdownGroup2._categoryFilterHandler
+        );
+        dropdownGroup2._categoryFilterHandler = null;
+      }
+      const toggleBtn2 = dropdownGroup2.querySelector(
+        '[data-bs-toggle="dropdown"] > span'
+      );
+      if (toggleBtn2) {
+        toggleBtn2.textContent = "All";
+      }
+      document.querySelectorAll(".dropdown-item[data-client-category]").forEach((item) => {
+        item.classList.remove("disabled");
+        item.removeAttribute("aria-disabled");
+      });
+    }
+    return {
+      applyStatusFilter,
+      initStatusFilter,
+      destroyStatusFilter,
+      initCategoryFilter,
+      destroyCategoryFilter
+    };
+  })();
+
+  // src/pages/client-directory-page.js
+  var clientDirectoryPage = /* @__PURE__ */ (() => {
     let bound = false;
+    const MODAL_ID = "#app-modal";
     const init = () => {
       if (bound) {
         return;
@@ -3414,59 +4000,24 @@
         return;
       }
       bound = false;
-      $(document).off("click.allClients");
-      $(document).off("submit.allClients");
+      $(document).off("click.clientDirectory");
+      $(document).off("submit.clientDirectory");
+      ClientTableService.destroyCategoryFilter("clientCategoryFilter");
       ClientDirectory.destroy?.();
       TableClientSelector.destroy?.();
     };
     const bindActions = () => {
-      $(document).off("click.allClients", "#add-new-client-sheet").on("click.allClients", "#add-new-client-sheet", function() {
-        AppUtils.openDrawer("#drawerClientAdd");
-        const $addClientForm = $("#addClientForm");
-        $addClientForm.off("submit.allClients").on("submit.allClients", function(e) {
-          e.preventDefault();
-          const $submitBtn = $(this).find('button[type="submit"]');
-          const clientName = $("#sheet_name").val().trim();
-          if (!clientName) {
-            AppUtils.showError("Client name is required!");
-            return;
-          }
-          ReportActions.confirmAction(
-            "addClientSheet",
-            "Register New Client?",
-            `Are you sure you want to add "${clientName}" to the record?`,
-            () => {
-              AppUtils.submitForm({
-                gscriptFunc: "createClientSheet",
-                data: { name: clientName },
-                $btn: $submitBtn,
-                loadingText: "Creating new client sheet...",
-                onSuccess: () => {
-                  AppUtils.showDashboardToast(
-                    "Sheet created successfully!",
-                    "success"
-                  );
-                  google.script.run.withFailureHandler(
-                    () => AppUtils.showError("Syncing error!")
-                  ).syncClientSheetList();
-                  AppUtils.cacheClear("allClientsData");
-                  if (RouterModule.getCurrentPage() === "addManualHours") {
-                    TableClientSelector.init();
-                  }
-                  ClientDirectory.init("allClientsData");
-                  $("#sheet_name").val("");
-                }
-              });
-            }
-          );
-        });
-      }).off("click.allClients", "#sync-clients-list").on("click.allClients", "#sync-clients-list", function() {
+      $(document).off("click.clientDirectory", '[data-client-action="add-normal"]').on(
+        "click.clientDirectory",
+        '[data-client-action="add-normal"]',
+        openAddClientModal
+      ).off("click.clientDirectory", '[data-client-action="sync"]').on("click.clientDirectory", '[data-client-action="sync"]', function() {
         ReportActions.confirmAction(
           "syncClientsList",
           "Synchronize Client Directory?",
           "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
           () => {
-            ClientDirectory.refreshClientDirectory("allClientsData", () => {
+            ClientDirectory.refreshClientDirectory("clientDirectoryData", () => {
               AppUtils.showDashboardToast(
                 "Clients refreshed successfully.",
                 "success"
@@ -3474,12 +4025,340 @@
             });
           }
         );
-      });
+      }).off("click.clientDirectory", '[data-client-action="add-external"]').on(
+        "click.clientDirectory",
+        '[data-client-action="add-external"]',
+        openAddExternalClientModal
+      );
     };
     const loadData = () => {
-      ClientDirectory.init("allClientsData");
+      ClientDirectory.init("clientDirectoryData");
     };
-    return { init, destroy };
+    function openAddClientModal() {
+      AppUtils.openModal(MODAL_ID, {
+        size: "md",
+        placement: "center",
+        header: `<div></div>`,
+        body: `
+        <div id="main-modal-body">
+          <form id="addClientForm">
+
+            <div class="form-group mb-3">
+              <label
+                for="sheet_name"
+                class="form-label"
+              >
+                Client Name
+              </label>
+
+              <input
+                type="text"
+                name="sheet_name"
+                id="sheet_name"
+                class="form-control"
+                placeholder="Enter client name"
+                autocomplete="off"
+                required
+              >
+
+            </div>
+
+          </form>
+        </div>
+
+        <div id="review-modal-body" class="d-none">
+          <h5 class="modal-title mb-2">
+            <strong>Do you want to proceed?</strong>
+          </h5>
+
+          <p>
+            Please review the client information
+            before creating the client sheet.
+          </p>
+        </div>
+      `,
+        footer: `
+        <div
+          id="main-modal-footer"
+          class="d-flex gap-2"
+        >
+          <button
+            type="button"
+            class="btn btn-secondary btn-cancel"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-primary btn-add"
+          >
+            <i class="fa fa-plus me-1"></i>
+            Add Client
+          </button>
+        </div>
+
+        <div
+          id="review-modal-footer"
+          class="d-flex gap-2 d-none"
+        >
+          <button
+            type="button"
+            class="btn btn-secondary btn-back"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-success btn-proceed"
+          >
+            Proceed
+          </button>
+        </div>
+      `,
+        onOpen($modal) {
+          const namespace = ".addClientModal";
+          $modal.off(namespace).on(`click${namespace}`, ".btn-cancel", () => {
+            AppUtils.closeModal(MODAL_ID);
+          }).on(`click${namespace}`, ".btn-add", () => {
+            validateAndShowReview($modal, "#addClientForm");
+          }).on(`click${namespace}`, ".btn-back", () => {
+            showFormStep($modal);
+          }).on(`click${namespace}`, ".btn-proceed", () => {
+            const $button = $modal.find(".btn-proceed");
+            submitAddClient($modal, $button);
+          });
+        },
+        onClose($modal) {
+          $modal.off(".addClientModal");
+        }
+      });
+    }
+    function submitAddClient($modal, $button) {
+      const form = $modal.find("#addClientForm")[0];
+      if (!form) {
+        return;
+      }
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      const clientName = String($modal.find("#sheet_name").val() || "").trim();
+      if (!clientName) {
+        return;
+      }
+      AppUtils.submitForm({
+        gscriptFunc: "createClientSheet",
+        data: {
+          name: clientName
+        },
+        $btn: $button,
+        loadingText: "Creating new client",
+        onSuccess: () => {
+          AppUtils.closeModal(MODAL_ID);
+          AppUtils.showDashboardToast(
+            "Client sheet created successfully!",
+            "success"
+          );
+          google.script.run.withFailureHandler((error) => {
+            console.error("[clientDirectory] syncClientSheetList failed:", error);
+            AppUtils.showError("Syncing error!");
+          }).syncClientSheetList();
+          AppUtils.cacheClear("clientDirectoryData");
+          ClientDirectory.refreshClientDirectory("clientDirectoryData");
+        }
+      });
+    }
+    function openAddExternalClientModal() {
+      AppUtils.openModal(MODAL_ID, {
+        size: "md",
+        placement: "center",
+        header: `<div></div>`,
+        body: `
+        <div id="main-modal-body">
+          <form id="externalSheetForm">
+
+            <div class="form-group mb-3">
+              <label
+                for="externalClientName"
+                class="form-label"
+              >
+                Client Name
+              </label>
+
+              <input
+                type="text"
+                id="externalClientName"
+                name="clientName"
+                class="form-control"
+                placeholder="Enter client name"
+                autocomplete="off"
+                required
+              >
+            </div>
+
+            <div class="form-group mb-3">
+              <label
+                for="externalProjects"
+                class="form-label"
+              >
+                Projects
+              </label>
+
+              <input
+                type="text"
+                id="externalProjects"
+                name="projects"
+                class="form-control"
+                placeholder="proj1, proj2, proj3"
+                autocomplete="off"
+                required
+              >
+
+              <small class="form-text text-muted">
+                Enter project names separated by commas.
+              </small>
+            </div>
+
+          </form>
+        </div>
+
+        <div id="review-modal-body" class="d-none">
+          <h5 class="modal-title mb-2">
+            <strong>Do you want to proceed?</strong>
+          </h5>
+
+          <p>
+            Please review the external sheet
+            configuration before provisioning.
+          </p>
+        </div>
+      `,
+        footer: `
+        <div
+          id="main-modal-footer"
+          class="d-flex gap-2"
+        >
+          <button
+            type="button"
+            class="btn btn-secondary btn-cancel"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-primary btn-create"
+          >
+            <i class="fa fa-plus me-1"></i>
+            Create External Sheet
+          </button>
+        </div>
+
+        <div
+          id="review-modal-footer"
+          class="d-flex gap-2 d-none"
+        >
+          <button
+            type="button"
+            class="btn btn-secondary btn-back"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-success btn-proceed"
+          >
+            Proceed
+          </button>
+        </div>
+      `,
+        onOpen($modal) {
+          const namespace = ".externalClientModal";
+          $modal.off(namespace).on(`click${namespace}`, ".btn-cancel", () => {
+            AppUtils.closeModal(MODAL_ID);
+          }).on(`click${namespace}`, ".btn-create", () => {
+            validateAndShowReview($modal, "#externalSheetForm");
+          }).on(`click${namespace}`, ".btn-back", () => {
+            showFormStep($modal);
+          }).on(`click${namespace}`, ".btn-proceed", () => {
+            const $button = $modal.find(".btn-proceed");
+            createExternalSheet($modal, $button);
+          });
+        },
+        onClose($modal) {
+          $modal.off(".externalClientModal");
+        }
+      });
+    }
+    function createExternalSheet($modal, $btn) {
+      const form = $modal.find("#externalSheetForm")[0];
+      if (!form) {
+        return;
+      }
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      const clientName = String(
+        $modal.find("#externalClientName").val() || ""
+      ).trim();
+      const projects = String(
+        $modal.find("#externalProjects").val() || ""
+      ).trim();
+      if (!clientName || !projects) {
+        return;
+      }
+      const loading = AppUtils.setButtonLoading(
+        $btn[0],
+        "Creating External Sheet"
+      );
+      google.script.run.withSuccessHandler((result) => {
+        loading.setSuccess("Sheet Created");
+        AppUtils.closeModal(MODAL_ID);
+        AppUtils.showDashboardToast(
+          `External sheet created for ${result.clientName}.`,
+          "success"
+        );
+        AppUtils.cacheClear("clientDirectoryData");
+        google.script.run.withFailureHandler((error) => {
+          console.error("[clientDirectory] syncClientSheetList failed:", error);
+        }).syncClientSheetList();
+        ClientDirectory.refreshClientDirectory("clientDirectoryData");
+      }).withFailureHandler((error) => {
+        console.error("[clientDirectory] createExternalSheet failed:", error);
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Failed to create external sheet.",
+          "error"
+        );
+      }).createExternalSheet({
+        clientName,
+        projects
+      });
+    }
+    function validateAndShowReview($modal, formSelector) {
+      const form = $modal.find(formSelector)[0];
+      if (!form) {
+        return;
+      }
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
+      $modal.find("#review-modal-body, #review-modal-footer").removeClass("d-none");
+    }
+    function showFormStep($modal) {
+      $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
+      $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
+    }
+    return {
+      init,
+      destroy
+    };
   })();
 
   // src/pages/upsell-overview-page.js
@@ -3516,7 +4395,7 @@
         const btn = $(this);
         const loading = AppUtils.setButtonLoading(
           btn[0],
-          "Redirecting..."
+          "Redirecting"
         );
         google.script.run.withSuccessHandler((url) => {
           loading.restore();
@@ -3563,7 +4442,7 @@
               gscriptFunc: "addUpsellEntry",
               data,
               $btn: $submitBtn,
-              loadingText: "Saving upsell...",
+              loadingText: "Saving upsell",
               onSuccess: handleUpsellSaveSuccess
             });
           }
@@ -3698,6 +4577,18 @@
       client_paid_owed_history: {
         serverFunction: "getClientPaidOwedHistoryChart",
         cacheKey: "chartData_client_paid_owed_history"
+      },
+      current_month_log: {
+        serverFunction: "getCurrentMonthLogChartData",
+        cacheKey: (month, year) => `chartData_current_month_log_${year}_${month}`
+      },
+      yearly_monthly_hours: {
+        serverFunction: "getYearlyMonthlyHoursChartData",
+        cacheKey: (year) => `chartData_yearly_monthly_hours_${year}`
+      },
+      monthly_hours_by_year: {
+        serverFunction: "getMonthlyHoursByYears",
+        cacheKey: (years) => `chartData_monthly_hours_by_year_${years.join("_")}`
       }
     };
     const chartInstances = {};
@@ -3742,7 +4633,7 @@
         });
       });
     }
-    function loadChart(chartType, animated = false, year = "all", refresh = false, log = false, chartOpts = {}) {
+    function loadChart(chartType, animated = false, year = "all", refresh = false, log = false, chartOpts = {}, month = (/* @__PURE__ */ new Date()).getMonth() + 1, onComplete = null) {
       const logMessage = (...args2) => {
         if (log) {
           console.log("[Charts]", ...args2);
@@ -3760,8 +4651,8 @@
           `No chart configuration found for: ${chartType}`
         );
       }
-      const cacheKey = typeof config.cacheKey === "function" ? config.cacheKey(year) : config.cacheKey;
-      const args = chartType === "yearly" ? [year] : [];
+      const cacheKey = typeof config.cacheKey === "function" ? chartType === "current_month_log" ? config.cacheKey(month, year) : config.cacheKey(year) : config.cacheKey;
+      const args = chartType === "yearly" ? [year] : chartType === "monthly_hours_by_year" || chartType === "yearly_monthly_hours" ? [year] : chartType === "current_month_log" ? [month, year] : [];
       logMessage("Loading chart:", {
         chartType,
         year,
@@ -3780,9 +4671,13 @@
             logMessage("Chart container no longer exists.");
             return;
           }
-          if (!Array.isArray(data) || !data.length) {
+          const hasChartData = chartType === "monthly_hours_by_year" ? data && typeof data === "object" && Object.keys(data).length > 0 : Array.isArray(data) && data.length > 0;
+          if (!hasChartData) {
             logMessage("No chart data found.");
             chartDiv.innerText = "No data found.";
+            if (typeof onComplete === "function") {
+              onComplete();
+            }
             return;
           }
           logMessage("Drawing chart:", {
@@ -3790,6 +4685,9 @@
             rows: data.length
           });
           drawChart(chartType, data, false, animated, chartOpts);
+          if (typeof onComplete === "function") {
+            onComplete();
+          }
         },
         log,
         refresh
@@ -3873,11 +4771,23 @@
           return drawHourlyChart(ctx, type, data, true);
         case "monthly-prev-merged":
           return drawMonthlyComparisonChart(ctx, type, data, true);
+        case "current_month_log":
+        case "yearly_monthly_hours":
         case "daily":
         case "monthly":
           return drawLineChart(ctx, type, data, animated, chartOpts);
+        case "monthly_hours_by_year":
+          return drawMonthlyHoursByYearChart(ctx, type, data, animated);
+        case "daily_overview":
+          return drawDailyOverviewChart(ctx, type, data, animated);
         case "client_paid_owed_history":
-          return drawClientPaidOwedHistoryChart(ctx, type, data, animated, chartOpts);
+          return drawClientPaidOwedHistoryChart(
+            ctx,
+            type,
+            data,
+            animated,
+            chartOpts
+          );
         default:
           return AppUtils.showError(`Unknown chart type: ${type}`);
       }
@@ -3887,11 +4797,55 @@
         chart.resize();
       });
     }
+    function animateChart(type, enabled = true, duration = 1800) {
+      const chart = chartInstances[type];
+      if (!chart) {
+        return;
+      }
+      if (!enabled) {
+        chart.options.animation = false;
+        chart.options.animations = {};
+        if (chart._waveAnimation) {
+          cancelAnimationFrame(chart._waveAnimation);
+          chart._waveAnimation = null;
+        }
+        if (chart._waveOriginalData) {
+          chart.data.datasets[0].data = [...chart._waveOriginalData];
+          chart._waveOriginalData = null;
+        }
+        chart.update("none");
+        return;
+      }
+      if (chart._waveAnimation) {
+        return;
+      }
+      const dataset = chart.data.datasets[0];
+      chart._waveOriginalData = [...dataset.data];
+      const originalData = chart._waveOriginalData;
+      const startTime = performance.now();
+      function wave(time) {
+        if (!chartInstances[type]) {
+          return;
+        }
+        const elapsed = time - startTime;
+        const progress = elapsed % duration / duration;
+        dataset.data = originalData.map((value, index) => {
+          const wave2 = Math.sin(index * 0.7 + progress * Math.PI * 2) * 0.025;
+          return value * (1 + wave2);
+        });
+        chart.update("none");
+        chart._waveAnimation = requestAnimationFrame(wave);
+      }
+      chart._waveAnimation = requestAnimationFrame(wave);
+    }
     function drawYearlyChart(ctx, type, data, animated = false) {
       const labels = data.map((row) => row?.[0] ?? "");
       const paid = data.map((row) => Number(row?.[2]) || 0);
       const owed = data.map((row) => Number(row?.[3]) || 0);
       const net = data.map((row) => Number(row?.[4]) || 0);
+      const paidPeakIndex = getPeakIndex(paid);
+      const owedPeakIndex = getPeakIndex(owed);
+      const netPeakIndex = getPeakIndex(net);
       chartInstances[type] = new Chart(ctx, {
         type: "bar",
         data: {
@@ -3900,13 +4854,17 @@
             {
               label: "Net Paid",
               data: paid,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(14, 165, 233, 0.8)",
-                "rgba(14, 165, 233, 0.4)"
+              backgroundColor: paid.map(
+                (value, index) => index === paidPeakIndex ? "rgba(14, 165, 233, 1)" : createGradient(
+                  ctx,
+                  "rgba(14, 165, 233, 0.8)",
+                  "rgba(14, 165, 233, 0.4)"
+                )
               ),
               borderColor: "#0ea5e9",
-              borderWidth: 1,
+              borderWidth: paid.map(
+                (value, index) => index === paidPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -3915,13 +4873,17 @@
             {
               label: "Net Owed",
               data: owed,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(249, 115, 22, 0.8)",
-                "rgba(249, 115, 22, 0.4)"
+              backgroundColor: owed.map(
+                (value, index) => index === owedPeakIndex ? "rgba(249, 115, 22, 1)" : createGradient(
+                  ctx,
+                  "rgba(249, 115, 22, 0.8)",
+                  "rgba(249, 115, 22, 0.4)"
+                )
               ),
               borderColor: "#f97316",
-              borderWidth: 1,
+              borderWidth: owed.map(
+                (value, index) => index === owedPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -3930,13 +4892,17 @@
             {
               label: "Net Hrs",
               data: net,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(16, 185, 129, 0.8)",
-                "rgba(16, 185, 129, 0.4)"
+              backgroundColor: net.map(
+                (value, index) => index === netPeakIndex ? "rgba(16, 185, 129, 1)" : createGradient(
+                  ctx,
+                  "rgba(16, 185, 129, 0.8)",
+                  "rgba(16, 185, 129, 0.4)"
+                )
               ),
               borderColor: "#10b981",
-              borderWidth: 1,
+              borderWidth: net.map(
+                (value, index) => index === netPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -4028,6 +4994,7 @@
     function drawHourlyChart(ctx, type, data, animated = false) {
       const labels = data.map((row) => String(row?.[0] || ""));
       const values = data.map((row) => Number(row?.[1]) || 0);
+      const peakIndex = getPeakIndex(values);
       chartInstances[type] = new Chart(ctx, {
         type: "bar",
         data: {
@@ -4036,13 +5003,17 @@
             {
               label: "Total",
               data: values,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(14, 165, 233, 0.8)",
-                "rgba(14, 165, 233, 0.4)"
+              backgroundColor: values.map(
+                (value, index) => index === peakIndex ? "rgba(14, 165, 233, 1)" : createGradient(
+                  ctx,
+                  "rgba(14, 165, 233, 0.8)",
+                  "rgba(14, 165, 233, 0.4)"
+                )
               ),
               borderColor: "#0ea5e9",
-              borderWidth: 2,
+              borderWidth: values.map(
+                (value, index) => index === peakIndex ? 3 : 2
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -4153,6 +5124,8 @@
     function drawMonthlyComparisonChart(ctx, type, data, animated = false) {
       const prev = fillMonthlyData(data?.prevYear || []);
       const current = fillMonthlyData(data?.currentYear || []);
+      const prevPeakIndex = getPeakIndex(prev);
+      const currentPeakIndex = getPeakIndex(current);
       chartInstances[type] = new Chart(ctx, {
         type: "bar",
         data: {
@@ -4161,13 +5134,17 @@
             {
               label: "Previous Year",
               data: prev,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(249, 115, 22, 0.9)",
-                "rgba(249, 115, 22, 0.5)"
+              backgroundColor: prev.map(
+                (value, index) => index === prevPeakIndex ? "rgba(249, 115, 22, 1)" : createGradient(
+                  ctx,
+                  "rgba(249, 115, 22, 0.9)",
+                  "rgba(249, 115, 22, 0.5)"
+                )
               ),
               borderColor: "#f97316",
-              borderWidth: 1,
+              borderWidth: prev.map(
+                (value, index) => index === prevPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -4180,13 +5157,17 @@
               label: "Current Year",
               data: current,
               // Lighter, related orange/amber for current year
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(251, 146, 60, 0.9)",
-                "rgba(251, 146, 60, 0.5)"
+              backgroundColor: current.map(
+                (value, index) => index === currentPeakIndex ? "rgba(251, 146, 60, 1)" : createGradient(
+                  ctx,
+                  "rgba(251, 146, 60, 0.9)",
+                  "rgba(251, 146, 60, 0.5)"
+                )
               ),
               borderColor: "#fb923c",
-              borderWidth: 1,
+              borderWidth: current.map(
+                (value, index) => index === currentPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -4273,6 +5254,213 @@
         }
       });
     }
+    function drawMonthlyHoursByYearChart(ctx, type, data, animated = false) {
+      const datasets = Object.entries(data || {}).map(([year, rows]) => {
+        const monthlyData = Array(12).fill(0);
+        (rows || []).forEach(([monthIndex, hours]) => {
+          if (Number.isInteger(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
+            monthlyData[monthIndex] = Number(hours) || 0;
+          }
+        });
+        const peakIndex = getPeakIndex(monthlyData);
+        return {
+          label: year,
+          data: monthlyData,
+          backgroundColor: monthlyData.map(
+            (value, index) => index === peakIndex ? "rgba(14, 165, 233, 1)" : createGradient(
+              ctx,
+              "rgba(14, 165, 233, 0.85)",
+              "rgba(14, 165, 233, 0.45)"
+            )
+          ),
+          borderColor: "#0ea5e9",
+          borderWidth: monthlyData.map(
+            (value, index) => index === peakIndex ? 2 : 1
+          ),
+          borderRadius: 6,
+          borderSkipped: false,
+          barPercentage: 0.8,
+          categoryPercentage: 0.75,
+          hoverBackgroundColor: "rgba(14, 165, 233, 1)",
+          hoverBorderColor: "#0284c7",
+          hoverBorderWidth: 1
+        };
+      });
+      chartInstances[type] = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: REPORT_MONTHS,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: animated ? {
+            duration: 1200,
+            easing: "easeOutQuart"
+          } : false,
+          interaction: {
+            mode: "index",
+            axis: "x",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: "top"
+            },
+            tooltip: {
+              mode: "index",
+              axis: "x",
+              intersect: false,
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              titleColor: "#111827",
+              bodyColor: "#374151",
+              borderColor: "#e5e7eb",
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 8,
+              displayColors: true,
+              callbacks: {
+                label: function(context) {
+                  const value = Number(context.parsed.y) || 0;
+                  return `${context.dataset.label}: ${value.toLocaleString()}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: "rgba(0, 0, 0, 0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
+              },
+              border: {
+                display: false
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: "rgba(0, 0, 0, 0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                },
+                callback: (value) => `${value}`
+              },
+              border: {
+                display: false
+              }
+            }
+          }
+        }
+      });
+    }
+    function drawDailyOverviewChart(ctx, type, data, animated = false) {
+      const labels = data.map(([client]) => client);
+      const values = data.map(([, hours]) => Number(hours) || 0);
+      const peakIndex = getPeakIndex(values);
+      chartInstances[type] = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Hours",
+              data: values,
+              backgroundColor: values.map(
+                (value, index) => index === peakIndex ? "rgba(14, 165, 233, 1)" : createGradient(
+                  ctx,
+                  "rgba(14, 165, 233, 0.85)",
+                  "rgba(14, 165, 233, 0.45)"
+                )
+              ),
+              borderColor: "#0ea5e9",
+              borderWidth: values.map(
+                (value, index) => index === peakIndex ? 2 : 1
+              ),
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.8,
+              categoryPercentage: 0.75,
+              hoverBackgroundColor: "rgba(14, 165, 233, 1)",
+              hoverBorderColor: "#0284c7",
+              hoverBorderWidth: 1
+            }
+          ]
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: animated ? {
+            duration: 1200,
+            easing: "easeOutQuart"
+          } : false,
+          interaction: {
+            mode: "index",
+            axis: "y",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              titleColor: "#111827",
+              bodyColor: "#374151",
+              borderColor: "#e5e7eb",
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 8,
+              callbacks: {
+                label: function(context) {
+                  const value = Number(context.parsed.x) || 0;
+                  return `Hours: ${value.toLocaleString()}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: {
+                color: "rgba(0, 0, 0, 0.04)"
+              },
+              ticks: {
+                font: {
+                  size: 10
+                },
+                callback: (value) => Number(value).toLocaleString()
+              },
+              border: {
+                display: false
+              }
+            },
+            y: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
+              },
+              border: {
+                display: false
+              }
+            }
+          }
+        }
+      });
+    }
     function fillMonthlyData(data) {
       const values = Array(12).fill(0);
       data.forEach((row) => {
@@ -4303,12 +5491,14 @@
       const displayY = showYAxis ?? showAxes;
       const labels = data.map((row) => row?.[0] ?? "");
       const values = data.map((row) => Number(row?.[1]) || 0);
-      const isMonthly = type === "monthly";
-      const lineColor = isMonthly ? "#22c55e" : "#0ea5e9";
-      const gradientTopColor = isMonthly ? "rgba(34, 197, 94, 0.5)" : "rgba(14, 165, 233, 0.5)";
-      const gradientBottomColor = isMonthly ? "rgba(220, 252, 231, 0.2)" : "rgba(231, 246, 254, 0.2)";
-      const pointRadius = showPoints ? 2 : 0;
-      const pointHoverRadius = showPoints ? 5 : 0;
+      const isMonthly = type === "monthly" || type === "yearly_monthly_hours";
+      const isCurrentMonthLog = type === "current_month_log";
+      const lineColor = isCurrentMonthLog ? "#8b5cf6" : isMonthly ? "#22c55e" : "#0ea5e9";
+      const gradientTopColor = isCurrentMonthLog ? "rgba(139, 92, 246, 0.5)" : isMonthly ? "rgba(34, 197, 94, 0.5)" : "rgba(14, 165, 233, 0.5)";
+      const gradientBottomColor = isCurrentMonthLog ? "rgba(237, 233, 254, 0.2)" : isMonthly ? "rgba(220, 252, 231, 0.2)" : "rgba(231, 246, 254, 0.2)";
+      const peakIndex = getPeakIndex(values);
+      const pointRadius = showPoints ? values.map((value, index) => index === peakIndex ? 7 : 2) : 0;
+      const pointHoverRadius = showPoints ? values.map((value, index) => index === peakIndex ? 9 : 5) : 0;
       chartInstances[type] = new Chart(ctx, {
         type: "line",
         data: {
@@ -4327,9 +5517,13 @@
               tension: 0.4,
               pointRadius,
               pointHoverRadius,
-              pointBackgroundColor: "#ffffff",
+              pointBackgroundColor: values.map(
+                (value, index) => index === peakIndex ? lineColor : "#ffffff"
+              ),
               pointBorderColor: lineColor,
-              pointBorderWidth: 2,
+              pointBorderWidth: values.map(
+                (value, index) => index === peakIndex ? 3 : 2
+              ),
               borderWidth: 2
             }
           ]
@@ -4417,6 +5611,35 @@
           }
         }
       });
+      if (showTooltip && peakIndex >= 0) {
+        setTimeout(
+          () => {
+            if (!chartInstances[type]) {
+              return;
+            }
+            chartInstances[type].setActiveElements([
+              {
+                datasetIndex: 0,
+                index: peakIndex
+              }
+            ]);
+            chartInstances[type].tooltip.setActiveElements(
+              [
+                {
+                  datasetIndex: 0,
+                  index: peakIndex
+                }
+              ],
+              {
+                x: 0,
+                y: 0
+              }
+            );
+            chartInstances[type].update();
+          },
+          animated ? 1200 : 0
+        );
+      }
     }
     function drawClientPaidOwedHistoryChart(ctx, type, yearlyData, animated = false, chartOpts = {}) {
       const {
@@ -4431,6 +5654,8 @@
       const labels = yearlyData.map((item) => String(item?.year ?? ""));
       const paidHours = yearlyData.map((item) => Number(item?.hoursPaid) || 0);
       const owedHours = yearlyData.map((item) => Number(item?.hoursOwed) || 0);
+      const paidPeakIndex = getPeakIndex(paidHours);
+      const owedPeakIndex = getPeakIndex(owedHours);
       chartInstances[type] = new Chart(ctx, {
         type: "bar",
         data: {
@@ -4439,13 +5664,17 @@
             {
               label: showLabel ? "Paid Hours" : "",
               data: paidHours,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(14, 165, 233, 0.9)",
-                "rgba(14, 165, 233, 0.5)"
+              backgroundColor: paidHours.map(
+                (value, index) => index === paidPeakIndex ? "rgba(14, 165, 233, 1)" : createGradient(
+                  ctx,
+                  "rgba(14, 165, 233, 0.9)",
+                  "rgba(14, 165, 233, 0.5)"
+                )
               ),
               borderColor: "#0ea5e9",
-              borderWidth: 1,
+              borderWidth: paidHours.map(
+                (value, index) => index === paidPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -4457,13 +5686,17 @@
             {
               label: showLabel ? "Owed Hours" : "",
               data: owedHours,
-              backgroundColor: createGradient(
-                ctx,
-                "rgba(249, 115, 22, 0.9)",
-                "rgba(249, 115, 22, 0.5)"
+              backgroundColor: owedHours.map(
+                (value, index) => index === owedPeakIndex ? "rgba(249, 115, 22, 1)" : createGradient(
+                  ctx,
+                  "rgba(249, 115, 22, 0.9)",
+                  "rgba(249, 115, 22, 0.5)"
+                )
               ),
               borderColor: "#f97316",
-              borderWidth: 1,
+              borderWidth: owedHours.map(
+                (value, index) => index === owedPeakIndex ? 2 : 1
+              ),
               borderRadius: 6,
               borderSkipped: false,
               barPercentage: 0.8,
@@ -4625,6 +5858,15 @@
         }
       });
     }
+    function getPeakIndex(values) {
+      if (!values?.length) {
+        return -1;
+      }
+      return values.reduce(
+        (maxIndex, value, index, array) => value > array[maxIndex] ? index : maxIndex,
+        0
+      );
+    }
     function createGradient(ctx, startColor, endColor) {
       if (!startColor || !endColor) {
         console.warn("Invalid gradient colors:", {
@@ -4676,6 +5918,7 @@
       drawMonthlyTargetChart,
       drawChart,
       resizeAllCharts,
+      animateChart,
       destroyAllCharts
     };
   })();
@@ -4702,7 +5945,7 @@
     const bindActions = () => {
       $("#addtoSheet-hourly").on("click", function() {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Redirecting...");
+        const loading = AppUtils.setButtonLoading(btn[0], "Redirecting");
         google.script.run.withSuccessHandler(function(url) {
           loading.restore();
           window.open(url, "_blank");
@@ -4729,7 +5972,7 @@
               gscriptFunc: "addCurrMthTotalHrly",
               data: fValueVal,
               $btn: $submitBtn,
-              loadingText: "Saving ...",
+              loadingText: "Saving",
               onSuccess: () => {
                 AppUtils.showDashboardToast(
                   "Successfully added Total!",
@@ -4943,7 +6186,7 @@
         RouterModule.go(page);
       }).on("click.reports", "#download-latest-pdf", function() {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading");
         ReportActions.downloadLatestPDF(btn, loading);
       }).on("click.reports", "#email-latest-report", function() {
         const $btn = $(this);
@@ -5020,7 +6263,7 @@
         RouterModule.go(page);
       }).on("click.reportsMonthly", "#download-latest-pdf", function() {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading");
         ReportActions.downloadLatestPDF(btn, loading);
       }).on("click.reportsMonthly", "#email-latest-report", function() {
         const $btn = $(this);
@@ -5111,7 +6354,7 @@
         );
       }).on("click.reportsAnnual", "#download-latest-pdf", function() {
         const btn = $(this);
-        const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        const loading = AppUtils.setButtonLoading(btn[0], "Downloading");
         ReportActions.downloadLatestPDF(btn, loading);
       }).on("click.reportsAnnual", "#email-latest-report", function() {
         const $btn = $(this);
@@ -5151,41 +6394,22 @@
   var settingsConfigurationPage = /* @__PURE__ */ (() => {
     let initialized = false;
     const loadedTabs = /* @__PURE__ */ new Set();
+    let masterFormulaOperationId = 0;
+    let masterFormulaTimer = null;
+    const MODAL_ID = "#app-modal";
     const tabHandlers = {
       // "#tab-content-2": loadIntegrationSettings,
     };
-    function clearCache(btn) {
-      const loading = AppUtils.setButtonLoading(btn, "Clearing cache...");
-      AppUtils.clearAppCache();
-      AppUtils.showDashboardToast("App cache cleared successfully!", "success");
-      loading.setSuccess("Cleared Cache");
-    }
-    function syncClientSheets(btn) {
-      const loading = AppUtils.setButtonLoading(btn, "Syncing client lists...");
-      google.script.run.withSuccessHandler(() => {
-        AppUtils.showDashboardToast(
-          "Client list synced successfully!",
-          "success"
-        );
-        loading.setSuccess("Synced Clients");
-      }).withFailureHandler((err) => {
-        console.error("syncClientSheetList failed:", err);
-        AppUtils.showDashboardToast(
-          "Client list sync failed. Please try again.",
-          "error"
-        );
-        loading.restore();
-      }).syncClientSheetList();
-    }
     function handleClick(e) {
       const btn = e.target.closest(
-        "#btnClearCache, #btnSyncClient, #btnBackupAllSheets, #btnAddMasterFormula"
+        "#btnClearCache, #btnSyncClient, #btnSyncProjectLists, #btnBackupAllSheets, #btnAddMasterFormula, #btnDeployExternalProjectsMainSheetFormula, #btnDeployExternalProjectsInternalSheetFormula, #btnSyncExternalClients"
       );
       if (!btn) {
         return;
       }
       e.preventDefault();
-      switch (btn.id) {
+      const el_id = btn.id;
+      switch (el_id) {
         //main tab click
         case "btnClearCache":
           AppUtils.openConfirmationModal({
@@ -5193,8 +6417,7 @@
             title: "Clear Application Cache?",
             message: "This will clear all temporary data from your browser's local storage. You may need to log in or reload configurations again.",
             onProceed: ($modal, $btn) => {
-              clearCache(btn);
-              AppUtils.closeModal("#app-modal");
+              clearCache($btn);
             }
           });
           break;
@@ -5204,13 +6427,36 @@
             title: "Sync Client Sheets?",
             message: "This will refresh and synchronize the client names on the main sheet. This could take a few moments to pull the latest records.",
             onProceed: ($modal, $btn) => {
-              syncClientSheets(btn);
-              AppUtils.closeModal("#app-modal");
+              syncClientSheets($btn);
+            }
+          });
+          break;
+        case "btnSyncExternalClients":
+          AppUtils.openConfirmationModal({
+            ns: "syncClient",
+            title: "Sync External Client Sheets?",
+            message: "This will refresh and synchronize the client names and records from the registered external client sheets. This could take a few moments to pull the latest records.",
+            onProceed: ($modal, $btn) => {
+              syncExternalClientSheets($btn);
+            }
+          });
+          break;
+        case "btnSyncProjectLists":
+          AppUtils.openConfirmationModal({
+            ns: "syncProject",
+            title: "Update Project List?",
+            message: "This will refresh and synchronize the overall project list with the latest project records. This could take a few moments.",
+            onProceed: ($modal, $btn) => {
+              syncClientProjectsFromMain($btn);
             }
           });
           break;
         case "btnAddMasterFormula":
           openMasterFormulaModal();
+          break;
+        case "btnDeployExternalProjectsMainSheetFormula":
+        case "btnDeployExternalProjectsInternalSheetFormula":
+          openMasterFormulaModal(el_id);
           break;
         case "btnBackupAllSheets":
           AppUtils.openConfirmationModal({
@@ -5218,8 +6464,7 @@
             title: "Confirm All Google Sheets Backup?",
             message: "This will create a complete backup point for all active sheets. This process might take a few moments.",
             onProceed: ($modal, $btn) => {
-              BackupAllSheets(btn);
-              AppUtils.closeModal("#app-modal");
+              BackupAllSheets($btn);
             }
           });
           break;
@@ -5228,15 +6473,81 @@
           break;
       }
     }
+    function clearCache(btn) {
+      const loading = AppUtils.setButtonLoading(btn, "Clearing cache");
+      AppUtils.clearAppCache();
+      AppUtils.showDashboardToast("App cache cleared successfully!", "success");
+      AppUtils.closeModal(MODAL_ID);
+      loading.setSuccess("Cleared Cache");
+    }
+    function syncExternalClientSheets(btn) {
+      const loading = AppUtils.setButtonLoading(
+        btn,
+        "Syncing sheets"
+      );
+      google.script.run.withSuccessHandler((result) => {
+        const count = Array.isArray(result) ? result.length : 0;
+        AppUtils.showDashboardToast(
+          count ? `${count} external sheet(s) synchronized successfully.` : "External sheets are already synchronized.",
+          "success"
+        );
+        loading.setSuccess("Clients Synced");
+        AppUtils.closeModal(MODAL_ID);
+      }).withFailureHandler((err) => {
+        console.error("reconcileExternalSheets failed:", err);
+        AppUtils.showDashboardToast(
+          "Failed to synchronize external client sheets. Please try again.",
+          "error"
+        );
+        loading.restore();
+      }).reconcileExternalSheets();
+    }
+    function syncClientSheets(btn) {
+      const loading = AppUtils.setButtonLoading(btn, "Syncing clients");
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast(
+          "Client list synced successfully!",
+          "success"
+        );
+        loading.setSuccess("Clients Synced");
+        AppUtils.closeModal(MODAL_ID);
+      }).withFailureHandler((err) => {
+        console.error("syncClientSheetList failed:", err);
+        AppUtils.showDashboardToast(
+          "Client list sync failed. Please try again.",
+          "error"
+        );
+        loading.restore();
+      }).syncClientSheetList();
+    }
+    function syncClientProjectsFromMain(btn) {
+      const loading = AppUtils.setButtonLoading(btn, "Updating projects");
+      google.script.run.withSuccessHandler(() => {
+        AppUtils.showDashboardToast(
+          "Project data updated successfully.",
+          "success"
+        );
+        loading.setSuccess("Projects Updated");
+        AppUtils.closeModal(MODAL_ID);
+      }).withFailureHandler((err) => {
+        console.error("syncClientProjects failed:", err);
+        AppUtils.showDashboardToast(
+          "Failed to update project data. Please try again.",
+          "error"
+        );
+        loading.restore();
+      }).syncClientProjects();
+    }
     function BackupAllSheets(btn) {
       const loading = AppUtils.setButtonLoading(
         btn,
-        "Creating Backup..."
+        "Creating Backup"
       );
       google.script.run.withSuccessHandler((result) => {
         AppUtils.showDashboardToast("Backup completed", "info");
         console.log("Backup completed:", result);
         loading.setSuccess("Backup Completed");
+        AppUtils.closeModal(MODAL_ID);
       }).withFailureHandler((err) => {
         console.error("Backup failed:", err);
         AppUtils.showDashboardToast(
@@ -5246,9 +6557,77 @@
         loading.restore();
       }).backupAllSheets();
     }
-    function openMasterFormulaModal() {
+    function handleIntegrationListClick(e) {
+      const item = e.target.closest(".integration-list-item");
+      if (!item) {
+        return;
+      }
+      if (item.classList.contains("integration-list-item-coming")) {
+        return;
+      }
+      const integration = item.getAttribute("data-integration");
+      if (!integration) {
+        return;
+      }
+      AppUtils.cacheSet("selectedIntegration", integration);
+      RouterModule.go("integrationsConfiguration");
+    }
+    function isValidCellRef(ref) {
+      return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
+    }
+    function isValidFormula(formula) {
+      return /^=\s*[A-Z]+\(/i.test(formula) || /^=.+[A-Z0-9]/i.test(formula);
+    }
+    function startMasterFormulaOperation() {
+      masterFormulaOperationId++;
+      if (masterFormulaTimer) {
+        clearTimeout(masterFormulaTimer);
+        masterFormulaTimer = null;
+      }
+      return masterFormulaOperationId;
+    }
+    function isMasterFormulaOperationActive(operationId) {
+      return operationId === masterFormulaOperationId;
+    }
+    function cancelMasterFormulaOperation() {
+      masterFormulaOperationId++;
+      if (masterFormulaTimer) {
+        clearTimeout(masterFormulaTimer);
+        masterFormulaTimer = null;
+      }
+    }
+    function getMasterFormulaFormData($modal) {
+      const cellRef = String($modal.find("#masterFormulaCell").val() || "").trim().toUpperCase();
+      const formula = String(
+        $modal.find("#masterFormulaValue").val() || ""
+      ).trim();
+      if (!cellRef) {
+        AppUtils.showDashboardToast("Cell reference is required.", "error");
+        return null;
+      }
+      if (!isValidCellRef(cellRef)) {
+        AppUtils.showDashboardToast(
+          "Invalid cell reference. Example: B39 or AB25.",
+          "error"
+        );
+        return null;
+      }
+      if (!formula) {
+        AppUtils.showDashboardToast("Formula is required.", "error");
+        return null;
+      }
+      if (!isValidFormula(formula)) {
+        AppUtils.showDashboardToast("Invalid Google Sheets formula.", "error");
+        return null;
+      }
+      return {
+        cellRef,
+        formula
+      };
+    }
+    function openMasterFormulaModal(isNotMain = false) {
       const ns = ".masterFormula";
-      AppUtils.openModal("#app-modal", {
+      AppUtils.openModal(MODAL_ID, {
         size: "md",
         placement: "center",
         header: "<div></div>",
@@ -5259,6 +6638,7 @@
           <label for="masterFormulaCell" class="form-label">
             Cell Reference
           </label>
+
           <input
             type="text"
             class="form-none control"
@@ -5266,6 +6646,7 @@
             placeholder="B39"
             autocomplete="off"
           >
+
           <div class="form-text">
             Example: B39, N18, or AB25.
           </div>
@@ -5275,51 +6656,109 @@
           <label for="masterFormulaValue" class="form-label">
             Formula
           </label>
+
           <textarea
             class="form-control"
             id="masterFormulaValue"
-            rows="3"
+            rows="10"
+            style="height: 200px;"
             placeholder='=COUNTIF(B41:B,"<>")'
           ></textarea>
         </div>
 
         <div class="small text-muted">
-          The formula will be applied to the applicable client
-          sheets and the <strong>Projects</strong> sheet of
-          registered external spreadsheets.
+          The formula will be applied to the applicable sheets.
         </div>
       </div>
 
       <!-- STEP 2: REVIEW / CONFIRMATION BODY -->
       <div id="review-modal-body" class="d-none">
-        <h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>
-        <p>Please review the details before updating the spreadsheets.</p>
+        <h5 class="modal-title mb-2">
+          <strong>Do you want to proceed?</strong>
+        </h5>
+
+        <p>
+          Please review the details before updating the spreadsheets.
+        </p>
       </div>
     `,
         footer: `
       <!-- STEP 1: MAIN FOOTER -->
-      <div id="main-modal-footer" class="d-flex gap-2">
-        <button type="button" class="btn btn-secondary btn-cancel">
+      <div
+        id="main-modal-footer"
+        class="d-flex gap-2"
+      >
+        <!-- APP-MODAL-MAIN-ACTIONS -->
+
+        <button
+          type="button"
+          class="btn btn-secondary btn-cancel"
+        >
           Cancel
         </button>
-        <button type="button" class="btn btn-primary btn-save">
+
+        <button
+          type="button"
+          class="btn btn-primary btn-save"
+        >
           Apply Formula
         </button>
       </div>
 
       <!-- STEP 2: REVIEW FOOTER -->
-      <div id="review-modal-footer" class="d-flex gap-2 d-none">
-        <button type="button" class="btn btn-secondary btn-back">
+      <div
+        id="review-modal-footer"
+        class="d-flex gap-2 d-none"
+      >
+        <!-- APP-MODAL-REVIEW-ACTIONS -->
+
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
           Back
         </button>
-        <button type="button" class="btn btn-success btn-proceed">
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
           Proceed
         </button>
       </div>
     `,
+        /*
+         * ----------------------------------------------------------
+         * OPTIONAL CUSTOM ACTIONS
+         * ----------------------------------------------------------
+         */
+        footerActions: {
+          review: [
+            {
+              label: "Apply to External Main Sheet",
+              icon: "pe-7s-shuffle",
+              onClick: ($modal, $btn) => {
+                applyFormulaToExternalProjectsFromModal(
+                  $modal,
+                  $(MODAL_ID).find(".btn-proceed")
+                );
+              }
+            },
+            {
+              label: "Apply to External Internal Sheets",
+              icon: "pe-7s-shuffle",
+              onClick: ($modal, $btn) => {
+                applyFormulaToExternalProjectSheetsFromModal(
+                  $modal,
+                  $(MODAL_ID).find(".btn-proceed")
+                );
+              }
+            }
+          ]
+        },
         onOpen($modal) {
           $modal.off(ns).on(`click${ns}`, ".btn-cancel", () => {
-            AppUtils.closeModal("#app-modal");
+            AppUtils.closeModal(MODAL_ID);
           }).on(`click${ns}`, ".btn-save", () => {
             const $cellInput = $modal.find("#masterFormulaCell");
             const $formulaValue = $modal.find("#masterFormulaValue");
@@ -5343,7 +6782,13 @@
             $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
           }).on(`click${ns}`, ".btn-proceed", () => {
             const $btn = $modal.find(".btn-proceed");
-            applyMasterFormula($modal, $btn);
+            if (isNotMain === "btnDeployExternalProjectsInternalSheetFormula") {
+              applyFormulaToExternalProjectSheetsFromModal($modal, $btn);
+            } else if (isNotMain === "btnDeployExternalProjectsMainSheetFormula") {
+              applyFormulaToExternalProjectsFromModal($modal, $btn);
+            } else {
+              applyMasterFormula($modal, $btn);
+            }
           });
         },
         onClose($modal) {
@@ -5351,68 +6796,162 @@
         }
       });
     }
-    function handleIntegrationListClick(e) {
-      const item = e.target.closest(".integration-list-item");
-      if (!item) {
-        return;
-      }
-      if (item.classList.contains("integration-list-item-coming")) {
-        return;
-      }
-      const integration = item.getAttribute("data-integration");
-      if (!integration) {
-        return;
-      }
-      AppUtils.cacheSet("selectedIntegration", integration);
-      RouterModule.go("integrationsConfiguration");
-    }
-    function isValidCellRef(ref) {
-      return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
-    }
-    function isValidFormula(formula) {
-      return /^=\s*[A-Z]+\(/i.test(formula) || /^=.+[A-Z0-9]/i.test(formula);
-    }
     function applyMasterFormula($modal, $btn) {
-      const cellRef = String($modal.find("#masterFormulaCell").val() || "").trim().toUpperCase();
-      const formula = String(
-        $modal.find("#masterFormulaValue").val() || ""
-      ).trim();
-      if (!cellRef) {
-        AppUtils.showDashboardToast("Cell reference is required.", "error");
+      const data = getMasterFormulaFormData($modal);
+      if (!data) {
         return;
       }
-      if (!isValidCellRef(cellRef)) {
-        AppUtils.showDashboardToast(
-          "Invalid cell reference. Example: B39 or AB25.",
-          "error"
-        );
-        return;
-      }
-      if (!formula) {
-        AppUtils.showDashboardToast("Formula is required.", "error");
-        return;
-      }
-      if (!isValidFormula(formula)) {
-        AppUtils.showDashboardToast("Invalid Google Sheets formula.", "error");
-        return;
-      }
-      const loading = AppUtils.setButtonLoading(
-        $btn[0],
-        "Applying Formula..."
-      );
+      const { cellRef, formula } = data;
+      const operationId = startMasterFormulaOperation();
+      const loading = AppUtils.setButtonLoading($btn[0], "Applying Formula");
       google.script.run.withSuccessHandler((result) => {
-        console.log("applyFormulaToSheets:", result);
+        if (!isMasterFormulaOperationActive(operationId)) {
+          return;
+        }
+        console.log("applyFormulaToMainSheets:", result);
         loading.setSuccess("Formula Applied");
-        AppUtils.closeModal("#app-modal");
-        AppUtils.showDashboardToast("Formula applied successfully.", "success");
+        AppUtils.showDashboardToast(
+          "Formula applied to the main spreadsheet.",
+          "success"
+        );
+        AppUtils.closeModal(MODAL_ID);
+        masterFormulaTimer = setTimeout(() => {
+          masterFormulaTimer = null;
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+          openExternalProjectsConfirmation(cellRef, formula, operationId);
+        }, 1e3);
       }).withFailureHandler((err) => {
-        console.error("applyFormulaToSheets failed:", err);
+        if (!isMasterFormulaOperationActive(operationId)) {
+          return;
+        }
+        console.error("applyFormulaToMainSheets failed:", err);
         loading.restore();
         AppUtils.showDashboardToast(
-          err?.message || "Failed to apply formula.",
+          err?.message || "Failed to apply formula to the main spreadsheet.",
           "error"
         );
-      }).applyFormulaToSheets(cellRef, formula);
+      }).applyFormulaToMainSheets(cellRef, formula);
+    }
+    function openExternalProjectsConfirmation(cellRef, formula, operationId) {
+      if (!isMasterFormulaOperationActive(operationId)) {
+        return;
+      }
+      AppUtils.openConfirmationModal({
+        ns: "externalProjects",
+        title: "Update External Projects?",
+        message: "This will apply the formula to the Projects sheet of every registered external spreadsheet, including the external template. This may take some time.",
+        onProceed: ($modal, $btn) => {
+          applyFormulaToExternalProjects(cellRef, formula, $btn[0], operationId);
+        },
+        onBack: () => {
+          cancelMasterFormulaOperation();
+          AppUtils.closeModal(MODAL_ID);
+        }
+      });
+    }
+    function applyFormulaToExternalProjectsFromModal($modal, $btn) {
+      const data = getMasterFormulaFormData($modal);
+      if (!data) {
+        return;
+      }
+      const { cellRef, formula } = data;
+      const operationId = startMasterFormulaOperation();
+      applyFormulaToExternalProjects(cellRef, formula, $btn[0], operationId);
+    }
+    function applyFormulaToExternalProjects(cellRef, formula, btn, operationId) {
+      if (!isMasterFormulaOperationActive(operationId)) {
+        return;
+      }
+      const loading = AppUtils.setButtonLoading(btn, "Updating Projects");
+      google.script.run.withSuccessHandler((result) => {
+        if (!isMasterFormulaOperationActive(operationId)) {
+          return;
+        }
+        console.log("applyFormulaToExternalProjects:", result);
+        loading.setSuccess("Formula Applied");
+        AppUtils.showDashboardToast(
+          `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
+          "success"
+        );
+        masterFormulaTimer = setTimeout(() => {
+          masterFormulaTimer = null;
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+          openExternalProjectSheetsConfirmation(cellRef, formula, operationId);
+        }, 1e3);
+      }).withFailureHandler((err) => {
+        if (!isMasterFormulaOperationActive(operationId)) {
+          return;
+        }
+        console.error("applyFormulaToExternalProjects failed:", err);
+        loading.restore();
+        AppUtils.showDashboardToast(
+          err?.message || "Failed to update External Projects.",
+          "error"
+        );
+      }).applyFormulaToExternalProjects(cellRef, formula);
+    }
+    function openExternalProjectSheetsConfirmation(cellRef, formula, operationId) {
+      if (!isMasterFormulaOperationActive(operationId)) {
+        return;
+      }
+      AppUtils.openConfirmationModal({
+        ns: "externalProjectSheets",
+        title: "Update External Project Sheets?",
+        message: "This will apply the formula to the individual project sheets inside every registered external spreadsheet, including the external template. This may take some time.",
+        onProceed: ($modal, $btn) => {
+          applyFormulaToExternalProjectSheets(
+            cellRef,
+            formula,
+            $btn[0],
+            operationId
+          );
+        },
+        onBack: () => {
+          cancelMasterFormulaOperation();
+          AppUtils.closeModal(MODAL_ID);
+        }
+      });
+    }
+    function applyFormulaToExternalProjectSheetsFromModal($modal, $btn) {
+      const data = getMasterFormulaFormData($modal);
+      if (!data) {
+        return;
+      }
+      const { cellRef, formula } = data;
+      const operationId = startMasterFormulaOperation();
+      applyFormulaToExternalProjectSheets(cellRef, formula, $btn[0], operationId);
+    }
+    function applyFormulaToExternalProjectSheets(cellRef, formula, btn, operationId) {
+      if (!isMasterFormulaOperationActive(operationId)) {
+        return;
+      }
+      const loading = AppUtils.setButtonLoading(btn, "Updating Sheets");
+      google.script.run.withSuccessHandler((result) => {
+        if (!isMasterFormulaOperationActive(operationId)) {
+          return;
+        }
+        console.log("applyFormulaToExternalProjectSheets:", result);
+        loading.setSuccess("Sheets Updated");
+        AppUtils.showDashboardToast(
+          `External project sheets updated successfully: ${result.updated} sheet(s).`,
+          "success"
+        );
+        cancelMasterFormulaOperation();
+      }).withFailureHandler((err) => {
+        if (!isMasterFormulaOperationActive(operationId)) {
+          return;
+        }
+        console.error("applyFormulaToExternalProjectSheets failed:", err);
+        loading.restore();
+        AppUtils.showDashboardToast(
+          err?.message || "Failed to update external project sheets.",
+          "error"
+        );
+      }).applyFormulaToExternalProjectSheets(cellRef, formula);
     }
     function handleTabShown(e) {
       const tab = e.target;
@@ -5427,9 +6966,6 @@
       loadedTabs.add(target);
       handler();
     }
-    function handleSubmit(e) {
-      e.preventDefault();
-    }
     function init() {
       if (initialized) {
         return;
@@ -5438,7 +6974,6 @@
       document.addEventListener("click", handleClick);
       document.addEventListener("click", handleIntegrationListClick);
       document.addEventListener("shown.bs.tab", handleTabShown);
-      document.addEventListener("submit", handleSubmit);
     }
     function destroy() {
       if (!initialized) {
@@ -5447,7 +6982,6 @@
       initialized = false;
       document.removeEventListener("click", handleClick);
       document.removeEventListener("shown.bs.tab", handleTabShown);
-      document.removeEventListener("submit", handleSubmit);
     }
     return {
       init,
@@ -5455,108 +6989,182 @@
     };
   })();
 
-  // src/clients/client-table-service.js
-  var ClientTableService = /* @__PURE__ */ (() => {
-    let filterInitialized = false;
-    let dropdownGroup = null;
-    let menu = null;
-    let items = [];
-    let toggleBtn = null;
-    let filterHandler = null;
-    function applyStatusFilter(tableId, selectedValue) {
-      const table = document.getElementById(tableId);
-      if (!table) {
-        return;
+  // src/clients/client-activity-trends.js
+  var ClientActivityTrends = /* @__PURE__ */ (() => {
+    const CONTAINER_ID = "client-activity-trends";
+    const CACHE_KEY = "clientActivityTrends";
+    const trends = [
+      {
+        key: "activeClients",
+        label: "Active Clients",
+        icon: "pe-7s-users",
+        color: "primary",
+        suffix: ""
+      },
+      {
+        key: "hoursLogged",
+        label: "Hours Logged",
+        icon: "pe-7s-clock",
+        color: "success",
+        suffix: " hrs"
+      },
+      {
+        key: "tasksCompleted",
+        label: "Tasks Completed",
+        icon: "pe-7s-check",
+        color: "info",
+        suffix: ""
+      },
+      {
+        key: "projectsActive",
+        label: "Projects Active",
+        icon: "pe-7s-portfolio",
+        color: "warning",
+        suffix: ""
+      },
+      {
+        key: "newClients",
+        label: "New Clients",
+        icon: "pe-7s-add-user",
+        color: "primary",
+        suffix: "",
+        fixedComparison: "this year"
+      },
+      {
+        key: "newProjects",
+        label: "New Projects",
+        icon: "pe-7s-exapnd2 ",
+        color: "secondary",
+        suffix: "",
+        fixedComparison: "this year"
       }
-      const rows = table.querySelectorAll("tbody tr");
-      let visibleIndex = 1;
-      rows.forEach((row) => {
-        const cells = row.querySelectorAll("td");
-        if (!cells.length) {
-          return;
-        }
-        const statusCell = cells[cells.length - 1];
-        const status = statusCell.textContent.trim();
-        const shouldShow = selectedValue === "Show All" || status.toLowerCase() === selectedValue.toLowerCase();
-        row.style.display = shouldShow ? "" : "none";
-        if (shouldShow) {
-          cells[0].textContent = visibleIndex++;
-        }
-      });
+    ];
+    function init() {
+      load();
     }
-    function resetDropdownState() {
-      if (!toggleBtn || !items.length) {
-        return;
-      }
-      toggleBtn.textContent = "Show All";
-      items.forEach((item) => {
-        item.classList.remove("disabled");
-        item.removeAttribute("aria-disabled");
-        item.removeAttribute("disabled");
-      });
-    }
-    function initStatusFilter(dropdownId, tableId, defaultValue = "Show All") {
-      if (filterInitialized) {
-        return;
-      }
-      dropdownGroup = document.getElementById(dropdownId);
-      if (!dropdownGroup) {
-        return;
-      }
-      toggleBtn = dropdownGroup.querySelector(
-        '[data-bs-toggle="dropdown"] > span'
-      );
-      menu = dropdownGroup.querySelector(".dropdown-menu");
-      if (!toggleBtn || !menu) {
-        return;
-      }
-      items = Array.from(menu.querySelectorAll(".dropdown-item"));
-      if (!items.length) {
-        return;
-      }
-      function setSelected(value) {
-        toggleBtn.textContent = value;
-        items.forEach((item) => {
-          const text = item.textContent.trim();
-          const isSelected = text === value;
-          item.classList.toggle("disabled", isSelected);
-          if (isSelected) {
-            item.setAttribute("aria-disabled", "true");
-          } else {
-            item.removeAttribute("aria-disabled");
+    function load() {
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getClientActivityTrends",
+        [],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            renderEmpty();
+            return;
           }
-        });
-        applyStatusFilter(tableId, value);
-      }
-      filterHandler = (e) => {
-        const item = e.target.closest(".dropdown-item");
-        if (!item || item.classList.contains("disabled")) {
-          return;
+          render(data);
         }
-        const value = item.textContent.trim();
-        item.blur();
-        setSelected(value);
-      };
-      menu.addEventListener("click", filterHandler);
-      filterInitialized = true;
-      setSelected(defaultValue);
+      );
     }
-    function destroyStatusFilter() {
-      if (menu && filterHandler) {
-        menu.removeEventListener("click", filterHandler);
+    function render(data) {
+      const container = document.getElementById(CONTAINER_ID);
+      if (!container) {
+        console.warn(
+          `[ClientActivityTrends] Container not found: ${CONTAINER_ID}`
+        );
+        return;
       }
-      filterHandler = null;
-      resetDropdownState();
-      filterInitialized = false;
-      dropdownGroup = null;
-      menu = null;
-      items = [];
-      toggleBtn = null;
+      const comparison = getComparisonPeriod();
+      container.innerHTML = trends.map((trend) => {
+        const value = Number(data[trend.key]) || 0;
+        const formattedValue = formatValue(value, trend.suffix);
+        const valueClass = getTrendColor(trend.key, value);
+        const badgeClass = `${trend.color}-subtle`;
+        const textClass = `text-${trend.color}`;
+        const comparisonText = trend.fixedComparison || comparison;
+        return `
+          <div class="row align-items-center mb-4">
+            <div class="col-8">
+              <div class="d-flex align-items-center">
+
+                <div>
+                  <div
+                    class="fs-5 bsb-w-50 bsb-h-50
+                    bg-${badgeClass} ${textClass}
+                    rounded-2 d-flex align-items-center
+                    justify-content-center me-3"
+                  >
+                    <i class="bi ${trend.icon}"></i>
+                  </div>
+                </div>
+
+                <div>
+                  <h6 class="m-0">
+                    ${trend.label}
+                  </h6>
+
+                  <p class="text-secondary m-0 fs-7">
+                    ${comparisonText}
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="col-4">
+              <h6
+                class="fs-7 d-flex
+                align-items-center
+                justify-content-end m-0"
+              >
+                <span
+                  class="${valueClass} rounded-2
+                  py-1 px-2"
+                >
+                  ${formattedValue}
+                </span>
+              </h6>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+    function formatValue(value, suffix = "") {
+      const sign = value > 0 ? "+" : "";
+      const formatted = Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(void 0, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+      return `${sign}${formatted}${suffix}`;
+    }
+    function getComparisonPeriod() {
+      const now = /* @__PURE__ */ new Date();
+      const day = now.getDate();
+      if (day <= 7) {
+        return "since last week";
+      }
+      if (day <= 14) {
+        return "since last week";
+      }
+      if (day <= 21) {
+        return "since last 2 weeks";
+      }
+      return "since last 3 weeks";
+    }
+    function getTrendColor(key, value) {
+      if (value === 0) {
+        return "bg-secondary-subtle text-secondary";
+      }
+      return value > 0 ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger";
+    }
+    function renderEmpty() {
+      const container = document.getElementById(CONTAINER_ID);
+      if (!container) {
+        return;
+      }
+      container.innerHTML = `
+      <div class="text-center text-secondary py-4">
+        No client activity trends available.
+      </div>
+    `;
+    }
+    function refresh() {
+      AppUtils.cacheClear(CACHE_KEY);
+      load();
     }
     return {
-      applyStatusFilter,
-      initStatusFilter,
-      destroyStatusFilter
+      init,
+      refresh
     };
   })();
 
@@ -5647,6 +7255,84 @@
         ClientTableService.initStatusFilter("categoryDtFilter", "active-clients");
       }
     }
+    function renderActiveClients(debug = false, reset = false) {
+      const log = (...args) => debug && console.log(...args);
+      const cacheKey = "paidOwedClients";
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getActiveClientsPaidOwed",
+        [],
+        (data) => {
+          log("[renderActiveClients] callback:", data);
+          if (!Array.isArray(data)) {
+            AppUtils.showError("\u26A0\uFE0F Invalid active client data.");
+            return;
+          }
+          renderActiveClientList(data);
+        },
+        debug,
+        reset
+      );
+    }
+    function renderActiveClientList(data) {
+      const container = document.getElementById("active-clients-list");
+      if (!container) {
+        return;
+      }
+      container.innerHTML = "";
+      if (!data.length) {
+        container.innerHTML = `
+      <div class="text-muted text-center py-3">
+        No active clients found.
+      </div>
+    `;
+        return;
+      }
+      data.slice(0, 4).forEach((client) => {
+        container.appendChild(createActiveClientItem(client));
+      });
+      if (data.length > 6) {
+        const remaining = data.length - 6;
+        const more = document.createElement("div");
+        more.className = "text-center text-muted fs-7 mt-3";
+        more.textContent = `+${remaining} more active clients`;
+        container.appendChild(more);
+      }
+    }
+    function createActiveClientItem(client) {
+      const item = document.createElement("div");
+      item.className = "client-activity-active-client d-flex align-items-center mb-1";
+      const status = String(client?.today || "").trim();
+      const isIdle = status.toLowerCase() === "idle";
+      const statusClass = isIdle ? "bg-danger" : "bg-success";
+      const name = AppUtils.escapeHtml(String(client?.client || "").trim());
+      const initials = AppUtils.escapeHtml(
+        AppUtils.getInitials(client?.client || "")
+      );
+      item.innerHTML = `
+    <div class="avatar-circle bg-light text-info rounded-circle
+                d-flex align-items-center justify-content-center me-2">
+      ${initials}
+    </div>
+
+    <div class="flex-grow-1 text-truncate">
+      <div class="fw-normal text-truncate">
+        ${name}
+      </div>
+
+      <div class="text-muted fs-8">
+        ${formatAmount(client?.totalPaid)} paid
+      </div>
+    </div>
+
+    <span
+      class="rounded-circle ${statusClass}"
+      style="width:8px;height:8px;"
+      title="${isIdle ? "Idle" : "Online"}"
+    ></span>
+  `;
+      return item;
+    }
     function createPaidOwedRow(row, index) {
       const tr = document.createElement("tr");
       const chartCanvasId = `clientHoursChart-${index}`;
@@ -5736,384 +7422,36 @@
     }
     return {
       renderClientDataByStatus,
-      renderActivePaidOwedClients
+      renderActivePaidOwedClients,
+      renderActiveClients
     };
   })();
 
-  // src/clients/client-ranking.js
-  var ClientRanking = /* @__PURE__ */ (() => {
-    function renderTopPaidClients() {
-      renderClientRanking({
-        cacheKey: "topPaidClients",
-        listSelector: "#top-paid-clients",
-        avatarClass: "bg-malibu-beach",
-        sortFn: sortTopPaid,
-        rightContentFn: getTopPaidRightContent
-      });
-    }
-    function renderLowestPaidClients() {
-      renderClientRanking({
-        cacheKey: "lowestPaidClients",
-        listSelector: "#lowest-paid-clients",
-        avatarClass: "bg-love-kiss",
-        sortFn: sortLowestPaid,
-        rightContentFn: getLowestPaidRightContent
-      });
-    }
-    function renderClientRanking(config) {
-      AppUtils.cachedGScriptCall(
-        config.cacheKey,
-        "getTopPaidClients",
-        [],
-        (data) => {
-          if (!Array.isArray(data) || !data.length) {
-            return;
-          }
-          const ul = document.querySelector(config.listSelector);
-          if (!ul) {
-            return;
-          }
-          ul.innerHTML = "";
-          const sorted = config.sortFn([...data]);
-          renderRankingList(ul, sorted, config);
-        }
-      );
-    }
-    function renderRankingList(ul, clients, config) {
-      clients.forEach((client) => {
-        createRankingItem(ul, client, config);
-      });
-    }
-    function createRankingItem(ul, client, config) {
-      const [name, paid, owed] = client;
-      AppUtils.cachedGScriptCall(
-        `role_${name}`,
-        "getRoleFromSheet",
-        [name],
-        (role) => {
-          role = role || "";
-          const li = document.createElement("li");
-          li.className = "list-group-item";
-          li.innerHTML = `
-          <div class="widget-content p-0">
-            <div class="widget-content-wrapper">
-
-              <div class="widget-content-left me-2 me-lg-3">
-                <div
-                  class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-                  text-white rounded-circle d-flex align-items-center justify-content-center">
-                  ${AppUtils.getInitials(name)}
-                </div>
-              </div>
-
-              <div class="widget-content-left">
-                <div class="widget-heading">${name}</div>
-                <div class="widget-subheading">${role}</div>
-              </div>
-
-              <div class="widget-content-right font-weight-bold">
-                ${config.rightContentFn(paid, owed)}
-              </div>
-
-            </div>
-          </div>
-        `;
-          ul.appendChild(li);
-        }
-      );
-    }
-    function sortTopPaid(data) {
-      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
-    }
-    function sortLowestPaid(data) {
-      return data.sort((a, b) => {
-        const paidDiff = (a[1] || 0) - (b[1] || 0);
-        if (paidDiff !== 0) {
-          return paidDiff;
-        }
-        return (b[2] || 0) - (a[2] || 0);
-      }).slice(0, 10);
-    }
-    function getTopPaidRightContent(paid, owed) {
-      if (owed === 0) {
-        return `
-        <div class="font-size-xs text-muted">
-          <small class="opacity-5 pe-1">$</small>
-          <span>${paid}</span>
-          <small class="text-warning ps-2">
-            <i class="fa fa-dot-circle"></i>
-          </small>
-        </div>
-      `;
-      }
-      return `
-      <div class="font-size-xs text-muted">
-        <span>${paid}</span>
-        <small class="text-success ps-2">
-          <i class="fa fa-angle-up"></i>
-        </small>
-      </div>
-
-      <div class="font-size-xs text-muted">
-        <span>${owed}</span>
-        <small class="text-danger ps-2">
-          <i class="fa fa-angle-down"></i>
-        </small>
-      </div>
-    `;
-    }
-    function getLowestPaidRightContent(paid, owed) {
-      let html = `
-      <div class="font-size-xs text-muted">
-        <span>${paid}</span>
-        <small class="text-danger ps-2">
-          <i class="fa fa-angle-down"></i>
-        </small>
-      </div>
-    `;
-      if (owed > 0) {
-        html += `
-        <div class="font-size-xs text-muted">
-          <span>${owed}</span>
-          <small class="text-warning ps-2">
-            <i class="fa fa-exclamation-circle"></i>
-          </small>
-        </div>
-      `;
-      }
-      return html;
-    }
-    return {
-      renderTopPaidClients,
-      renderLowestPaidClients
-    };
-  })();
-
-  // src/projects/project-ranking.js
-  var ProjectRankings = /* @__PURE__ */ (() => {
-    function renderTopProjects() {
-      renderProjectRanking({
-        cacheKey: "topProjects",
-        method: "getTopProjects",
-        listSelector: "#top-projects",
-        avatarClass: "bg-malibu-beach",
-        sortFn: sortTopProjects,
-        iconClass: "fas fa-briefcase",
-        iconColor: "text-warning"
-      });
-    }
-    function renderLowestProjects() {
-      renderProjectRanking({
-        cacheKey: "lowestProjects",
-        method: "getTopProjects",
-        listSelector: "#lowest-projects",
-        avatarClass: "bg-love-kiss",
-        sortFn: sortLowestProjects,
-        iconClass: "fas fa-exclamation-circle",
-        iconColor: "text-danger"
-      });
-    }
-    function renderProjectRanking(config) {
-      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
-        if (!Array.isArray(data) || !data.length) {
-          return;
-        }
-        const list = document.querySelector(config.listSelector);
-        if (!list) {
-          return;
-        }
-        list.innerHTML = "";
-        renderProjectList(list, config.sortFn([...data]), config);
-      });
-    }
-    function renderProjectList(list, projects, config) {
-      projects.forEach((project) => {
-        list.appendChild(createProjectItem(project, config));
-      });
-    }
-    function createProjectItem(project, config) {
-      const [projectName, hours, client] = project;
-      const li = document.createElement("li");
-      li.className = "list-group-item";
-      li.innerHTML = `
-      <div class="widget-content p-0">
-        <div class="widget-content-wrapper">
-
-          <div class="widget-content-left me-2 me-lg-3">
-            <div
-              class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-              text-white rounded-circle d-flex align-items-center justify-content-center">
-              ${AppUtils.getInitials(client)}
-            </div>
-          </div>
-
-          <div class="widget-content-left">
-            <div class="widget-heading">
-              ${projectName}
-            </div>
-
-            <div class="widget-subheading">
-              ${client}
-            </div>
-          </div>
-
-          <div class="widget-content-right font-weight-bold">
-            <div class="font-size-xs text-muted">
-              <span>${hours}</span>
-              <small class="${config.iconColor} ps-2">
-                <i class="${config.iconClass}"></i>
-              </small>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    `;
-      return li;
-    }
-    function sortTopProjects(data) {
-      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
-    }
-    function sortLowestProjects(data) {
-      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
-    }
-    return {
-      renderTopProjects,
-      renderLowestProjects
-    };
-  })();
-
-  // src/pages/active-clients-page.js
-  var activeClientsPage = /* @__PURE__ */ (() => {
-    let filterInitialized = false;
-    let dropdownGroup = null;
-    let menu = null;
-    let items = [];
-    let toggleBtn = null;
-    const filterConfig = {
-      dropdownId: "categoryDtFilter",
-      tableId: "active-clients",
-      statusColumnIndex: null
-      // null = last column; or set e.g. 6
-    };
-    function applyStatusFilterOnActiveClients(selectedValue) {
-      const table = document.getElementById(filterConfig.tableId);
-      if (!table) {
-        return;
-      }
-      const rows = table.querySelectorAll("tbody tr");
-      let visibleIndex = 1;
-      rows.forEach((row) => {
-        const cells = row.querySelectorAll("td");
-        if (!cells.length) {
-          return;
-        }
-        const statusCell = cells[cells.length - 1];
-        const status = statusCell.textContent.trim();
-        const shouldShow = selectedValue === "Show All" || status.toLowerCase() === selectedValue.toLowerCase();
-        row.style.display = shouldShow ? "" : "none";
-        if (shouldShow) {
-          cells[0].textContent = visibleIndex++;
-        }
-      });
-    }
-    function resetDropdownState() {
-      if (!toggleBtn || !items.length) {
-        return;
-      }
-      toggleBtn.textContent = "Show All";
-      items.forEach((item) => {
-        item.classList.remove("disabled");
-        item.removeAttribute("aria-disabled");
-        item.removeAttribute("disabled");
-      });
-    }
-    function initStatusFilter() {
-      if (filterInitialized) {
-        return;
-      }
-      dropdownGroup = document.getElementById(filterConfig.dropdownId);
-      if (!dropdownGroup) {
-        return;
-      }
-      toggleBtn = dropdownGroup.querySelector(
-        '[data-bs-toggle="dropdown"] > span'
-      );
-      menu = dropdownGroup.querySelector(".dropdown-menu");
-      if (!toggleBtn || !menu) {
-        return;
-      }
-      items = Array.from(menu.querySelectorAll(".dropdown-item"));
-      if (!items.length) {
-        return;
-      }
-      function setSelected(value) {
-        toggleBtn.textContent = value;
-        items.forEach((item) => {
-          const text = item.textContent.trim();
-          if (text === value) {
-            item.classList.add("disabled");
-            item.setAttribute("aria-disabled", "true");
-          } else {
-            item.classList.remove("disabled");
-            item.removeAttribute("aria-disabled");
-          }
-        });
-        applyStatusFilterOnActiveClients(value);
-      }
-      function onItemClick(e) {
-        const item = e.target.closest(".dropdown-item");
-        if (!item || item.classList.contains("disabled")) {
-          return;
-        }
-        const value = item.textContent.trim();
-        item.blur();
-        setSelected(value);
-      }
-      menu.addEventListener("click", onItemClick);
-      menu._activeClientsFilterHandler = onItemClick;
-      filterInitialized = true;
-    }
-    function destroy() {
-      if (!filterInitialized || !menu) {
-        return;
-      }
-      const handler = menu._activeClientsFilterHandler;
-      if (handler) {
-        menu.removeEventListener("click", handler);
-        menu._activeClientsFilterHandler = null;
-      }
-      applyStatusFilterOnActiveClients("Show All");
-      resetDropdownState();
-      filterInitialized = false;
-      dropdownGroup = null;
-      menu = null;
-      items = [];
-      toggleBtn = null;
-    }
-    function init() {
-      ClientDataService.renderActivePaidOwedClients();
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
-    }
-    return { init, initStatusFilter, destroy };
-  })();
-
-  // src/pages/add-manual-hours-page.js
-  var addManualHoursPage = /* @__PURE__ */ (() => {
+  // src/pages/client-activity-page.js
+  var clientActivityPage = /* @__PURE__ */ (() => {
     let bound = false;
     function init() {
       if (bound) {
         return;
       }
       bound = true;
-      HourSummary.loadHourTotals();
       ClientDataService.renderClientDataByStatus(
         "Client Tracker - Today",
         "Activity Today",
         "Activity Today"
       );
       TableClientSelector.init();
+      ClientDataService.renderActiveClients();
+      HourSummary.loadTodayChargedHours();
+      ChartModule.loadChart("daily", false, false, false, false, {
+        showAxes: false,
+        showGrid: false,
+        showPoints: false,
+        showTooltip: false,
+        showLegend: false,
+        showLabel: false
+      });
+      ClientActivityTrends.init();
     }
     function destroy() {
       if (!bound) {
@@ -6125,6 +7463,297 @@
     return {
       init,
       destroy
+    };
+  })();
+
+  // src/clients/client-ranking.js
+  var ClientRanking = /* @__PURE__ */ (() => {
+    const CACHE_KEY = "clientRankings";
+    let initialized = false;
+    function init() {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
+      load();
+    }
+    function destroy() {
+      initialized = false;
+    }
+    function load(reset = false) {
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getClientRankings",
+        [],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            showError();
+            return;
+          }
+          renderOverview(data.overview || {});
+          renderRankings(data.rankings || {});
+        },
+        false,
+        reset
+      );
+    }
+    function refresh() {
+      load(true);
+    }
+    function renderOverview(overview) {
+      setText(
+        '[data-metric="total-clients"]',
+        formatNumber(overview.totalClients)
+      );
+      setText('[data-metric="total-hours"]', formatHours(overview.totalHours));
+      setText(
+        '[data-metric="collection-rate"]',
+        formatPercent(overview.collectionRate)
+      );
+    }
+    function renderRankings(rankings) {
+      renderRanking('[data-ranking="top-clients"]', rankings.topClients, {
+        valueKey: "netPaid",
+        valueLabel: "Net Paid",
+        valueType: "amount",
+        icon: "fa-trophy",
+        iconClass: "client-icon-primary"
+      });
+      renderRanking('[data-ranking="top-paid"]', rankings.topPaid, {
+        valueKey: "paid",
+        valueLabel: "Paid",
+        valueType: "amount",
+        icon: "fa-money-bill-wave",
+        iconClass: "client-icon-success"
+      });
+      renderRanking('[data-ranking="highest-hours"]', rankings.highestHours, {
+        valueKey: "hours",
+        valueLabel: "Hours",
+        valueType: "hours",
+        icon: "fa-clock",
+        iconClass: "client-icon-info"
+      });
+      renderRanking('[data-ranking="highest-owed"]', rankings.highestOwed, {
+        valueKey: "owed",
+        valueLabel: "Owed",
+        valueType: "amount",
+        icon: "fa-credit-card",
+        iconClass: "client-icon-warning"
+      });
+      renderRanking('[data-ranking="best-collection"]', rankings.bestCollection, {
+        valueKey: "collectionRate",
+        valueLabel: "Collection",
+        valueType: "percent",
+        icon: "fa-chart-line",
+        iconClass: "client-icon-success"
+      });
+      renderRanking(
+        '[data-ranking="highest-debt-exposure"]',
+        rankings.highestDebtExposure,
+        {
+          valueKey: "debtExposure",
+          valueLabel: "Debt Exposure",
+          valueType: "percent",
+          icon: "fa-triangle-exclamation",
+          iconClass: "client-icon-danger"
+        }
+      );
+    }
+    function renderRanking(selector, clients, config) {
+      const container = document.querySelector(selector);
+      if (!container) {
+        return;
+      }
+      container.innerHTML = "";
+      if (!Array.isArray(clients) || !clients.length) {
+        container.innerHTML = `
+        <div class="client-loading text-muted">
+          No ranking data available.
+        </div>
+      `;
+        return;
+      }
+      clients.forEach((client, index) => {
+        container.appendChild(createRankingItem(client, index, config));
+      });
+    }
+    function renderTopPaidClients() {
+      renderLegacyRanking(
+        "#top-paid-clients",
+        "topPaid",
+        getTopPaidRightContent
+      );
+    }
+    function renderLowestPaidClients() {
+      renderLegacyRanking(
+        "#lowest-paid-clients",
+        "highestOwed",
+        getLowestPaidRightContent
+      );
+    }
+    function renderLegacyRanking(listSelector, rankingKey, rightContentFn) {
+      AppUtils.cachedGScriptCall(CACHE_KEY, "getClientRankings", [], (data) => {
+        const list = document.querySelector(listSelector);
+        if (!list) {
+          return;
+        }
+        const clients = data?.rankings?.[rankingKey];
+        if (!Array.isArray(clients) || !clients.length) {
+          return;
+        }
+        list.innerHTML = "";
+        clients.forEach((client) => {
+          const li = document.createElement("li");
+          li.className = "list-group-item";
+          li.innerHTML = `
+          <div class="widget-content p-0">
+            <div class="widget-content-wrapper">
+
+              <div class="widget-content-left me-2 me-lg-3">
+                <div
+                  class="avatar-circle swatch-holder swatch-holder-lg bg-light
+                  text-info rounded-circle d-flex align-items-center justify-content-center">
+                  ${AppUtils.getInitials(client.client)}
+                </div>
+              </div>
+
+              <div class="widget-content-left">
+                <div class="widget-heading">
+                  ${AppUtils.escapeHtml(client.client)}
+                </div>
+              </div>
+
+              <div class="widget-content-right font-weight-bold">
+                ${rightContentFn(client.paid, client.owed)}
+              </div>
+
+            </div>
+          </div>
+        `;
+          list.appendChild(li);
+        });
+      });
+    }
+    function getTopPaidRightContent(paid, owed) {
+      if (owed === 0) {
+        return `
+      <div class="font-size-xs text-muted">
+        <small class="opacity-5 pe-1">$</small>
+        <span>${paid}</span>
+        <small class="text-warning ps-2">
+          <i class="fa fa-dot-circle"></i>
+        </small>
+      </div>
+    `;
+      }
+      return `
+    <div class="font-size-xs text-muted">
+      <span>${paid}</span>
+      <small class="text-success ps-2">
+        <i class="fa fa-angle-up"></i>
+      </small>
+    </div>
+
+    <div class="font-size-xs text-muted">
+      <span>${owed}</span>
+      <small class="text-danger ps-2">
+        <i class="fa fa-angle-down"></i>
+      </small>
+    </div>
+  `;
+    }
+    function getLowestPaidRightContent(paid, owed) {
+      let html = `
+    <div class="font-size-xs text-muted">
+      <span>${paid}</span>
+      <small class="text-danger ps-2">
+        <i class="fa fa-angle-down"></i>
+      </small>
+    </div>
+  `;
+      if (owed > 0) {
+        html += `
+      <div class="font-size-xs text-muted">
+        <span>${owed}</span>
+        <small class="text-warning ps-2">
+          <i class="fa fa-exclamation-circle"></i>
+        </small>
+      </div>
+    `;
+      }
+      return html;
+    }
+    function createRankingItem(client, index, config) {
+      const item = document.createElement("div");
+      item.className = "client-item";
+      const name = AppUtils.escapeHtml(String(client.client ?? ""));
+      const value = formatValue(client[config.valueKey], config.valueType);
+      item.innerHTML = `
+      <div class="client-position">
+        ${index + 1}
+      </div>
+
+      <div class="client-avatar">
+        ${AppUtils.getInitials(client.client ?? "")}
+      </div>
+
+      <div class="client-client">
+        <div class="client-client-name">
+          ${name}
+        </div>
+
+        <div class="client-client-meta">
+          ${config.valueLabel}
+        </div>
+      </div>
+
+      <div class="client-value">
+        ${value}
+      </div>
+    `;
+      return item;
+    }
+    function formatValue(value, type) {
+      const number = Number(value) || 0;
+      if (type === "percent") {
+        return formatPercent(number);
+      }
+      if (type === "hours") {
+        return formatHours(number);
+      }
+      return number.toLocaleString("en-PH", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+    }
+    function formatHours(value) {
+      return `${(Number(value) || 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      })}h`;
+    }
+    function formatPercent(value) {
+      return `${((Number(value) || 0) * 100).toFixed(2)}%`;
+    }
+    function formatNumber(value) {
+      return (Number(value) || 0).toLocaleString("en-PH");
+    }
+    function setText(selector, value) {
+      const element = document.querySelector(selector);
+      if (element) {
+        element.textContent = value;
+      }
+    }
+    function showError() {
+      AppUtils.showError("\u26A0\uFE0F Unable to load client rankings.");
+    }
+    return {
+      init,
+      destroy,
+      refresh,
+      // Legacy widgets still used by existing pages
+      renderTopPaidClients,
+      renderLowestPaidClients
     };
   })();
 
@@ -6249,6 +7878,98 @@
     };
   })();
 
+  // src/projects/project-ranking.js
+  var ProjectRankings = /* @__PURE__ */ (() => {
+    function renderTopProjects() {
+      renderProjectRanking({
+        cacheKey: "topProjects",
+        method: "getTopProjects",
+        listSelector: "#top-projects",
+        sortFn: sortTopProjects,
+        iconClass: "fas fa-briefcase",
+        iconColor: "text-warning"
+      });
+    }
+    function renderLowestProjects() {
+      renderProjectRanking({
+        cacheKey: "lowestProjects",
+        method: "getTopProjects",
+        listSelector: "#lowest-projects",
+        sortFn: sortLowestProjects,
+        iconClass: "fas fa-exclamation-circle",
+        iconColor: "text-danger"
+      });
+    }
+    function renderProjectRanking(config) {
+      AppUtils.cachedGScriptCall(config.cacheKey, config.method, [], (data) => {
+        if (!Array.isArray(data) || !data.length) {
+          return;
+        }
+        const list = document.querySelector(config.listSelector);
+        if (!list) {
+          return;
+        }
+        list.innerHTML = "";
+        renderProjectList(list, config.sortFn([...data]), config);
+      });
+    }
+    function renderProjectList(list, projects, config) {
+      projects.forEach((project) => {
+        list.appendChild(createProjectItem(project, config));
+      });
+    }
+    function createProjectItem(project, config) {
+      const [projectName, hours, client] = project;
+      const li = document.createElement("li");
+      li.className = "list-group-item";
+      li.innerHTML = `
+      <div class="widget-content p-0">
+        <div class="widget-content-wrapper">
+
+          <div class="widget-content-left me-2 me-lg-3">
+            <div
+              class="avatar-circle swatch-holder swatch-holder-lg bg-light
+              text-info rounded-circle d-flex align-items-center justify-content-center">
+              ${AppUtils.getInitials(client)}
+            </div>
+          </div>
+
+          <div class="widget-content-left">
+            <div class="widget-heading">
+              ${projectName}
+            </div>
+
+            <div class="widget-subheading">
+              ${client}
+            </div>
+          </div>
+
+          <div class="widget-content-right font-weight-bold">
+            <div class="font-size-xs text-muted">
+              <span>${hours}</span>
+              <small class="${config.iconColor} ps-2">
+                <i class="${config.iconClass}"></i>
+              </small>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+      return li;
+    }
+    function sortTopProjects(data) {
+      return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
+    }
+    function sortLowestProjects(data) {
+      return data.sort((a, b) => (a[1] || 0) - (b[1] || 0)).slice(0, 10);
+    }
+    return {
+      renderTopProjects,
+      renderLowestProjects
+    };
+  })();
+
   // src/pages/all-manual-projects-page.js
   var allManualProjectsPage = /* @__PURE__ */ (() => {
     let bound = false;
@@ -6300,13 +8021,126 @@
 
   // src/pages/daily-overview-page.js
   var dailyOverviewPage = /* @__PURE__ */ (() => {
+    const DATE_RANGE_CACHE_KEY = "dailyOverviewSelectedRange";
+    let datePicker = null;
     function init() {
       HourSummary.loadDailyOverviewSummary();
-      ChartModule.loadChart("daily");
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
+      initDateRangePicker();
+      bindDateRangeFilter();
+      loadInitialChart();
     }
-    return { init };
+    function initDateRangePicker() {
+      const $input = $("#dailyOverviewDateRange");
+      if (!$input.length || typeof window.flatpickr !== "function") {
+        console.warn("[DailyOverview] Flatpickr is not available.");
+        return;
+      }
+      const today = /* @__PURE__ */ new Date();
+      const todayString = formatDate(today);
+      const cachedRange = AppUtils.cacheGet(DATE_RANGE_CACHE_KEY);
+      const startDate = cachedRange?.startDate || todayString;
+      const endDate = cachedRange?.endDate || todayString;
+      datePicker = window.flatpickr($input[0], {
+        mode: "range",
+        dateFormat: "M d, Y",
+        defaultDate: [parseLocalDate(startDate), parseLocalDate(endDate)],
+        maxDate: "today",
+        disableMobile: true,
+        onOpen: function(selectedDates, dateStr, instance) {
+          instance.set("minDate", null);
+        },
+        onChange: function(selectedDates, dateStr, instance) {
+          if (selectedDates.length === 1) {
+            instance.set("minDate", selectedDates[0]);
+          }
+        }
+      });
+    }
+    function bindDateRangeFilter() {
+      $(document).off("click.dailyOverview", "#dailyOverviewFilterSubmit").on("click.dailyOverview", "#dailyOverviewFilterSubmit", function() {
+        const dates = datePicker?.selectedDates || [];
+        if (!dates.length) {
+          AppUtils.showError("Please select a date.");
+          return;
+        }
+        const startDate = formatDate(dates[0]);
+        const endDate = formatDate(dates[1] || dates[0]);
+        saveDateRange(startDate, endDate);
+        loadDailyOverviewChart(startDate, endDate);
+      });
+    }
+    function loadInitialChart() {
+      if (!datePicker) {
+        return;
+      }
+      const dates = datePicker.selectedDates;
+      if (!dates.length) {
+        return;
+      }
+      const startDate = formatDate(dates[0]);
+      const endDate = formatDate(dates[1] || dates[0]);
+      loadDailyOverviewChart(startDate, endDate, false);
+    }
+    function loadDailyOverviewChart(startDate, endDate, showLoading = true) {
+      if (showLoading) {
+        showChartLoading();
+      }
+      AppUtils.cachedGScriptCall(
+        `dailyOverviewChart_${startDate}_${endDate}`,
+        "updateDailyOverviewChartRange",
+        [startDate, endDate],
+        (data) => {
+          if (showLoading) {
+            hideChartLoading();
+          }
+          ChartModule.drawChart("daily_overview", data, false, true);
+        },
+        false,
+        true
+      );
+    }
+    function saveDateRange(startDate, endDate) {
+      AppUtils.cacheSet(DATE_RANGE_CACHE_KEY, {
+        startDate,
+        endDate
+      });
+    }
+    function formatDate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+    function parseLocalDate(dateString) {
+      const [year, month, day] = dateString.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    }
+    function showChartLoading() {
+      $("#chart-daily_overview-loading").removeClass("d-none");
+      $("#dailyOverviewDateRange, #dailyOverviewFilterSubmit").prop(
+        "disabled",
+        true
+      );
+    }
+    function hideChartLoading() {
+      $("#chart-daily_overview-loading").addClass("d-none");
+      $("#dailyOverviewDateRange, #dailyOverviewFilterSubmit").prop(
+        "disabled",
+        false
+      );
+    }
+    function destroy() {
+      $(document).off(".dailyOverview");
+      if (datePicker) {
+        datePicker.destroy();
+        datePicker = null;
+      }
+      ChartModule.destroyChart?.("daily_overview");
+    }
+    return {
+      init,
+      destroy
+    };
   })();
 
   // src/pages/growth-comparison-overview-page.js
@@ -6314,10 +8148,75 @@
     const CACHE_KEY = "growthComparison";
     function init() {
       loadGrowthComparison("#growth-comparison");
-      ChartModule.loadPrevYearCombinedChart();
+      initMonthlyHoursChart();
       ChartModule.loadChart("yearly");
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
+    }
+    function destroy() {
+      $(document).off(".monthlyHoursByYear");
+      const $year = $("#monthlyHoursYearFilter");
+      if ($year.hasClass("select2-hidden-accessible")) {
+        $year.select2("destroy");
+      }
+      hideMonthlyHoursChartLoading();
+      ChartModule.destroyChart?.("monthly_hours_by_year");
+    }
+    function initMonthlyHoursFilters() {
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      const $year = $("#monthlyHoursYearFilter");
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(`<option value="${year}">${year}</option>`);
+      }
+      $year.val([currentYear - 1, currentYear]);
+      AppUtils.initSelect2($year, {
+        closeOnSelect: false,
+        placeholder: "Select years"
+      });
+    }
+    function bindMonthlyHoursFilters() {
+      $(document).off("click.monthlyHoursByYear", "#monthlyHoursFilterSubmit").on("click.monthlyHoursByYear", "#monthlyHoursFilterSubmit", function() {
+        loadMonthlyHoursChart();
+      });
+    }
+    function loadMonthlyHoursChart(showLoading = true) {
+      const selectedYears = $("#monthlyHoursYearFilter").val()?.map(Number).filter(Boolean);
+      if (!selectedYears?.length) {
+        return;
+      }
+      if (showLoading) {
+        showMonthlyHoursChartLoading();
+      }
+      ChartModule.loadChart(
+        "monthly_hours_by_year",
+        false,
+        selectedYears,
+        false,
+        false,
+        {},
+        void 0,
+        hideMonthlyHoursChartLoading
+      );
+    }
+    function initMonthlyHoursChart() {
+      initMonthlyHoursFilters();
+      bindMonthlyHoursFilters();
+      loadMonthlyHoursChart(false);
+    }
+    function showMonthlyHoursChartLoading() {
+      $("#chart-monthly_hours_by_year-loading").removeClass("d-none");
+      $("#monthlyHoursYearFilter, #monthlyHoursFilterSubmit").prop(
+        "disabled",
+        true
+      );
+      ChartModule.animateChart("monthly_hours_by_year", true, 1800);
+    }
+    function hideMonthlyHoursChartLoading() {
+      ChartModule.animateChart("monthly_hours_by_year", false);
+      $("#monthlyHoursYearFilter, #monthlyHoursFilterSubmit").prop(
+        "disabled",
+        false
+      );
+      $("#chart-monthly_hours_by_year-loading").addClass("d-none");
     }
     function loadGrowthComparison(containerSelector, currentYear = (/* @__PURE__ */ new Date()).getFullYear(), comparisonYear = (/* @__PURE__ */ new Date()).getFullYear() - 1, refresh = false, log = false) {
       const cacheKey = `${CACHE_KEY}_${currentYear}_${comparisonYear}`;
@@ -6518,7 +8417,7 @@
       const isGood = goodDirection === "positive" ? change > 0 : change < 0;
       $element.addClass(isGood ? "text-success" : "text-danger");
     }
-    return { init };
+    return { init, destroy };
   })();
 
   // src/performance/performance-metrics.js
@@ -6532,13 +8431,13 @@
         "bg-grow-early",
         "bg-love-kiss",
         "bg-sunny-morning",
-        "bg-ripe-malin"
+        "bg-night-sky"
       ],
       previous: [
-        "bg-tempting-azure",
-        "bg-deep-blue",
-        "bg-ripe-malin",
-        "bg-amy-crisp"
+        "bg-grow-early",
+        "bg-love-kiss",
+        "bg-sunny-morning",
+        "bg-night-sky"
       ]
     };
     function loadPerformanceSummary(containerId, growthId, yearType) {
@@ -6656,14 +8555,6 @@
   var HomePage = /* @__PURE__ */ (() => {
     function init() {
       HourSummary.loadHoursSummary("#hours-summary");
-      ChartModule.loadChart("daily", false, false, false, false, {
-        showAxes: false,
-        showGrid: false,
-        showPoints: false,
-        showTooltip: false,
-        showLegend: false,
-        showLabel: false
-      });
       ChartModule.loadChart("monthly");
       ChartModule.loadPrevYearCombinedChart();
       PerformanceMetrics.loadPerformanceSummary(
@@ -6677,6 +8568,14 @@
         "previous"
       );
       HourSummary.loadTodayChargedHours();
+      ChartModule.loadChart("daily", false, false, false, false, {
+        showAxes: false,
+        showGrid: false,
+        showPoints: false,
+        showTooltip: false,
+        showLegend: false,
+        showLabel: false
+      });
       ClientRanking.renderTopPaidClients();
       ProjectRankings.renderTopProjects();
       ClientDataService.renderActivePaidOwedClients(true);
@@ -6691,11 +8590,104 @@
   var monthlyOverviewPage = /* @__PURE__ */ (() => {
     function init() {
       HourSummary.loadMonthlyHoursSummary("#monthly-hours-summary");
-      ChartModule.loadChart("monthly");
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
+      initCurrentMonthLogChart();
     }
-    return { init };
+    function destroy() {
+      $(document).off(".currentMonthLog");
+      hideCurrentMonthLogChartLoading();
+      ChartModule.destroyChart?.("current_month_log");
+    }
+    function loadCurrentMonthLogChart(showLoading = true) {
+      const month = Number($("#chartMonthFilter").val());
+      const year = Number($("#chartYearFilter").val());
+      if (!month || !year) {
+        return;
+      }
+      if (showLoading) {
+        showCurrentMonthLogChartLoading();
+      }
+      ChartModule.loadChart(
+        "current_month_log",
+        false,
+        year,
+        false,
+        false,
+        {},
+        month,
+        hideCurrentMonthLogChartLoading
+      );
+    }
+    function bindCurrentMonthLogChartFilters() {
+      $(document).off("change.currentMonthLog", "#chartYearFilter").on("change.currentMonthLog", "#chartYearFilter", function() {
+        const selectedYear = Number(this.value);
+        const currentMonth = (/* @__PURE__ */ new Date()).getMonth() + 1;
+        updateCurrentMonthLogMonthOptions(selectedYear, currentMonth);
+      });
+      $(document).off("click.currentMonthLog", "#chartFilterSubmit").on("click.currentMonthLog", "#chartFilterSubmit", function() {
+        loadCurrentMonthLogChart();
+      });
+    }
+    function initCurrentMonthLogChart() {
+      initCurrentMonthLogFilters();
+      bindCurrentMonthLogChartFilters();
+      loadCurrentMonthLogChart(false);
+    }
+    function initCurrentMonthLogFilters() {
+      const now = /* @__PURE__ */ new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      const $year = $("#chartYearFilter");
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(`<option value="${year}">${year}</option>`);
+      }
+      $year.val(currentYear);
+      updateCurrentMonthLogMonthOptions(currentYear, currentMonth);
+    }
+    function updateCurrentMonthLogMonthOptions(selectedYear, currentMonth) {
+      const $month = $("#chartMonthFilter");
+      $month.empty();
+      const months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December"
+      ];
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      const maxMonth = selectedYear === currentYear ? currentMonth : 12;
+      for (let month = 1; month <= maxMonth; month++) {
+        $month.append(`<option value="${month}">${months[month - 1]}</option>`);
+      }
+      $month.val(selectedYear === currentYear ? currentMonth : 12);
+    }
+    function showCurrentMonthLogChartLoading() {
+      $("#chart-current_month_log-loading").removeClass("d-none");
+      $("#chartMonthFilter, #chartYearFilter, #chartFilterSubmit").prop(
+        "disabled",
+        true
+      );
+      ChartModule.animateChart("current_month_log", true, 1800);
+    }
+    function hideCurrentMonthLogChartLoading() {
+      ChartModule.animateChart("current_month_log", false);
+      $("#chartMonthFilter, #chartYearFilter, #chartFilterSubmit").prop(
+        "disabled",
+        false
+      );
+      $("#chart-current_month_log-loading").addClass("d-none");
+    }
+    return {
+      init,
+      destroy
+    };
   })();
 
   // src/pages/outstanding-clients-page.js
@@ -6972,11 +8964,66 @@
   var yearlyOverviewPage = /* @__PURE__ */ (() => {
     function init() {
       HourSummary.loadYearHoursSummary("#year-hours-summary");
-      ChartModule.loadChart("yearly", false, (/* @__PURE__ */ new Date()).getFullYear());
-      ClientRanking.renderTopPaidClients();
-      ProjectRankings.renderTopProjects();
+      initYearlyMonthlyHoursChart();
     }
-    return { init };
+    function destroy() {
+      $(document).off(".yearlyMonthlyHours");
+      hideYearlyMonthlyHoursChartLoading();
+      ChartModule.destroyChart?.("yearly_monthly_hours");
+    }
+    function loadYearlyMonthlyHoursChart(showLoading = true, selectedYear = null) {
+      const year = selectedYear ?? Number($("#chartYearFilter").val());
+      if (!year) {
+        return;
+      }
+      if (showLoading) {
+        showYearlyMonthlyHoursChartLoading();
+      }
+      ChartModule.loadChart(
+        "yearly_monthly_hours",
+        false,
+        year,
+        false,
+        false,
+        {},
+        void 0,
+        hideYearlyMonthlyHoursChartLoading
+      );
+    }
+    function bindYearlyMonthlyHoursChartFilters() {
+      $(document).off("click.yearlyMonthlyHours", "#chartFilterSubmit").on("click.yearlyMonthlyHours", "#chartFilterSubmit", function() {
+        loadYearlyMonthlyHoursChart();
+      });
+    }
+    function initYearlyMonthlyHoursFilters() {
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      const $year = $("#chartYearFilter");
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(`<option value="${year}">${year}</option>`);
+      }
+      $year.val(String(currentYear));
+      return currentYear;
+    }
+    function initYearlyMonthlyHoursChart() {
+      const currentYear = initYearlyMonthlyHoursFilters();
+      bindYearlyMonthlyHoursChartFilters();
+      loadYearlyMonthlyHoursChart(false, currentYear);
+    }
+    function showYearlyMonthlyHoursChartLoading() {
+      $("#chart-yearly_monthly_hours-loading").removeClass("d-none");
+      $("#chartYearFilter, #chartFilterSubmit").prop("disabled", true);
+      ChartModule.animateChart("yearly_monthly_hours", true, 1800);
+    }
+    function hideYearlyMonthlyHoursChartLoading() {
+      ChartModule.animateChart("yearly_monthly_hours", false);
+      $("#chartYearFilter, #chartFilterSubmit").prop("disabled", false);
+      $("#chart-yearly_monthly_hours-loading").addClass("d-none");
+    }
+    return {
+      init,
+      destroy
+    };
   })();
 
   // src/app-ui.js
@@ -7105,19 +9152,14 @@
       icon: "pe-7s-graph2 icon-gradient bg-malibu-beach"
     };
     const pageMeta = {
-      activeClients: {
-        title: "Active Clients",
-        desc: "View all clients currently active.",
-        icon: "pe-7s-users icon-gradient bg-malibu-beach"
-      },
       topClients: {
         title: "Top Clients",
         desc: "Check highest performing clients.",
         icon: "pe-7s-users icon-gradient bg-malibu-beach"
       },
-      allClients: {
-        title: "All Clients",
-        desc: "See every client in one place.",
+      clientDirectory: {
+        title: "Client Directory",
+        desc: "Browse and manage all clients in one place.",
         icon: "pe-7s-users icon-gradient bg-malibu-beach"
       },
       outstandingClients: {
@@ -7125,15 +9167,15 @@
         desc: "See clients with pending or unpaid items.",
         icon: "pe-7s-users icon-gradient bg-malibu-beach"
       },
-      addManualHours: {
-        title: "Add Manual Hours",
-        desc: "Log manual hours and track entries in real time.",
+      clientActivity: {
+        title: "Client Activity",
+        desc: "Monitor client activity and recent work in real time.",
         icon: "pe-7s-hourglass icon-gradient bg-malibu-beach"
       },
-      externalSheetsManager: {
-        title: "External Sheets Manager",
-        desc: "Manage and sync external Google Sheets used by the system.",
-        icon: "pe-7s-folder icon-gradient bg-malibu-beach"
+      clientRanking: {
+        title: "Client Ranking",
+        desc: "Performance leaders across your client portfolio.",
+        icon: "pe-7s-medal icon-gradient bg-malibu-beach"
       },
       upsellOverview: {
         title: "Upsell Entries",
@@ -7355,30 +9397,6 @@
     }
     function initializeShellUI() {
       initializeSidebar();
-      initializeDropdownRecovery();
-    }
-    function initializeDropdownRecovery() {
-      if (document.documentElement.dataset.dropdownFix === "true") {
-        return;
-      }
-      document.documentElement.dataset.dropdownFix = "true";
-      document.addEventListener(
-        "click",
-        (e) => {
-          const toggle = e.target.closest?.('[data-bs-toggle="dropdown"]');
-          if (!toggle) {
-            return;
-          }
-          if (toggle !== e.target && !toggle.contains(e.target)) {
-            return;
-          }
-          e.preventDefault();
-          e.stopPropagation();
-          const instance = bootstrap.Dropdown.getOrCreateInstance(toggle);
-          instance.toggle();
-        },
-        true
-      );
     }
     function initializeSidebar() {
       const closeSidebarButtons = document.querySelectorAll(".close-sidebar-btn");
@@ -7659,7 +9677,7 @@
         AppUtils.showDashboardToast("Please enter a value.", "error");
         return;
       }
-      const loading = AppUtils.setButtonLoading($btn[0], "Saving...");
+      const loading = AppUtils.setButtonLoading($btn[0], "Saving");
       const config = getIntegrationConfig(integration);
       const title = config?.title || "Integration";
       google.script.run.withSuccessHandler(() => {
@@ -7687,344 +9705,22 @@
     };
   })();
 
-  // src/pages/external-sheets-manager-page.js
-  var externalSheetsManagerPage = /* @__PURE__ */ (() => {
+  // src/pages/client-ranking-page.js
+  var clientRankingPage = /* @__PURE__ */ (() => {
     let bound = false;
-    const TABLE_ID = "#externalSheetsTable";
-    const TABLE_TITLE = "External Sheets";
-    const CACHE_KEY = "externalSheets";
-    const MODAL_ID = "#app-modal";
     function init() {
       if (bound) {
         return;
       }
       bound = true;
-      bindActions();
-      loadData();
+      ClientRanking.init();
     }
     function destroy() {
       if (!bound) {
         return;
       }
       bound = false;
-      $(document).off(".externalSheetsPage");
-      DataTableModule.destroy(TABLE_ID);
-    }
-    function bindActions() {
-      $(document).off("click.externalSheetsPage", "#add-external-sheet").on("click.externalSheetsPage", "#add-external-sheet", openCreateModal);
-      $(document).off("click.externalSheetsPage", "#sync-external-sheets").on("click.externalSheetsPage", "#sync-external-sheets", function() {
-        ReportActions.confirmAction(
-          "syncExternalSheets",
-          "Sync External Sheets?",
-          "This will pull down and reconcile all metadata records from registered external linked files. This process might take a few moments. Proceed?",
-          () => {
-            syncExternalSheets();
-          }
-        );
-      });
-      $(document).off("click.externalSheetsPage", ".external-sheet-view-btn").on("click.externalSheetsPage", ".external-sheet-view-btn", handleView);
-    }
-    function loadData(reset = false) {
-      DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getExternalSheets",
-        [],
-        (data) => {
-          renderTable(data);
-        },
-        false,
-        reset
-      );
-    }
-    function renderTable(data) {
-      const rows = Array.isArray(data) ? data : [];
-      const $tbody = $(`${TABLE_ID} tbody`);
-      if (!$tbody.length) {
-        return;
-      }
-      if (!rows.length) {
-        DataTableModule.destroy(TABLE_ID);
-        DataTableModule.showEmpty(TABLE_ID, "No external sheets configured.");
-        return;
-      }
-      DataTableModule.destroy(TABLE_ID);
-      $tbody.empty();
-      rows.forEach((row) => {
-        $tbody.append(createRow(row));
-      });
-      DataTableModule.init(TABLE_TITLE, TABLE_ID);
-    }
-    function createRow(row) {
-      const clientName = AppUtils.escapeHtml(row.clientName ?? "");
-      const totalHours = Number(row.totalHours || 0).toFixed(2);
-      const projectCount = Number(row.projectCount || 0);
-      const status = AppUtils.escapeHtml(row.status || "Active");
-      const spreadsheetId = AppUtils.escapeHtml(row.spreadsheetId || "");
-      const statusHtml = !row.accessible ? `
-        <span class="badge bg-danger text-center">
-          Inaccessible
-        </span>
-      ` : `
-        <span class="badge bg-success text-center">
-          ${status}
-        </span>
-      `;
-      const actionHtml = !row.spreadsheetId ? "-" : `
-        <button
-          type="button"
-          class="btn action-btn external-sheet-view-btn"
-          data-spreadsheet-id="${spreadsheetId}"
-          title="Open External Sheet"
-        >
-          <i class="pe-7s-look"></i>
-        </button>
-      `;
-      return `
-      <tr>
-
-        <td>
-          ${clientName}
-        </td>
-
-        <td class="text-center">
-          ${totalHours}
-        </td>
-
-        <td class="text-center">
-          ${projectCount}
-        </td>
-
-        <td class="text-center">
-          ${statusHtml}
-        </td>
-
-        <td class="text-center action-btn-group">
-          ${actionHtml}
-        </td>
-
-      </tr>
-    `;
-    }
-    function openCreateModal() {
-      AppUtils.openModal(MODAL_ID, {
-        size: "md",
-        placement: "center",
-        header: `<div></div>`,
-        body: `
-      <div id="main-modal-body">
-        <form id="externalSheetForm">
-          <div class="form-group mb-3">
-            <label
-              for="externalClientName"
-              class="form-label"
-            >
-              Client Name
-            </label>
-
-            <input
-              type="text"
-              id="externalClientName"
-              name="clientName"
-              class="form-control"
-              placeholder="Enter client name"
-              autocomplete="off"
-              required
-            >
-          </div>
-
-          <div class="form-group mb-3">
-            <label
-              for="externalProjects"
-              class="form-label"
-            >
-              Projects
-            </label>
-
-            <input
-              type="text"
-              id="externalProjects"
-              name="projects"
-              class="form-control"
-              placeholder="proj1, proj2, proj3"
-              autocomplete="off"
-              required
-            >
-
-            <small class="form-text text-muted">
-              Enter project names separated by commas.
-            </small>
-          </div>
-        </form>
-      </div>
-
-      <div id="review-modal-body" class="d-none">
-        <h5 class="modal-title mb-2">
-          <strong>Do you want to proceed?</strong>
-        </h5>
-
-        <p>
-          Please review the external sheet configurations
-          before provisioning.
-        </p>
-      </div>
-    `,
-        footer: `
-      <div
-        id="main-modal-footer"
-        class="d-flex gap-2"
-      >
-        <button
-          type="button"
-          class="btn btn-secondary btn-cancel"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          class="btn btn-primary btn-create"
-        >
-          <i class="fa fa-plus me-1"></i>
-          Create External Sheet
-        </button>
-      </div>
-
-      <div
-        id="review-modal-footer"
-        class="d-flex gap-2 d-none"
-      >
-        <button
-          type="button"
-          class="btn btn-secondary btn-back"
-        >
-          Back
-        </button>
-
-        <button
-          type="button"
-          class="btn btn-success btn-proceed"
-        >
-          Proceed
-        </button>
-      </div>
-    `,
-        onOpen($modal) {
-          const namespace = ".externalSheetModal";
-          $modal.off(namespace).on(`click${namespace}`, ".btn-cancel", () => {
-            AppUtils.closeModal(MODAL_ID);
-          }).on(`click${namespace}`, ".btn-create", () => {
-            validateAndShowReview($modal);
-          }).on(`click${namespace}`, ".btn-back", () => {
-            showFormStep($modal);
-          }).on(`click${namespace}`, ".btn-proceed", () => {
-            const $button = $modal.find(".btn-proceed");
-            createExternalSheet($modal, $button);
-          });
-        },
-        onClose($modal) {
-          $modal.off(".externalSheetModal");
-        }
-      });
-    }
-    function validateAndShowReview($modal) {
-      const form = $modal.find("#externalSheetForm")[0];
-      if (!form) {
-        return;
-      }
-      if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-      }
-      $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
-      $modal.find("#review-modal-body, #review-modal-footer").removeClass("d-none");
-    }
-    function showFormStep($modal) {
-      $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
-      $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
-    }
-    function createExternalSheet($modal, $btn) {
-      const form = $modal.find("#externalSheetForm")[0];
-      if (!form) {
-        return;
-      }
-      if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-      }
-      const loading = AppUtils.setButtonLoading(
-        $btn[0],
-        "Creating External Sheet..."
-      );
-      const clientName = String(
-        $modal.find("#externalClientName").val() || ""
-      ).trim();
-      const projects = String(
-        $modal.find("#externalProjects").val() || ""
-      ).trim();
-      google.script.run.withSuccessHandler((result) => {
-        loading.setSuccess("Sheet Created");
-        AppUtils.closeModal(MODAL_ID);
-        AppUtils.showDashboardToast(
-          `External sheet created for ${result.clientName}.`,
-          "success"
-        );
-        AppUtils.cacheClear("allClientsData");
-        AppUtils.cacheClear(CACHE_KEY);
-        google.script.run.withFailureHandler((error) => {
-          console.error(
-            "[ExternalSheets] syncClientSheetList failed:",
-            error
-          );
-        }).syncClientSheetList();
-        loadData(true);
-      }).withFailureHandler((error) => {
-        console.error("[ExternalSheets] createExternalSheet failed:", error);
-        loading.restore();
-        AppUtils.showDashboardToast(
-          error?.message || "Failed to create external sheet.",
-          "error"
-        );
-      }).createExternalSheet({
-        clientName,
-        projects
-      });
-    }
-    function syncExternalSheets() {
-      const $icon = $("#sync-external-sheets i");
-      $icon.addClass("fa-spin");
-      google.script.run.withSuccessHandler((result) => {
-        AppUtils.cacheClear(CACHE_KEY);
-        loadData(true);
-        const count = Array.isArray(result) ? result.length : 0;
-        AppUtils.showDashboardToast(
-          count ? `External sheets refreshed successfully` : "External sheets are already up to date.",
-          "success"
-        );
-        $icon.removeClass("fa-spin");
-      }).withFailureHandler((error) => {
-        console.error(
-          "[ExternalSheets] reconcileExternalSheets failed:",
-          error
-        );
-        $icon.removeClass("fa-spin");
-        AppUtils.showDashboardToast(
-          error?.message || "Failed to sync external sheets.",
-          "error"
-        );
-      }).reconcileExternalSheets();
-    }
-    function handleView(e) {
-      e.preventDefault();
-      const spreadsheetId = e.currentTarget.getAttribute("data-spreadsheet-id");
-      if (!spreadsheetId) {
-        return;
-      }
-      window.open(
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
-        "_blank",
-        "noopener,noreferrer"
-      );
+      ClientRanking.destroy?.();
     }
     return {
       init,
@@ -8042,16 +9738,15 @@
     let pendingPage = null;
     const routes = {
       home: HomePage,
-      addManualHours: addManualHoursPage,
-      externalSheetsManager: externalSheetsManagerPage,
       dailyOverview: dailyOverviewPage,
       monthlyOverview: monthlyOverviewPage,
       yearlyOverview: yearlyOverviewPage,
       growthComparisonOverview: growthComparisonOverviewPage,
+      clientDirectory: clientDirectoryPage,
+      clientActivity: clientActivityPage,
+      clientRanking: clientRankingPage,
       topClients: topClientsPage,
-      activeClients: activeClientsPage,
       outstandingClients: outstandingClientsPage,
-      allClients: allClientsPage,
       upsellOverview: upsellOverviewPage,
       allManualProjects: allManualProjectsPage,
       hourlyOverview: hourlyOverviewPage,
@@ -8132,6 +9827,7 @@
       }
       pageToken++;
       const token = pageToken;
+      AppUtils.closeAllDrawers();
       DataTableModule.destroyAll();
       ChartModule.destroyAllCharts();
       currentModule?.destroy?.();
