@@ -1,3 +1,5 @@
+import { ProfilePopoverModule } from "../profile/profile-popover";
+import { TableClientSelector } from "../tables/client-selector";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -17,8 +19,13 @@ const ClientDirectory = (() => {
 
     initialized = true;
 
-    bindClientDirectoryEvents();
+    ProfilePopoverModule.init();
+    ProfilePopoverModule.setProfileBuilder(
+      getClientProfilePopoverOptions,
+    );
+
     loadClientDirectory(source);
+    TableClientSelector.init();
   }
 
   function destroy() {
@@ -27,8 +34,6 @@ const ClientDirectory = (() => {
     }
 
     initialized = false;
-
-    unbindClientDirectoryEvents();
   }
 
   function loadClientDirectory(source = CACHE_KEY) {
@@ -145,6 +150,8 @@ const ClientDirectory = (() => {
   }
 
   function renderClientDirectory(data, callback = null) {
+    ProfilePopoverModule.setClientData(data);
+
     const tbody = document.getElementById(TABLE_BODY_ID);
 
     if (!tbody) {
@@ -226,7 +233,6 @@ const ClientDirectory = (() => {
     const row = document.createElement("tr");
 
     const name = String(client?.name || "").trim();
-    const role = String(client?.role || "").trim();
 
     const projects = Number(client?.projects) || 0;
     const hours = Number(client?.hours) || 0;
@@ -235,195 +241,110 @@ const ClientDirectory = (() => {
     const collectionRate = Number(client?.collectionRate) || 0;
     const debtExposure = Number(client?.debtExposure) || 0;
 
-    const externalUrl = String(client?.externalUrl || "").trim();
-
-    const initials = AppUtils.getInitials(name);
     const safeName = AppUtils.escapeHtml(name);
-    const safeRole = AppUtils.escapeHtml(role);
-    const safeExternalUrl = AppUtils.escapeHtml(externalUrl);
 
     row.innerHTML = `
     <td class="client-name-cell">
-      <!-- Desktop version -->
-      <div class="client-name-desktop">
-        <div class="widget-content p-0">
-          <div class="widget-content-wrapper">
-            <div class="widget-content-left me-2 me-lg-3">
-              <div
-                class="avatar-circle bg-light text-info rounded-circle
-                       d-flex align-items-center justify-content-center"
-                aria-hidden="true"
-              >
-                ${AppUtils.escapeHtml(initials)}
-              </div>
-            </div>
-
-            <div class="widget-content-left flex2">
-              <div class="widget-heading">
-                ${safeName}
-              </div>
-
-              <div class="widget-subheading opacity-7">
-                ${safeRole}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Mobile version -->
-      <span class="client-name-mobile">
+      <span
+        class="client-action-name client-profile-trigger"
+        role="button"
+        tabindex="0"
+        data-profile-popover
+        data-client-name="${safeName}"
+      >
         ${safeName}
       </span>
     </td>
 
-    <td class="text-center text-muted">
+    <td class="text-center">
       ${projects}
     </td>
 
-    <td class="text-center text-muted">
+    <td class="text-center">
       ${formatHours(hours)}
     </td>
 
-    <td class="text-center text-muted">
+    <td class="text-center">
       ${formatAmount(paid)}
     </td>
 
-    <td class="text-center text-muted">
+    <td class="text-center">
       ${formatAmount(owed)}
     </td>
 
-    <td class="text-center text-muted">
+    <td class="text-center">
       ${formatPercent(collectionRate)}
     </td>
 
-    <td class="text-center text-muted">
+    <td class="text-center">
       ${formatPercent(debtExposure)}
-    </td>
-
-    <td class="text-center action-btn-group">
-      <button
-        type="button"
-        class="btn action-btn open-client-btn"
-        title="Open Client Sheet"
-        aria-label="Open ${safeName} sheet"
-        data-external-url="${safeExternalUrl}"
-      >
-        <i class="pe-7s-note"></i>
-      </button>
     </td>
   `;
 
     return row;
   }
 
-  function bindClientDirectoryEvents() {
-    const tbody = document.getElementById(TABLE_BODY_ID);
+  function getClientProfilePopoverOptions(client) {
+    return {
+      profileButton: true,
 
-    if (!tbody) {
-      return;
-    }
+      actions: `
+      <button
+        type="button"
+        class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-profile-client-action="add-hours"
+        data-client-name="${AppUtils.escapeHtml(client.name)}"
+      >
+        <i class="pe-7s-magic-wand"></i>
+        <span>Add Hours</span>
+      </button>
 
-    /*
-     * Remove first so repeated initialization never
-     * accumulates duplicate handlers.
-     */
-    tbody.removeEventListener("click", handleClientDirectoryClick);
-
-    tbody.addEventListener("click", handleClientDirectoryClick);
+      <button
+        type="button"
+        class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-profile-client-action="open-sheet"
+        data-client-name="${AppUtils.escapeHtml(client.name)}"
+      >
+        <i class="pe-7s-edit"></i>
+        <span>Open Sheet</span>
+      </button>
+    `,
+    };
   }
 
-  function unbindClientDirectoryEvents() {
-    const tbody = document.getElementById(TABLE_BODY_ID);
+  //   function getClientProfilePopoverOptions(client) {
+  //   return {
+  //     content: `
+  //     <div class="small text-muted mb-2">
+  //       Collection Rate
+  //     </div>
 
-    if (!tbody) {
-      return;
-    }
+  //     <div class="fw-semibold">
+  //       ${formatPercent(client.collectionRate)}
+  //     </div>
+  //   `,
 
-    tbody.removeEventListener("click", handleClientDirectoryClick);
-  }
+  //     actions: `
+  //     <button
+  //       type="button"
+  //       class="btn btn-gc btn-sm"
+  //       data-profile-client-action="details"
+  //       data-client-name="${AppUtils.escapeHtml(client.name)}"
+  //     >
+  //       View Client
+  //     </button>
 
-  function handleClientDirectoryClick(event) {
-    const button = event.target.closest(".open-client-btn");
-
-    if (!button) {
-      return;
-    }
-
-    // Get the <tr> that directly contains the button (could be child row or main row)
-    const immediateRow = button.closest("tr");
-
-    if (!immediateRow) {
-      return;
-    }
-
-    const table = $(immediateRow).closest("table")[0];
-    const api = $(table).DataTable();
-
-    let rowNode;
-
-    // If the row is a Responsive child row, get its parent data row
-    if (immediateRow.classList.contains("child")) {
-      // The previous <tr> is the parent data row
-      rowNode = immediateRow.previousElementSibling;
-    } else {
-      rowNode = immediateRow;
-    }
-
-    if (!rowNode) {
-      return;
-    }
-
-    // Get DataTables row data using the row node
-    const rowData = api.row(rowNode).data();
-
-    // Prefer data from rowData if your object has clientName there
-    let clientName = rowData?.clientName || rowData?.name || rowData?.Client;
-
-    // Fallback to DOM if needed
-    if (!clientName) {
-      clientName = rowNode
-        .querySelector(".widget-heading")
-        ?.textContent?.trim();
-    }
-
-    if (!clientName) {
-      console.warn("[ClientDirectory] Could not determine client name");
-      return;
-    }
-
-    const externalUrl = button.dataset.externalUrl?.trim();
-
-    if (externalUrl) {
-      AppUtils.showDashboardToast(
-        "Redirecting to external client sheet!",
-        "info",
-      );
-
-      window.open(externalUrl, "_blank");
-
-      return;
-    }
-
-    AppUtils.showDashboardToast("Redirecting to sheet!", "info");
-
-    google.script.run
-      .withSuccessHandler((url) => {
-        const clientUrl = String(url || "").trim();
-
-        if (clientUrl.startsWith("http")) {
-          window.open(clientUrl, "_blank");
-          return;
-        }
-
-        AppUtils.showError(url);
-      })
-      .withFailureHandler((error) => {
-        console.error("[ClientDirectory] Failed to open client sheet:", error);
-        AppUtils.showError(error);
-      })
-      .goToPresentClient(clientName);
-  }
+  //     <button
+  //       type="button"
+  //       class="btn btn-outline-gc btn-sm"
+  //       data-profile-client-action="open-sheet"
+  //       data-client-name="${AppUtils.escapeHtml(client.name)}"
+  //     >
+  //       Open Sheet
+  //     </button>
+  //   `,
+  //   };
+  // }
 
   function formatAmount(value) {
     return (Number(value) || 0).toLocaleString("en-PH", {

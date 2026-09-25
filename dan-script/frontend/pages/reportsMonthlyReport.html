@@ -1,99 +1,326 @@
 <div class="main">
 
-    <div class="row g-4 mb-4">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Generate Report
-                </div>
-                <div class="card-body">
-                    <form class>
-                        <div class="position-relative">
-                            <label class="form-label">Month</label>
+  <!-- PAGE HEADER -->
+  <div class="mb-4">
+    <h4 class="mb-1">Monthly Reports</h4>
+    <p class="text-muted mb-0">
+      Generate, view, and manage monthly performance reports.
+    </p>
+  </div>
 
-                            <select class="form-select form-control" type="select" id="monthly-report-month">
-                                <option>January</option>
-                                <option>February</option>
-                                <option>March</option>
-                                <option>April</option>
-                                <option>May</option>
-                                <option>June</option>
-                                <option>July</option>
-                                <option>August</option>
-                                <option>September</option>
-                                <option>October</option>
-                                <option>November</option>
-                                <option>December</option>
-                            </select>
-                        </div>
-                        <div class="position-relative">
-                            <label class="form-label">Year</label>
+  <!-- GENERATION + LATEST REPORT -->
+  <div class="row g-4 mb-4">
 
-                            <select class="form-select form-control" type="select" id="monthly-report-year"></select>
-                        </div>
-                        <button class="btn btn-primary btn-lg" id="btn-generate-monthly-report">
-                            <i class="bi bi-play-fill"></i>
-                            Generate Monthly Report
-                        </button>
-                    </form>
-                </div>
+    <!-- GENERATE -->
+    <div class="col-xl-7">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex align-items-start mb-4">
+            <div>
+              <h5 class="card-title mb-1">Generate Monthly Report</h5>
+              <p class="text-muted small mb-0">
+                Select the reporting period and generate a PDF report.
+              </p>
             </div>
-            <div class="card">
-                <div class="card-header">
-                    Quick Actions
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-3">
-                        <button class="btn btn-success btn-lg" id="generate-yearly-report">
-                            <i class="fa-regular fa-calendar"></i>
-                            Generate Yearly Report
-                        </button>
-                        <button class="btn btn-danger btn-lg" id="download-latest-pdf">
-                            <i class="fa-solid fa-file-pdf"></i>
-                            Download Latest PDF
-                        </button>
-                        <button class="btn btn-warning btn-lg" id="email-latest-report">
-                            <i class="fa-solid fa-envelope"></i>
-                            Email Latest Report
-                        </button>
-                        <button class="btn btn-dark btn-lg" id="send-discord-notification">
-                            <i class="fa-brands fa-discord"></i>
-                            Send Discord Notification
-                        </button>
+
+            <div class="ms-auto">
+              <span class="badge bg-light text-gc">
+                <i class="fa-solid fa-file-pdf me-1"></i>
+                PDF
+              </span>
+            </div>
+          </div>
+
+          <div class="row g-3 generator-filters">
+
+            <div class="col-md-6">
+              <label for="monthly-report-month" class="form-label">
+                Month
+              </label>
+
+              <select
+                class="custom-select js-select2"
+                id="monthly-report-month"
+              >
+                <option value="January">January</option>
+                <option value="February">February</option>
+                <option value="March">March</option>
+                <option value="April">April</option>
+                <option value="May">May</option>
+                <option value="June">June</option>
+                <option value="July">July</option>
+                <option value="August">August</option>
+                <option value="September">September</option>
+                <option value="October">October</option>
+                <option value="November">November</option>
+                <option value="December">December</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label for="monthly-report-year" class="form-label">
+                Year
+              </label>
+
+              <select
+                class="custom-select js-select2"
+                id="monthly-report-year"
+              ></select>
+            </div>
+
+            <div class="col-12 mt-3">
+              <div
+                id="monthly-report-period-summary"
+                class="alert alert-light border mb-0"
+              >
+                <div class="d-flex align-items-center">
+                  <i class="fa-regular fa-calendar me-2 text-gc"></i>
+
+                  <div>
+                    <div class="small text-muted">
+                      Reporting period
                     </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="row">
-                <div class="col-md-12">
-                    <div class="main-card mb-3 card">
-                        <div class="card-body">
-                            <div class="d-flex align-items-start mb-3">
 
-                                <h5 class="card-title mb-0">
-                                Recent Generated Reports
-                                </h5>
-
-                            </div>
-                            <div id="table-wrapper" class="mt-4">
-                                <table id="monthly-report-history" class="table table-hovered nowrap" style="width:100%">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">#</th>
-                                        <th>Date</th>
-                                        <th class="text-center">Name</th>
-                                        <th class="text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="data-table-body"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
+                    <strong id="monthly-report-period-label">
+                      -
+                    </strong>
+                  </div>
                 </div>
+              </div>
             </div>
+
+            <div class="col-12">
+              <button
+                type="button"
+                class="btn btn-gc"
+                id="btn-generate-monthly-report"
+              >
+                <i class="bi bi-play-fill me-1"></i>
+                Generate Monthly Report
+              </button>
+            </div>
+
+          </div>
+
         </div>
+      </div>
     </div>
+
+    <!-- LATEST REPORT -->
+    <div class="col-xl-5">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex align-items-start mb-4">
+            <div>
+              <h5 class="card-title mb-1">Latest Report</h5>
+              <p class="text-muted small mb-0">
+                Your most recently generated monthly report.
+              </p>
+            </div>
+
+            <div class="ms-auto">
+              <i class="fa-solid fa-file-pdf text-gc fs-4"></i>
+            </div>
+          </div>
+
+          <div id="monthly-latest-report">
+
+            <div class="text-muted small mb-1">
+              Latest generated report
+            </div>
+
+            <div
+              id="monthly-latest-report-name"
+              class="fw-semibold fs-5 mb-2"
+            >
+              No report available
+            </div>
+
+            <div
+              id="monthly-latest-report-date"
+              class="text-muted small mb-4"
+            >
+              -
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+
+              <button
+                type="button"
+                class="btn btn-sm btn-transition btn-outline-primary"
+                id="download-latest-pdf"
+              >
+                <i class="fa-solid fa-eye me-1"></i>
+                View Report
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-transition btn-outline-secondary"
+                id="email-latest-report"
+              >
+                <i class="fa-solid fa-envelope me-1"></i>
+                Email
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-transition btn-outline-dark"
+                id="send-discord-notification"
+              >
+                <i class="fa-brands fa-discord me-1"></i>
+                Discord
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- REPORT SUMMARY -->
+  <div class="row g-4 mb-4">
+
+    <div class="col-md-4">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+
+          <div>
+            <div class="text-muted small">
+              Reports Generated
+            </div>
+
+            <div
+              id="monthly-reports-count"
+              class="fs-5 fw-semibold"
+            >
+              0
+            </div>
+
+            <div class="small text-muted">
+              Monthly reports
+            </div>
+          </div>
+
+          <i class="fa-solid fa-file-lines text-primary fs-3"></i>
+
+        </div>
+      </div>
+    </div>
+
+
+    <div class="col-md-4">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+
+          <div>
+            <div class="text-muted small">
+              Last Report
+            </div>
+
+            <div
+              id="monthly-last-report"
+              class="fs-5 fw-semibold"
+            >
+              -
+            </div>
+
+            <div class="small text-muted">
+              Most recently generated
+            </div>
+          </div>
+
+          <i class="fa-solid fa-calendar-check text-success fs-3"></i>
+
+        </div>
+      </div>
+    </div>
+
+
+    <div class="col-md-4">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+
+          <div>
+            <div class="text-muted small">
+              Report Automation
+            </div>
+
+            <div
+              id="monthly-automation-status"
+              class="fs-5 fw-semibold"
+            >
+              -
+            </div>
+
+            <div class="small text-muted">
+              Scheduled report generation
+            </div>
+          </div>
+
+          <i class="fa-solid fa-robot text-info fs-3"></i>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- REPORT HISTORY -->
+  <div class="card card-shadow-sm border-0 bg-white">
+
+    <div class="card-body">
+
+      <div class="d-flex align-items-start mb-3">
+
+        <div>
+          <h5 class="card-title mb-1">
+            Report History
+          </h5>
+
+          <p class="text-muted small mb-0">
+            View and access previously generated monthly reports.
+          </p>
+        </div>
+
+      </div>
+
+      <div class="table-responsive mt-4">
+
+        <table
+          id="monthly-report-history"
+          class="table table-hovered nowrap"
+          style="width:100%"
+        >
+
+          <thead>
+            <tr>
+              <th class="text-center">#</th>
+              <th>Date</th>
+              <th class="text-center">Report</th>
+              <th class="text-center">Action</th>
+            </tr>
+          </thead>
+
+          <tbody
+            id="monthly-report-history-body"
+            class="scrollbar-hover"
+          ></tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </div>
 
 </div>

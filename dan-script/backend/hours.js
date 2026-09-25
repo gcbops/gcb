@@ -855,18 +855,32 @@ function getDailyOverviewSummary() {
 
   const values = metricsSheet.getRange("R2:R29").getValues();
 
+  const currentMonth = new Date().getMonth() + 1;
+
+  const monthlyValues = metricsSheet
+    .getRange("O2:Q")
+    .getValues()
+    .filter((row) => row[0] !== "");
+
+  const currentMonthRow = monthlyValues.find(
+    (row) => Number(row[0]) === currentMonth,
+  );
+
+  const currentMonthAverage = currentMonthRow?.[2] ?? null;
+
   return {
     overall: values[0][0],
     overallTotalHours: values[3][0],
 
     currentMonth: values[6][0],
-    currentMonthAverage: values[9][0],
+    currentMonthAverage,
 
     activeClientsToday: values[12][0],
     activeClientsYesterday: values[15][0],
 
     todayHours: values[18][0],
     yesterdayHours: values[21][0],
+
     hoursVsYesterday: values[24][0],
     monthVsPreviousMonth: values[27][0],
   };
@@ -1131,118 +1145,6 @@ function getGrowthComparisonSummary(currentYear, comparisonYear) {
   };
 }
 
-function getCurrentTargetProgress() {
-  try {
-    const sheet = getSheetSafe("Other Analytics");
 
-    if (!sheet) {
-      throw new Error('Sheet "Other Analytics" was not found.');
-    }
 
-    const values = sheet.getRange("P1:X2").getValues();
 
-    const headers = values[0];
-    const data = values[1];
-
-    const getValue = (header) => {
-      const index = headers.indexOf(header);
-
-      if (index === -1) {
-        return null;
-      }
-
-      return data[index];
-    };
-
-    const toNumber = (value) => {
-      if (value === null || value === "" || value === undefined) {
-        return null;
-      }
-
-      const number = Number(value);
-
-      return Number.isFinite(number) ? number : null;
-    };
-
-    const currentYear = toNumber(getValue("Target Year"));
-
-    const currentMonth = getValue("Current Month");
-
-    const monthlyTarget = toNumber(getValue("Monthly Target")) || 340;
-
-    const dailyTarget = toNumber(getValue("Daily Target")) || 30;
-
-    const workingDays = toNumber(getValue("Working Days")) || 0;
-
-    const currentMonthHours = toNumber(getValue("Current Month Hours"));
-
-    const ytdHours = toNumber(getValue("YTD Hours")) || 0;
-
-    const annualTarget =
-      toNumber(getValue("Annual Target")) || monthlyTarget * 12;
-
-    const projectedAnnualHours =
-      toNumber(getValue("Projected Annual Hours")) || 0;
-
-    const monthsElapsed = new Date().getMonth() + 1;
-
-    const ytdTarget = monthlyTarget * monthsElapsed;
-
-    const dailyElapsedTarget = dailyTarget * workingDays;
-
-    /*
-     * Monthly progress.
-     *
-     * null means there is no current-month
-     * record yet.
-     */
-    const monthlyProgress =
-      currentMonthHours === null
-        ? null
-        : monthlyTarget > 0
-          ? (currentMonthHours / monthlyTarget) * 100
-          : 0;
-
-    const dailyProgress =
-      currentMonthHours === null
-        ? null
-        : dailyElapsedTarget > 0
-          ? (currentMonthHours / dailyElapsedTarget) * 100
-          : 0;
-
-    const ytdProgress = ytdTarget > 0 ? (ytdHours / ytdTarget) * 100 : 0;
-
-    const annualProgress =
-      annualTarget > 0 ? (ytdHours / annualTarget) * 100 : 0;
-
-    const projectedProgress =
-      annualTarget > 0 ? (projectedAnnualHours / annualTarget) * 100 : 0;
-
-    return {
-      currentYear,
-      currentMonth,
-
-      monthlyTarget,
-      dailyTarget,
-      workingDays,
-
-      currentMonthHours,
-
-      dailyElapsedTarget,
-
-      ytdHours,
-      ytdTarget,
-
-      annualTarget,
-      projectedAnnualHours,
-
-      monthlyProgress,
-      dailyProgress,
-      ytdProgress,
-      annualProgress,
-      projectedProgress,
-    };
-  } catch (err) {
-    throw new Error(err.message || String(err));
-  }
-}

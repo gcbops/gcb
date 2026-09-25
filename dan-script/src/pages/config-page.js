@@ -52,6 +52,22 @@ const settingsConfigurationPage = (() => {
         });
         break;
 
+      // case "btnApplyMonthlyBillingFormulas":
+      //   AppUtils.openConfirmationModal({
+      //     ns: "monthlyBilling",
+
+      //     title: "Apply Monthly Billing Formulas?",
+
+      //     message:
+      //       "This will add or update the monthly billing summary formulas on the Projects sheet of all external client spreadsheets. This could take a few moments.",
+
+      //     onProceed: ($modal, $btn) => {
+      //       applyBillingAnalyticsFormulas($btn);
+      //     },
+      //   });
+
+      //   break;
+
       case "btnSyncExternalClients":
         AppUtils.openConfirmationModal({
           ns: "syncClient",
@@ -105,6 +121,33 @@ const settingsConfigurationPage = (() => {
         break;
     }
   }
+
+  // function applyBillingAnalyticsFormulas($btn) {
+  //   AppUtils.setButtonLoading($btn, true);
+
+  //   google.script.run
+  //     .withSuccessHandler((response) => {
+  //       AppUtils.setButtonLoading($btn, false);
+
+  //       if (!response?.success) {
+  //         AppUtils.showError("Unable to apply monthly billing formulas.");
+  //         return;
+  //       }
+
+  //       AppUtils.showDashboardToast(
+  //         `Monthly billing formulas applied to ${response.updated} client sheet(s).`,
+  //         "success",
+  //       );
+  //     })
+  //     .withFailureHandler((error) => {
+  //       AppUtils.setButtonLoading($btn, false);
+
+  //       AppUtils.showError(
+  //         error?.message || "Failed to apply monthly billing formulas.",
+  //       );
+  //     })
+  //     .applyBillingAnalyticsFormulas();
+  // }
 
   function clearCache(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Clearing cache");

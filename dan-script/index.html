@@ -114,7 +114,7 @@
         <span
           ><button
             type="button"
-            class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav"
+            class="btn-icon btn-icon-only btn btn-gc btn-sm mobile-toggle-header-nav"
           >
             <span class="btn-icon-wrapper"
               ><i class="fa fa-ellipsis-v fa-w-6"></i
@@ -243,7 +243,7 @@
           <span
             ><button
               type="button"
-              class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav"
+              class="btn-icon btn-icon-only btn btn-gc btn-sm mobile-toggle-header-nav"
             >
               <span class="btn-icon-wrapper"
                 ><i class="fa fa-ellipsis-v fa-w-6"></i
@@ -285,12 +285,10 @@
                     <ul>
                       <li><a data-page="clientDirectory"><i class="metismenu-icon"></i>Client Directory</a></li>
                       <li><a data-page="clientActivity"><i class="metismenu-icon"></i>Client Activity</a></li>
-                      <li><a data-page="clientRanking"><i class="metismenu-icon"></i>Client Ranking</a></li>
-                      <li><a data-page="upsellOverview"><i class="metismenu-icon"></i>Upsell</a></li>
+                      <li><a data-page="clientRankings"><i class="metismenu-icon"></i>Client Rankings</a></li>
+                      <li><a data-page="clientOpportunities"><i class="metismenu-icon"></i>Client Opportunities</a></li>
                     </ul>
                 </li>
-
-                <li class="app-sidebar__heading">Projects</li>
                 <li>
                     <a href="#">
                     <i class="metismenu-icon pe-7s-portfolio"></i>
@@ -298,12 +296,12 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="allManualProjects"><i class="metismenu-icon"></i>Manual Projects</a></li>
-                    <li><a data-page="hourlyOverview"><i class="metismenu-icon"></i>Hourly Projects</a></li>
+                      <li><a data-page="projectDirectory"><i class="metismenu-icon"></i>Project Directory</a></li>
+                      <li><a data-page="projectRankings"><i class="metismenu-icon"></i>Project Rankings</a></li>
                     </ul>
                 </li>
 
-                <li class="app-sidebar__heading">Billing & Payments</li>
+                <li class="app-sidebar__heading">Billing & Hours</li>
                 <li>
                     <a href="#">
                     <i class="metismenu-icon pe-7s-cash"></i>
@@ -311,8 +309,10 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
+                    <li><a data-page="billingOverview"><i class="metismenu-icon"></i>Billing Overview</a></li>
                     <li><a data-page="billingPaidHours"><i class="metismenu-icon"></i>Paid Hours</a></li>
                     <li><a data-page="billingOwedHours"><i class="metismenu-icon"></i>Owed Hours</a></li>
+                    <li><a data-page="billingInvoiceStatus"><i class="metismenu-icon"></i>Invoice Status</a></li>
                     </ul>
                 </li>
 
@@ -324,9 +324,9 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="performanceTarget"><i class="metismenu-icon"></i>Targets</a></li>
-                    <li><a data-page="performanceDaily"><i class="metismenu-icon"></i>Daily Grind</a></li>
-                    <li><a data-page="performanceYearly"><i class="metismenu-icon"></i>Yearly Overview</a></li>
+                      <li><a data-page="performanceOverview"><i class="metismenu-icon"></i>Performance Overview</a></li>
+                      <li><a data-page="performanceTarget"><i class="metismenu-icon"></i>Target & Efficiency</a></li>
+                    <li><a data-page="performanceProductivity"><i class="metismenu-icon"></i>Productivity</a></li>
                     </ul>
                 </li>
 
@@ -340,7 +340,7 @@
                     <ul>
                     <li><a data-page="reportsMonthlyReport"><i class="metismenu-icon"></i>Monthly Report</a></li>
                     <li><a data-page="reportsAnnualReport"><i class="metismenu-icon"></i>Annual Report</a></li>
-                    <li><a data-page="reportsExportData"><i class="metismenu-icon"></i>Export Data</a></li>
+                    <li><a data-page="reportsDataExport"><i class="metismenu-icon"></i>Data Export</a></li>
                     </ul>
                 </li>
 
@@ -396,7 +396,7 @@
                     data-bs-toggle="dropdown"
                     aria-haspopup="true"
                     aria-expanded="false"
-                    class="btn-shadow dropdown-toggle btn btn-info"
+                    class="btn-shadow dropdown-toggle btn btn-gc"
                   >
                     <span class="btn-icon-wrapper pe-2 opacity-7"><i class="fa fa-business-time fa-w-20"></i> </span>Quick Actions
                   </dropdo>

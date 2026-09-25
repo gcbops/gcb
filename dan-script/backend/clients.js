@@ -283,11 +283,21 @@ function getClientDirectoryData() {
     .getValues()
     .filter((row) => row[0] !== "" && row[0] !== null);
 
+  const externalClientMap = getExternalClientMap();
+
   return analytics.map((row) => {
     const name = String(row[0] || "").trim();
 
+    const clientSheet = getSheetSafe(name);
+
+    const role = clientSheet
+      ? String(clientSheet.getRange("N17").getValue() || "").trim()
+      : "";
+
     return {
       name,
+
+      role,
 
       paid: Number(row[1]) || 0,
       owed: Number(row[2]) || 0,
@@ -297,16 +307,7 @@ function getClientDirectoryData() {
       projects: Number(row[6]) || 0,
       debtExposure: Number(row[7]) || 0,
 
-      /*
-       * Directory information can be added here.
-       *
-       * These will need to come from the existing
-       * client-directory source.
-       */
-      role: "",
-      status: "",
-      category: "",
-      externalUrl: "",
+      externalUrl: externalClientMap.get(normalizeText(name)) || "",
     };
   });
 }
@@ -548,5 +549,273 @@ function getClientRankings() {
       bestCollection: sortDescFrom(collectionClients, "collectionRate"),
       highestDebtExposure: sortDescFrom(collectionClients, "debtExposure"),
     },
+  };
+}
+
+function getLegacyClients() {
+  try {
+    const sheet = getSheetSafe("Legacy Clients");
+
+    if (!sheet) {
+      throw new Error('Sheet "Legacy Clients" not found.');
+    }
+
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      return {
+        clients: [],
+        total: 0,
+        fixed: 0,
+        hourly: 0,
+        manual: 0,
+      };
+    }
+
+    const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+
+    const clients = values
+      .filter((row) => isNonEmptyString(row[0]))
+      .map((row) => ({
+        name: String(row[0]).trim(),
+        type: String(row[1] || "").trim(),
+      }));
+
+    const fixed = clients.filter(
+      (client) => client.type.toLowerCase() === "fixed",
+    ).length;
+
+    const hourly = clients.filter(
+      (client) => client.type.toLowerCase() === "hourly",
+    ).length;
+
+    const manual = clients.filter(
+      (client) => client.type.toLowerCase() === "manual",
+    ).length;
+
+    return {
+      clients,
+      total: clients.length,
+      fixed,
+      hourly,
+      manual,
+    };
+  } catch (err) {
+    logResponse(`⚠️ getLegacyClients error: ${err.message}`);
+
+    return {
+      clients: [],
+      total: 0,
+      fixed: 0,
+      hourly: 0,
+      manual: 0,
+    };
+  }
+}
+
+function getClientDetails(clientName) {
+  if (!isNonEmptyString(clientName)) {
+    throw new Error("Client name cannot be empty.");
+  }
+
+  const name = clientName.trim();
+  const sheet = getSheetSafe(name);
+
+  if (!sheet) {
+    throw new Error(`Client sheet "${name}" not found.`);
+  }
+
+  const timezone = getSpreadsheet().getSpreadsheetTimeZone();
+
+  const profile = {
+    name,
+    role: getCellValueSafe(sheet, "N17") || "",
+    email: getCellValueSafe(sheet, "C11") || "",
+    accountOwner: getCellValueSafe(sheet, "C12") || "",
+    paymentDetails: getCellValueSafe(sheet, "C13") || "",
+  };
+
+  const summary = {
+    totalRenderedTime: Number(getCellValueSafe(sheet, "B8")) || 0,
+    totalPaid: Number(getCellValueSafe(sheet, "B24")) || 0,
+    totalOwed: Number(getCellValueSafe(sheet, "B16")) || 0,
+    totalBalanceOwed: Number(getCellValueSafe(sheet, "B16")) || 0,
+    currentMonthBalanceOwed: Number(getCellValueSafe(sheet, "B20")) || 0,
+
+    projects: Number(getCellValueSafe(sheet, "N29")) || 0,
+    activeProjectsMonth: Number(getCellValueSafe(sheet, "N30")) || 0,
+    activeProjectsYear: Number(getCellValueSafe(sheet, "N31")) || 0,
+  };
+
+  const tasks = {
+    dev: Number(getCellValueSafe(sheet, "C3")) || 0,
+    design: Number(getCellValueSafe(sheet, "C4")) || 0,
+    seo: Number(getCellValueSafe(sheet, "C5")) || 0,
+  };
+
+  const currentActivity = {
+    week: Number(getCellValueSafe(sheet, "N18")) || 0,
+    month: Number(getCellValueSafe(sheet, "N19")) || 0,
+    year: Number(getCellValueSafe(sheet, "N20")) || 0,
+
+    weeks: [
+      Number(getCellValueSafe(sheet, "N23")) || 0,
+      Number(getCellValueSafe(sheet, "N24")) || 0,
+      Number(getCellValueSafe(sheet, "N25")) || 0,
+      Number(getCellValueSafe(sheet, "N26")) || 0,
+      Number(getCellValueSafe(sheet, "N27")) || 0,
+    ],
+  };
+
+  return {
+    profile,
+    summary,
+    tasks,
+    currentActivity,
+
+    hoursByMonth: getClientMonthlyHours(sheet),
+    dailyHours: getClientDailyHours(sheet),
+    yearlyBilling: getClientYearlyBilling(sheet),
+
+    projects: getClientProjects(sheet, timezone),
+    activity: getClientActivity(sheet, timezone),
+  };
+}
+
+function getClientMonthlyHours(sheet) {
+  const lastColumn = sheet.getLastColumn();
+
+  if (lastColumn < 12) return [];
+
+  const values = sheet.getRange(3, 11, 13, lastColumn - 10).getValues();
+
+  const headers = values[0];
+  const results = [];
+
+  for (let column = 1; column < headers.length; column++) {
+    const year = Number(headers[column]);
+
+    if (!year) continue;
+
+    for (let row = 1; row < values.length; row++) {
+      const month = values[row][0];
+
+      if (!month) continue;
+
+      results.push({
+        year,
+        month: String(month),
+        monthIndex: row,
+        hours: Number(values[row][column]) || 0,
+      });
+    }
+  }
+
+  return results;
+}
+
+function getClientDailyHours(sheet) {
+  return sheet
+    .getRange("K18:L48")
+    .getValues()
+    .filter((row) => row[0] !== "" && row[0] !== null)
+    .map((row) => ({
+      day: Number(row[0]) || 0,
+      hours: Number(row[1]) || 0,
+    }));
+}
+
+function getClientYearlyBilling(sheet) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 51) return [];
+
+  return sheet
+    .getRange(51, 11, lastRow - 50, 4)
+    .getValues()
+    .filter((row) => row[0] !== "" && row[0] !== null)
+    .map((row) => ({
+      year: Number(row[0]) || 0,
+      hoursPaid: Number(row[1]) || 0,
+      hoursOwed: Number(row[2]) || 0,
+      netHours: Number(row[3]) || 0,
+    }))
+    .filter((row) => row.year);
+}
+
+function getClientProjects(sheet, timezone) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 51) return [];
+
+  return sheet
+    .getRange(51, 20, lastRow - 50, 5)
+    .getValues()
+    .filter((row) => row[0] !== "" && row[0] !== null)
+    .map((row) => ({
+      name: String(row[0] || "").trim(),
+      totalHours: Number(row[1]) || 0,
+      activeYear: row[2] || "",
+      activeMonth: row[3] || "",
+      startDate:
+        row[4] instanceof Date
+          ? Utilities.formatDate(row[4], timezone, "MM/dd/yyyy")
+          : String(row[4] || ""),
+    }));
+}
+
+function getClientActivity(sheet, timezone) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 3) return [];
+
+  return sheet
+    .getRange(3, 5, lastRow - 2, 5)
+    .getValues()
+    .filter((row) => row.some((value) => value !== ""))
+    .map((row) => ({
+      type: String(row[0] || ""),
+      project: String(row[1] || ""),
+      hours: Number(row[2]) || 0,
+      date:
+        row[3] instanceof Date
+          ? Utilities.formatDate(row[3], timezone, "MM/dd/yyyy")
+          : String(row[3] || ""),
+      paymentStatus: String(row[4] || ""),
+    }));
+}
+
+function updateClientInformation(clientName, field, value) {
+  const name = String(clientName || "").trim();
+
+  if (!name) {
+    throw new Error("Client name is required.");
+  }
+
+  const fieldMap = {
+    email: "C11",
+    accountOwner: "C12",
+    paymentDetails: "C13",
+  };
+
+  const cell = fieldMap[field];
+
+  if (!cell) {
+    throw new Error("Invalid client information field.");
+  }
+
+  const sheet = getSheetSafe(name);
+
+  if (!sheet) {
+    throw new Error(`Client sheet not found: ${name}`);
+  }
+
+  sheet.getRange(cell).setValue(String(value ?? "").trim());
+
+  return {
+    success: true,
+    clientName: name,
+    field,
+    value: String(value ?? "").trim(),
   };
 }

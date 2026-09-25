@@ -238,7 +238,7 @@ const ActivityToday = (() => {
         function (event) {
           event.preventDefault();
 
-          openClientSelector($(this), $taskForm);
+          openClientSelector($taskForm);
 
           const dropdown = this.closest(".dropdown");
 
@@ -275,14 +275,14 @@ const ActivityToday = (() => {
       .on("click.activityToday", function (event) {
         event.preventDefault();
 
-        openClientSelector($(this), $taskForm);
+        openClientSelector($taskForm);
       });
   }
 
-  function openClientSelector($selectClient, $taskForm) {
+  function openClientSelector($taskForm) {
     const $drawer = $taskForm.parents(".drawer-content");
     const $firstGroup = $taskForm.find(".form-group").first();
-    const $icon = $selectClient.find("i");
+    // const $icon = $selectClient.find("i");
 
     $drawer
       .toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5"))
@@ -290,13 +290,13 @@ const ActivityToday = (() => {
 
     $firstGroup.toggleClass("element-hidden");
 
-    $icon
-      .toggleClass("fa-plus", function () {
-        return $(this).hasClass("fa-minus");
-      })
-      .toggleClass("fa-minus", function () {
-        return $(this).hasClass("fa-plus");
-      });
+    // $icon
+    //   .toggleClass("fa-plus", function () {
+    //     return $(this).hasClass("fa-minus");
+    //   })
+    //   .toggleClass("fa-minus", function () {
+    //     return $(this).hasClass("fa-plus");
+    //   });
 
     AppUtils.openDrawer("#drawerManualAdd");
   }
@@ -464,40 +464,66 @@ const ActivityToday = (() => {
     const canEdit = hours > 0;
 
     return $(`
-    <div class="btn-group btn-group-sm">
+    <div class="dropleft btn-group">
       <button
         type="button"
-        class="btn action-btn add-client"
-        title="Add Client">
-        <i class="pe-7s-plus"></i>
+        class="p-0 btn border-0"
+        data-bs-toggle="dropdown"
+        aria-haspopup="true"
+        aria-expanded="false"
+        title="Activity actions"
+      >
+        <i class="pe-7s-more"></i>
       </button>
 
-      ${
-        canEdit
-          ? `
-            <button
-              type="button"
-              class="btn action-btn edit-today-hours"
-              title="Edit Today's Hours">
-              <i class="pe-7s-note"></i>
-            </button>
-          `
-          : ""
-      }
+      <div
+        tabindex="-1"
+        role="menu"
+        aria-hidden="true"
+        class="dropdown-menu"
+      >
+        <button
+          type="button"
+          id="add-hours"
+          class="dropdown-item add-hours"
+        >
+          <i class="pe-7s-plus me-2 text-primary"></i>
+          Add Hours
+        </button>
 
-      <button
-        type="button"
-        class="btn action-btn view-client"
-        title="View Client">
-        <i class="pe-7s-look"></i>
-      </button>
+        ${
+          canEdit
+            ? `
+              <button
+                type="button"
+                id="edit-today-hours"
+                class="dropdown-item edit-today-hours"
+              >
+                <i class="pe-7s-note me-2 text-primary"></i>
+                Edit Today's Hours
+              </button>
+            `
+            : ""
+        }
 
-      <button
-        type="button"
-        class="btn action-btn edit-client"
-        title="Edit Client">
-        <i class="pe-7s-note2"></i>
-      </button>
+        <button
+          type="button"
+          id="view-hour-history"
+          class="dropdown-item view-hour-history"
+        >
+          <i class="pe-7s-look me-2 text-success"></i>
+          View Recent
+        </button>
+
+        <button
+          type="button"
+          id="edit-client-sheet"
+          class="dropdown-item edit-client-sheet"
+        >
+          <i class="pe-7s-note2 me-2 text-info"></i>
+          View Sheet
+        </button>
+      </div>
     </div>
   `);
   }

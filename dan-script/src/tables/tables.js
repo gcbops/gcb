@@ -15,59 +15,65 @@ const TableModule = (() => {
 
     $tbody
       .off("click.tableActions")
-      .on("click.tableActions", ".action-btn-group .btn", function (e) {
-        e.stopPropagation();
+      .on(
+        "click.tableActions",
+        ".action-btn-group .dropdown-menu .dropdown-item",
+        function (e) {
+          e.stopPropagation();
 
-        const $btn = $(this);
-        const $tr = $btn.closest("tr");
+          const $btn = $(this);
+          const $tr = $btn.closest("tr");
 
-        const dataTable = DataTableModule.getInstance(tableId);
+          const dataTable = DataTableModule.getInstance(tableId);
 
-        if (!dataTable) {
-          AppUtils.showError("DataTable instance not found.");
-          return;
-        }
+          if (!dataTable) {
+            AppUtils.showError("DataTable instance not found.");
+            return;
+          }
 
-        const row = dataTable.row($tr).data();
+          const row = dataTable.row($tr).data();
 
-        if (!row) {
-          AppUtils.showError("No row data found.");
-          return;
-        }
+          if (!row) {
+            AppUtils.showError("No row data found.");
+            return;
+          }
 
-        const clientName = String(row[0] || "").trim();
+          const clientName = String(row[0] || "").trim();
+          console.log($btn);
+          console.log(clientName);
 
-        if (!clientName) {
-          AppUtils.showError("No client name found.");
-          return;
-        }
+          if (!clientName) {
+            AppUtils.showError("No client name found.");
+            return;
+          }
 
-        if ($btn.hasClass("add-client")) {
-          addClient(clientName);
-          return;
-        }
+          if ($btn.hasClass("add-hours")) {
+            addClientHours(clientName);
+            return;
+          }
 
-        if ($btn.hasClass("edit-today-hours")) {
-          TodayHoursEditor.open(clientName);
-          return;
-        }
+          if ($btn.hasClass("edit-today-hours")) {
+            TodayHoursEditor.open(clientName);
+            return;
+          }
 
-        if ($btn.hasClass("view-client")) {
-          viewClient(clientName);
-          return;
-        }
+          if ($btn.hasClass("view-hour-history")) {
+            viewClientHoursHistory(clientName);
+            return;
+          }
 
-        if ($btn.hasClass("edit-client")) {
-          editClient(clientName);
-        }
-      });
+          if ($btn.hasClass("edit-client-sheet")) {
+            editClientSheet(clientName);
+          }
+        },
+      );
   }
 
   /* ============================================================
    * CLIENT ACTIONS
    * ========================================================== */
 
-  function addClient(clientName, manual = false, isForProject = false) {
+  function addClientHours(clientName, manual = false, isForProject = false) {
     if (!clientName) {
       return;
     }
@@ -98,7 +104,7 @@ const TableModule = (() => {
     );
   }
 
-  function viewClient(clientName) {
+  function viewClientHoursHistory(clientName) {
     if (!clientName) {
       return;
     }
@@ -126,7 +132,7 @@ const TableModule = (() => {
     );
   }
 
-  function editClient(clientName) {
+  function editClientSheet(clientName) {
     if (!clientName) {
       return;
     }
@@ -448,9 +454,9 @@ const TableModule = (() => {
     renderClientData,
     highlightLatestRow,
     bindTableActions,
-    addClient,
-    viewClient,
-    editClient,
+    addClientHours,
+    viewClientHoursHistory,
+    editClientSheet,
   };
 })();
 

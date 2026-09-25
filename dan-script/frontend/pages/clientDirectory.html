@@ -63,10 +63,6 @@
             <div class="card-body">
                 <div class="d-flex align-items-center">
 
-                    <div class="client-summary-icon client-icon-success me-3">
-                        <i class="fa fa-money-bill-wave"></i>
-                    </div>
-
                     <div>
                         <div class="text-muted text-uppercase small">
                             Total Paid
@@ -125,8 +121,6 @@
 
                 <div class="d-flex align-items-center mb-3">
 
-                    <i class="fa fa-address-book fs-4 me-2 text-info"></i>
-
                     <h5 class="card-title mb-0">
                         Client Directory
                     </h5>
@@ -138,36 +132,49 @@
 
                             <button
                                 type="button"
-                                class="btn btn-light mb-2 me-2"
-                                id="sync-clients-list"
-                                data-client-action="sync"
-                                title="Refresh Client Directory"
-                                aria-label="Refresh Client Directory"
-                            >
-                                <i class="fa fa-sync"></i>
-                            </button>
-
-                            <button
-                                type="button"
-                                class="btn btn-light mb-2 me-2"
-                                id="add-external-sheet"
-                                data-client-action="add-external"
-                                title="Add External Client"
-                                aria-label="Add External Client"
-                            >
-                                <i class="fa fa-external-link-alt"></i>
-                            </button>
-
-                            <button
-                                type="button"
-                                class="btn btn-light mb-2"
-                                id="add-new-client-sheet"
+                                class="btn btn-gc me-2"
                                 data-client-action="add-normal"
-                                title="Add Client"
-                                aria-label="Add Client"
                             >
-                                <i class="fa fa-plus"></i>
+                                <i class="fa-solid fa-user-plus me-1"></i>
+                                Add Client
                             </button>
+                            
+                            <button
+                                type="button"
+                                class="btn border-0 p-0"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Client options"
+                                title="Client options"
+                            >
+                                <i class="fa fa-ellipsis-v fs-5"></i>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-client-action="sync"
+                                    >
+                                        <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                                        Refresh
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-client-action="add-external"
+                                    >
+                                        <i class="pe-7s-network text-primary me-2"></i>
+                                        Add External Client
+                                    </button>
+                                </li>
+
+                            </ul>
 
                         </div>
 
@@ -200,7 +207,7 @@
                                         class="dropdown-item"
                                         data-client-action="sync"
                                     >
-                                        <i class="fa fa-sync me-2"></i>
+                                        <i class="pe-7s-refresh-2 text-warning me-2"></i>
                                         Refresh
                                     </button>
                                 </li>
@@ -211,7 +218,7 @@
                                         class="dropdown-item"
                                         data-client-action="add-external"
                                     >
-                                        <i class="fa fa-external-link-alt me-2"></i>
+                                        <i class="pe-7s-network text-primary me-2"></i>
                                         Add External Client
                                     </button>
                                 </li>
@@ -222,7 +229,7 @@
                                         class="dropdown-item"
                                         data-client-action="add-normal"
                                     >
-                                        <i class="fa fa-plus me-2"></i>
+                                        <i class="pe-7s-plus text-primary me-2"></i>
                                         Add Client
                                     </button>
                                 </li>
@@ -236,7 +243,7 @@
                 </div>
 
 
-                <div id="table-wrapper" class="mt-4">
+                <div class="table-responsive mt-4">
 
                     <table
                         id="clientsTable"
@@ -273,14 +280,10 @@
                                     Debt Exposure
                                 </th>
 
-                                <th class="text-center">
-                                    Action
-                                </th>
-
                             </tr>
                         </thead>
 
-                        <tbody id="dataBody"></tbody>
+                        <tbody id="dataBody" class="scrollbar-hover"></tbody>
 
                     </table>
 

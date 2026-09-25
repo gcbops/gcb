@@ -1,6 +1,8 @@
 import { AppUtils } from "./utils.js";
 
 const ChartModule = (() => {
+  Chart.defaults.font.family = "Inter";
+  
   const CHART_CONFIG = {
     daily: {
       serverFunction: "getDailyChartData",
@@ -339,6 +341,15 @@ const ChartModule = (() => {
           animated,
           chartOpts,
         );
+
+      case "client_hours_month":
+        return drawClientMonthlyHoursChart(ctx, type, data, animated);
+
+      case "client_daily_hours":
+        return drawClientDailyHoursChart(ctx, type, data, animated);
+
+      case "client_paid_owed":
+        return drawClientPaidOwedHistoryChart(ctx, type, data, animated);
 
       default:
         return AppUtils.showError(`Unknown chart type: ${type}`);
@@ -1803,6 +1814,114 @@ const ChartModule = (() => {
                 return `${value} hrs`;
               },
             },
+          },
+        },
+      },
+    });
+  }
+
+  function drawClientMonthlyHoursChart(ctx, type, data, animated = false) {
+    const years = Object.keys(data || {});
+
+    const year = years[0];
+
+    const rows = data?.[year] || [];
+
+    const labels = Array.from({ length: 12 }, (_, index) =>
+      new Date(2000, index, 1).toLocaleString("en-US", { month: "short" }),
+    );
+
+    const values = Array(12).fill(0);
+
+    rows.forEach(([monthIndex, hours]) => {
+      const index = Number(monthIndex) - 1;
+
+      if (index >= 0 && index < 12) {
+        values[index] = Number(hours) || 0;
+      }
+    });
+
+    destroyChart(type);
+
+    chartInstances[type] = new Chart(ctx, {
+      type: "bar",
+
+      data: {
+        labels,
+
+        datasets: [
+          {
+            label: `${year} Hours`,
+            data: values,
+            borderWidth: 1,
+          },
+        ],
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        animation: animated ? undefined : false,
+
+        scales: {
+          y: {
+            beginAtZero: true,
+          },
+        },
+
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
+      },
+    });
+  }
+
+  function drawClientDailyHoursChart(ctx, type, data, animated = false) {
+    const labels = data.map((row) => String(row[0]));
+    const values = data.map((row) => Number(row[1]) || 0);
+
+    destroyChart(type);
+
+    chartInstances[type] = new Chart(ctx, {
+      type: "bar",
+
+      data: {
+        labels,
+
+        datasets: [
+          {
+            label: "Hours",
+            data: values,
+            borderWidth: 1,
+          },
+        ],
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        animation: animated ? undefined : false,
+
+        scales: {
+          y: {
+            beginAtZero: true,
+          },
+
+          x: {
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 15,
+            },
+          },
+        },
+
+        plugins: {
+          legend: {
+            display: false,
           },
         },
       },

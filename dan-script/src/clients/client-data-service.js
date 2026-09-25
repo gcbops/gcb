@@ -2,7 +2,7 @@ import { AppUtils } from "../utils";
 import { TableModule } from "../tables/tables";
 import { DataTableModule } from "../tables/data-table";
 import { ChartModule } from "../charts";
-import { ClientTableService } from "./client-table-service";
+import { TableFilterService } from "../tables/table-filter-service";
 
 const ClientDataService = (() => {
   const ACTIVE_CLIENTS_TABLE_ID = "#active-clients";
@@ -134,7 +134,13 @@ const ClientDataService = (() => {
      * Initialize category filter only when the filter exists.
      */
     if (document.getElementById("categoryDtFilter")) {
-      ClientTableService.initStatusFilter("categoryDtFilter", "active-clients");
+      TableFilterService.init(
+        "categoryDtFilter",
+        "active-clients",
+        6,
+        "client-status",
+        "all",
+      );
     }
   }
 
@@ -169,9 +175,25 @@ const ClientDataService = (() => {
       return;
     }
 
-    container.innerHTML = "";
+    const parent = container.parentElement;
 
-    if (!data.length) {
+    if (!parent) {
+      return;
+    }
+
+    container.innerHTML = "";
+    container.classList.remove("scrollable");
+
+    parent.querySelector("#active-clients-count")?.remove();
+
+    const summary = document.getElementById("today-hours-summary");
+
+    if (summary) {
+      summary.hidden = false;
+      summary.classList.remove("is-collapsing");
+    }
+
+    if (!Array.isArray(data) || !data.length) {
       container.innerHTML = `
       <div class="text-muted text-center py-3">
         No active clients found.
@@ -181,28 +203,94 @@ const ClientDataService = (() => {
       return;
     }
 
-    data.slice(0, 4).forEach((client) => {
+    data.forEach((client) => {
       container.appendChild(createActiveClientItem(client));
     });
 
-    if (data.length > 6) {
-      const remaining = data.length - 6;
+    const remaining = Math.max(data.length - 4, 0);
 
+    if (remaining > 0) {
       const more = document.createElement("div");
 
-      more.className = "text-center text-muted fs-7 mt-3";
-
+      more.id = "active-clients-count";
+      more.className = "active-clients-count text-center text-muted fs-7 mt-3";
+      more.setAttribute("role", "button");
+      more.setAttribute("tabindex", "0");
+      more.setAttribute("aria-controls", "today-hours-summary");
+      more.setAttribute("aria-expanded", "false");
       more.textContent = `+${remaining} more active clients`;
 
-      container.appendChild(more);
+      parent.appendChild(more);
+
+      setupActiveClientsToggle(container, more, remaining);
     }
+  }
+
+  function setupActiveClientsToggle(container, more, remaining) {
+    const summary = document.getElementById("today-hours-summary");
+
+    if (!summary) {
+      return;
+    }
+
+    const toggleSummary = () => {
+      const isHidden = summary.classList.contains("is-collapsing");
+
+      if (isHidden) {
+        showTodaySummary(summary, more, remaining, container);
+      } else {
+        hideTodaySummary(summary, more, container);
+      }
+    };
+
+    more.addEventListener("click", toggleSummary);
+
+    more.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleSummary();
+      }
+    });
+  }
+
+  function hideTodaySummary(summary, more, container) {
+    summary.classList.add("is-collapsing");
+
+    more.setAttribute("aria-expanded", "true");
+    more.textContent = "Show today summary";
+
+    summary.addEventListener(
+      "transitionend",
+      (e) => {
+        if (e.propertyName !== "max-height") {
+          container.classList.add("scrollable", "scrollbar-hover");
+          return;
+        }
+
+        summary.hidden = true;
+      },
+      { once: true },
+    );
+  }
+
+  function showTodaySummary(summary, more, remaining, container) {
+    container.classList.remove("scrollable", "scrollbar-hover");
+
+    summary.hidden = false;
+
+    summary.offsetHeight;
+
+    summary.classList.remove("is-collapsing");
+
+    more.setAttribute("aria-expanded", "false");
+    more.textContent = `+${remaining} more active clients`;
   }
 
   function createActiveClientItem(client) {
     const item = document.createElement("div");
 
     item.className =
-      "client-activity-active-client d-flex align-items-center mb-1";
+      "client-activity-active-client d-flex align-items-center mb-4";
 
     const status = String(client?.today || "").trim();
 
@@ -233,7 +321,7 @@ const ClientDataService = (() => {
     </div>
 
     <span
-      class="rounded-circle ${statusClass}"
+      class="rounded-circle ${statusClass} me-0 me-lg-2"
       style="width:8px;height:8px;"
       title="${isIdle ? "Idle" : "Online"}"
     ></span>
@@ -252,6 +340,8 @@ const ClientDataService = (() => {
 
     const statusValue = isIdle ? "Idle" : "Online";
 
+    const safeName = AppUtils.escapeHtml(row?.client ?? "");
+
     const statusHtml = isIdle
         ? `
       <span class="badge bg-danger text-center">
@@ -269,8 +359,14 @@ const ClientDataService = (() => {
         ${index + 1}
       </td>
 
-      <td class="align-middle">
-        ${AppUtils.escapeHtml(row?.client ?? "")}
+      <td 
+        class="align-middle client-action-name"
+        role="button"
+        tabindex="0"
+        data-client-details
+        data-client-name="${safeName}"
+      >
+        ${safeName}
       </td>
 
       <td class="align-middle datatable--chart-cell">

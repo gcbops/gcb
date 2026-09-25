@@ -9,13 +9,13 @@ const PerformanceMetrics = (() => {
   const COLORS = {
     current: [
       "bg-grow-early",
-      "bg-love-kiss",
+      "bg-danger",
       "bg-sunny-morning",
       "bg-night-sky",
     ],
     previous: [
       "bg-grow-early",
-      "bg-love-kiss",
+      "bg-danger",
       "bg-sunny-morning",
       "bg-night-sky",
     ],

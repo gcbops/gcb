@@ -1,209 +1,253 @@
-<div class="main-card mb-3 card">
-   <div class="g-0 row" id="billing-hours-summary">
-      <div class="col-md-4">
-         <div class="widget-content">
-            <div class="widget-content-wrapper justify-content-between justify-content-lg-start">
-               <div class="widget-content-right ms-0 me-0 order-lg-1 order-2 me-lg-3">
-                  <div class="widget-numbers text-success"><span></span></div>
-               </div>
-               <div class="widget-content-left order-lg-2 order-1">
-                  <div class="widget-heading">Total Hours</div>
-                  <div class="widget-subheading">Cumulative Tracked Hours</div>
-               </div>
+<div id="paid-hours-page" class="row">
+
+  <!-- SUMMARY -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Paid Hours
             </div>
-         </div>
-      </div>
-      <div class="col-md-4">
-         <div class="widget-content">
-            <div class="widget-content-wrapper justify-content-between justify-content-lg-start">
-               <div class="widget-content-right ms-0 me-0 order-lg-1 order-2 me-lg-3">
-                  <div class="widget-numbers text-warning"><span></span></div>
-               </div>
-               <div class="widget-content-left order-lg-2 order-1">
-                  <div class="widget-heading">Paid Hours</div>
-                  <div class="widget-subheading">Client Paid Hours</div>
-               </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-paid-metric="paid-hours">
+                0.0
+              </span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                hrs
+              </span>
             </div>
-         </div>
-      </div>
-      <div class="col-md-4">
-         <div class="widget-content">
-            <div class="widget-content-wrapper justify-content-between justify-content-lg-start">
-               <div class="widget-content-right ms-0 me-0 order-lg-1 order-2 me-lg-3">
-                  <div class="widget-numbers text-danger"><span></span></div>
-               </div>
-               <div class="widget-content-left order-lg-2 order-1">
-                  <div class="widget-heading">Net Hours</div>
-                  <div class="widget-subheading">Net Tracked Hours</div>
-               </div>
+          </div>
+
+          <div class="text-right">
+            <div
+              data-paid-metric="paid-rate"
+              class="text-success font-weight-bold h5 mb-0"
+            >
+              0%
             </div>
-         </div>
+
+            <div class="text-muted font-size-xs opacity-7">
+              paid rate
+            </div>
+          </div>
+
+        </div>
+
+        <div class="pt-2 border-top font-size-xs text-secondary">
+          Hours currently marked as paid
+        </div>
+
       </div>
-   </div>
-</div>
-<div class="divider mt-0" style="margin-bottom: 30px;"></div>
-<div class="row">
-    <div class="col-lg-6">
-        <div class="main-card mb-3 card">
-            <div class="card-body">
-                <div class="card-title">Top Clients</div>
-                <div class="scroll-area-sm">
-                    <div class="scrollbar-container">
-                        <ul class="rm-list-borders rm-list-borders-scroll list-group list-group-flush" id="top-paid-clients">
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Top 1</div>
-                                            <div class="widget-subheading">Excellent</div>
-                                        </div>
-                                        <div class="widget-content-right"><div class="font-size-xs text-muted"> <span>0</span> <small class="text-success ps-2"><i class="fa fa-angle-up"></i></small> </div></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Top 2</div>
-                                            <div class="widget-subheading">Marvelous</div>
-                                        </div>
-                                        <div class="widget-content-right"><div class="font-size-xs text-muted"> <span>0</span> <small class="text-success ps-2"><i class="fa fa-angle-up"></i></small> </div></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Top 3</div>
-                                            <div class="widget-subheading">Bravo</div>
-                                        </div>
-                                        <div class="widget-content-right"><div class="font-size-xs text-muted"> <span>0</span> <small class="text-success ps-2"><i class="fa fa-angle-up"></i></small> </div></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="list-group-item">
-                                <div class="widget-content p-0">
-                                    <div class="widget-content-wrapper">
-                                        <div class="widget-content-left me-2 me-lg-3">
-                                            <div class="avatar-circle swatch-holder swatch-holder-lg bg-light text-info rounded-circle d-flex align-items-center justify-content-center">GC</div>
-                                        </div>
-                                        <div class="widget-content-left">
-                                            <div class="widget-heading">Loading</div>
-                                            <div class="widget-subheading">Loading</div>
-                                        </div>
-                                        <div class="widget-content-right"></div>
-                                    </div>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
+    </div>
+  </div>
+
+  <!-- PAID RECORDS -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Paid Records
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-paid-metric="paid-records">
+                0
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="pt-2 border-top font-size-xs text-secondary">
+          Hour entries marked as paid
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIENTS -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Clients Paid
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-paid-metric="clients-paid">
+                0
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="pt-2 border-top font-size-xs text-secondary">
+          Clients with paid hours
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Projects Paid
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-paid-metric="projects-paid">
+                0
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="pt-2 border-top font-size-xs text-secondary">
+          Projects with paid hours
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- TABLE -->
+  <div class="col-md-12">
+    <div class="main-card card">
+        <div class="card-body">
+
+            <div class="d-flex align-items-start justify-content-between mb-3">
+            <div>
+                <h5 class="card-title mb-1">
+                Paid Hours
+                </h5>
+
+                <div class="text-muted fs-7">
+                Detailed hour records marked as paid.
                 </div>
             </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="main-card mb-3 card">
-            <div class="card-body">
-                <div class="card-title">Top Projects</div>
-                <div class="scroll-area-sm">
-                    <ul class="rm-list-borders rm-list-borders-scroll list-group list-group-flush" id="top-projects"></ul>
-                </div>
+
+            <button
+                type="button"
+                class="btn border-0 p-0"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                title="Records option"
+                aria-label="Records option"
+            >
+                <i class="fa fa-ellipsis-v fs-5"></i>
+            </button>
+
+            <ul class="dropdown-menu dropdown-menu-end">
+
+                <li>
+                    <button
+                        type="button"
+                        class="dropdown-item"
+                        id="sync-billing-records"
+                        data-action="sync-billing-records"
+                    >
+                        <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                        Refresh
+                    </button>
+                </li>
+
+            </ul>
+
             </div>
+
+            <!-- FILTERS -->
+            <div class="row mb-2 dt-table-filters">
+
+              <div class="col-md-6 col-lg-3 mb-2 mb-md-0">
+                <label class="font-size-xs text-muted font-weight-bold mb-1">
+                  Year
+                </label>
+
+                <select
+                  id="paid-hours-year-filter"
+                  class="custom-select js-select2"
+                >
+                  <option value="all">
+                    All Years
+                  </option>
+                </select>
+              </div>
+
+              <div class="col-md-6 col-lg-3">
+                <label class="font-size-xs text-muted font-weight-bold mb-1">
+                  Month
+                </label>
+
+                <select
+                  id="paid-hours-month-filter"
+                  class="custom-select js-select2"
+                >
+                  <option value="all">
+                    All Months
+                  </option>
+                  <option value="0">January</option>
+                  <option value="1">February</option>
+                  <option value="2">March</option>
+                  <option value="3">April</option>
+                  <option value="4">May</option>
+                  <option value="5">June</option>
+                  <option value="6">July</option>
+                  <option value="7">August</option>
+                  <option value="8">September</option>
+                  <option value="9">October</option>
+                  <option value="10">November</option>
+                  <option value="11">December</option>
+                </select>
+              </div>
+
+            </div>
+
+            <div class="table-responsive">
+            <table
+                id="paid-hours-table"
+                class="table table-hovered nowrap"
+                style="width:100%"
+            >
+                <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Type</th>
+                    <th>Project</th>
+                    <th class="text-center">Hours</th>
+                    <th>Date</th>
+                    <th class="text-center">Status</th>
+                </tr>
+                </thead>
+
+                <tbody id="paid-hours-body" class="scrollbar-hover"></tbody>
+            </table>
+            </div>
+
         </div>
     </div>
+  </div>
+
 </div>

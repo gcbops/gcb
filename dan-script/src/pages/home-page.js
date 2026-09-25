@@ -1,15 +1,29 @@
 import { ChartModule } from "../charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
-import { ClientRanking } from "../clients/client-ranking.js";
-import { ProjectRankings } from "../projects/project-ranking.js";
+import { clientRankings } from "../clients/client-ranking.js";
+import { ProjectRankings } from "../projects/project-rankings.js";
 import { PerformanceMetrics } from "../performance/performance-metrics.js";
 import { ClientDataService } from "../clients/client-data-service.js";
-import { ClientTableService } from "../clients/client-table-service.js";
+import { TableFilterService } from "../tables/table-filter-service.js";
+import { ProfilePopoverModule } from "../profile/profile-popover.js";
 
 const HomePage = (() => {
+  let initialized = false;
+
   function init() {
+    if (initialized) {
+      return;
+    }
+
+    initialized = true;
+
+    loadData();
+    bindEvents();
+  }
+
+  function loadData() {
     HourSummary.loadHoursSummary("#hours-summary");
-    
+
     ChartModule.loadChart("monthly");
     ChartModule.loadPrevYearCombinedChart();
     PerformanceMetrics.loadPerformanceSummary(
@@ -33,14 +47,41 @@ const HomePage = (() => {
       showLegend: false,
       showLabel: false,
     });
-    ClientRanking.renderTopPaidClients();
+    clientRankings.renderTopPaidClients();
     ProjectRankings.renderTopProjects();
 
     ClientDataService.renderActivePaidOwedClients(true);
   }
 
+  function bindEvents() {
+    document.addEventListener("click", handleClientDetailsClick);
+  }
+
   function destroy() {
-    ClientTableService.destroyStatusFilter();
+    if (!initialized) {
+      return;
+    }
+
+    initialized = false;
+
+    TableFilterService.destroy("categoryDtFilter");
+    document.removeEventListener("click", handleClientDetailsClick);
+  }
+
+  function handleClientDetailsClick(event) {
+    const trigger = event.target.closest("[data-client-details]");
+
+    if (!trigger) {
+      return;
+    }
+
+    const clientName = trigger.dataset.clientName?.trim();
+
+    if (!clientName) {
+      return;
+    }
+
+    ProfilePopoverModule.openClientDetails(clientName);
   }
 
   return { init, destroy };

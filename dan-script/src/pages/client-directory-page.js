@@ -1,8 +1,6 @@
 import { AppUtils } from "../utils.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { TableClientSelector } from "../tables/client-selector.js";
-import { ReportActions } from "../reports/actions.js";
-import { ClientTableService } from "../clients/client-table-service.js";
 
 const clientDirectoryPage = (() => {
   let bound = false;
@@ -30,8 +28,6 @@ const clientDirectoryPage = (() => {
     $(document).off("click.clientDirectory");
     $(document).off("submit.clientDirectory");
 
-    ClientTableService.destroyCategoryFilter("clientCategoryFilter");
-
     ClientDirectory.destroy?.();
     TableClientSelector.destroy?.();
   };
@@ -53,7 +49,7 @@ const clientDirectoryPage = (() => {
        */
       .off("click.clientDirectory", '[data-client-action="sync"]')
       .on("click.clientDirectory", '[data-client-action="sync"]', function () {
-        ReportActions.confirmAction(
+        AppUtils.confirmAction(
           "syncClientsList",
           "Synchronize Client Directory?",
           "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",

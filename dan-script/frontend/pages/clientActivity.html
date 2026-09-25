@@ -12,8 +12,6 @@
 
                 <div class="d-flex align-items-center mb-3">
 
-                    <i class="fa fa-list-check fs-4 me-2 text-info"></i>
-
                     <h5 class="card-title mb-0">
                         Activity Today
                     </h5>
@@ -25,33 +23,60 @@
 
                             <button
                                 type="button"
-                                class="mb-2 me-2 btn btn-light not-done-div"
-                                id="dashFilter"
-                            >
-                                Pending
-                                <span class="badge rounded-pill bg-light text-dark not-done-text">
-                                    0
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                class="mb-2 me-2 btn btn-light special-div"
-                                id="waitingFilter"
-                            >
-                                Waiting
-                                <span class="badge rounded-pill bg-light text-dark special-count">
-                                    0
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                class="btn btn-light mb-2"
+                                class="btn btn-gc me-2"
                                 id="selectClient-a-m"
                             >
-                                <i class="fa fa-plus"></i>
+                                <i class="fa-regular fa-clock me-1"></i>
+                                Add Hours
                             </button>
+                            
+                            <button
+                                type="button"
+                                class="btn border-0 p-0"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Activity options"
+                                title="Activity options"
+                            >
+                                <i class="fa fa-ellipsis-v fs-5"></i>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+
+                                <!-- FILTERS -->
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        View
+                                    </h6>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item not-done-div"
+                                        data-activity-action="pending"
+                                    >
+                                        Pending
+                                        <span class="badge rounded-pill bg-light text-dark not-done-text ms-2">
+                                            0
+                                        </span>
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item special-div"
+                                        data-activity-action="waiting"
+                                    >
+                                        Waiting
+                                        <span class="badge rounded-pill bg-light text-dark special-count ms-2">
+                                            0
+                                        </span>
+                                    </button>
+                                </li>
+
+                            </ul>
 
                         </div>
 
@@ -111,7 +136,7 @@
                                 <!-- OTHER -->
                                 <li>
                                     <h6 class="dropdown-header">
-                                        Other
+                                        Action
                                     </h6>
                                 </li>
 
@@ -122,8 +147,8 @@
                                         id="mobile-selectClient-a-m"
                                         data-activity-action="add"
                                     >
-                                        <i class="fa fa-plus me-2"></i>
-                                        Add Activity
+                                        <i class="pe-7s-clock text-primary me-2"></i>
+                                        Add Hours
                                     </button>
                                 </li>
 
@@ -135,7 +160,7 @@
 
                 </div>
 
-                <div id="table-wrapper" class="mt-4">
+                <div class="table-responsive mt-4">
                     <table id="table" class="table table-hovered nowrap" style="width:100%">
                         <thead>
                         <tr>
@@ -148,7 +173,7 @@
                             <th class="text-center">Action</th>
                         </tr>
                         </thead>   
-                        <tbody id="data-table-body"></tbody>
+                        <tbody id="data-table-body" class="scrollbar-hover"></tbody>
                     </table>
                 </div>
 

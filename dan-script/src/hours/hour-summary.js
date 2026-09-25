@@ -121,7 +121,7 @@ const HourSummary = (() => {
 
       $container
         .find('[data-metric="month-average"]')
-        .text(AppUtils.formatHours(data.currentMonthAverage));
+        .text(formatHoursPerDay(data.currentMonthAverage));
 
       $container
         .find('[data-metric="overall-hours"]')
@@ -162,7 +162,8 @@ const HourSummary = (() => {
         value === "" ||
         !Number.isFinite(Number(value))
       ) {
-        $element.removeClass("text-success text-danger text-warning").html(`
+        $element.removeClass("text-success text-danger text-warning text-muted")
+          .html(`
         <span class="text-muted">
           No comparison available
         </span>
@@ -173,45 +174,46 @@ const HourSummary = (() => {
 
       const numericValue = Number(value);
 
+      $element.removeClass("text-success text-danger text-warning text-muted");
+
       if (numericValue === 0) {
-        $element.removeClass("text-success text-danger text-warning").html(`
-        <i class="fa fa-minus me-1"></i>
-        No change
-      `);
+        $element.addClass("text-warning").html(`
+      <i class="fa fa-minus me-1"></i>
+      No change
+    `);
 
         return;
       }
 
       const isPositive = numericValue > 0;
+      const percentage = AppUtils.formatPercent(Math.abs(numericValue));
 
       let text;
 
       switch (type) {
         case "hours":
           text = isPositive
-            ? `${formatTrendPercent(numericValue)} more hours vs yesterday`
-            : `${formatTrendPercent(numericValue)} fewer hours vs yesterday`;
+            ? `${percentage} more hours vs yesterday`
+            : `${percentage} fewer hours vs yesterday`;
           break;
 
         case "clients":
           text = isPositive
-            ? `${formatTrendPercent(numericValue)} more active clients vs yesterday`
-            : `${formatTrendPercent(numericValue)} fewer active clients vs yesterday`;
+            ? `${percentage} more active clients vs yesterday`
+            : `${percentage} fewer active clients vs yesterday`;
           break;
 
         case "month":
           text = isPositive
-            ? `${formatTrendPercent(numericValue)} more hours vs last month`
-            : `${formatTrendPercent(numericValue)} fewer hours vs last month`;
+            ? `${percentage} more hours vs last month`
+            : `${percentage} fewer hours vs last month`;
           break;
 
         default:
-          text = `${formatTrendPercent(numericValue)} vs previous period`;
+          text = `${percentage} vs previous period`;
       }
 
-      $element
-        .removeClass("text-success text-danger text-warning")
-        .addClass(isPositive ? "text-success" : "text-danger").html(`
+      $element.addClass(isPositive ? "text-success" : "text-danger").html(`
       <i class="fa ${isPositive ? "fa-arrow-up" : "fa-arrow-down"} me-1"></i>
       ${text}
     `);
@@ -757,6 +759,19 @@ const HourSummary = (() => {
       }
 
       return currentValue / previousValue - 1;
+    }
+
+    function formatHoursPerDay(value) {
+      const number = Number(value);
+
+      if (!Number.isFinite(number)) {
+        return "—";
+      }
+
+      return `${number.toLocaleString(undefined, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      })} hrs/day`;
     }
 
     return {

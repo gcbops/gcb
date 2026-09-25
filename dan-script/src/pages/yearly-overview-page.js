@@ -1,5 +1,6 @@
 import { ChartModule } from "../charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
+import { AppUtils } from "../utils.js";
 
 const yearlyOverviewPage = (() => {
   function init() {
@@ -29,6 +30,8 @@ const yearlyOverviewPage = (() => {
     if (showLoading) {
       showYearlyMonthlyHoursChartLoading();
     }
+
+    AppUtils.initSelect2(".chart-filters");
 
     ChartModule.loadChart(
       "yearly_monthly_hours",

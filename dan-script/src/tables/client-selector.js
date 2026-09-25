@@ -97,7 +97,7 @@ const TableClientSelector = (() => {
           return;
         }
 
-        TableModule.addClient(selectedName, true, isForProject);
+        TableModule.addClientHours(selectedName, true, isForProject);
       });
   }
 

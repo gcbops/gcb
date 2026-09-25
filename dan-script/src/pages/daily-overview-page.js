@@ -35,6 +35,7 @@ const dailyOverviewPage = (() => {
 
     datePicker = window.flatpickr($input[0], {
       mode: "range",
+      showMonths: window.innerWidth <= 767 ? 1 : 2,
       dateFormat: "M d, Y",
 
       defaultDate: [parseLocalDate(startDate), parseLocalDate(endDate)],

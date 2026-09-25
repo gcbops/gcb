@@ -1,0 +1,484 @@
+<div class="client-details-page">
+
+  <!-- CLIENT HEADER -->
+  <div class="card card-shadow-sm border-0 bg-white mb-3">
+    <div class="card-body">
+
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+
+        <div>
+
+          <h4
+            id="client-details-name"
+            class="mb-1 font-weight-bold text-dark"
+          >
+            Client
+          </h4>
+
+          <div
+            id="client-details-role"
+            class="text-secondary font-size-sm"
+          >
+            —
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-gc btn-sm"
+          data-client-action="open-sheet"
+        >
+          <i class="fa-solid fa-up-right-from-square me-1"></i>
+          Open Client Sheet
+        </button>
+
+      </div>
+
+      <!-- SUMMARY -->
+      <div class="row mt-4">
+
+        <div class="col-6 col-md-3 mb-3 mb-md-0">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Projects
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="client-projects">0</span>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-3 mb-3 mb-md-0">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Rendered Hours
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="client-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              hrs
+            </span>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Paid
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="client-paid">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              hrs
+            </span>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Balance Owed
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="client-owed">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              hrs
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- CLIENT INFORMATION + BALANCE -->
+  <div class="row">
+
+    <div class="col-md-6 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <h5 class="card-title mb-3">
+            Client Information
+          </h5>
+
+          <div class="mb-3">
+            <div class="font-size-xs text-muted text-uppercase font-weight-bold">
+              Email
+            </div>
+
+            <div
+              id="client-details-email"
+              class="text-dark d-flex align-items-center"
+            >
+              <span class="edit-info-value">—</span>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-link edit-info text-secondary p-1 ms-1"
+                id="edit-email"
+                title="Edit email"
+                aria-label="Edit email"
+              >
+                <i class="fa-solid fa-pencil"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="font-size-xs text-muted text-uppercase font-weight-bold">
+              Account Owner
+            </div>
+
+            <div
+              id="client-details-owner"
+              class="text-dark d-flex align-items-center"
+            >
+              <span class="edit-info-value">—</span>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-link edit-info text-secondary p-1 ms-1"
+                id="edit-account-owner"
+                title="Edit account owner"
+                aria-label="Edit account owner"
+              >
+                <i class="fa-solid fa-pencil"></i>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="font-size-xs text-muted text-uppercase font-weight-bold">
+              Payment Details
+            </div>
+
+            <div
+              id="client-details-payment"
+              class="text-dark d-flex align-items-center"
+            >
+              <span class="edit-info-value">—</span>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-link edit-info text-secondary p-1 ms-1"
+                id="edit-payment-details"
+                title="Edit payment details"
+                aria-label="Edit payment details"
+              >
+                <i class="fa-solid fa-pencil"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <div class="col-md-6 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <h5 class="card-title mb-3">
+            Balance
+          </h5>
+
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="font-size-xs text-muted text-uppercase font-weight-bold">
+                Total Balance Owed
+              </div>
+
+              <div class="h4 mb-0 font-weight-bold text-dark">
+                <span data-metric="total-balance-owed">0.0</span>
+              </div>
+            </div>
+
+            <div class="text-secondary">
+              hrs
+            </div>
+          </div>
+
+          <div class="pt-3 border-top">
+            <div class="font-size-xs text-muted text-uppercase font-weight-bold">
+              Current Month
+            </div>
+
+            <div class="h5 mb-0 font-weight-bold text-dark">
+              <span data-metric="current-month-owed">0.0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                hrs
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- TASK SUMMARY -->
+  <div class="card card-shadow-sm border-0 bg-white mb-3">
+    <div class="card-body">
+
+      <h5 class="card-title mb-3">
+        Task Summary
+      </h5>
+
+      <div class="row">
+
+        <div class="col-md-4 mb-3 mb-md-0">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            DEV Tasks
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="dev-tasks">0</span>
+          </div>
+        </div>
+
+        <div class="col-md-4 mb-3 mb-md-0">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Design Tasks
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="design-tasks">0</span>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            SEO Tasks
+          </div>
+
+          <div class="h4 mb-0 font-weight-bold text-dark">
+            <span data-metric="seo-tasks">0</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- CURRENT ACTIVITY -->
+  <div class="card card-shadow-sm border-0 bg-white mb-3">
+    <div class="card-body">
+
+      <h5 class="card-title mb-3">
+        Current Activity
+      </h5>
+
+      <div class="row">
+
+        <div class="col-4">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold">
+            This Week
+          </div>
+
+          <div class="h5 mb-0 font-weight-bold">
+            <span data-metric="current-week-hours">0.0</span>
+            <span class="font-size-xs text-secondary">hrs</span>
+          </div>
+        </div>
+
+        <div class="col-4">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold">
+            This Month
+          </div>
+
+          <div class="h5 mb-0 font-weight-bold">
+            <span data-metric="current-month-hours">0.0</span>
+            <span class="font-size-xs text-secondary">hrs</span>
+          </div>
+        </div>
+
+        <div class="col-4">
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold">
+            This Year
+          </div>
+
+          <div class="h5 mb-0 font-weight-bold">
+            <span data-metric="current-year-hours">0.0</span>
+            <span class="font-size-xs text-secondary">hrs</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+
+    <!-- Hours Analytics -->
+    <div class="row g-3 mb-3">
+
+        <!-- Hours by Month -->
+        <div class="col-12">
+            <div class="card card-shadow-sm border-0 bg-white">
+            <div class="card-body">
+
+              <div class="chart-header">
+                <div class="chart-title">
+                  <h6 class="mb-1">Hours by Month</h6>
+                  <small class="text-muted">Monthly rendered hours by year</small>
+                </div>
+
+                <div class="chart-filters d-flex align-items-stretch gap-2">
+                  <select
+                      id="client-hours-year"
+                      class="custom-select js-select2"
+                  ></select>
+                </div>
+              </div>
+
+                <div id="chart-client_hours_month" style="height:280px;">
+                    <div class="bar-loader">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
+            </div>
+            </div>
+        </div>
+
+        <!-- Daily Hours -->
+        <div class="col-12 col-lg-6">
+            <div class="card card-shadow-sm border-0 bg-white">
+            <div class="card-body">
+
+                <div class="mb-3">
+                <h6 class="mb-1">Daily Hours</h6>
+                <small class="text-muted">Hours rendered during the current month</small>
+                </div>
+
+                <div id="chart-client_daily_hours" style="height:280px;">
+                    <div class="bar-loader">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
+            </div>
+            </div>
+        </div>
+
+        <!-- Paid vs Owed -->
+        <div class="col-12 col-lg-6">
+            <div class="card card-shadow-sm border-0 bg-white">
+            <div class="card-body">
+
+                <div class="mb-3">
+                <h6 class="mb-1">Paid vs Owed Hours</h6>
+                <small class="text-muted">Yearly billing history</small>
+                </div>
+
+                <div id="chart-client_paid_owed" style="height:280px;">
+                    <div class="bar-loader">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
+            </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Billing History -->
+    <div class="card card-shadow-sm border-0 bg-white mb-3">
+        <div class="card-body">
+
+            <div class="mb-3">
+            <h6 class="mb-1">Billing History</h6>
+            <small class="text-muted">Paid, owed, and net hours by year</small>
+            </div>
+
+            <div class="table-responsive">
+            <table
+                id="client-paid-owed-history"
+                class="table table-sm align-middle w-100"
+            >
+                <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Paid Hours</th>
+                    <th>Owed Hours</th>
+                    <th>Net Hours</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- Projects -->
+    <div class="card card-shadow-sm border-0 bg-white mb-3">
+        <div class="card-body">
+
+            <div class="mb-3">
+            <h6 class="mb-1">Projects</h6>
+            <small class="text-muted">Client project activity</small>
+            </div>
+
+            <div class="table-responsive">
+            <table
+                id="client-projects"
+                class="table table-sm align-middle w-100"
+            >
+                <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Total Hours</th>
+                    <th>Active This Year</th>
+                    <th>Active This Month</th>
+                    <th>Start Date</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- Activity -->
+    <div class="card card-shadow-sm border-0 bg-white mb-3">
+        <div class="card-body">
+
+            <div class="mb-3">
+            <h6 class="mb-1">Activity</h6>
+            <small class="text-muted">Rendered hours and payment status</small>
+            </div>
+
+            <div class="table-responsive">
+            <table
+                id="client-activity"
+                class="table table-sm align-middle w-100"
+            >
+                <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Project</th>
+                    <th>Hours</th>
+                    <th>Date</th>
+                    <th>Payment Status</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            </div>
+
+        </div>
+    </div>
+
+</div>

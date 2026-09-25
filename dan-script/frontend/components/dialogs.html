@@ -8,11 +8,11 @@
             <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px">
               <h5 class="card-title">Recent Records</h5>
               <div style="flex: 1"></div>
-              <button type="button" class="btn btn-primary" id="viewMySheet-v-h">View</button>
+              <button type="button" class="btn btn-gc" id="viewMySheet-v-h">View</button>
             </div>
             <input type="hidden" name="client-view-hours" id="client-view-hours" />
             <div class="table-responsive" style="max-height: 230px; overflow-y: auto;">
-                <table class="align-middle mb-0 table table-borderless table-hovered" id="client-hours-table">
+                <table class="align-middle mb-0 table table-borderless table-hovered" style="width:100%" id="client-hours-table">
                     <thead>
                       <tr>
                         <th>Type</th>
@@ -21,7 +21,7 @@
                         <th>Date</th>
                       </tr>
                     </thead>
-                    <tbody></tbody>
+                    <tbody class="scrollbar-hover"></tbody>
                 </table>
             </div>
           </div>
@@ -102,7 +102,6 @@
     <!-- Header with minimize + close -->
     <div class="drawer-header">
       <span class="drawer-title">
-        <i class="pe-7s-clock icon-gradient bg-tempting-azure"></i>
         ADD HOURS
       </span>
 
@@ -127,7 +126,7 @@
             <!-- Optional: hide duplicate title if you want -->
             <h5 class="card-title" style="display:none;">ADD HOURS</h5>
             <div style="flex:1"></div>
-            <button id="submit-new-hours" type="submit" class="btn btn-primary">Add</button>
+            <button id="submit-new-hours" type="submit" class="btn btn-gc">Add</button>
           </div>
           <form id="taskForm" class="form-inline">
             <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group element-hidden">

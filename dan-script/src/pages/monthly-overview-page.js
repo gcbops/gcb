@@ -1,5 +1,6 @@
 import { ChartModule } from "../charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
+import { AppUtils } from "../utils.js";
 
 const monthlyOverviewPage = (() => {
   function init() {
@@ -21,12 +22,16 @@ const monthlyOverviewPage = (() => {
   function loadCurrentMonthLogChart(showLoading = true) {
     const month = Number($("#chartMonthFilter").val());
     const year = Number($("#chartYearFilter").val());
+    
     if (!month || !year) {
       return;
     }
     if (showLoading) {
       showCurrentMonthLogChartLoading();
     }
+
+    AppUtils.initSelect2(".chart-filters");
+
     ChartModule.loadChart(
       "current_month_log",
       false,

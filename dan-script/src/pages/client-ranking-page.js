@@ -1,6 +1,6 @@
-import { ClientRanking } from "../clients/client-ranking.js";
+import { clientRankings } from "../clients/client-ranking.js";
 
-const clientRankingPage = (() => {
+const clientRankingsPage = (() => {
   let bound = false;
 
   function init() {
@@ -10,7 +10,7 @@ const clientRankingPage = (() => {
 
     bound = true;
 
-    ClientRanking.init();
+    clientRankings.init();
   }
 
   function destroy() {
@@ -20,7 +20,7 @@ const clientRankingPage = (() => {
 
     bound = false;
 
-    ClientRanking.destroy?.();
+    clientRankings.destroy?.();
   }
 
   return {
@@ -29,4 +29,4 @@ const clientRankingPage = (() => {
   };
 })();
 
-export { clientRankingPage };
+export { clientRankingsPage };

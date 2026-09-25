@@ -1,21 +1,16 @@
 import { clientDirectoryPage } from "./pages/client-directory-page.js";
-import { upsellOverviewPage } from "./pages/upsell-overview-page.js";
-import { hourlyOverviewPage } from "./pages/hourly-overview-page.js";
-import { reportsExportDataPage } from "./pages/reports-export-data-page.js";
+import { reportsDataExportPage } from "./pages/reports-data-export-page.js";
 import { reportsMonthlyReportPage } from "./pages/reports-monthly-report-page.js";
 import { reportsAnnualReportPage } from "./pages/reports-annual-report-page.js";
 import { settingsConfigurationPage } from "./pages/config-page.js";
 import { clientActivityPage } from "./pages/client-activity-page.js";
-import { allManualProjectsPage } from "./pages/all-manual-projects-page.js";
 import { billingOwedHoursPage } from "./pages/billing-owed-hours-page.js";
 import { billingPaidHoursPage } from "./pages/billing-paid-hours-page.js";
 import { dailyOverviewPage } from "./pages/daily-overview-page.js";
 import { growthComparisonOverviewPage } from "./pages/growth-comparison-overview-page.js";
 import { HomePage } from "./pages/home-page.js";
 import { monthlyOverviewPage } from "./pages/monthly-overview-page.js";
-import { performanceDailyPage } from "./pages/performance-daily-page.js";
 import { performanceTargetPage } from "./pages/performance-target-page.js";
-import { performanceYearlyPage } from "./pages/performance-yearly-page.js";
 import { yearlyOverviewPage } from "./pages/yearly-overview-page.js";
 import { ChartModule } from "./charts.js";
 import { PageLoaderModule } from "./page-loader.js";
@@ -24,7 +19,15 @@ import { AppUI } from "./app-ui.js";
 import { AppShellModule } from "./app-shell.js";
 import { AppUtils } from "./utils.js";
 import { integrationsConfigurationPage } from "./pages/integration-page.js";
-import { clientRankingPage } from "./pages/client-ranking-page.js";
+import { clientRankingsPage } from "./pages/client-ranking-page.js";
+import { clientOpportunitiesPage } from "./pages/client-opportunities-page.js";
+import { projectRankingsPage } from "./pages/project-rankings-page.js";
+import { projectDirectoryPage } from "./pages/project-directory-page.js";
+import { billingOverviewPage } from "./pages/billing-overview-page.js";
+import { billingInvoiceStatusPage } from "./pages/billing-invoice-status-page.js";
+import { performanceOverviewPage } from "./pages/performance-overview.js";
+import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
+import { clientDetailsPage } from "./pages/client-details.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -50,27 +53,27 @@ const RouterModule = (() => {
 
     clientDirectory: clientDirectoryPage,
     clientActivity: clientActivityPage,
-    clientRanking: clientRankingPage,
+    clientRankings: clientRankingsPage,
+    clientOpportunities: clientOpportunitiesPage,
+    clientDetails: clientDetailsPage,
 
-    upsellOverview: upsellOverviewPage,
+    projectRankings: projectRankingsPage,
+    projectDirectory: projectDirectoryPage,
 
-    allManualProjects: allManualProjectsPage,
-
-    hourlyOverview: hourlyOverviewPage,
-
-    settingsConfiguration: settingsConfigurationPage,
-
+    billingOverview: billingOverviewPage,
     billingPaidHours: billingPaidHoursPage,
     billingOwedHours: billingOwedHoursPage,
+    billingInvoiceStatus: billingInvoiceStatusPage,
 
-    performanceYearly: performanceYearlyPage,
-    performanceDaily: performanceDailyPage,
+    performanceProductivity: performanceProductivityPage,
+    performanceOverview: performanceOverviewPage,
     performanceTarget: performanceTargetPage,
 
-    reportsExportData: reportsExportDataPage,
+    reportsDataExport: reportsDataExportPage,
     reportsMonthlyReport: reportsMonthlyReportPage,
     reportsAnnualReport: reportsAnnualReportPage,
 
+    settingsConfiguration: settingsConfigurationPage,
     integrationsConfiguration: integrationsConfigurationPage,
   };
 

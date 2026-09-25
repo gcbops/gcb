@@ -4,10 +4,10 @@ import { ActivityToday } from "./activity-today.js";
 const DataTableModule = (() => {
   const instances = {};
 
-  const NUMERIC_SORT_TABLES = new Set([
-    "top paid accounts",
-    "outstanding accounts",
-  ]);
+  // const NUMERIC_SORT_TABLES = new Set([
+  //   "top paid accounts",
+  //   "outstanding accounts",
+  // ]);
 
   function init(
     title,
@@ -92,12 +92,11 @@ const DataTableModule = (() => {
     if (simple) {
       Object.assign(tableOptions, {
         responsive: false,
-        searching: false,
         lengthChange: false,
         info: false,
         paging: false,
+        scrollY: "400px",
         scrollCollapse: true,
-        scrollY: "50dvh",
 
         layout: {
           topStart: null,
@@ -136,31 +135,25 @@ const DataTableModule = (() => {
     }
 
     // 2) Numeric sorting
-    if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
-      tableOptions.columnDefs.push({
-        targets: [1, 2],
-        type: "num-fmt",
-      });
-    }
+    // if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
+    //   tableOptions.columnDefs.push({
+    //     targets: [1, 2],
+    //     type: "num-fmt",
+    //   });
+    // }
 
-    if (cleanTitle === "upsell") {
-      Object.assign(tableOptions, {
-        pageLength: 5,
-        order: [],
-        ordering: false,
-        searching: true,
-        lengthChange: false,
-        info: false,
-        paging: true,
-      });
-
-      tableOptions.columnDefs.push({
-        targets: [1, 2],
-        className: "dt-center",
-      });
-    }
-
-    if (cleanTitle === "clients" || cleanTitle === "activity today") {
+    if (
+      cleanTitle === "clients" ||
+      cleanTitle === "activity today" ||
+      cleanTitle === "upsell opportunities" ||
+      cleanTitle === "legacy clients" ||
+      cleanTitle === "project directory" ||
+      cleanTitle === "monthly billing analytics" ||
+      cleanTitle === "hours without status" ||
+      cleanTitle === "yearly performance" ||
+      cleanTitle === "billing records export" ||
+      cleanTitle === "reports overview"
+    ) {
       log("Initializing Client Directory");
 
       tableOptions.paging = false;
@@ -194,6 +187,10 @@ const DataTableModule = (() => {
     /*
      * Activity Today setup.
      */
+    if (cleanTitle === "project directory") {
+      ActivityToday.setupTaskForm();
+    }
+
     if (cleanTitle === "activity today") {
       ActivityToday.setupFilters(instance);
       ActivityToday.setupTaskForm();
@@ -204,7 +201,7 @@ const DataTableModule = (() => {
     /*
      * Apply optional table-specific behavior.
      */
-    applyTableSpecificLogic(title, instance, tableId, debug);
+    // applyTableSpecificLogic(title, instance, tableId, debug);
 
     log("DataTable initialized:", tableId);
 
@@ -321,101 +318,101 @@ const DataTableModule = (() => {
     return columnDefs;
   }
 
-  function addColumnClass(tableId, colIndex, className) {
-    const instance = getInstance(tableId);
+  // function addColumnClass(tableId, colIndex, className) {
+  //   const instance = getInstance(tableId);
 
-    if (!instance || !className) {
-      return;
-    }
+  //   if (!instance || !className) {
+  //     return;
+  //   }
 
-    const column = instance.column(colIndex);
+  //   const column = instance.column(colIndex);
 
-    if (!column || !column.nodes) {
-      return;
-    }
+  //   if (!column || !column.nodes) {
+  //     return;
+  //   }
 
-    column.nodes().to$().addClass(className);
-  }
+  //   column.nodes().to$().addClass(className);
+  // }
 
-  function applyRankingTableLogic(
-    instance,
-    tableId,
-    orderColumn,
-    highlightColumn,
-    centerColumn,
-    topRows = 3,
-  ) {
-    instance.order([orderColumn, "desc"]).draw();
+  // function applyRankingTableLogic(
+  //   instance,
+  //   tableId,
+  //   orderColumn,
+  //   highlightColumn,
+  //   centerColumn,
+  //   topRows = 3,
+  // ) {
+  //   instance.order([orderColumn, "desc"]).draw();
 
-    addColumnClass(tableId, highlightColumn, "highlight");
+  //   addColumnClass(tableId, highlightColumn, "highlight");
 
-    addColumnClass(tableId, centerColumn, "dt-center");
+  //   addColumnClass(tableId, centerColumn, "dt-center");
 
-    highlightTopRows(tableId, topRows);
-  }
+  //   highlightTopRows(tableId, topRows);
+  // }
 
-  function applyTableSpecificLogic(title, instance, tableId, debug = false) {
-    const log = (...args) => debug && console.log(...args);
+  // function applyTableSpecificLogic(title, instance, tableId, debug = false) {
+  //   const log = (...args) => debug && console.log(...args);
 
-    const cleanTitle = title.toLowerCase().trim();
+  //   const cleanTitle = title.toLowerCase().trim();
 
-    if (cleanTitle === "top paid accounts") {
-      applyRankingTableLogic(instance, tableId, 1, 1, 3);
-    }
+  //   if (cleanTitle === "top paid accounts") {
+  //     applyRankingTableLogic(instance, tableId, 1, 1, 3);
+  //   }
 
-    if (cleanTitle === "outstanding accounts") {
-      applyRankingTableLogic(instance, tableId, 2, 2, 3);
-    }
+  //   if (cleanTitle === "outstanding accounts") {
+  //     applyRankingTableLogic(instance, tableId, 2, 2, 3);
+  //   }
 
-    log("Extra table logic completed:", title);
-  }
+  //   log("Extra table logic completed:", title);
+  // }
 
-  function highlightTopRows(tableId, rowCount, rowClass = "highlight-row") {
-    const instance = getInstance(tableId);
+  // function highlightTopRows(tableId, rowCount, rowClass = "highlight-row") {
+  //   const instance = getInstance(tableId);
 
-    if (!instance) {
-      return;
-    }
+  //   if (!instance) {
+  //     return;
+  //   }
 
-    const applyHighlight = () => {
-      const $tbody = $(`${tableId} tbody`);
+  //   const applyHighlight = () => {
+  //     const $tbody = $(`${tableId} tbody`);
 
-      if (!$tbody.length) {
-        return;
-      }
+  //     if (!$tbody.length) {
+  //       return;
+  //     }
 
-      $tbody.find(`.${rowClass}`).removeClass(rowClass);
+  //     $tbody.find(`.${rowClass}`).removeClass(rowClass);
 
-      $tbody.find(".row-rank").remove();
+  //     $tbody.find(".row-rank").remove();
 
-      $tbody.find("tr").each((index, row) => {
-        if (index >= rowCount) {
-          return;
-        }
+  //     $tbody.find("tr").each((index, row) => {
+  //       if (index >= rowCount) {
+  //         return;
+  //       }
 
-        row.classList.add(rowClass);
+  //       row.classList.add(rowClass);
 
-        const firstTd = row.querySelector("td");
+  //       const firstTd = row.querySelector("td");
 
-        if (!firstTd) {
-          return;
-        }
+  //       if (!firstTd) {
+  //         return;
+  //       }
 
-        const span = document.createElement("span");
+  //       const span = document.createElement("span");
 
-        span.className = "row-rank";
-        span.textContent = String(index + 1);
+  //       span.className = "row-rank";
+  //       span.textContent = String(index + 1);
 
-        firstTd.prepend(span);
-      });
-    };
+  //       firstTd.prepend(span);
+  //     });
+  //   };
 
-    instance.off("draw.highlightTopRows");
+  //   instance.off("draw.highlightTopRows");
 
-    instance.on("draw.highlightTopRows", applyHighlight);
+  //   instance.on("draw.highlightTopRows", applyHighlight);
 
-    applyHighlight();
-  }
+  //   applyHighlight();
+  // }
 
   function getColumnCount(tableId) {
     const $table = $(tableId);

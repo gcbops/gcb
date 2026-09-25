@@ -647,7 +647,7 @@ const AppUtils = (() => {
     }
   }
 
-  function setButtonLoading(btn, loadingText = "Loading") {
+  function setButtonLoading(btn, loadingText = "Loading", isSync = false) {
     const $button = $(btn);
 
     if (!$button.data("original-text")) {
@@ -691,6 +691,7 @@ const AppUtils = (() => {
     };
 
     const restore = () => {
+      $button.find("i").removeClass("fa-spin");
       $button.prop("disabled", false).html($button.data("original-text"));
       $button.removeData("original-text");
 
@@ -703,7 +704,12 @@ const AppUtils = (() => {
       }
     };
 
-    setText(loadingText);
+    if(isSync) {
+      $button.prop("disabled", true);
+      $button.find("i").addClass("fa-spin");
+    } else {
+      setText(loadingText);
+    }
 
     return {
       setText,
@@ -803,7 +809,7 @@ const AppUtils = (() => {
         const {
           label = "Action",
           icon = "",
-          className = "btn-primary",
+          className = "btn-gc",
           disabled = false,
         } = action;
 
@@ -1196,7 +1202,9 @@ const AppUtils = (() => {
     onBack,
     customActions = [],
   }) {
-    const eventNs = ns ? (ns.startsWith(".") ? ns : `.${ns}`) : ".confirmation";
+    const eventNs = ns
+      ? `.AppUtilsConfirmation${ns.startsWith(".") ? ns : `.${ns}`}`
+      : ".AppUtilsConfirmation";
 
     const transitionNs = ".AppUtilsConfirmationTransition";
 
@@ -1231,7 +1239,7 @@ const AppUtils = (() => {
         const {
           label = "Action",
           icon = "",
-          className = "btn-primary",
+          className = "btn-gc",
           disabled = false,
         } = action;
 
@@ -1283,7 +1291,7 @@ const AppUtils = (() => {
       <div class="dropdown">
         <button
           type="button"
-          class="btn btn-primary dropdown-toggle"
+          class="btn btn-gc dropdown-toggle"
           data-bs-toggle="dropdown"
           aria-expanded="false"
         >
@@ -1332,7 +1340,7 @@ const AppUtils = (() => {
 
           <button
             type="button"
-            class="btn btn-success btn-proceed"
+            class="btn btn-gc btn-proceed"
           >
             Proceed
           </button>
@@ -1344,16 +1352,15 @@ const AppUtils = (() => {
       /*
        * Clean up previous confirmation handlers.
        */
-      $appModal
-        .off(`click${eventNs}`, ".btn-back")
-        .off(`click${eventNs}`, ".btn-proceed")
-        .off(`click${eventNs}`, ".btn-custom-action");
+      $appModal.off(".AppUtilsConfirmation");
 
       /*
        * Cancel / Back.
        */
       $appModal.on(`click${eventNs}`, ".btn-back", function (event) {
         event.preventDefault();
+
+        $appModal.off(".AppUtilsConfirmation");
 
         if (typeof onBack === "function") {
           onBack($appModal);
@@ -1422,6 +1429,18 @@ const AppUtils = (() => {
 
     openModal();
   }
+
+  const confirmAction = (ns, title, message, actionCallback) => {
+    AppUtils.openConfirmationModal({
+      ns: ns,
+      title: title,
+      message: message,
+      onProceed: ($modal) => {
+        actionCallback();
+        AppUtils.closeModal("#app-modal");
+      },
+    });
+  };
 
 //   sample use case:
 //   customActions: [
@@ -1509,6 +1528,7 @@ const AppUtils = (() => {
     openModal,
     closeModal,
     openConfirmationModal,
+    confirmAction,
   };
 }
 )();
