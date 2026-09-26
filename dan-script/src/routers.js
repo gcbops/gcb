@@ -42,6 +42,7 @@ const RouterModule = (() => {
    * initializing.
    */
   let pendingPage = null;
+  let parentPage = null;
 
   const isEmbedded = window !== window.top;
   const isDirectGas = !isEmbedded;
@@ -148,6 +149,11 @@ const RouterModule = (() => {
       return;
     }
 
+    if (!initialized) {
+      parentPage = page;
+      return;
+    }
+
     go(page, false);
   }
 
@@ -205,7 +211,9 @@ const RouterModule = (() => {
          */
         const initialPage = isValidRoute(pendingPage)
           ? pendingPage
-          : restoredPage;
+          : isValidRoute(parentPage)
+            ? parentPage
+            : restoredPage;
 
         /*
          * Clear pending navigation before

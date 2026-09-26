@@ -44,16 +44,23 @@
     const GCB_APP_ORIGIN = "https://script.google.com";
     const iframe = document.getElementById("gcb-app");
 
-    let currentPage = "home";
+    const validPage = (page) =>
+      typeof page === "string" && page.trim() !== "";
 
+    const getPageFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("page");
+    };
+
+    let currentPage = getPageFromUrl() || "home";
+
+    // Establish the initial history state without removing ?page=...
     if (!history.state?.gcbPage) {
       history.replaceState(
-        { gcbPage: "home" },
+        { gcbPage: currentPage },
         "",
-        window.location.pathname,
+        window.location.href,
       );
-    } else {
-      currentPage = history.state.gcbPage;
     }
 
     window.addEventListener("message", (event) => {
@@ -67,23 +74,29 @@
 
       const page = event.data.page;
 
-      if (!page || page === currentPage) {
+      if (!validPage(page) || page === currentPage) {
         return;
       }
 
       currentPage = page;
 
+      const url = new URL(window.location.href);
+
+      url.searchParams.set("page", page);
+
       history.pushState(
         { gcbPage: page },
         "",
-        window.location.pathname + "?page=" + encodeURIComponent(page),
+        url.href,
       );
     });
 
     window.addEventListener("popstate", (event) => {
-      const page = event.state?.gcbPage;
+      const page =
+        event.state?.gcbPage ||
+        getPageFromUrl();
 
-      if (!page) {
+      if (!validPage(page)) {
         return;
       }
 
@@ -93,6 +106,16 @@
         {
           type: "GCB_HISTORY_NAVIGATION",
           page,
+        },
+        GCB_APP_ORIGIN,
+      );
+    });
+
+    iframe.addEventListener("load", () => {
+      iframe.contentWindow.postMessage(
+        {
+          type: "GCB_HISTORY_NAVIGATION",
+          page: currentPage,
         },
         GCB_APP_ORIGIN,
       );
