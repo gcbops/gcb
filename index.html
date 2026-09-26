@@ -41,7 +41,8 @@
   ></iframe>
 
   <script>
-    const GCB_APP_ORIGIN = "https://script.google.com";
+    const GCB_APP_ORIGIN = "*";
+    const GCB_GAS_HOST_SUFFIX = "-script.googleusercontent.com";
     const iframe = document.getElementById("gcb-app");
 
     const validPage = (page) =>
@@ -51,6 +52,14 @@
       const params = new URLSearchParams(window.location.search);
       return params.get("page");
     };
+
+    function isGcbGasOrigin(origin) {
+      try {
+        return new URL(origin).hostname.endsWith(GCB_GAS_HOST_SUFFIX);
+      } catch {
+        return false;
+      }
+    }
 
     let currentPage = getPageFromUrl() || "home";
 
@@ -64,7 +73,7 @@
     }
 
     window.addEventListener("message", (event) => {
-      if (event.origin !== GCB_APP_ORIGIN) {
+      if (!isGcbGasOrigin(event.origin)) {
         return;
       }
 
@@ -81,7 +90,6 @@
       currentPage = page;
 
       const url = new URL(window.location.href);
-
       url.searchParams.set("page", page);
 
       history.pushState(
@@ -107,7 +115,7 @@
           type: "GCB_HISTORY_NAVIGATION",
           page,
         },
-        GCB_APP_ORIGIN,
+        "*",
       );
     });
 

@@ -13313,6 +13313,7 @@
     let initialized = false;
     let initializing = null;
     let pendingPage = null;
+    let parentPage = null;
     const isEmbedded = window !== window.top;
     const isDirectGas = !isEmbedded;
     const GITHUB_ORIGIN = "https://gcbops.github.io";
@@ -13390,6 +13391,10 @@
       if (!isValidRoute(page)) {
         return;
       }
+      if (!initialized) {
+        parentPage = page;
+        return;
+      }
       go(page, false);
     }
     async function init() {
@@ -13412,7 +13417,7 @@
           }
           const savedPage = localStorage.getItem("gcb_currentPageGC");
           const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
-          const initialPage = isValidRoute(pendingPage) ? pendingPage : restoredPage;
+          const initialPage = isValidRoute(pendingPage) ? pendingPage : isValidRoute(parentPage) ? parentPage : restoredPage;
           pendingPage = null;
           initialized = true;
           go(initialPage, false);
