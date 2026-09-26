@@ -100,10 +100,18 @@ const RouterModule = (() => {
 
   function pushHistory(pageName) {
     if (isDirectGas) {
+      console.log("[RouterModule] Direct GAS history:", pageName);
+
       history.pushState({ gcbPage: pageName }, "", window.location.href);
 
       return;
     }
+
+    console.log("[RouterModule] Sending navigation to GitHub:", {
+      page: pageName,
+      targetOrigin: GITHUB_ORIGIN,
+      parentOrigin: window.parent.location?.origin,
+    });
 
     window.parent.postMessage(
       {
