@@ -1,0 +1,253 @@
+<div class="row" id="year-hours-summary">
+
+  <!-- TOTAL HOURS -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div
+              class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1"
+            >
+              Total Hours
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-metric="total-hours">0.0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                hrs
+              </span>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div
+              data-metric="lifetime"
+              class="text-primary font-weight-bold h4 mb-0 px-2 py-1 rounded bg-primary-light"
+            >
+              0%
+            </div>
+
+            <div class="text-muted font-size-xs opacity-7">
+              of lifetime vol
+            </div>
+          </div>
+
+        </div>
+
+        <div
+          data-metric="hours-yoy"
+          class="pt-2 border-top font-size-xs text-secondary"
+        >
+          —
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- COLLECTION RATE -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div
+              class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1"
+            >
+              Collection Rate
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-metric="paid-hours">0.0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                paid
+              </span>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div
+              data-metric="collection"
+              class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+            >
+              0%
+            </div>
+          </div>
+
+        </div>
+
+        <div
+          data-metric="collection-yoy"
+          class="pt-2 border-top font-size-xs text-secondary"
+        >
+          —
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DEBT EXPOSURE -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div
+              class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1"
+            >
+              Debt Exposure
+            </div>
+
+            <div class="h3 mb-0 font-weight-bold text-dark">
+              <span data-metric="owed-hours">0.0</span>
+              <span class="font-size-sm font-weight-normal text-secondary">
+                owed
+              </span>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div
+              data-metric="debt"
+              class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+            >
+              0%
+            </div>
+          </div>
+
+        </div>
+
+        <div
+          data-metric="debt-yoy"
+          class="pt-2 border-top font-size-xs text-secondary"
+        >
+          —
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- NET HOURS YIELD -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+
+          <div>
+            <div
+              class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1"
+            >
+              Net Hours Yield
+            </div>
+
+            <div
+              data-metric="net-hours"
+              class="h3 mb-0 font-weight-bold"
+            >
+              0.0
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div
+              data-metric="yield"
+              class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+            >
+              0%
+            </div>
+          </div>
+
+        </div>
+
+        <div
+          data-metric="yield-yoy"
+          class="pt-2 border-top font-size-xs text-secondary"
+        >
+          —
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <div class="main-card mb-3 card">
+      <div class="card-body">
+
+        <div class="chart-header">
+          <div class="chart-title">
+            <h5 class="card-title mb-1">
+              Monthly Hours
+            </h5>
+
+            <p class="text-secondary m-0 fs-7">
+              Hours logged per month for the selected year
+            </p>
+          </div>
+
+          <div class="chart-filters d-flex align-items-stretch gap-2">
+
+            <select
+              id="chartYearFilter"
+              class="custom-select chart-filter-control chart-filter-year js-select2 m-0"
+            ></select>
+
+            <button
+              type="button"
+              id="chartFilterSubmit"
+              class="btn btn-light chart-filter-control chart-filter-submit"
+            >
+              Apply
+            </button>
+
+          </div>
+        </div>
+
+        <div class="chart-loading-container">
+
+          <div
+            id="chart-yearly_monthly_hours-loading"
+            class="chart-loading-overlay d-none"
+          >
+            <div class="chart-loading-content">
+              <div class="chart-loading-spinner"></div>
+
+              <div class="chart-loading-text">
+                Updating chart...
+              </div>
+            </div>
+          </div>
+
+          <div
+            id="chart-yearly_monthly_hours"
+            style="height:400px;"
+          >
+            <div class="bar-loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

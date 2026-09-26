@@ -1,0 +1,345 @@
+<div class="row" id="client-rankings-page">
+  <div class="col-md-12">
+
+    <!-- OVERVIEW -->
+    <div id="client-ranking-overview" class="row">
+
+      <div class="col-md-4">
+        <div class="main-card mb-3 card">
+          <div class="card-body">
+
+            <div class="d-flex align-items-center">
+
+              <div class="client-summary-icon client-icon-primary">
+                <i class="fa fa-users"></i>
+              </div>
+
+              <div class="ms-3">
+                <div class="text-muted text-uppercase small">
+                  Total Clients
+                </div>
+
+                <div
+                  class="fs-4 fw-bold"
+                  data-metric="total-clients"
+                >
+                  —
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+
+      <div class="col-md-4">
+        <div class="main-card mb-3 card">
+          <div class="card-body">
+
+            <div class="d-flex align-items-center">
+
+              <div class="client-summary-icon client-icon-info">
+                <i class="fa fa-clock"></i>
+              </div>
+
+              <div class="ms-3">
+                <div class="text-muted text-uppercase small">
+                  Total Hours
+                </div>
+
+                <div
+                  class="fs-4 fw-bold"
+                  data-metric="total-hours"
+                >
+                  —
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+
+      <div class="col-md-4">
+        <div class="main-card mb-3 card">
+          <div class="card-body">
+
+            <div class="d-flex align-items-center">
+
+              <div class="client-summary-icon client-icon-success">
+                <i class="fa fa-chart-line"></i>
+              </div>
+
+              <div class="ms-3">
+                <div class="text-muted text-uppercase small">
+                  Collection Rate
+                </div>
+
+                <div
+                  class="fs-4 fw-bold"
+                  data-metric="collection-rate"
+                >
+                  —
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TOP CLIENTS -->
+    <div class="main-card mb-3 card client-featured">
+
+      <div class="card-body">
+
+        <div class="d-flex align-items-center mb-3">
+
+          <div class="client-icon client-icon-primary me-3">
+            <i class="fa fa-trophy"></i>
+          </div>
+
+          <div>
+            <h5 class="card-title mb-0">
+              Top Clients
+            </h5>
+
+            <div class="text-muted small">
+              Highest net paid
+            </div>
+          </div>
+
+        </div>
+
+        <div
+          class="client-list"
+          data-ranking="top-clients"
+        >
+          <div class="client-loading text-muted">
+            Loading...
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- SECONDARY RANKINGS -->
+    <div class="row">
+
+
+      <!-- TOP PAID -->
+      <div class="col-md-6">
+
+        <div class="main-card mb-3 card">
+
+          <div class="card-body">
+
+            <div class="d-flex align-items-center mb-3">
+
+              <div class="client-icon client-icon-success me-3">
+                <i class="fa fa-money-bill-wave"></i>
+              </div>
+
+              <div>
+                <h5 class="card-title mb-0">
+                  Top Paid
+                </h5>
+
+                <div class="text-muted small">
+                  Highest paid hours
+                </div>
+              </div>
+
+            </div>
+
+            <div
+              class="client-list"
+              data-ranking="top-paid"
+            >
+              <div class="client-loading text-muted">
+                Loading...
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- HIGHEST HOURS -->
+      <div class="col-md-6">
+
+        <div class="main-card mb-3 card">
+
+          <div class="card-body">
+
+            <div class="d-flex align-items-center mb-3">
+
+              <div class="client-icon client-icon-info me-3">
+                <i class="fa fa-clock"></i>
+              </div>
+
+              <div>
+                <h5 class="card-title mb-0">
+                  Highest Hours
+                </h5>
+
+                <div class="text-muted small">
+                  Most project hours
+                </div>
+              </div>
+
+            </div>
+
+            <div
+              class="client-list"
+              data-ranking="highest-hours"
+            >
+              <div class="client-loading text-muted">
+                Loading...
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- HIGHEST OWED -->
+      <div class="col-md-6">
+
+        <div class="main-card mb-3 card">
+
+          <div class="card-body">
+
+            <div class="d-flex align-items-center mb-3">
+
+              <div class="client-icon client-icon-warning me-3">
+                <i class="fa fa-credit-card"></i>
+              </div>
+
+              <div>
+                <h5 class="card-title mb-0">
+                  Highest Owed
+                </h5>
+
+                <div class="text-muted small">
+                  Largest outstanding balance
+                </div>
+              </div>
+
+            </div>
+
+            <div
+              class="client-list"
+              data-ranking="highest-owed"
+            >
+              <div class="client-loading text-muted">
+                Loading...
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- BEST COLLECTION -->
+      <div class="col-md-6">
+
+        <div class="main-card mb-3 card">
+
+          <div class="card-body">
+
+            <div class="d-flex align-items-center mb-3">
+
+              <div class="client-icon client-icon-success me-3">
+                <i class="fa fa-chart-line"></i>
+              </div>
+
+              <div>
+                <h5 class="card-title mb-0">
+                  Best Collection
+                </h5>
+
+                <div class="text-muted small">
+                  Highest collection rate
+                </div>
+              </div>
+
+            </div>
+
+            <div
+              class="client-list"
+              data-ranking="best-collection"
+            >
+              <div class="client-loading text-muted">
+                Loading...
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- HIGHEST DEBT EXPOSURE -->
+      <div class="col-md-6">
+
+        <div class="main-card mb-3 card">
+
+          <div class="card-body">
+
+            <div class="d-flex align-items-center mb-3">
+
+              <div class="client-icon client-icon-danger me-3">
+                <i class="fa fa-triangle-exclamation"></i>
+              </div>
+
+              <div>
+                <h5 class="card-title mb-0">
+                  Highest Debt Exposure
+                </h5>
+
+                <div class="text-muted small">
+                  Highest owed-to-total ratio
+                </div>
+              </div>
+
+            </div>
+
+            <div
+              class="client-list"
+              data-ranking="highest-debt-exposure"
+            >
+              <div class="client-loading text-muted">
+                Loading...
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+</div>

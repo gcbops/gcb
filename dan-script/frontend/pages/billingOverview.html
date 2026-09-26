@@ -1,0 +1,265 @@
+<div id="billing-overview-page">
+
+    <div class="row" id="billing-overview-summary">
+
+    <!-- CARD 1: TOTAL HOURS -->
+    <div class="col-md-6 col-xl-3 mb-4">
+        <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+
+            <div>
+                <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Total Hours
+                </div>
+
+                <div class="h3 mb-0 font-weight-bold text-dark">
+                <span data-billing-metric="total-hours">0.0</span>
+                <span class="font-size-sm font-weight-normal text-secondary">
+                    hrs
+                </span>
+                </div>
+            </div>
+
+            <div class="text-right">
+                <div
+                data-billing-metric="paid-hours"
+                class="text-success font-weight-bold h5 mb-0"
+                >
+                0.0
+                </div>
+
+                <div class="text-muted font-size-xs opacity-7">
+                paid
+                </div>
+            </div>
+
+            </div>
+
+            <div class="pt-2 border-top font-size-xs text-secondary">
+            Current month tracked hours
+            <span
+                data-billing-metric="month-label"
+                class="font-weight-bold ml-1"
+            >
+                —
+            </span>
+            </div>
+
+        </div>
+        </div>
+    </div>
+
+
+    <!-- CARD 2: OUTSTANDING HOURS -->
+    <div class="col-md-6 col-xl-3 mb-4">
+        <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+
+            <div>
+                <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Outstanding Hours
+                </div>
+
+                <div class="h3 mb-0 font-weight-bold text-dark">
+                <span data-billing-metric="outstanding-hours">0.0</span>
+                <span class="font-size-sm font-weight-normal text-secondary">
+                    hrs
+                </span>
+                </div>
+            </div>
+
+            <div class="text-right">
+                <div
+                data-billing-metric="unpaid-hours"
+                class="text-warning font-weight-bold h5 mb-0"
+                >
+                0.0
+                </div>
+
+                <div class="text-muted font-size-xs opacity-7">
+                unpaid
+                </div>
+            </div>
+
+            </div>
+
+            <div class="pt-2 border-top font-size-xs text-secondary">
+            Current month hours still outstanding
+            </div>
+
+        </div>
+        </div>
+    </div>
+
+
+    <!-- CARD 3: COLLECTION RATE -->
+    <div class="col-md-6 col-xl-3 mb-4">
+        <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+
+            <div>
+                <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Collection Rate
+                </div>
+
+                <div
+                data-billing-metric="collection-rate"
+                class="h3 mb-0 font-weight-bold"
+                >
+                0%
+                </div>
+            </div>
+
+            <div class="text-right">
+                <div
+                data-billing-metric="unpaid-rate"
+                class="font-weight-bold h5 mb-0"
+                >
+                0%
+                </div>
+
+                <div class="text-muted font-size-xs opacity-7">
+                unpaid rate
+                </div>
+            </div>
+
+            </div>
+
+            <div class="pt-2 border-top font-size-xs text-secondary">
+            Current month billing clearance
+            </div>
+
+        </div>
+        </div>
+    </div>
+
+
+    <!-- CARD 4: INVOICED HOURS -->
+    <div class="col-md-6 col-xl-3 mb-4">
+        <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+
+            <div>
+                <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Invoiced Hours
+                </div>
+
+                <div class="h3 mb-0 font-weight-bold text-dark">
+                <span data-billing-metric="invoiced-hours">0.0</span>
+                <span class="font-size-sm font-weight-normal text-secondary">
+                    hrs
+                </span>
+                </div>
+            </div>
+
+            <div class="text-right">
+                <div
+                data-billing-metric="invoiced-rate"
+                class="font-weight-bold h5 mb-0"
+                >
+                0%
+                </div>
+
+                <div class="text-muted font-size-xs opacity-7">
+                invoiced rate
+                </div>
+            </div>
+
+            </div>
+
+            <div class="pt-2 border-top font-size-xs text-secondary">
+            Current month invoiced hours
+            </div>
+
+        </div>
+        </div>
+    </div>
+
+    </div>
+
+    <div class="main-card card">
+
+    <div class="card-body">
+
+        <div class="d-flex align-items-start justify-content-between mb-3">
+
+            <div>
+                <h5 class="card-title mb-1">
+                Monthly Billing Analytics
+                </h5>
+
+                <div class="text-muted fs-7">
+                Monthly hours and billing status.
+                </div>
+            </div>
+
+            <button
+                type="button"
+                class="btn border-0 p-0"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                title="Analytics option"
+                aria-label="Analytics option"
+            >
+                <i class="fa fa-ellipsis-v fs-5"></i>
+            </button>
+
+            <ul class="dropdown-menu dropdown-menu-end">
+
+                <li>
+                    <button
+                        type="button"
+                        class="dropdown-item"
+                        id="refresh-billing-analytics"
+                        data-action="refresh-billing-analytics"
+                    >
+                        <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                        Refresh
+                    </button>
+                </li>
+
+            </ul>
+
+        </div>
+
+
+        <div class="table-responsive">
+
+            <table
+                id="billing-analytics-table"
+                class="table scrollbar-hover table-hovered nowrap w-100"
+            >
+
+                <thead>
+                <tr>
+                    <th>Month</th>
+                    <th class="text-center">Total Hours</th>
+                    <th class="text-center">Paid Hours</th>
+                    <th class="text-center">Unpaid Hours</th>
+                    <th class="text-center">Invoiced Hours</th>
+                    <th class="text-center">Outstanding Hours</th>
+                    <th class="text-center">Collection Rate</th>
+                    <th class="text-center">Unpaid Rate</th>
+                    <th class="text-center">Invoiced Rate</th>
+                </tr>
+                </thead>
+
+                <tbody id="billing-analytics-body" class="scrollbar-hover"></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+    </div>
+
+</div>

@@ -1,12 +1,13 @@
 import { AppUtils } from "../utils";
 import { DataTableModule } from "../tables/data-table";
+import { TableFilterService } from "../tables/table-filter-service";
 
 const ReportsOverview = (() => {
   const TABLE_ID = "#reports-export-table";
   const TABLE_TITLE = "Reports Overview";
 
   function loadReportsOverview() {
-    DataTableModule.showLoader(TABLE_ID, "Loading reports...");
+    DataTableModule.showLoader(TABLE_ID);
 
     AppUtils.cachedGScriptCall(
       "reportsOverview",
@@ -54,10 +55,27 @@ const ReportsOverview = (() => {
     });
 
     DataTableModule.init(TABLE_TITLE, TABLE_ID);
+
+    if (document.getElementById("reportHistoryTypeFilter")) {
+      TableFilterService.init(
+        "reportHistoryTypeFilter",
+        "reports-export-table",
+        3,
+        "table-filter-value",
+        "all",
+      );
+    }
   }
 
   function createReportLogRow(log, index) {
-    const badgeClass = log.type === "Monthly" ? "bg-primary" : "bg-success";
+    const type = String(log.type || "").toUpperCase();
+
+    const badgeClass =
+      {
+        MONTHLY: "bg-grow-early",
+        YEARLY: "bg-alternate",
+        DATAEXPORT: "bg-night-sky",
+      }[type] || "bg-secondary";
 
     return `
       <tr>
@@ -72,7 +90,7 @@ const ReportsOverview = (() => {
 
         <td class="text-center">
           <span class="badge bg-light text-info">
-            <i class="fa fa-file-pdf"></i>
+            <i class="fa-solid fa-file-pdf"></i>
             ${AppUtils.escapeHtml(log.name ?? "")}
           </span>
         </td>
@@ -83,33 +101,56 @@ const ReportsOverview = (() => {
           </span>
         </td>
 
-        <td class="text-center">
-          <div class="btn-group btn-group-sm">
+        <td class="action-btn-group">
+          <button
+            type="button"
+            class="p-0 btn border-0"
+            data-bs-toggle="dropdown"
+            aria-haspopup="true"
+            aria-expanded="false"
+            title="Report actions"
+          >
+            <i class="pe-7s-more"></i>
+          </button>
 
+          <div
+            tabindex="-1"
+            role="menu"
+            aria-hidden="true"
+            class="dropdown-menu"
+          >
             <button
-              class="btn btn-report-action btn-view-report"
+              type="button"
+              tabindex="0"
+              role="menuitem"
+              class="dropdown-item btn-report-action btn-view-report"
               data-url="${AppUtils.escapeHtml(log.link ?? "")}"
-              title="View Report"
             >
-              <i class="fa fa-eye"></i>
+              <i class="pe-7s-display2 me-2 text-info"></i>
+              View Report
             </button>
 
             <button
-              class="btn btn-report-action btn-email-report"
+              type="button"
+              tabindex="0"
+              role="menuitem"
+              class="dropdown-item btn-report-action btn-email-report"
               data-id="${AppUtils.escapeHtml(log.id ?? "")}"
-              title="Send Email"
             >
-              <i class="fa fa-envelope"></i>
+              <i class="pe-7s-mail me-2 text-success"></i>
+              Send Email
             </button>
 
             <button
-              class="btn btn-report-action btn-discord-report"
+              type="button"
+              tabindex="0"
+              role="menuitem"
+              class="dropdown-item btn-report-action btn-discord-report"
               data-id="${AppUtils.escapeHtml(log.id ?? "")}"
-              title="Send to Discord"
             >
-              <i class="fab fa-discord"></i>
+              <i class="pe-7s-joy me-2 text-alternate"></i>
+              Send to Discord
             </button>
-
           </div>
         </td>
 

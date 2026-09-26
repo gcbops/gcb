@@ -40,11 +40,12 @@
 
   <!-- Plugins -->
 
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-    integrity="sha384-DyZ88mC6Up2uqS4h/KRgHuoeGwBcD4Ng9SiP4dIRy0EXTlnuz47vAwmeGwVChigm" 
-    crossorigin="anonymous"
+  <link 
+    rel="stylesheet" 
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" 
+    integrity="sha512-QeR2VH+lsBE5LSAe1Q5EnTBbe7XTBubt8dG93Y7gidSgdMCr8nVqKcfKAMyN96SV8KDbZVTDXChatu5G2KQGzg==" 
+    crossorigin="anonymous" 
+    referrerpolicy="no-referrer"
   />
 
   <link
@@ -61,6 +62,11 @@
     crossorigin="anonymous"
   />
 
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+  />
+
   <!-- Application CSS -->
 
   <?!= include('styles'); ?>
@@ -74,301 +80,6 @@
   <!-- =========================
        Application Shell
   ========================== -->
-
-  <!-- <div id="app-container" class="app-container loading app-theme-white body-tabs-shadow fixed-sidebar fixed-header">
-
-    <div class="app-header header-shadow">
-      <div class="app-header__logo">
-          <div class="logo-src" data-page="home"></div>
-          <div class="header__pane ml-auto">
-              <div>
-                  <button type="button" class="hamburger close-sidebar-btn hamburger--elastic" data-class="closed-sidebar">
-                      <span class="hamburger-box">
-                          <span class="hamburger-inner"></span>
-                      </span>
-                  </button>
-              </div>
-          </div>
-      </div>
-      <div class="app-header__mobile-menu">
-          <div>
-              <button type="button" class="hamburger hamburger--elastic mobile-toggle-nav">
-                  <span class="hamburger-box">
-                      <span class="hamburger-inner"></span>
-                  </span>
-              </button>
-          </div>
-      </div>
-      <div class="app-header__menu">
-          <span>
-              <button type="button" class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav">
-                  <span class="btn-icon-wrapper">
-                      <i class="fa fa-ellipsis-v fa-w-6"></i>
-                  </span>
-              </button>
-          </span>
-      </div>   
-      <div class="app-header__content">
-          <div class="app-header-left">
-              <div class="search-wrapper">
-                  <div class="input-holder">
-                      <input class="search-input" placeholder="Type to search"> 
-                      <button class="search-icon"><span></span></button>
-                  </div>
-                  <button class="close"></button>
-              </div>
-              <ul class="header-menu nav">
-                <li class="nav-item">
-                  <a data-page="home" class="nav-link">
-                    <i class="nav-link-icon fa fa-chart-line"></i>
-                    Overview
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a data-page="growthComparisonOverview" class="nav-link">
-                    <i class="nav-link-icon fa fa-database"></i>
-                    Statistics
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a data-page="allManualProjects" class="nav-link">
-                    <i class="nav-link-icon fa fa-briefcase"></i>
-                    Projects
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a data-page="allClients" class="nav-link">
-                    <i class="nav-link-icon fa fa-user-friends"></i>
-                    Clients
-                  </a>
-                </li>
-              </ul>
-          </div>
-          <div class="app-header-right">
-              <div class="header-btn-lg pe-0">
-                  <div class="widget-content p-0">
-                      <div class="widget-content-wrapper">
-                          <div class="widget-content-left">
-                              <div class="btn-group">
-                                  <a data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="p-0 btn">
-                                      <img width="42" class="rounded-circle" src="https://s12.gifyu.com/images/b3woD.png" alt="profile">
-                                      <i class="fa fa-angle-down ml-2 opacity-8"></i>
-                                  </a>
-                                  <div tabindex="-1" role="menu" aria-hidden="true" class="dropdown-menu dropdown-menu-right">
-                                      <button type="button" tabindex="0" class="dropdown-item">User Account</button>
-                                      <button type="button" tabindex="0" class="dropdown-item">Settings</button>
-                                      <h6 tabindex="-1" class="dropdown-header">Header</h6>
-                                      <button type="button" tabindex="0" class="dropdown-item">Actions</button>
-                                      <div tabindex="-1" class="dropdown-divider"></div>
-                                      <button type="button" tabindex="0" class="dropdown-item">Dividers</button>
-                                  </div>
-                              </div>
-                          </div>
-                          <div class="widget-content-left  ml-3 header-user-info">
-                              <div class="widget-heading">
-                                  Dan Maxwel Vocal
-                              </div>
-                              <div class="widget-subheading">
-                                  Web Dev Project Manager
-                              </div>
-                          </div>
-                          <div class="widget-content-right header-user-info ml-3">
-                              <button type="button" class="btn-shadow p-1 btn btn-primary btn-sm show-toastr-example">
-                                  <i class="fa text-white fa-calendar pe-1 ps-1"></i>
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-              </div>       
-          </div>
-      </div>
-    </div>
-
-    <div class="app-main">
-      <div class="app-sidebar sidebar-shadow">
-          <div class="app-header__logo">
-              <div class="logo-src" data-page="home"></div>
-              <div class="header__pane ml-auto">
-                  <div>
-                      <button type="button" class="hamburger close-sidebar-btn hamburger--elastic" data-class="closed-sidebar">
-                          <span class="hamburger-box">
-                              <span class="hamburger-inner"></span>
-                          </span>
-                      </button>
-                  </div>
-              </div>
-          </div>
-          <div class="app-header__mobile-menu">
-              <div>
-                  <button type="button" class="hamburger hamburger--elastic mobile-toggle-nav">
-                      <span class="hamburger-box">
-                          <span class="hamburger-inner"></span>
-                      </span>
-                  </button>
-              </div>
-          </div>
-          <div class="app-header__menu">
-              <span>
-                  <button type="button" class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav">
-                      <span class="btn-icon-wrapper">
-                          <i class="fa fa-ellipsis-v fa-w-6"></i>
-                      </span>
-                  </button>
-              </span>
-          </div>    
-          <div class="scrollbar-sidebar">
-              <div class="app-sidebar__inner">
-                  <ul class="vertical-nav-menu">
-                    <li class="app-sidebar__heading">Dashboards</li>
-                    <li>
-                      <a data-page="home">
-                        <i class="metismenu-icon pe-7s-rocket"></i>
-                        Overview
-                      </a>
-                    </li>
-
-                    <li class="app-sidebar__heading">Analytics</li>
-                    <li>
-                      <a href="#">
-                        <i class="metismenu-icon pe-7s-graph2"></i>
-                        Hours Tracking
-                        <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
-                      </a>
-                      <ul>
-                        <li><a data-page="dailyOverview"><i class="metismenu-icon"></i>Daily Overview</a></li>
-                        <li><a data-page="monthlyOverview"><i class="metismenu-icon"></i>Monthly Overview</a></li>
-                        <li><a data-page="yearlyOverview"><i class="metismenu-icon"></i>Yearly Overview</a></li>
-                        <li><a data-page="growthComparisonOverview"><i class="metismenu-icon"></i>Growth Comparison</a></li>
-                      </ul>
-                    </li>
-                    <li>
-                      <a href="#">
-                        <i class="metismenu-icon pe-7s-users"></i>
-                        Clients
-                        <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
-                      </a>
-                      <ul>
-                        <li><a data-page="allClients"><i class="metismenu-icon"></i>All Clients</a></li>
-                        <li><a data-page="topClients"><i class="metismenu-icon"></i>Top Clients</a></li>
-                        <li><a data-page="activeClients"><i class="metismenu-icon"></i>Active Clients</a></li>
-                        <li><a data-page="upsellOverview"><i class="metismenu-icon"></i>Upsell</a></li>
-                        <li><a data-page="outstandingClients"><i class="metismenu-icon"></i>Outstanding</a></li>
-                      </ul>
-                    </li>
-
-                    <li class="app-sidebar__heading">Projects</li>
-                    <li>
-                      <a href="#">
-                        <i class="metismenu-icon pe-7s-portfolio"></i>
-                        Projects
-                        <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
-                      </a>
-                      <ul>
-                        <li><a data-page="allManualProjects"><i class="metismenu-icon"></i>Manual Projects</a></li>
-                        <li><a data-page="hourlyOverview"><i class="metismenu-icon"></i>Hourly Projects</a></li>
-                      </ul>
-                    </li>
-
-                    <li class="app-sidebar__heading">Billing & Payments</li>
-                    <li>
-                      <a href="#">
-                        <i class="metismenu-icon pe-7s-cash"></i>
-                        Billing
-                        <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
-                      </a>
-                      <ul>
-                        <li><a data-page="billingPaidHours"><i class="metismenu-icon"></i>Paid Hours</a></li>
-                        <li><a data-page="billingOwedHours"><i class="metismenu-icon"></i>Owed Hours</a></li>
-                      </ul>
-                    </li>
-
-                    <li class="app-sidebar__heading">Performance</li>
-                    <li>
-                      <a href="#">
-                        <i class="metismenu-icon pe-7s-display2"></i>
-                        Performance
-                        <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
-                      </a>
-                      <ul>
-                        <li><a data-page="performanceTarget"><i class="metismenu-icon"></i>Targets</a></li>
-                        <li><a data-page="performanceDaily"><i class="metismenu-icon"></i>Daily Grind</a></li>
-                        <li><a data-page="performanceYearly"><i class="metismenu-icon"></i>Yearly Overview</a></li>
-                      </ul>
-                    </li>
-
-                    <li class="app-sidebar__heading">Reports</li>
-                    <li>
-                      <a href="#">
-                        <i class="metismenu-icon pe-7s-note2"></i>
-                        Reports
-                        <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
-                      </a>
-                      <ul>
-                        <li><a data-page="reportsMonthlyReport"><i class="metismenu-icon"></i>Monthly Report</a></li>
-                        <li><a data-page="reportsAnnualReport"><i class="metismenu-icon"></i>Annual Report</a></li>
-                        <li><a data-page="reportsExportData"><i class="metismenu-icon"></i>Export Data</a></li>
-                      </ul>
-                    </li>
-
-                    <li class="app-sidebar__heading">System</li>
-                    <li>
-                      <a data-page="settingsConfiguration"><i class="metismenu-icon pe-7s-config"></i>Settings</a>
-                    </li>
-                    <li>
-                      <a data-page="integrationsConfiguration"> <i class="metismenu-icon pe-7s-network"></i>Integrations</a>
-                    </li>
-                  </ul>
-              </div>
-          </div>
-      </div>    
-      <div class="app-main__outer">
-          <div class="app-main__inner" id="app-main__inner"></div>
-          <div class="app-wrapper-footer">
-            <div class="app-footer">
-              <div class="app-footer__inner">
-           
-                <div class="app-footer-left">
-                  <ul class="nav">
-                    <li class="nav-item">
-                      <a href="https://www.facebook.com/gocrayonsteam" target="_blank" class="nav-link" style="color:#1877F2;">
-                        <i class="fab fa-facebook-f"></i>
-                      </a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="https://twitter.com/gocrayonsteam" target="_blank" class="nav-link" style="color:#1DA1F2;">
-                        <i class="fab fa-twitter"></i>
-                      </a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="https://www.youtube.com/channel/UCDXNfLkOLXWfIGZekMa7WZw?feature=applinks" target="_blank" class="nav-link" style="color:#FF0000;">
-                        <i class="fab fa-youtube"></i>
-                      </a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="https://www.instagram.com/go_crayons/?hl=en" target="_blank" class="nav-link" style="color:#E4405F;">
-                        <i class="fab fa-instagram"></i>
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-
-              
-                <div class="app-footer-right">
-                  <ul class="nav">
-                    <li class="nav-item">
-                      <a href="https://gocrayons.com/" target="_blank" class="nav-link" style="color:#3f6ad8;">
-                        <i class="fas fa-globe"></i>
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-      </div>
-    </div>
-    
-  </div> -->
 
   <div id="app-container" class="app-container loading app-theme-white body-tabs-shadow fixed-sidebar fixed-header closed-sidebar">
 
@@ -403,7 +114,7 @@
         <span
           ><button
             type="button"
-            class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav"
+            class="btn-icon btn-icon-only btn btn-gc btn-sm mobile-toggle-header-nav"
           >
             <span class="btn-icon-wrapper"
               ><i class="fa fa-ellipsis-v fa-w-6"></i
@@ -421,26 +132,26 @@
           </div>
           <ul class="header-menu nav">
             <li class="nav-item">
-              <a data-page="home" class="nav-link">
-                <i class="nav-link-icon fa fa-chart-line"></i>
-                Overview
+              <a data-page="reportsExportData" class="nav-link">
+                <i class="nav-link-icon fa pe-7s-graph3"></i>
+                Reports
               </a>
             </li>
             <li class="nav-item">
               <a data-page="growthComparisonOverview" class="nav-link">
-                <i class="nav-link-icon fa fa-database"></i>
+                <i class="nav-link-icon fs-4 pe-7s-graph1"></i>
                 Statistics
               </a>
             </li>
             <li class="nav-item">
               <a data-page="allManualProjects" class="nav-link">
-                <i class="nav-link-icon fa fa-briefcase"></i>
+                <i class="nav-link-icon fs-4 pe-7s-portfolio"></i>
                 Projects
               </a>
             </li>
             <li class="nav-item">
-              <a data-page="allClients" class="nav-link">
-                <i class="nav-link-icon fa fa-user-friends"></i>
+              <a data-page="clientDirectory" class="nav-link">
+                <i class="nav-link-icon fs-4 pe-7s-users"></i>
                 Clients
               </a>
             </li>
@@ -491,14 +202,6 @@
                   <div class="widget-heading">Dan Maxwel Vocal</div>
                   <div class="widget-subheading">Web Dev Project Manager</div>
                 </div>
-                <div class="widget-content-right header-user-info ms-3">
-                  <button
-                    type="button"
-                    class="btn-shadow p-1 btn btn-primary btn-sm show-toastr-example"
-                  >
-                    <i class="fa text-white fa-calendar pe-1 ps-1"></i>
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -540,7 +243,7 @@
           <span
             ><button
               type="button"
-              class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav"
+              class="btn-icon btn-icon-only btn btn-gc btn-sm mobile-toggle-header-nav"
             >
               <span class="btn-icon-wrapper"
                 ><i class="fa fa-ellipsis-v fa-w-6"></i
@@ -567,10 +270,10 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="dailyOverview"><i class="metismenu-icon"></i>Daily Overview</a></li>
-                    <li><a data-page="monthlyOverview"><i class="metismenu-icon"></i>Monthly Overview</a></li>
-                    <li><a data-page="yearlyOverview"><i class="metismenu-icon"></i>Yearly Overview</a></li>
-                    <li><a data-page="growthComparisonOverview"><i class="metismenu-icon"></i>Growth Comparison</a></li>
+                      <li><a data-page="dailyOverview"><i class="metismenu-icon"></i>Daily Overview</a></li>
+                      <li><a data-page="monthlyOverview"><i class="metismenu-icon"></i>Monthly Overview</a></li>
+                      <li><a data-page="yearlyOverview"><i class="metismenu-icon"></i>Yearly Overview</a></li>
+                      <li><a data-page="growthComparisonOverview"><i class="metismenu-icon"></i>Growth Comparison</a></li>
                     </ul>
                 </li>
                 <li>
@@ -580,16 +283,12 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="allClients"><i class="metismenu-icon"></i>All Clients</a></li>
-                    <li><a data-page="topClients"><i class="metismenu-icon"></i>Top Clients</a></li>
-                    <li><a data-page="activeClients"><i class="metismenu-icon"></i>Active Clients</a></li>
-                    <li><a data-page="externalSheetsManager"><i class="metismenu-icon"></i>Other Clients</a></li>
-                    <li><a data-page="upsellOverview"><i class="metismenu-icon"></i>Upsell</a></li>
-                    <li><a data-page="outstandingClients"><i class="metismenu-icon"></i>Outstanding</a></li>
+                      <li><a data-page="clientDirectory"><i class="metismenu-icon"></i>Client Directory</a></li>
+                      <li><a data-page="clientActivity"><i class="metismenu-icon"></i>Client Activity</a></li>
+                      <li><a data-page="clientRankings"><i class="metismenu-icon"></i>Client Rankings</a></li>
+                      <li><a data-page="clientOpportunities"><i class="metismenu-icon"></i>Client Opportunities</a></li>
                     </ul>
                 </li>
-
-                <li class="app-sidebar__heading">Projects</li>
                 <li>
                     <a href="#">
                     <i class="metismenu-icon pe-7s-portfolio"></i>
@@ -597,12 +296,12 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="allManualProjects"><i class="metismenu-icon"></i>Manual Projects</a></li>
-                    <li><a data-page="hourlyOverview"><i class="metismenu-icon"></i>Hourly Projects</a></li>
+                      <li><a data-page="projectDirectory"><i class="metismenu-icon"></i>Project Directory</a></li>
+                      <li><a data-page="projectRankings"><i class="metismenu-icon"></i>Project Rankings</a></li>
                     </ul>
                 </li>
 
-                <li class="app-sidebar__heading">Billing & Payments</li>
+                <li class="app-sidebar__heading">Billing & Hours</li>
                 <li>
                     <a href="#">
                     <i class="metismenu-icon pe-7s-cash"></i>
@@ -610,8 +309,10 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
+                    <li><a data-page="billingOverview"><i class="metismenu-icon"></i>Billing Overview</a></li>
                     <li><a data-page="billingPaidHours"><i class="metismenu-icon"></i>Paid Hours</a></li>
                     <li><a data-page="billingOwedHours"><i class="metismenu-icon"></i>Owed Hours</a></li>
+                    <li><a data-page="billingInvoiceStatus"><i class="metismenu-icon"></i>Invoice Status</a></li>
                     </ul>
                 </li>
 
@@ -623,9 +324,9 @@
                     <i class="metismenu-state-icon pe-7s-angle-down caret-left"></i>
                     </a>
                     <ul>
-                    <li><a data-page="performanceTarget"><i class="metismenu-icon"></i>Targets</a></li>
-                    <li><a data-page="performanceDaily"><i class="metismenu-icon"></i>Daily Grind</a></li>
-                    <li><a data-page="performanceYearly"><i class="metismenu-icon"></i>Yearly Overview</a></li>
+                      <li><a data-page="performanceOverview"><i class="metismenu-icon"></i>Performance Overview</a></li>
+                      <li><a data-page="performanceTarget"><i class="metismenu-icon"></i>Target & Efficiency</a></li>
+                    <li><a data-page="performanceProductivity"><i class="metismenu-icon"></i>Productivity</a></li>
                     </ul>
                 </li>
 
@@ -639,7 +340,7 @@
                     <ul>
                     <li><a data-page="reportsMonthlyReport"><i class="metismenu-icon"></i>Monthly Report</a></li>
                     <li><a data-page="reportsAnnualReport"><i class="metismenu-icon"></i>Annual Report</a></li>
-                    <li><a data-page="reportsExportData"><i class="metismenu-icon"></i>Export Data</a></li>
+                    <li><a data-page="reportsDataExport"><i class="metismenu-icon"></i>Data Export</a></li>
                     </ul>
                 </li>
 
@@ -685,7 +386,7 @@
                 <button
                   type="button"
                   class="btn-shadow me-3 btn btn-light"
-                  data-page="addManualHours"
+                  data-page="clientActivity"
                 >
                   <i class="fa fa-star"></i>
                 </button>
@@ -695,19 +396,19 @@
                     data-bs-toggle="dropdown"
                     aria-haspopup="true"
                     aria-expanded="false"
-                    class="btn-shadow dropdown-toggle btn btn-info"
+                    class="btn-shadow dropdown-toggle btn btn-gc"
                   >
                     <span class="btn-icon-wrapper pe-2 opacity-7"><i class="fa fa-business-time fa-w-20"></i> </span>Quick Actions
                   </dropdo>
                   <div tabindex="-1" role="menu" aria-hidden="true" class="dropdown-menu dropdown-menu-end">
                     <ul class="nav flex-column">
                       <li class="nav-item">
-                        <a data-page="allClients" class="nav-link">
+                        <a data-page="clientDirectory" class="nav-link">
                           <i class="pe-7s-add-user me-2"></i> <span>Add Project</span>
                         </a>
                       </li>
                       <li class="nav-item">
-                        <a data-page="addManualHours" class="nav-link">
+                        <a data-page="clientActivity" class="nav-link">
                           <i class="pe-7s-plus me-2"></i> <span>Add Hours</span>
                         </a>
                       </li>
@@ -821,13 +522,6 @@
   ========================== -->
 
   <script 
-    src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" 
-    integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" 
-    crossorigin="anonymous" 
-    referrerpolicy="no-referrer">
-  </script>
-
-  <script 
     src="https://cdn.jsdelivr.net/npm/chart.js" 
     integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" 
     crossorigin="anonymous"
@@ -851,6 +545,10 @@
     integrity="sha384-Si3HKTyQYGU+NC4aAF3ThcOSvK+ZQiyEKlYyfjiIFKMqsnCmfHjGa1VK1kYP9UdS" 
     crossorigin="anonymous"
     referrerpolicy="no-referrer">
+  </script>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/flatpickr">
   </script>
 
 

@@ -1,0 +1,602 @@
+<div class="main">
+
+  <!-- PAGE HEADER -->
+  <div class="mb-4">
+    <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+      Reports
+    </div>
+
+    <h4 class="mb-1 font-weight-bold text-dark">
+      Data Export
+    </h4>
+
+    <div class="font-size-sm text-secondary">
+      Export Billing Records and manage generated report files.
+    </div>
+  </div>
+
+
+  <!-- BILLING RECORDS EXPORT -->
+  <div class="row mb-4">
+
+    <div class="col-xl-8 mb-4 mb-xl-0">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-start mb-4">
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Billing Records
+              </div>
+
+              <h5 class="mb-1 font-weight-bold text-dark">
+                Generate CSV Export
+              </h5>
+
+              <div class="font-size-xs text-secondary">
+                Select the records you want to include in the CSV.
+              </div>
+            </div>
+
+            <div class="text-gc font-size-lg">
+              <i class="fa-solid fa-file-csv"></i>
+            </div>
+          </div>
+
+
+          <div class="form-group mb-4">
+            <label
+              for="billingRecordsDateRange"
+              class="font-size-xs text-muted font-weight-bold"
+            >
+              Date Range
+            </label>
+
+            <div class="input-group">
+              <input
+                type="text"
+                id="billingRecordsDateRange"
+                class="chart-filter-control custom-flatpickr form-control"
+                placeholder="Select date range"
+                readonly
+              >
+
+              <button
+                type="button"
+                id="billingRecordsFilterSubmit"
+                class="btn btn-light chart-filter-submit"
+              >
+                <i class="fa fa-filter me-1"></i>
+                Apply
+              </button>
+            </div>
+          </div>
+
+
+          <div
+            id="billingRecordsExportSummary"
+            class="p-3 bg-light rounded mb-4"
+          >
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Selected Range
+            </div>
+
+            <div
+              id="billingRecordsSelectedRange"
+              class="font-weight-bold text-dark"
+            >
+              No date range selected
+            </div>
+          </div>
+
+
+          <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+
+            <div
+              id="billingRecordsExportStatus"
+              class="font-size-xs text-secondary"
+              aria-live="polite"
+            >
+              Select a date range to continue.
+            </div>
+
+            <button
+              type="button"
+              id="btn-generate-billing-records-csv"
+              class="btn btn-gc"
+              disabled
+            >
+              <i class="fa-solid fa-file-csv me-1"></i>
+              Export
+            </button>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- REPORT ACTIONS -->
+    <div class="col-xl-4">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="mb-3">
+            <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+              Reports
+            </div>
+
+            <h5 class="mb-1 font-weight-bold text-dark">
+              Report Overview
+            </h5>
+
+            <div class="font-size-xs text-secondary">
+              Generated reports and export activity.
+            </div>
+          </div>
+
+
+          <div class="pt-3 border-top">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <span class="font-size-xs text-secondary">
+                Monthly Reports
+              </span>
+
+              <strong
+                id="monthly-reports-count"
+                class="text-dark"
+              >
+                0
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <span class="font-size-xs text-secondary">
+                Annual Reports
+              </span>
+
+              <strong
+                id="yearly-reports-count"
+                class="text-dark"
+              >
+                0
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <span class="font-size-xs text-secondary">
+                PDFs Generated
+              </span>
+
+              <strong
+                id="pdf-generated-count"
+                class="text-dark"
+              >
+                0
+              </strong>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="font-size-xs text-secondary">
+                CSV Generated
+              </span>
+
+              <strong
+                id="csv-generated-count"
+                class="text-dark"
+              >
+                0
+              </strong>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- BILLING RECORDS PREVIEW -->
+  <div class="row mb-4">
+    <div class="col-12">
+
+      <div class="main-card card">
+
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Export Preview
+              </div>
+
+              <h5 class="card-title mb-1">
+                Billing Records
+              </h5>
+
+              <div class="font-size-xs text-secondary">
+                Records matching the selected date range.
+              </div>
+            </div>
+          </div>
+
+
+          <div
+            class="table-responsive mt-4"
+          >
+            <table
+              id="billing-records-export-table"
+              class="table table-hovered scrollbar-hover nowrap w-100"
+            >
+              <thead>
+                <tr>
+                  <th class="text-center">#</th>
+                  <th>Client</th>
+                  <th>Type</th>
+                  <th>Project</th>
+                  <th>Hours</th>
+                  <th>Date</th>
+                  <th class="text-center">Payment Status</th>
+                </tr>
+              </thead>
+
+              <tbody
+                id="billing-records-export-table-body"
+                class="scrollbar-hover"
+              ></tbody>
+            </table>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- REPORT STATUS -->
+  <div class="row mb-4">
+
+    <div class="col-xl-4 mb-4 mb-xl-0">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Report Status
+          </div>
+
+          <h5 class="mb-3 font-weight-bold text-dark">
+            Report Schedule
+          </h5>
+
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="font-size-xs text-secondary">
+              Last Monthly Report
+            </span>
+
+            <strong
+              id="last-monthly-report"
+              class="font-size-xs text-dark"
+            ></strong>
+          </div>
+
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="font-size-xs text-secondary">
+              Last Annual Report
+            </span>
+
+            <strong
+              id="last-yearly-report"
+              class="font-size-xs text-dark"
+            ></strong>
+          </div>
+
+          <div class="d-flex justify-content-between py-2">
+            <span class="font-size-xs text-secondary">
+              Next Scheduled
+            </span>
+
+            <strong
+              id="next-scheduled-report"
+              class="font-size-xs text-dark"
+            ></strong>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <div class="col-xl-4 mb-4 mb-xl-0">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Integrations
+          </div>
+
+          <h5 class="mb-3 font-weight-bold text-dark">
+            Delivery Status
+          </h5>
+
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="font-size-xs text-secondary">
+              Drive Storage
+            </span>
+
+            <span
+              id="drive-storage-status"
+              class="font-size-xs text-success"
+            >
+              Connected
+            </span>
+          </div>
+
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="font-size-xs text-secondary">
+              Discord
+            </span>
+
+            <span
+              id="discord-status"
+              class="font-size-xs text-success"
+            >
+              Connected
+            </span>
+          </div>
+
+          <div class="d-flex justify-content-between py-2">
+            <span class="font-size-xs text-secondary">
+              Email
+            </span>
+
+            <span
+              id="email-status"
+              class="font-size-xs text-success"
+            >
+              Connected
+            </span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <div class="col-xl-4">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Automation
+          </div>
+
+          <h5 class="mb-3 font-weight-bold text-dark">
+            Report Automation
+          </h5>
+
+          <div class="d-flex align-items-center">
+
+            <div class="me-3">
+              <i class="fa-solid fa-cloud-bolt icon-gradient bg-happy-itmeo fs-2"></i>
+            </div>
+
+            <div>
+              <div
+                id="automation-status"
+                class="font-weight-bold text-dark"
+              >
+                Active
+              </div>
+
+              <div class="font-size-xs text-secondary">
+                Scheduled report generation and delivery.
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- RECENT REPORTS -->
+  <div class="row">
+
+    <div class="col-12">
+
+      <div class="card card-shadow-sm border-0 bg-white">
+
+        <div class="card-body">
+
+          <div class="d-flex align-items-start mb-3">
+
+              <div class="">
+                <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                  Report History
+                </div>
+
+                <h5 class="card-title mb-1">
+                  Recent Generated Reports
+                </h5>
+
+                <div class="font-size-xs text-secondary">
+                  View and access previously generated reports and data exports.
+                </div>
+              </div>
+
+              <div class="ms-auto d-flex justify-content-end">
+
+                  <!-- DESKTOP CONTROLS -->
+                  <div class="responsive-desktop-actions d-flex">
+
+                      <div class="btn-group" id="reportHistoryTypeFilter">
+
+                          <a
+                              data-bs-toggle="dropdown"
+                              aria-haspopup="true"
+                              aria-expanded="false"
+                              class="p-0 btn"
+                          >
+                              <span class="px-2">All</span>
+                              <i class="fa fa-angle-down ms-2 opacity-8"></i>
+                          </a>
+
+                          <div
+                              tabindex="-1"
+                              role="menu"
+                              aria-hidden="true"
+                              class="dropdown-menu dropdown-menu-right"
+                          >
+                              <button
+                                  type="button"
+                                  tabindex="0"
+                                  class="dropdown-item"
+                                  data-table-filter-value="all"
+                              >
+                                  All
+                              </button>
+
+                              <button
+                                  type="button"
+                                  tabindex="0"
+                                  class="dropdown-item"
+                                  data-table-filter-value="Monthly"
+                              >
+                                  Monthly
+                              </button>
+
+                              <button
+                                  type="button"
+                                  tabindex="0"
+                                  class="dropdown-item"
+                                  data-table-filter-value="Yearly"
+                              >
+                                  Yearly
+                              </button>
+
+                              <button
+                                  type="button"
+                                  tabindex="0"
+                                  class="dropdown-item"
+                                  data-table-filter-value="Data Export"
+                              >
+                                  Data Export
+                              </button>
+                          </div>
+
+                      </div>
+
+                  </div>
+
+                  <!-- MOBILE CONTROLS -->
+                  <div class="responsive-mobile-actions dropdown mb-2">
+
+                      <button
+                          type="button"
+                          class="btn btn-light"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false"
+                          aria-label="Report history filters"
+                          title="Report history filters"
+                      >
+                          <i class="fa fa-ellipsis-v"></i>
+                      </button>
+
+                      <ul class="dropdown-menu dropdown-menu-end">
+
+                          <li>
+                              <h6 class="dropdown-header">
+                                  View
+                              </h6>
+                          </li>
+
+                          <li>
+                            <button
+                              type="button"
+                              class="dropdown-item"
+                              data-table-filter-value="all"
+                            >
+                              All
+                            </button>
+                          </li>
+
+                          <li>
+                              <button
+                                  type="button"
+                                  class="dropdown-item"
+                                  data-table-filter-value="Monthly"
+                              >
+                                  Monthly
+                              </button>
+                          </li>
+
+                          <li>
+                              <button
+                                  type="button"
+                                  class="dropdown-item"
+                                  data-table-filter-value="Yearly"
+                              >
+                                  Yearly
+                              </button>
+                          </li>
+
+                          <li>
+                              <button
+                                  type="button"
+                                  class="dropdown-item"
+                                  data-table-filter-value="Data Export"
+                              >
+                                  Data Export
+                              </button>
+                          </li>
+
+                      </ul>
+
+                  </div>
+
+              </div>
+
+          </div>
+
+          <div
+            class="table-responsive mt-4"
+          >
+            <table
+              id="reports-export-table"
+              class="table table-hovered scrollbar-hover nowrap w-100"
+            >
+              <thead>
+                <tr>
+                  <th class="text-center">#</th>
+                  <th>Date</th>
+                  <th class="text-center">Name</th>
+                  <th class="text-center">Type</th>
+                  <th class="text-center">Action</th>
+                </tr>
+              </thead>
+
+              <tbody
+                id="data-table-body"
+                class="scrollbar-hover"
+              ></tbody>
+            </table>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>

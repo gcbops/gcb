@@ -1,196 +1,231 @@
-import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
 import { ReportHistory } from "../reports/history.js";
 import { ReportActions } from "../reports/actions.js";
-import { ReportGenerator } from "../reports/generator.js";
+import { DataTableModule } from "../tables/data-table.js";
 
 const reportsAnnualReportPage = (() => {
+  let bound = false;
 
-    let bound = false;
+  const init = () => {
+    if (bound) {
+      return;
+    }
 
-    const init = () => {
+    bound = true;
 
-        if (bound) {return;}
+    bindActions();
+    loadData();
+  };
 
-        bound = true;
+  const destroy = () => {
+    if (!bound) {
+      return;
+    }
 
-        bindActions();
-        loadData();
+    bound = false;
 
-    };
+    $(document).off(".reportsAnnual");
 
-    const destroy = () => {
+    DataTableModule.destroy("#annual-report-history");
+  };
 
-        if (!bound) {return;}
+  const bindActions = () => {
+    $(document)
+      .off(".reportsAnnual")
 
-        bound = false;
+      /*
+       * Report history actions
+       */
+      .on("click.reportsAnnual", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
 
-        $(document).off(".reportsAnnual");
-
-    };
-
-    const bindActions = () => {
-
-      $(document)
-          .off(".reportsAnnual")
-
-          .on("click.reportsAnnual", ".btn-view-report", (e) => {
-            const url = $(e.currentTarget).data("url");
-            window.open(url, "_blank");
-          })
-
-          .on("click.reportsAnnual", ".btn-email-report", function () {
-            const btn = $(this);
-
-            google.script.run
-            .withSuccessHandler(() => {
-                AppUtils.showDashboardToast(
-                    "Email sent successfully!",
-                    "success"
-                );
-            })
-            .withFailureHandler(err => {
-                AppUtils.showError(err);
-            })
-            .sendRequestedEmailReport(
-                btn.data("id")
-            );
-          })
-
-          .on("click.reportsAnnual", ".btn-discord-report", function () {
-            const btn = $(this);
-
-            google.script.run
-                .withSuccessHandler(() => {
-                    AppUtils.showDashboardToast(
-                        "Discord notification sent!",
-                        "success"
-                    );
-                })
-
-                .withFailureHandler(err => {
-                    AppUtils.showError(err);
-                })
-                .sendRequestedDiscordReport(
-                    btn.data("id")
-                );
-          })
-
-          .on("click.reportsAnnual", "#btn-generate-yearly-report", function () {
-
-              const btn = $(this);
-              const selectYear = $("#yearly-report-year");
-              const type = "yearly";
-              const year = selectYear.val();
-              selectYear.prop("disabled", true);
-
-              const loading = AppUtils.setButtonLoading(
-                btn[0],
-                "Analyzing Report Request...",
-              );
-
-              google.script.run
-                  .withSuccessHandler(result => {
-
-                      if (!result.valid) {
-
-                          ReportGenerator.setGenerateState(type, false, loading);
-
-                          AppUtils.showDashboardToast(
-                              result.message,
-                              "warning"
-                          );
-
-                          return;
-
-                      }
-
-                      ReportGenerator.generateYearlyReport(year, btn, loading);
-
-                  })
-                  .withFailureHandler(err => {
-
-                      ReportGenerator.setGenerateState(type, false, loading);
-
-                      console.error(err);
-
-                      AppUtils.showDashboardToast(
-                          err.message || "Something went wrong.",
-                          "error"
-                      );
-
-                  })
-                  .validateCustomYearlyReport(year);
-
-          })
-
-          .on("click.reportsAnnual", "#generate-yearly-report", () => {
-            const page = "reportsAnnualReport";
-            RouterModule.go(page);
-          })
-
-          .on("click.reportsAnnual", "#download-latest-pdf", function () {
-
-            const btn = $(this);
-            const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
-
-            ReportActions.downloadLatestPDF(btn, loading);
-
-          })
-
-          .on("click.reportsAnnual", "#email-latest-report", function () {
-
-            const btn = $(this);
-            const loading = AppUtils.setButtonLoading(
-              btn[0],
-              "Sending email...",
-            );
-
-            ReportActions.emailLatestReport(btn, loading);
-
-          })
-
-          .on("click.reportsAnnual", "#send-discord-notification", function () {
-
-            const btn = $(this);
-            const loading = AppUtils.setButtonLoading(
-              btn[0],
-              "Sending Discord...",
-            );
-
-            ReportActions.sendLatestReportToDiscord(btn, loading);
-
-          });
-
-    };
-
-    const loadData = () => {
-
-        const currentYear = new Date().getFullYear();
-
-        const $year = $("#yearly-report-year");
-
-        $year.empty();
-
-        for (let year = 2024; year <= currentYear; year++) {
-
-            $year.append(
-                `<option value="${year}">${year}</option>`
-            );
-
+        if (url) {
+          window.open(url, "_blank");
         }
+      })
 
-        $year.val(currentYear);
+      .on("click.reportsAnnual", ".btn-email-report", function () {
+        const $btn = $(this);
 
-        ReportHistory.loadCustomYearlyReportsPageData();
+        AppUtils.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to send this report via email?",
+          () => ReportActions.handleEmailReport($btn),
+        );
+      })
 
-    };
+      .on("click.reportsAnnual", ".btn-discord-report", function () {
+        const $btn = $(this);
 
-    return {
-        init,
-        destroy
-    };
+        AppUtils.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "Are you sure you want to send this report to Discord?",
+          () => ReportActions.handleDiscordReport($btn),
+        );
+      })
 
+      /*
+       * Generate report
+       */
+      .on("click.reportsAnnual", "#btn-generate-yearly-report", function (e) {
+        e.preventDefault();
+
+        const $btn = $(this);
+
+        AppUtils.confirmAction(
+          "generateYearlyReport",
+          "Generate Annual Report?",
+          "This will generate a PDF report for the selected year. Proceed?",
+          () => ReportActions.handleBtnGenerateYearlyReport($btn),
+        );
+      })
+
+      /*
+       * Latest report actions
+       */
+      .on("click.reportsAnnual", "#download-latest-pdf", function () {
+        const $btn = $(this);
+
+        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
+
+        ReportActions.downloadLatestPDF($btn, loading, "Yearly");
+      })
+
+      .on("click.reportsAnnual", "#email-latest-report", function () {
+        const $btn = $(this);
+
+        AppUtils.confirmAction(
+          "emailLatestReport",
+          "Email Latest Annual Report?",
+          "This will send the latest annual report to your registered email.",
+          () => {
+            ReportActions.handleEmailLatestReport($btn, "Yearly");
+          },
+        );
+      })
+
+      .on("click.reportsAnnual", "#send-discord-notification", function () {
+        const $btn = $(this);
+
+        AppUtils.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Annual Report to Discord?",
+          "This will send the latest annual report to the configured Discord channel.",
+          () => {
+            ReportActions.handleSendDiscordNotification($btn, "Yearly");
+          },
+        );
+      })
+
+      /*
+       * Update displayed period.
+       */
+      .on("change.reportsAnnual", "#yearly-report-year", updatePeriodLabel);
+  };
+
+  const loadData = () => {
+    populateYearSelector();
+    updatePeriodLabel();
+
+    loadReportsOverview();
+
+    ReportHistory.loadCustomYearlyReportsPageData(handleHistoryLoaded, false);
+  };
+
+  const populateYearSelector = () => {
+    const currentYear = new Date().getFullYear();
+
+    const $year = $("#yearly-report-year");
+
+    if (!$year.length) {
+      return;
+    }
+
+    $year.empty();
+
+    for (let year = 2024; year <= currentYear; year++) {
+      $year.append(`<option value="${year}">${year}</option>`);
+    }
+
+    $year.val(currentYear);
+
+    AppUtils.initSelect2(".generator-filters");
+  };
+
+  const loadReportsOverview = () => {
+    AppUtils.cachedGScriptCall(
+      "reportsOverview",
+      "getReportsOverview",
+      [],
+      (data) => {
+        updateAutomationStatus(data);
+      },
+      false,
+      false,
+    );
+  };
+
+  const updateAutomationStatus = (data) => {
+    const automation = data?.counts?.automation;
+
+    $("#annual-automation-status").text(automation ? "Active" : "Not Active");
+  };
+
+  const updatePeriodLabel = () => {
+    const year = $("#yearly-report-year").val();
+
+    if (!year) {
+      $("#yearly-report-period-label").text("-");
+      return;
+    }
+
+    $("#yearly-report-period-label").text(`Year ${year}`);
+  };
+
+  const handleHistoryLoaded = (logs = []) => {
+    const reports = Array.isArray(logs) ? logs : [];
+
+    updateSummary(reports);
+    updateLatestReport(reports);
+  };
+
+  const updateSummary = (reports) => {
+    const count = reports.length;
+
+    $("#annual-reports-count").text(count);
+
+    if (!count) {
+      $("#annual-last-report").text("-");
+      return;
+    }
+
+    const latest = reports[0];
+
+    $("#annual-last-report").text(latest?.name || latest?.date || "-");
+  };
+
+  const updateLatestReport = (reports) => {
+    if (!Array.isArray(reports) || !reports.length) {
+      $("#annual-latest-report-name").text("No report available");
+
+      $("#annual-latest-report-date").text("-");
+
+      return;
+    }
+
+    const latest = reports[0];
+
+    $("#annual-latest-report-name").text(latest?.name || "Annual Report");
+
+    $("#annual-latest-report-date").text(latest?.date || "-");
+  };
+
+  return {
+    init,
+    destroy,
+  };
 })();
 
 export { reportsAnnualReportPage };

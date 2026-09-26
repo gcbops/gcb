@@ -1,3 +1,5 @@
+import { ProfilePopoverModule } from "../profile/profile-popover";
+import { TableClientSelector } from "../tables/client-selector";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -7,7 +9,8 @@ const ClientDirectory = (() => {
   const TABLE_ID = "#clientsTable";
   const TABLE_TITLE = "Clients";
   const TABLE_BODY_ID = "dataBody";
-  const CACHE_KEY = "allClientsData";
+  const CACHE_KEY = "clientDirectoryData";
+  const SERVER_FUNCTION = "getClientDirectoryData";
 
   function init(source = CACHE_KEY) {
     if (initialized) {
@@ -16,8 +19,13 @@ const ClientDirectory = (() => {
 
     initialized = true;
 
-    bindClientDirectoryEvents();
+    ProfilePopoverModule.init();
+    ProfilePopoverModule.setProfileBuilder(
+      getClientProfilePopoverOptions,
+    );
+
     loadClientDirectory(source);
+    TableClientSelector.init();
   }
 
   function destroy() {
@@ -26,14 +34,6 @@ const ClientDirectory = (() => {
     }
 
     initialized = false;
-
-    unbindClientDirectoryEvents();
-
-    /*
-     * Destroy the DataTable instance so it does not
-     * remain active after leaving the page.
-     */
-    DataTableModule.destroy(TABLE_ID);
   }
 
   function loadClientDirectory(source = CACHE_KEY) {
@@ -41,233 +41,327 @@ const ClientDirectory = (() => {
 
     /*
      * Render cached data immediately when available.
+     * Then refresh in the background.
      */
-    if (Array.isArray(cached) && cached.length) {
+    if (Array.isArray(cached) && cached.length > 0) {
       renderClientDirectory(cached);
 
-      /*
-       * Check for fresh data in the background.
-       */
-      refreshClientDirectory(source, cached);
+      refreshClientDirectoryInBackground(source, cached);
 
       return;
     }
 
-    DataTableModule.showLoader(TABLE_ID, "Loading clients...");
-
     /*
      * No usable cache.
-     * Fetch from Apps Script.
+     * Show the table loader while fetching fresh data.
      */
+    DataTableModule.showLoader(TABLE_ID);
+
     fetchClientDirectory(source);
   }
 
-  function fetchClientDirectory(source) {
+  function fetchClientDirectory(source, callback = null) {
+    AppUtils.cachedGScriptCall(source, SERVER_FUNCTION, [], (data) => {
+      if (!Array.isArray(data)) {
+        AppUtils.showDashboardToast(
+          "Something went wrong loading clients!",
+          "error",
+        );
+
+        return;
+      }
+
+      renderClientDirectory(data, callback);
+    });
+  }
+
+  /*
+   * Explicitly refresh the client directory.
+   *
+   * This is used by the manual Sync/Refresh action.
+   */
+  function refreshClientDirectory(source = CACHE_KEY, callback = null) {
+    DataTableModule.showLoader(TABLE_ID);
+
+    $("#sync-clients-list i").addClass("fa-spin");
+
+    /*
+     * Clear the client cache so the next request
+     * cannot use stale client data.
+     */
+    AppUtils.cacheClear(source);
+
     AppUtils.cachedGScriptCall(
       source,
-      "getClientDataWithNickname",
-      [source],
+      SERVER_FUNCTION,
+      [],
       (data) => {
+        $("#sync-clients-list i").removeClass("fa-spin");
+
         if (!Array.isArray(data)) {
           AppUtils.showDashboardToast(
-            "Something went wrong loading clients!",
+            "Something went wrong refreshing clients!",
             "error",
           );
 
           return;
         }
 
-        renderClientDirectory(data);
-      },
-    );
-  }
-
-  function refreshClientDirectory(source, cached) {
-    /*
-     * Force a fresh Apps Script request.
-     *
-     * cachedGScriptCall() normally stops when valid
-     * cache exists, so reset=true is required here.
-     */
-    AppUtils.cachedGScriptCall(
-      source,
-      "getClientDataWithNickname",
-      [source],
-      (fresh) => {
-        if (!Array.isArray(fresh)) {
-          return;
-        }
-
-        if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
-          renderClientDirectory(fresh);
-        }
+        renderClientDirectory(data, () => {
+          if (typeof callback === "function") {
+            callback();
+          }
+        });
       },
       false,
       true,
     );
   }
 
-  function renderClientDirectory(data) {
+  /*
+   * Refresh the client directory in the background.
+   *
+   * Used after cached data has already been rendered.
+   * Does not show a loader or toast.
+   */
+  function refreshClientDirectoryInBackground(source, cached) {
+    AppUtils.cachedGScriptCall(
+      source,
+      SERVER_FUNCTION,
+      [],
+      (fresh) => {
+        if (!Array.isArray(fresh)) {
+          return;
+        }
+
+        /*
+         * Avoid rebuilding the DataTable when
+         * the server data has not changed.
+         */
+        if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+          return;
+        }
+
+        renderClientDirectory(fresh);
+      },
+      false,
+      true,
+    );
+  }
+
+  function renderClientDirectory(data, callback = null) {
+    ProfilePopoverModule.setClientData(data);
+
     const tbody = document.getElementById(TABLE_BODY_ID);
 
     if (!tbody) {
       return;
     }
-    
+
+    renderSummary(data);
+
     if (!Array.isArray(data) || data.length === 0) {
+      DataTableModule.destroy(TABLE_ID);
       DataTableModule.showEmpty(TABLE_ID, "No clients found.");
+
       return;
     }
-    
-    tbody.innerHTML = "";
-
-    data.forEach((client, index) => {
-      tbody.appendChild(createClientDirectoryRow(client, index));
-    });
 
     /*
-     * Initialize DataTable only after rows exist.
+     * Destroy the existing instance before replacing its rows.
      */
-    DataTableModule.init(TABLE_TITLE, TABLE_ID);
+    DataTableModule.destroy(TABLE_ID);
+
+    tbody.innerHTML = "";
+
+    data.forEach((client) => {
+      tbody.appendChild(createClientDirectoryRow(client));
+    });
+
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, callback);
   }
 
-  function createClientDirectoryRow(client, index) {
+  function renderSummary(data) {
+    if (!Array.isArray(data) || !data.length) {
+      setMetric("total-clients", 0);
+      setMetric("total-hours", 0, "h");
+      setMetric("total-paid", 0);
+      setMetric("total-owed", 0);
+
+      return;
+    }
+
+    const totalClients = data.length;
+
+    const totalHours = data.reduce(
+      (total, client) => total + (Number(client?.hours) || 0),
+      0,
+    );
+
+    const totalPaid = data.reduce(
+      (total, client) => total + (Number(client?.paid) || 0),
+      0,
+    );
+
+    const totalOwed = data.reduce(
+      (total, client) => total + (Number(client?.owed) || 0),
+      0,
+    );
+
+    setMetric("total-clients", totalClients);
+    setMetric("total-hours", totalHours, "h");
+    setMetric("total-paid", totalPaid);
+    setMetric("total-owed", totalOwed);
+  }
+
+  function setMetric(name, value, suffix = "") {
+    const element = document.querySelector(`[data-metric="${name}"]`);
+
+    if (!element) {
+      return;
+    }
+
+    const number = Number(value) || 0;
+
+    element.textContent = `${number.toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}${suffix}`;
+  }
+
+  function createClientDirectoryRow(client) {
     const row = document.createElement("tr");
 
-    const initials = AppUtils.getInitials(client.name);
+    const name = String(client?.name || "").trim();
 
-    const status = String(client.status || "").trim();
+    const projects = Number(client?.projects) || 0;
+    const hours = Number(client?.hours) || 0;
+    const paid = Number(client?.paid) || 0;
+    const owed = Number(client?.owed) || 0;
+    const collectionRate = Number(client?.collectionRate) || 0;
+    const debtExposure = Number(client?.debtExposure) || 0;
 
-    const statusHtml =
-      status.toLowerCase() === "inactive"
-        ? `
-          <span class="badge bg-danger text-center">
-            Inactive
-          </span>
-        `
-        : `
-          <span class="badge bg-success text-center">
-            ${AppUtils.escapeHtml(status || "Active")}
-          </span>
-        `;
+    const safeName = AppUtils.escapeHtml(name);
 
     row.innerHTML = `
-      <td class="text-center text-muted font-weight-bold">
-        ${index + 1}
-      </td>
+    <td class="client-name-cell">
+      <span
+        class="client-action-name client-profile-trigger"
+        role="button"
+        tabindex="0"
+        data-profile-popover
+        data-client-name="${safeName}"
+      >
+        ${safeName}
+      </span>
+    </td>
 
-      <td>
-        <div class="widget-content p-0">
-          <div class="widget-content-wrapper">
-            <div class="widget-content-left me-3">
-              <div
-                class="avatar-circle bg-malibu-beach text-white rounded-circle d-flex align-items-center justify-content-center"
-                style="width:40px;height:40px;font-weight:600;"
-              >
-                ${AppUtils.escapeHtml(initials)}
-              </div>
-            </div>
+    <td class="text-center">
+      ${projects}
+    </td>
 
-            <div class="widget-content-left flex2">
-              <div class="widget-heading">
-                ${AppUtils.escapeHtml(client.name)}
-              </div>
+    <td class="text-center">
+      ${formatHours(hours)}
+    </td>
 
-              <div class="widget-subheading opacity-7">
-                ${AppUtils.escapeHtml(client.role)}
-              </div>
-            </div>
-          </div>
-        </div>
-      </td>
+    <td class="text-center">
+      ${formatAmount(paid)}
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.projects)}
-      </td>
+    <td class="text-center">
+      ${formatAmount(owed)}
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.paid)}
-      </td>
+    <td class="text-center">
+      ${formatPercent(collectionRate)}
+    </td>
 
-      <td class="text-center text-muted">
-        ${AppUtils.escapeHtml(client.owed)}
-      </td>
-
-      <td class="text-center">
-        ${statusHtml}
-      </td>
-
-      <td class="text-center action-btn-group">
-        <button
-          type="button"
-          class="btn action-btn open-client-btn"
-          title="Open Client Sheet"
-        >
-          <i class="pe-7s-note"></i>
-        </button>
-      </td>
-    `;
+    <td class="text-center">
+      ${formatPercent(debtExposure)}
+    </td>
+  `;
 
     return row;
   }
 
-  function bindClientDirectoryEvents() {
-    const tbody = document.getElementById(TABLE_BODY_ID);
+  function getClientProfilePopoverOptions(client) {
+    return {
+      profileButton: true,
 
-    if (!tbody) {
-      return;
-    }
+      actions: `
+      <button
+        type="button"
+        class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-profile-client-action="add-hours"
+        data-client-name="${AppUtils.escapeHtml(client.name)}"
+      >
+        <i class="pe-7s-magic-wand"></i>
+        <span>Add Hours</span>
+      </button>
 
-    tbody.removeEventListener("click", handleClientDirectoryClick);
-
-    tbody.addEventListener("click", handleClientDirectoryClick);
+      <button
+        type="button"
+        class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-profile-client-action="open-sheet"
+        data-client-name="${AppUtils.escapeHtml(client.name)}"
+      >
+        <i class="pe-7s-edit"></i>
+        <span>Open Sheet</span>
+      </button>
+    `,
+    };
   }
 
-  function unbindClientDirectoryEvents() {
-    const tbody = document.getElementById(TABLE_BODY_ID);
+  //   function getClientProfilePopoverOptions(client) {
+  //   return {
+  //     content: `
+  //     <div class="small text-muted mb-2">
+  //       Collection Rate
+  //     </div>
 
-    if (!tbody) {
-      return;
-    }
+  //     <div class="fw-semibold">
+  //       ${formatPercent(client.collectionRate)}
+  //     </div>
+  //   `,
 
-    tbody.removeEventListener("click", handleClientDirectoryClick);
+  //     actions: `
+  //     <button
+  //       type="button"
+  //       class="btn btn-gc btn-sm"
+  //       data-profile-client-action="details"
+  //       data-client-name="${AppUtils.escapeHtml(client.name)}"
+  //     >
+  //       View Client
+  //     </button>
+
+  //     <button
+  //       type="button"
+  //       class="btn btn-outline-gc btn-sm"
+  //       data-profile-client-action="open-sheet"
+  //       data-client-name="${AppUtils.escapeHtml(client.name)}"
+  //     >
+  //       Open Sheet
+  //     </button>
+  //   `,
+  //   };
+  // }
+
+  function formatAmount(value) {
+    return (Number(value) || 0).toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
   }
 
-  function handleClientDirectoryClick(e) {
-    const btn = e.target.closest(".open-client-btn");
+  function formatHours(value) {
+    return `${(Number(value) || 0).toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}h`;
+  }
 
-    if (!btn) {
-      return;
-    }
-
-    const row = btn.closest("tr");
-
-    if (!row) {
-      return;
-    }
-
-    const clientName = row
-      .querySelector(".widget-heading")
-      ?.textContent?.trim();
-
-    if (!clientName) {
-      return;
-    }
-
-    AppUtils.showDashboardToast("Redirecting to sheet!", "info");
-
-    google.script.run
-      .withSuccessHandler((url) => {
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-        } else {
-          AppUtils.showError(url);
-        }
-      })
-      .withFailureHandler((err) => {
-        AppUtils.showError(err);
-      })
-      .goToPresentClient(clientName);
+  function formatPercent(value) {
+    return `${((Number(value) || 0) * 100).toFixed(2)}%`;
   }
 
   return {

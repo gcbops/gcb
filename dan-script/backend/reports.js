@@ -307,8 +307,7 @@ function updateCustomReportPDF(type, month, year) {
 }
 
 function isReportReady(type = "monthly") {
-  const ss = SpreadsheetApp.getActive();
-  const settings = ss.getSheetByName("Settings");
+  const settings = getSheetSafe("Settings");
 
   const configs = {
     monthly: {
@@ -331,8 +330,8 @@ function isReportReady(type = "monthly") {
     throw new Error(`Unknown report type: ${type}`);
   }
 
-  const generator = ss.getSheetByName(config.generatorSheet);
-  const pdf = ss.getSheetByName(config.pdfSheet);
+  const generator = getSheetSafe(config.generatorSheet);
+  const pdf = getSheetSafe(config.pdfSheet);
 
   if (!generator || !pdf) {
     throw new Error(`Required sheets for "${type}" report not found.`);
@@ -605,6 +604,69 @@ function sendOwedReport() {
   countCell.setValue(count + 1);
 }
 
+function sendBillingRecordsCSVEmail(fileId) {
+  if (!fileId) {
+    throw new Error("Billing CSV file ID is required.");
+  }
+
+  const file = DriveApp.getFileById(fileId);
+  const emailTo = getNotificationEmail();
+
+  if (!emailTo) {
+    throw new Error("No notification email configured.");
+  }
+
+  const now = new Date();
+  const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
+
+  MailApp.sendEmail({
+    to: emailTo,
+    subject: `Billing Records Export - ${file.getName()}`,
+    htmlBody: `
+      <p>Hey 👋,</p>
+
+      <p>Your <b>Billing Records</b> data export is ready.</p>
+
+      <p>
+        <a href="${file.getUrl()}">
+          📄 View Billing Records CSV
+        </a>
+      </p>
+
+      <p>Generated on ${formatted}</p>
+    `,
+  });
+
+  logResponse("✅ Billing Records CSV emailed.");
+}
+
+function sendBillingRecordsCSVDiscord(fileId) {
+  if (!fileId) {
+    throw new Error("Billing CSV file ID is required.");
+  }
+
+  const file = DriveApp.getFileById(fileId);
+  const webhookUrl = getDiscordWebhook();
+
+  if (!webhookUrl) {
+    throw new Error("No Discord webhook configured.");
+  }
+
+  const now = new Date();
+  const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
+
+  const embed = {
+    title: `📊 Billing Records Export - ${formatted}`,
+    description: `**Billing Records CSV:**\n${file.getUrl()}`,
+    color: 0x3498db,
+    timestamp: now.toISOString(),
+  };
+
+  sendDiscordMessage(webhookUrl, embed);
+
+  logResponse("✅ Billing Records CSV sent to Discord.");
+}
+
 function getReportById(reportId) {
   const report = getReportLogs().find((r) => r.id === reportId);
 
@@ -738,23 +800,73 @@ function validateCustomYearlyReport(year) {
 }
 
 function getReportLogs() {
-  const ss = getSpreadsheet();
-
   const sources = [
-    { sheet: "MonthlyReport_Log", type: "Monthly" },
-    { sheet: "YearlyReport_Log", type: "Yearly" },
+    {
+      sheet: "MonthlyReport_Log",
+      type: "Monthly",
+      format: "report",
+    },
+    {
+      sheet: "YearlyReport_Log",
+      type: "Yearly",
+      format: "report",
+    },
+    {
+      sheet: "BillingRecordsExport_Log",
+      type: "Data Export",
+      format: "billingExport",
+    },
   ];
 
   const logs = [];
 
-  sources.forEach(({ sheet: sheetName, type }) => {
-    const sheet = ss.getSheetByName(sheetName);
+  sources.forEach(({ sheet: sheetName, type, format }) => {
+    const sheet = getSheetSafe(sheetName);
 
     if (!sheet) return;
 
     const lastRow = sheet.getLastRow();
 
     if (lastRow <= 1) return;
+
+    if (format === "billingExport") {
+      const values = sheet.getRange(2, 1, lastRow - 1, 7).getDisplayValues();
+
+      values.forEach(
+        ([
+          date,
+          startDate,
+          endDate,
+          recordCount,
+          fileName,
+          fileUrl,
+          fileId,
+        ]) => {
+          if (!date || !fileUrl || !fileId) return;
+
+          let name = fileName
+            ? String(fileName)
+                .replace(/\.csv$/i, "")
+                .replace(/_/g, " ")
+            : "";
+
+          if (!name && startDate && endDate) {
+            name = `Billing Records ${startDate} to ${endDate}`;
+          }
+
+          logs.push({
+            date,
+            id: fileId,
+            name,
+            link: fileUrl,
+            type,
+            recordCount,
+          });
+        },
+      );
+
+      return;
+    }
 
     const values = sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
 
@@ -848,4 +960,193 @@ function getReportsOverview() {
       "MMMM dd, yyyy",
     ),
   };
+}
+
+function getBillingRecordsForExport(startDate, endDate) {
+  requireAuthorizedUser();
+
+  const sheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Billing Records");
+
+  if (!sheet) {
+    throw new Error('Sheet "Billing Records" was not found.');
+  }
+
+  const values = sheet.getDataRange().getValues();
+
+  if (values.length <= 1) {
+    return [];
+  }
+
+  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+
+  const end = endDate ? new Date(`${endDate}T23:59:59`) : null;
+
+  return values
+    .slice(1)
+    .filter((row) => {
+      const date = row[4];
+
+      if (!(date instanceof Date)) {
+        return false;
+      }
+
+      if (start && date < start) {
+        return false;
+      }
+
+      if (end && date > end) {
+        return false;
+      }
+
+      return true;
+    })
+    .map((row) => ({
+      client: row[0] ?? "",
+      type: row[1] ?? "",
+      project: row[2] ?? "",
+      hours: row[3] ?? 0,
+      date: Utilities.formatDate(
+        row[4],
+        Session.getScriptTimeZone(),
+        "yyyy-MM-dd",
+      ),
+      paymentStatus: row[5] ?? "",
+      sourceSheet: row[6] ?? "",
+      sourceRow: row[7] ?? "",
+    }));
+}
+
+function saveBillingRecordsCSV(startDate, endDate) {
+  requireAuthorizedUser();
+
+  if (!startDate || !endDate) {
+    throw new Error("A start date and end date are required.");
+  }
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T23:59:59`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new Error("Invalid date range.");
+  }
+
+  if (start > end) {
+    throw new Error("The start date cannot be later than the end date.");
+  }
+
+  const records = getBillingRecordsForExport(startDate, endDate);
+
+  if (!records.length) {
+    throw new Error(
+      "No Billing Records were found for the selected date range.",
+    );
+  }
+
+  const folder = getReportFolder();
+
+  const headers = [
+    "Client",
+    "Type",
+    "Project",
+    "Hours",
+    "Date",
+    "Payment Status",
+  ];
+
+  const rows = records.map((record) => [
+    record.client ?? "",
+    record.type ?? "",
+    record.project ?? "",
+    record.hours ?? 0,
+    record.date ?? "",
+    record.paymentStatus ?? "",
+  ]);
+
+  const csvRows = [headers, ...rows];
+
+  const csvContent = csvRows
+    .map((row) =>
+      row
+        .map((value) => {
+          const text = String(value ?? "");
+
+          return `"${text.replace(/"/g, '""')}"`;
+        })
+        .join(","),
+    )
+    .join("\r\n");
+
+  const fileName = `Billing Records_${startDate}_to_${endDate}.csv`;
+
+  const blob = Utilities.newBlob(csvContent, "text/csv", fileName);
+
+  const file = folder.createFile(blob);
+
+  logBillingRecordsCSV({
+    file,
+    startDate,
+    endDate,
+    recordCount: records.length,
+  });
+
+  return {
+    success: true,
+    url: file.getUrl(),
+    fileId: file.getId(),
+    name: file.getName(),
+    startDate,
+    endDate,
+    recordCount: records.length,
+  };
+}
+
+function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  let sheet = ss.getSheetByName("BillingRecordsExport_Log");
+
+  if (!sheet) {
+    sheet = ss.insertSheet("BillingRecordsExport_Log");
+
+    sheet.appendRow([
+      "Date",
+      "Start Date",
+      "End Date",
+      "Record Count",
+      "File Name",
+      "File URL",
+      "File ID",
+    ]);
+  }
+
+  sheet.appendRow([
+    new Date(),
+    startDate,
+    endDate,
+    recordCount,
+    file.getName(),
+    file.getUrl(),
+    file.getId(),
+  ]);
+}
+
+function getBillingRecordsCSVExportCount() {
+  requireAuthorizedUser();
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+    "BillingRecordsExport_Log",
+  );
+
+  if (!sheet) {
+    return 0;
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow <= 1) {
+    return 0;
+  }
+
+  return lastRow - 1;
 }

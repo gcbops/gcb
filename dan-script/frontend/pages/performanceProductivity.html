@@ -1,0 +1,532 @@
+<div id="productivity-page">
+
+  <!-- =========================================================
+       PRODUCTIVITY SUMMARY
+       ========================================================= -->
+  <div class="row">
+
+    <!-- TASKS COMPLETED -->
+    <div class="col-md-6 col-xl-4 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-center">
+
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Tasks Completed
+              </div>
+
+              <div class="h3 mb-0 font-weight-bold text-dark">
+                <span data-metric="tasks-completed-year">—</span>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <div
+                data-metric="target-year"
+                class="font-weight-bold text-primary h5 mb-0"
+              >
+                —
+              </div>
+
+              <div class="font-size-xs text-muted">
+                current year
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt-2 pt-2 border-top font-size-xs text-secondary">
+            Completed work items this year
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- TASKS THIS MONTH -->
+    <div class="col-md-6 col-xl-4 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-center">
+
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Tasks This Month
+              </div>
+
+              <div class="h3 mb-0 font-weight-bold text-dark">
+                <span data-metric="tasks-completed-month">—</span>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <div
+                data-metric="current-month"
+                class="font-weight-bold text-primary h5 mb-0"
+              >
+                —
+              </div>
+
+              <div class="font-size-xs text-muted">
+                current month
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt-2 pt-2 border-top font-size-xs text-secondary">
+            Completed work items this month
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- HOURS PER TASK -->
+    <div class="col-md-6 col-xl-4 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-center">
+
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Hours per Task
+              </div>
+
+              <div class="h3 mb-0 font-weight-bold text-dark">
+                <span data-metric="hours-per-task">—</span>
+
+                <span class="font-size-sm font-weight-normal text-secondary">
+                  hrs/task
+                </span>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <div
+                data-metric="hours-per-task-rate"
+                class="font-weight-bold text-primary h5 mb-0"
+              >
+                —
+              </div>
+
+              <div class="font-size-xs text-muted">
+                tasks/hr
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt-2 pt-2 border-top font-size-xs text-secondary">
+            Average tracked hours per completed task
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- =========================================================
+       WORK OUTPUT
+       ========================================================= -->
+  <div class="row">
+
+    <!-- YEAR TO DATE -->
+    <div class="col-md-6 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-start mb-3">
+
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Year to Date
+              </div>
+
+              <div class="font-weight-bold text-dark">
+                Work Output
+              </div>
+            </div>
+
+            <span class="badge badge-light text-gc">
+              YTD
+            </span>
+
+          </div>
+
+          <div class="row">
+
+            <div class="col-6 border-right">
+              <div class="font-size-xs text-muted mb-1">
+                Tracked Hours
+              </div>
+
+              <div class="h4 mb-0 font-weight-bold text-dark">
+                <span data-metric="ytd-hours">—</span>
+
+                <span class="font-size-xs font-weight-normal text-secondary">
+                  hrs
+                </span>
+              </div>
+            </div>
+
+            <div class="col-6 pl-3">
+              <div class="font-size-xs text-muted mb-1">
+                Completed Tasks
+              </div>
+
+              <div class="h4 mb-0 font-weight-bold text-dark">
+                <span data-metric="ytd-tasks">—</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt-3 pt-2 border-top font-size-xs text-secondary">
+            Tracked hours and completed tasks for the current year.
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- CURRENT MONTH -->
+    <div class="col-md-6 mb-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-start mb-3">
+
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Current Month
+              </div>
+
+              <div class="font-weight-bold text-dark">
+                Monthly Productivity
+              </div>
+            </div>
+
+            <span class="badge badge-light text-gc">
+              MONTH
+            </span>
+
+          </div>
+
+          <div class="row">
+
+            <div class="col-6 border-right">
+              <div class="font-size-xs text-muted mb-1">
+                Tracked Hours
+              </div>
+
+              <div class="h4 mb-0 font-weight-bold text-dark">
+                <span data-metric="current-month-hours">—</span>
+
+                <span class="font-size-xs font-weight-normal text-secondary">
+                  hrs
+                </span>
+              </div>
+            </div>
+
+            <div class="col-6 pl-3">
+              <div class="font-size-xs text-muted mb-1">
+                Completed Tasks
+              </div>
+
+              <div class="h4 mb-0 font-weight-bold text-dark">
+                <span data-metric="current-month-tasks">—</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt-3 pt-2 border-top font-size-xs text-secondary">
+            Tracked work completed during the current month.
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- =========================================================
+       HOUR VALUE REFERENCE
+       ========================================================= -->
+  <div class="row">
+
+    <div class="col-12 mb-3">
+
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body">
+
+          <!-- HEADER -->
+          <div class="d-flex justify-content-between align-items-start mb-3">
+
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Hour Value Reference
+              </div>
+
+              <div class="font-weight-bold text-dark">
+                Estimated Value of Tracked Hours
+              </div>
+
+              <div class="font-size-xs text-secondary mt-1">
+                Hypothetical value based on the selected hourly rate.
+              </div>
+            </div>
+
+            <span class="badge badge-light text-gc">
+              REFERENCE
+            </span>
+
+          </div>
+
+
+          <!-- RATE CONTROLS -->
+          <div class="row align-items-end">
+
+            <!-- MIN -->
+            <div class="col-md-4 mb-3">
+
+              <label
+                for="productivity-rate-min"
+                class="font-size-xs text-muted font-weight-bold mb-1"
+              >
+                Minimum Rate
+              </label>
+
+              <div class="input-group">
+                <span class="input-group-text">
+                  $
+                </span>
+
+                <input
+                  type="number"
+                  id="productivity-rate-min"
+                  class="form-control my-0"
+                  min="0"
+                  step="0.50"
+                  value="12"
+                >
+
+                <span class="input-group-text">
+                  / hr
+                </span>
+              </div>
+
+            </div>
+
+
+            <!-- MAX -->
+            <div class="col-md-4 mb-3">
+
+              <label
+                for="productivity-rate-max"
+                class="font-size-xs text-muted font-weight-bold mb-1"
+              >
+                Maximum Rate
+              </label>
+
+              <div class="input-group">
+                <span class="input-group-text">
+                  $
+                </span>
+
+                <input
+                  type="number"
+                  id="productivity-rate-max"
+                  class="form-control my-0"
+                  min="0"
+                  step="0.50"
+                  value="16"
+                >
+
+                <span class="input-group-text">
+                  / hr
+                </span>
+              </div>
+
+            </div>
+
+
+            <!-- SELECTED RANGE -->
+            <div class="col-md-4 mb-3">
+
+              <div class="p-3 bg-light rounded">
+
+                <div class="font-size-xs text-uppercase text-muted font-weight-bold tracking-wider mb-1">
+                  Selected Range
+                </div>
+
+                <div class="h4 mb-0 font-weight-bold text-dark">
+                  <span data-metric="rate-range">
+                    $12.00 – $16.00
+                  </span>
+                </div>
+
+                <div class="font-size-xs text-secondary mt-1">
+                  Hypothetical hourly value
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- VALUE RESULTS -->
+          <div class="row">
+
+            <!-- CURRENT MONTH -->
+            <div class="col-md-4 mb-3">
+
+              <div class="p-3 bg-light rounded">
+
+                <div class="d-flex justify-content-between align-items-center">
+
+                  <div class="font-size-xs text-muted font-weight-bold">
+                    Current Month
+                  </div>
+
+                  <span class="font-size-xs text-secondary">
+                    <span data-metric="current-month-value-hours">
+                      —
+                    </span>
+                    hrs
+                  </span>
+
+                </div>
+
+                <div class="h5 mb-0 mt-2 font-weight-bold text-dark">
+
+                  <span data-metric="current-month-value-min">
+                    $—
+                  </span>
+
+                  <span class="text-muted mx-1">
+                    –
+                  </span>
+
+                  <span data-metric="current-month-value-max">
+                    $—
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+
+            <!-- YTD -->
+            <div class="col-md-4 mb-3">
+
+              <div class="p-3 bg-light rounded">
+
+                <div class="d-flex justify-content-between align-items-center">
+
+                  <div class="font-size-xs text-muted font-weight-bold">
+                    Year to Date
+                  </div>
+
+                  <span class="font-size-xs text-secondary">
+                    <span data-metric="ytd-value-hours">
+                      —
+                    </span>
+                    hrs
+                  </span>
+
+                </div>
+
+                <div class="h5 mb-0 mt-2 font-weight-bold text-dark">
+
+                  <span data-metric="ytd-value-min">
+                    $—
+                  </span>
+
+                  <span class="text-muted mx-1">
+                    –
+                  </span>
+
+                  <span data-metric="ytd-value-max">
+                    $—
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+
+            <!-- PROJECTED -->
+            <div class="col-md-4 mb-3">
+
+              <div class="p-3 bg-light rounded">
+
+                <div class="d-flex justify-content-between align-items-center">
+
+                  <div class="font-size-xs text-muted font-weight-bold">
+                    Projected Year
+                  </div>
+
+                  <span class="font-size-xs text-secondary">
+                    <span data-metric="projected-value-hours">
+                      —
+                    </span>
+                    hrs
+                  </span>
+
+                </div>
+
+                <div class="h5 mb-0 mt-2 font-weight-bold text-dark">
+
+                  <span data-metric="projected-value-min">
+                    $—
+                  </span>
+
+                  <span class="text-muted mx-1">
+                    –
+                  </span>
+
+                  <span data-metric="projected-value-max">
+                    $—
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- DISCLAIMER -->
+          <div class="mt-2 pt-2 border-top font-size-xs text-secondary">
+            Hypothetical reference only. This does not represent actual
+            revenue, payments, earnings, or other financial results.
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>

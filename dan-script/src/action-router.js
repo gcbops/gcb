@@ -24,6 +24,7 @@ const ActionRouterModule = (() => {
   }
 
   function handleNavigationClick(e) {
+    
     const pageBtn = e.target.closest("[data-page]");
 
     if (!pageBtn) {
@@ -64,6 +65,10 @@ const ActionRouterModule = (() => {
         hamburger.classList.remove("is-active");
       }
     }
+
+    document
+      .getElementById("app-main-inner-container")
+      .classList.add("opacity-0");
 
     RouterModule.go(page);
   }

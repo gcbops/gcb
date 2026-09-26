@@ -1,14 +1,16 @@
-import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
 import { ReportHistory } from "../reports/history.js";
 import { ReportActions } from "../reports/actions.js";
-import { ReportGenerator } from "../reports/generator.js";
+import { DataTableModule } from "../tables/data-table.js";
 
 const reportsMonthlyReportPage = (() => {
   let bound = false;
 
   const init = () => {
-    if (bound) {return;}
+    if (bound) {
+      return;
+    }
+
     bound = true;
 
     bindActions();
@@ -16,167 +18,219 @@ const reportsMonthlyReportPage = (() => {
   };
 
   const destroy = () => {
-    if (!bound) {return;}
+    if (!bound) {
+      return;
+    }
+
     bound = false;
 
     $(document).off(".reportsMonthly");
+
+    DataTableModule.destroy("#monthly-report-history");
   };
 
   const bindActions = () => {
-
     $(document)
-    .off(".reportsMonthly")
+      .off(".reportsMonthly")
 
-    .on("click.reportsMonthly", ".btn-view-report", (e) => {
-      const url = $(e.currentTarget).data("url");
-      window.open(url, "_blank");
-    })
+      /*
+       * Report history actions
+       */
+      .on("click.reportsMonthly", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
 
-    .on("click.reportsMonthly", ".btn-email-report", function () {
-
-        const btn = $(this);
-
-        google.script.run
-            .withSuccessHandler(() => {
-                AppUtils.showDashboardToast(
-                    "Email sent successfully!",
-                    "success"
-                );
-            })
-            .withFailureHandler(err => {
-                AppUtils.showError(err);
-            })
-            .sendRequestedEmailReport(
-                btn.data("id")
-            );
-
-    })
-
-    .on("click.reportsMonthly", ".btn-discord-report", function () {
-
-        const btn = $(this);
-
-        google.script.run
-            .withSuccessHandler(() => {
-                AppUtils.showDashboardToast(
-                    "Discord notification sent!",
-                    "success"
-                );
-            })
-            .withFailureHandler(err => {
-                AppUtils.showError(err);
-            })
-            .sendRequestedDiscordReport(
-                btn.data("id")
-            );
-    })
-
-    .on("click.reportsMonthly", "#btn-generate-monthly-report", function () {
-
-      const btn = $(this);
-      const selectMonth = $("#monthly-report-month");
-      const selectYear = $("#monthly-report-year");
-      const month = selectMonth.val();
-      const year = selectYear.val();
-      const type = "monthly";
-      selectMonth.prop("disabled", true);
-      selectYear.prop("disabled", true);
-
-      const loading = AppUtils.setButtonLoading(
-        btn[0],
-        "Analyzing Report Request...",
-      );
-
-      google.script.run
-      .withSuccessHandler(result => {
-
-        if (!result.valid) {
-          ReportGenerator.setGenerateState(type, false, loading);
-
-          AppUtils.showDashboardToast(result.message, "warning");
-          return;
+        if (url) {
+          window.open(url, "_blank");
         }
-
-        ReportGenerator.generateMonthlyReport(month, year, btn, loading);
-
       })
-      .withFailureHandler(err => {
-        ReportGenerator.setGenerateState(type, false, loading);
 
-        console.error(err);
+      .on("click.reportsMonthly", ".btn-email-report", function () {
+        const $btn = $(this);
 
-        AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error"
+        AppUtils.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to send this report via email?",
+          () => ReportActions.handleEmailReport($btn),
         );
       })
-      .validateCustomMonthlyReport(month, year);
 
-    })
+      .on("click.reportsMonthly", ".btn-discord-report", function () {
+        const $btn = $(this);
 
-    .on("click.reportsMonthly", "#generate-yearly-report", () => {
-      const page = "reportsAnnualReport";
-      RouterModule.go(page);
-    })
+        AppUtils.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "Are you sure you want to send this report to Discord?",
+          () => ReportActions.handleDiscordReport($btn),
+        );
+      })
 
-    .on("click.reportsMonthly", "#download-latest-pdf", function () {
+      /*
+       * Generate report
+       */
+      .on("click.reportsMonthly", "#btn-generate-monthly-report", function (e) {
+        e.preventDefault();
 
-      const btn = $(this);
-      const loading = AppUtils.setButtonLoading(btn[0], "Downloading...");
+        const $btn = $(this);
 
-      ReportActions.downloadLatestPDF(btn, loading);
+        AppUtils.confirmAction(
+          "generateMonthlyReport",
+          "Generate Monthly Report?",
+          "This will generate a PDF report for the selected month and year. Proceed?",
+          () => ReportActions.handleBtnGenerateMonthlyReport($btn),
+        );
+      })
 
-    })
+      /*
+       * Latest report actions
+       */
+      .on("click.reportsMonthly", "#download-latest-pdf", function () {
+        const $btn = $(this);
 
-    .on("click.reportsMonthly", "#email-latest-report", function () {
+        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
 
-      const btn = $(this);
-      const loading = AppUtils.setButtonLoading(btn[0], "Sending email...");
+        ReportActions.downloadLatestPDF($btn, loading, "Monthly");
+      })
 
-      ReportActions.emailLatestReport(btn, loading);
+      .on("click.reportsMonthly", "#email-latest-report", function () {
+        const $btn = $(this);
 
-    })
+        AppUtils.confirmAction(
+          "emailLatestReport",
+          "Email Latest Monthly Report?",
+          "This will send the latest monthly report to your registered email.",
+          () => {
+            ReportActions.handleEmailLatestReport($btn, "Monthly");
+          },
+        );
+      })
 
-    .on("click.reportsMonthly", "#send-discord-notification", function () {
+      .on("click.reportsMonthly", "#send-discord-notification", function () {
+        const $btn = $(this);
 
-      const btn = $(this);
-      const loading = AppUtils.setButtonLoading(btn[0], "Sending Discord...");
+        AppUtils.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Monthly Report to Discord?",
+          "This will send the latest monthly report to the configured Discord channel.",
+          () => {
+            ReportActions.handleSendDiscordNotification($btn, "Monthly");
+          },
+        );
+      })
 
-      ReportActions.sendLatestReportToDiscord(btn, loading);
-
-    });
-
+      /*
+       * Update displayed period.
+       */
+      .on(
+        "change.reportsMonthly",
+        "#monthly-report-month, #monthly-report-year",
+        updatePeriodLabel,
+      );
   };
 
   const loadData = () => {
+    populateYearSelector();
+    updatePeriodLabel();
 
-      const today = new Date();
+    loadReportsOverview();
 
-      const currentMonth = today.toLocaleString("default", {
-          month: "long"
-      });
-
-      const currentYear = today.getFullYear();
-
-      $("#monthly-report-month").val(currentMonth);
-
-      const $year = $("#monthly-report-year");
-
-      $year.empty();
-
-      for (let year = 2024; year <= currentYear; year++) {
-        $year.append(
-          `<option value="${year}">${year}</option>`
-        );
-      }
-
-      $year.val(currentYear);
-
-      ReportHistory.loadCustomMonthlyReportsPageData();
-
+    ReportHistory.loadCustomMonthlyReportsPageData(handleHistoryLoaded, false);
   };
 
-  return { init, destroy };
+  const populateYearSelector = () => {
+    const currentYear = new Date().getFullYear();
+
+    const $year = $("#monthly-report-year");
+
+    if (!$year.length) {
+      return;
+    }
+
+    $year.empty();
+
+    for (let year = 2024; year <= currentYear; year++) {
+      $year.append(`<option value="${year}">${year}</option>`);
+    }
+
+    $year.val(currentYear);
+
+    AppUtils.initSelect2(".generator-filters");
+  };
+
+  const loadReportsOverview = () => {
+    AppUtils.cachedGScriptCall(
+      "reportsOverview",
+      "getReportsOverview",
+      [],
+      (data) => {
+        updateAutomationStatus(data);
+      },
+      false,
+      false,
+    );
+  };
+
+  const updateAutomationStatus = (data) => {
+    const automation = data?.counts?.automation;
+
+    $("#monthly-automation-status").text(automation ? "Active" : "Not Active");
+  };
+
+  const updatePeriodLabel = () => {
+    const month = $("#monthly-report-month").val();
+    const year = $("#monthly-report-year").val();
+
+    if (!month || !year) {
+      $("#monthly-report-period-label").text("-");
+      return;
+    }
+
+    $("#monthly-report-period-label").text(`${month} ${year}`);
+  };
+
+  const handleHistoryLoaded = (logs = []) => {
+    const reports = Array.isArray(logs) ? logs : [];
+
+    updateSummary(reports);
+    updateLatestReport(reports);
+  };
+
+  const updateSummary = (reports) => {
+    const count = reports.length;
+
+    $("#monthly-reports-count").text(count);
+
+    if (!count) {
+      $("#monthly-last-report").text("-");
+      return;
+    }
+
+    const latest = reports[0];
+
+    $("#monthly-last-report").text(latest?.name || latest?.date || "-");
+  };
+
+  const updateLatestReport = (reports) => {
+    if (!Array.isArray(reports) || !reports.length) {
+      $("#monthly-latest-report-name").text("No report available");
+
+      $("#monthly-latest-report-date").text("-");
+
+      return;
+    }
+
+    const latest = reports[0];
+
+    $("#monthly-latest-report-name").text(latest?.name || "Monthly Report");
+
+    $("#monthly-latest-report-date").text(latest?.date || "-");
+  };
+
+  return {
+    init,
+    destroy,
+  };
 })();
 
 export { reportsMonthlyReportPage };

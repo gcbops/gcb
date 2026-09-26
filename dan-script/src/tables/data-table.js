@@ -4,14 +4,19 @@ import { ActivityToday } from "./activity-today.js";
 const DataTableModule = (() => {
   const instances = {};
 
-  const NUMERIC_SORT_TABLES = new Set([
-    "top paid accounts",
-    "outstanding accounts",
-  ]);
+  // const NUMERIC_SORT_TABLES = new Set([
+  //   "top paid accounts",
+  //   "outstanding accounts",
+  // ]);
 
-  function init(title, tableId, debug = false) {
+  function init(
+    title,
+    tableId,
+    debug = false,
+    callback = null,
+    simple = false,
+  ) {
     const log = (...args) => debug && console.log(...args);
-
     const error = (...args) => debug && console.error(...args);
 
     const cleanTitle = String(title || "")
@@ -22,6 +27,7 @@ const DataTableModule = (() => {
       title,
       tableId,
       cleanTitle,
+      simple,
     });
 
     const $table = $(tableId);
@@ -39,17 +45,17 @@ const DataTableModule = (() => {
     }
 
     /*
-     * Destroy any existing DataTable
-     * for this element.
+     * Destroy existing DataTable.
      */
     destroy(tableId);
 
     /*
-     * Build the default DataTable options.
-     *
-     * Every table gets these defaults.
-     * There is no need to register the
-     * table name anywhere.
+     * Detect total columns from thead.
+     */
+    const totalColumns = $table.find("thead tr:first th").length;
+
+    /*
+     * Build default DataTable options.
      */
     const tableOptions = {
       responsive: true,
@@ -65,7 +71,12 @@ const DataTableModule = (() => {
         bottomEnd: ["paging"],
       },
 
-      paging: true,
+      // paging: true,
+      paging: false,
+
+      scrollCollapse: true,
+
+      scrollY: "400px",
 
       pageLength: 5,
 
@@ -74,81 +85,122 @@ const DataTableModule = (() => {
         [5, 10, 25],
       ],
 
+      // Add data-row (optional) and data-col to cells
+      createdRow(row, data, dataIndex) {
+        $(row).attr("data-row", dataIndex);
+      },
+
+      createdCell(td, cellData, rowData, rowIndex, colIndex) {
+        $(td).attr("data-col", colIndex);
+      },
+
       initComplete() {
-        log("DataTable initComplete");
+        log("DataTable initComplete:", tableId);
+
+        // If the table itself has .table-hovered, also add it to tbody
+        if ($table.hasClass("table-hovered")) {
+          $table.find("tbody").addClass("table-hovered");
+        }
+
+        // Apply min-height for "client activity"
+        if (cleanTitle === "activity today") {
+          // Prefer the DataTables wrapper
+          const $wrapper = $table.closest(".dataTable-wrapper, .dataTables_wrapper, div").first();
+          if ($wrapper.length) {
+            $wrapper.css("min-height", "200px");
+          } else {
+            // Fallback: directly on table/tbody
+            $table.css("min-height", "200px");
+            $table.find("tbody").css("min-height", "200px");
+          }
+        }
+
+        if (typeof callback === "function") {
+          callback(this.api());
+        }
       },
     };
 
-    /*
-     * Numeric sorting.
-     *
-     * Only tables explicitly listed here
-     * receive numeric formatting.
-     */
-    if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
-      tableOptions.columnDefs = [
-        {
-          targets: [1, 2],
-          type: "num-fmt",
-        },
-      ];
-    }
-
-    /*
-     * UPSELL
-     *
-     * Override only the options that are
-     * different from the normal defaults.
-     */
-    if (cleanTitle === "upsell") {
+    if (simple) {
       Object.assign(tableOptions, {
-        pageLength: 5,
-
-        order: [],
-
-        ordering: false,
-
-        searching: true,
-
+        responsive: false,
         lengthChange: false,
-
         info: false,
+        paging: false,
+        scrollY: "400px",
+        scrollCollapse: true,
 
-        paging: true,
-
-        dom: '<"bottom d-flex justify-content-between"f p>',
-      });
-
-      tableOptions.columnDefs = [
-        {
-          targets: [1, 2],
-          className: "dt-center",
+        layout: {
+          topStart: null,
+          topEnd: null,
+          bottomStart: null,
+          bottomEnd: null,
         },
-      ];
+      });
     }
 
     /*
-     * ACTIVITY TODAY
-     *
-     * Add its action-button column without
-     * replacing existing column definitions.
+     * Priority columns for responsive behavior.
      */
+    const priorityMap = {
+      "activity today": [0, -1],
+      clients: [0, 2],
+      "reports overview": [2, -1],
+      "report history": [2, -1],
+      activity: [0, 1, 2],
+      "project directory": [1, 3],
+      "paid hours": [0, 3],
+      "owed hours": [0, 3],
+      "invoiced hours": [0, 3],
+      "hours without status": [0, 3],
+      "yearly performance": [0, 1, 5],
+      "billing records export": [4, 5, -1]
+    };
+
+    const priorityColumns = priorityMap[cleanTitle] || [];
+
+    // Start with an empty columnDefs array
+    tableOptions.columnDefs = [];
+
+    // 1) Responsive priorities (if any)
+    if (priorityColumns.length) {
+      tableOptions.columnDefs.push(
+        ...withResponsivePriorities(totalColumns, priorityColumns),
+      );
+    }
+
+    // 2) Numeric sorting
+    // if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
+    //   tableOptions.columnDefs.push({
+    //     targets: [1, 2],
+    //     type: "num-fmt",
+    //   });
+    // }
+
+    // if (
+    //   cleanTitle === "yearly performance" ||
+    //   cleanTitle === "billing records export" ||
+    //   cleanTitle === "reports overview"
+    // ) {
+    //   log("Initializing Client Directory");
+
+    //   tableOptions.paging = false;
+    //   tableOptions.scrollCollapse = true;
+    //   tableOptions.scrollY = "400px";
+    // }
+
     if (cleanTitle === "activity today") {
       log("Initializing Activity Today");
 
-      tableOptions.columnDefs = [
-        ...(tableOptions.columnDefs || []),
+      tableOptions.columnDefs.push({
+        targets: -1,
+        className: "action-btn-group",
+        orderable: false,
+        searchable: false,
 
-        {
-          targets: -1,
-          className: "action-btn-group",
-          orderable: false,
-          searchable: false,
-
-          render: (_data, _type, row) =>
-            ActivityToday.buildActionButtons(row).html(),
-        },
-      ];
+        render: (_data, _type, row) =>
+          ActivityToday.buildActionButtons(row).html(),
+      });
     }
 
     /*
@@ -163,23 +215,21 @@ const DataTableModule = (() => {
     /*
      * Activity Today setup.
      */
+    if (cleanTitle === "project directory") {
+      ActivityToday.setupTaskForm();
+    }
+
     if (cleanTitle === "activity today") {
       ActivityToday.setupFilters(instance);
-
       ActivityToday.setupTaskForm();
-
       ActivityToday.setupSheetViewButton();
-
       ActivityToday.startRefresh(instance);
     }
 
     /*
      * Apply optional table-specific behavior.
-     *
-     * This function itself determines whether
-     * anything special needs to happen.
      */
-    applyTableSpecificLogic(title, instance, tableId, debug);
+    // applyTableSpecificLogic(title, instance, tableId, debug);
 
     log("DataTable initialized:", tableId);
 
@@ -271,100 +321,29 @@ const DataTableModule = (() => {
     ActivityToday.stopRefresh();
   }
 
-  function addColumnClass(tableId, colIndex, className) {
-    const instance = getInstance(tableId);
-
-    if (!instance || !className) {
-      return;
-    }
-
-    const column = instance.column(colIndex);
-
-    if (!column || !column.nodes) {
-      return;
-    }
-
-    column.nodes().to$().addClass(className);
-  }
-
-  function applyRankingTableLogic(
-    instance,
-    tableId,
-    orderColumn,
-    highlightColumn,
-    centerColumn,
-    topRows = 3,
+  function withResponsivePriorities(
+    totalColumns,
+    priorityCols,
+    priorityValue = 1,
+    defaultPriority = 3,
   ) {
-    instance.order([orderColumn, "desc"]).draw();
+    const normalized = priorityCols.map((i) =>
+      i === -1 ? totalColumns - 1 : i,
+    );
+    const prioritySet = new Set(normalized);
+    const columnDefs = [];
 
-    addColumnClass(tableId, highlightColumn, "highlight");
+    for (let i = 0; i < totalColumns; i++) {
+      const isPriority = prioritySet.has(i);
 
-    addColumnClass(tableId, centerColumn, "dt-center");
-
-    highlightTopRows(tableId, topRows);
-  }
-
-  function applyTableSpecificLogic(title, instance, tableId, debug = false) {
-    const log = (...args) => debug && console.log(...args);
-
-    const cleanTitle = title.toLowerCase().trim();
-
-    if (cleanTitle === "top paid accounts") {
-      applyRankingTableLogic(instance, tableId, 1, 1, 3);
-    }
-
-    if (cleanTitle === "outstanding accounts") {
-      applyRankingTableLogic(instance, tableId, 2, 2, 3);
-    }
-
-    log("Extra table logic completed:", title);
-  }
-
-  function highlightTopRows(tableId, rowCount, rowClass = "highlight-row") {
-    const instance = getInstance(tableId);
-
-    if (!instance) {
-      return;
-    }
-
-    const applyHighlight = () => {
-      const $tbody = $(`${tableId} tbody`);
-
-      if (!$tbody.length) {
-        return;
-      }
-
-      $tbody.find(`.${rowClass}`).removeClass(rowClass);
-
-      $tbody.find(".row-rank").remove();
-
-      $tbody.find("tr").each((index, row) => {
-        if (index >= rowCount) {
-          return;
-        }
-
-        row.classList.add(rowClass);
-
-        const firstTd = row.querySelector("td");
-
-        if (!firstTd) {
-          return;
-        }
-
-        const span = document.createElement("span");
-
-        span.className = "row-rank";
-        span.textContent = String(index + 1);
-
-        firstTd.prepend(span);
+      columnDefs.push({
+        targets: i,
+        responsivePriority: isPriority ? priorityValue : defaultPriority,
+        ...(isPriority ? {} : { className: "dt-center" }),
       });
-    };
+    }
 
-    instance.off("draw.highlightTopRows");
-
-    instance.on("draw.highlightTopRows", applyHighlight);
-
-    applyHighlight();
+    return columnDefs;
   }
 
   function getColumnCount(tableId) {

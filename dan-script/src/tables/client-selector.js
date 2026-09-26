@@ -2,8 +2,8 @@ import { TableModule } from "./tables.js";
 import { AppUtils } from "../utils.js";
 
 const TableClientSelector = (() => {
-  const CLIENTS_CACHE_KEY = "allClientsData";
-  const CLIENTS_SERVER_FUNCTION = "getClientDataWithNickname";
+  const CLIENTS_CACHE_KEY = "clientDirectoryData";
+  const CLIENTS_SERVER_FUNCTION = "getClientDirectoryData";
 
   let initialized = false;
   let currentSelectId = "#client";
@@ -97,7 +97,7 @@ const TableClientSelector = (() => {
           return;
         }
 
-        TableModule.addClient(selectedName, true, isForProject);
+        TableModule.addClientHours(selectedName, true, isForProject);
       });
   }
 

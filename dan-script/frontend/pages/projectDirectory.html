@@ -1,0 +1,276 @@
+<!-- Summary -->
+<div id="project-rankings-summary" class="row">
+
+  <!-- TOTAL PROJECTS -->
+  <div class="col-md-6 col-xl-3">
+    <div class="main-card mb-3 card">
+      <div class="card-body">
+
+        <div class="d-flex align-items-center">
+
+          <div class="project-summary-icon project-icon-primary">
+            <i class="fa fa-folder-open"></i>
+          </div>
+
+          <div class="ms-3">
+            <div class="text-muted text-uppercase small">
+              Total Projects
+            </div>
+
+            <div
+              class="fs-4 fw-bold"
+              id="project-total-count"
+            >
+              0
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ACTIVE THIS YEAR -->
+  <div class="col-md-6 col-xl-3">
+    <div class="main-card mb-3 card">
+      <div class="card-body">
+
+        <div class="d-flex align-items-center">
+
+          <div class="project-summary-icon project-icon-success">
+            <i class="fa fa-chart-line"></i>
+          </div>
+
+          <div class="ms-3">
+            <div class="text-muted text-uppercase small">
+              Active This Year
+            </div>
+
+            <div
+              class="fs-4 fw-bold"
+              id="project-active-year-count"
+            >
+              0
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ACTIVE THIS MONTH -->
+  <div class="col-md-6 col-xl-3">
+    <div class="main-card mb-3 card">
+      <div class="card-body">
+
+        <div class="d-flex align-items-center">
+
+          <div class="project-summary-icon project-icon-info">
+            <i class="fa fa-calendar-check"></i>
+          </div>
+
+          <div class="ms-3">
+            <div class="text-muted text-uppercase small">
+              Active This Month
+            </div>
+
+            <div
+              class="fs-4 fw-bold"
+              id="project-active-month-count"
+            >
+              0
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- NEW THIS YEAR -->
+  <div class="col-md-6 col-xl-3">
+    <div class="main-card mb-3 card">
+      <div class="card-body">
+
+        <div class="d-flex align-items-center">
+
+          <div class="project-summary-icon project-icon-warning">
+            <i class="fa fa-wand-magic-sparkles"></i>
+          </div>
+
+          <div class="ms-3">
+            <div class="text-muted text-uppercase small">
+              New This Year
+            </div>
+
+            <div
+              class="fs-4 fw-bold"
+              id="project-new-year-count"
+            >
+              0
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="project-directory-page" class="row">
+
+  <!-- Project Table -->
+  <div class="col-md-12">
+    <div class="main-card mb-3 card">
+
+      <div class="card-body">
+
+        <div class="d-flex align-items-center mb-3">
+
+            <h5 class="card-title mb-0">
+                Project Directory
+            </h5>
+
+            <div class="ms-auto d-flex justify-content-end">
+
+                <!-- DESKTOP CONTROLS -->
+                <div class="responsive-desktop-actions d-flex">
+
+                    <button
+                        type="button"
+                        class="btn btn-gc me-2"
+                        id="add-new-project"
+                        data-client-action="add-project"
+                    >
+                        <i class="fa-solid fa-briefcase me-1"></i>
+                        Add Project
+                    </button>
+                    
+                    <button
+                        type="button"
+                        class="btn border-0 p-0"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        aria-label="Project option"
+                        title="Project option"
+                    >
+                        <i class="fa fa-ellipsis-v fs-5"></i>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end">
+
+                        <!-- FILTERS -->
+                        <li>
+                            <h6 class="dropdown-header">
+                                Action
+                            </h6>
+                        </li>
+
+                        <li>
+                            <button
+                                type="button"
+                                class="dropdown-item"
+                                data-client-action="sync"
+                            >
+                                <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                                Refresh
+                            </button>
+                        </li>
+
+                    </ul>
+
+                </div>
+
+
+                <!-- MOBILE CONTROLS -->
+                <div class="responsive-mobile-actions dropdown mb-2">
+
+                    <button
+                        type="button"
+                        class="btn btn-light"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        aria-label="Project options"
+                        title="Project options"
+                    >
+                        <i class="fa fa-ellipsis-v"></i>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end">
+
+                        <li>
+                            <h6 class="dropdown-header">
+                                Project Actions
+                            </h6>
+                        </li>
+
+                        <li>
+                            <button
+                                type="button"
+                                class="dropdown-item"
+                                data-client-action="sync"
+                            >
+                                <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                                Refresh
+                            </button>
+                        </li>
+
+                        <li>
+                            <button
+                                type="button"
+                                class="dropdown-item"
+                                data-client-action="add-project"
+                            >
+                                <i class="pe-7s-portfolio text-primary me-2"></i>
+                                Add Project
+                            </button>
+                        </li>
+
+                    </ul>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="table-responsive">
+
+          <table
+            id="projectsTable"
+            class="table table-hovered scrollbar-hover nowrap w-100"
+          >
+
+            <thead>
+              <tr>
+                <th class="text-center">#</th>
+                <th>Project</th>
+                <th>Client</th>
+                <th class="text-center">Hours</th>
+                <th class="text-center">Active This Year</th>
+                <th class="text-center">Active This Month</th>
+                <th class="text-center">Started Date</th>
+              </tr>
+            </thead>
+
+            <tbody id="projectsBody" class="scrollbar-hover"></tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>

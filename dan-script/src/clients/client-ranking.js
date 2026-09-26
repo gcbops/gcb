@@ -1,177 +1,323 @@
 import { AppUtils } from "../utils";
 
-const ClientRanking = (() => {
-  function renderTopPaidClients() {
-    renderClientRanking({
-      cacheKey: "topPaidClients",
-      listSelector: "#top-paid-clients",
-      avatarClass: "bg-malibu-beach",
-      sortFn: sortTopPaid,
-      rightContentFn: getTopPaidRightContent,
-    });
+const clientRankings = (() => {
+  const CACHE_KEY = "clientRankings";
+
+  let initialized = false;
+
+  function init() {
+    if (initialized) {
+      return;
+    }
+
+    initialized = true;
+
+    load();
   }
 
-  function renderLowestPaidClients() {
-    renderClientRanking({
-      cacheKey: "lowestPaidClients",
-      listSelector: "#lowest-paid-clients",
-      avatarClass: "bg-love-kiss",
-      sortFn: sortLowestPaid,
-      rightContentFn: getLowestPaidRightContent,
-    });
+  function destroy() {
+    initialized = false;
   }
 
-  function renderClientRanking(config) {
+  function load(reset = false) {
+
     AppUtils.cachedGScriptCall(
-      config.cacheKey,
-      "getTopPaidClients",
+      CACHE_KEY,
+      "getClientRankings",
       [],
       (data) => {
-        if (!Array.isArray(data) || !data.length) {
+        if (!data || typeof data !== "object") {
+          showError();
           return;
         }
 
-        const ul = document.querySelector(config.listSelector);
+        renderOverview(data.overview || {});
+        renderRankings(data.rankings || {});
+      },
+      false,
+      reset,
+    );
 
-        if (!ul) {
-          return;
-        }
+  }
 
-        ul.innerHTML = "";
+  function refresh() {
+    load(true);
+  }
 
-        const sorted = config.sortFn([...data]);
+  function renderOverview(overview) {
+    setText(
+      '[data-metric="total-clients"]',
+      formatNumber(overview.totalClients),
+    );
 
-        renderRankingList(ul, sorted, config);
+    setText('[data-metric="total-hours"]', formatHours(overview.totalHours));
+
+    setText(
+      '[data-metric="collection-rate"]',
+      formatPercent(overview.collectionRate),
+    );
+  }
+
+  function renderRankings(rankings) {
+    renderRanking('[data-ranking="top-clients"]', rankings.topClients, {
+      valueKey: "netPaid",
+      valueLabel: "Net Paid",
+      valueType: "amount",
+      icon: "fa-trophy",
+      iconClass: "client-icon-primary",
+    });
+
+    renderRanking('[data-ranking="top-paid"]', rankings.topPaid, {
+      valueKey: "paid",
+      valueLabel: "Paid",
+      valueType: "amount",
+      icon: "fa-money-bill-wave",
+      iconClass: "client-icon-success",
+    });
+
+    renderRanking('[data-ranking="highest-hours"]', rankings.highestHours, {
+      valueKey: "hours",
+      valueLabel: "Hours",
+      valueType: "hours",
+      icon: "fa-clock",
+      iconClass: "client-icon-info",
+    });
+
+    renderRanking('[data-ranking="highest-owed"]', rankings.highestOwed, {
+      valueKey: "owed",
+      valueLabel: "Owed",
+      valueType: "amount",
+      icon: "fa-credit-card",
+      iconClass: "client-icon-warning",
+    });
+
+    renderRanking('[data-ranking="best-collection"]', rankings.bestCollection, {
+      valueKey: "collectionRate",
+      valueLabel: "Collection",
+      valueType: "percent",
+      icon: "fa-chart-line",
+      iconClass: "client-icon-success",
+    });
+
+    renderRanking(
+      '[data-ranking="highest-debt-exposure"]',
+      rankings.highestDebtExposure,
+      {
+        valueKey: "debtExposure",
+        valueLabel: "Debt Exposure",
+        valueType: "percent",
+        icon: "fa-triangle-exclamation",
+        iconClass: "client-icon-danger",
       },
     );
   }
 
-  function renderRankingList(ul, clients, config) {
-    clients.forEach((client) => {
-      createRankingItem(ul, client, config);
+  function renderRanking(selector, clients, config) {
+    const container = document.querySelector(selector);
+
+    if (!container) {
+      return;
+    }
+
+    container.innerHTML = "";
+
+    if (!Array.isArray(clients) || !clients.length) {
+      container.innerHTML = `
+        <div class="client-loading text-muted">
+          No ranking data available.
+        </div>
+      `;
+
+      return;
+    }
+
+    clients.forEach((client, index) => {
+      container.appendChild(createRankingItem(client, index, config));
     });
   }
 
-  function createRankingItem(ul, client, config) {
-    const [name, paid, owed] = client;
+  function renderTopPaidClients() {
+    renderLegacyRanking("#top-paid-clients", "topPaid", {
+      valueKey: "paid",
+      valueLabel: "Paid",
+      valueType: "amount",
+      iconClass: "client-icon-success",
+      icon: "fa-money-bill-wave",
+    });
+  }
 
-    AppUtils.cachedGScriptCall(
-      `role_${name}`,
-      "getRoleFromSheet",
-      [name],
-      (role) => {
-        role = role || "";
+  function renderLegacyRanking(listSelector, rankingKey, config) {
+    AppUtils.cachedGScriptCall(CACHE_KEY, "getClientRankings", [], (data) => {
+      const list = document.querySelector(listSelector);
 
-        const li = document.createElement("li");
-        li.className = "list-group-item";
+      if (!list) {
+        return;
+      }
 
-        li.innerHTML = `
-          <div class="widget-content p-0">
-            <div class="widget-content-wrapper">
+      const clients = data?.rankings?.[rankingKey];
 
-              <div class="widget-content-left me-3">
-                <div
-                  class="avatar-circle swatch-holder swatch-holder-lg ${config.avatarClass}
-                  text-white rounded-circle d-flex align-items-center justify-content-center"
-                  style="width:42px;height:42px;font-weight:600;">
-                  ${AppUtils.getInitials(name)}
-                </div>
-              </div>
+      list.innerHTML = "";
 
-              <div class="widget-content-left">
-                <div class="widget-heading">${name}</div>
-                <div class="widget-subheading">${role}</div>
-              </div>
-
-              <div class="widget-content-right font-weight-bold">
-                ${config.rightContentFn(paid, owed)}
-              </div>
-
+      if (!Array.isArray(clients) || !clients.length) {
+        list.innerHTML = `
+            <div class="client-loading text-muted">
+              No ranking data available.
             </div>
-          </div>
-        `;
+          `;
+        return;
+      }
 
-        ul.appendChild(li);
-      },
-    );
+      clients.forEach((client, index) => {
+        list.appendChild(createLegacyRankingItem(client, index, config));
+      });
+    });
   }
 
-  function sortTopPaid(data) {
-    return data.sort((a, b) => (b[1] || 0) - (a[1] || 0)).slice(0, 10);
-  }
+  function createRankingItem(client, index, config) {
+    const item = document.createElement("div");
 
-  function sortLowestPaid(data) {
-    return data
-      .sort((a, b) => {
-        const paidDiff = (a[1] || 0) - (b[1] || 0);
+    item.className = "client-item";
 
-        if (paidDiff !== 0) {
-          return paidDiff;
-        }
+    const name = AppUtils.escapeHtml(String(client.client ?? ""));
 
-        return (b[2] || 0) - (a[2] || 0);
-      })
-      .slice(0, 10);
-  }
+    const value = formatValue(client[config.valueKey], config.valueType);
 
-  function getTopPaidRightContent(paid, owed) {
-    if (owed === 0) {
-      return `
-        <div class="font-size-xs text-muted">
-          <small class="opacity-5 pe-1">$</small>
-          <span>${paid}</span>
-          <small class="text-warning ps-2">
-            <i class="fa fa-dot-circle"></i>
-          </small>
+    item.innerHTML = `
+      <div class="client-position">
+        ${index + 1}
+      </div>
+
+      <div class="client-avatar">
+        ${AppUtils.getInitials(client.client ?? "")}
+      </div>
+
+      <div class="client-client">
+        <div class="client-client-name">
+          ${name}
         </div>
-      `;
-    }
 
-    return `
-      <div class="font-size-xs text-muted">
-        <span>${paid}</span>
-        <small class="text-success ps-2">
-          <i class="fa fa-angle-up"></i>
-        </small>
+        <div class="client-client-meta">
+          ${config.valueLabel}
+        </div>
       </div>
 
-      <div class="font-size-xs text-muted">
-        <span>${owed}</span>
-        <small class="text-danger ps-2">
-          <i class="fa fa-angle-down"></i>
-        </small>
-      </div>
-    `;
-  }
-
-  function getLowestPaidRightContent(paid, owed) {
-    let html = `
-      <div class="font-size-xs text-muted">
-        <span>${paid}</span>
-        <small class="text-danger ps-2">
-          <i class="fa fa-angle-down"></i>
-        </small>
+      <div class="client-value">
+        ${value}
       </div>
     `;
 
-    if (owed > 0) {
-      html += `
-        <div class="font-size-xs text-muted">
-          <span>${owed}</span>
-          <small class="text-warning ps-2">
-            <i class="fa fa-exclamation-circle"></i>
-          </small>
+    return item;
+  }
+
+  function createLegacyRankingItem(client, index, config) {
+    const item = document.createElement("div");
+
+    item.className = "client-item";
+
+    const name = AppUtils.escapeHtml(String(client?.client ?? ""));
+
+    const value = formatValue(client?.[config.valueKey], config.valueType);
+
+    item.innerHTML = `
+
+      <div class="client-client">
+        <div class="client-client-name">
+          ${name}
         </div>
-      `;
+
+        <div class="client-client-meta">
+          ${AppUtils.escapeHtml(config.valueLabel)}
+        </div>
+      </div>
+
+      <div class="client-value">
+        ${value}
+      </div>
+    `;
+
+    // item.innerHTML = `
+    //   <div class="client-position">
+    //     ${index + 1}
+    //   </div>
+
+    //   <div class="client-avatar ${config.iconClass || ""}">
+    //     ${
+    //       config.icon
+    //         ? `<i class="fa ${config.icon}"></i>`
+    //         : AppUtils.escapeHtml(initials)
+    //     }
+    //   </div>
+
+    //   <div class="client-client">
+    //     <div class="client-client-name">
+    //       ${name}
+    //     </div>
+
+    //     <div class="client-client-meta">
+    //       ${AppUtils.escapeHtml(config.valueLabel)}
+    //     </div>
+    //   </div>
+
+    //   <div class="client-value">
+    //     ${value}
+    //   </div>
+    // `;
+
+    return item;
+  }
+
+  function formatValue(value, type) {
+    const number = Number(value) || 0;
+
+    if (type === "percent") {
+      return formatPercent(number);
     }
 
-    return html;
+    if (type === "hours") {
+      return formatHours(number);
+    }
+
+    return number.toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+  }
+
+  function formatHours(value) {
+    return `${(Number(value) || 0).toLocaleString("en-PH", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}h`;
+  }
+
+  function formatPercent(value) {
+    return `${((Number(value) || 0) * 100).toFixed(2)}%`;
+  }
+
+  function formatNumber(value) {
+    return (Number(value) || 0).toLocaleString("en-PH");
+  }
+
+  function setText(selector, value) {
+    const element = document.querySelector(selector);
+
+    if (element) {
+      element.textContent = value;
+    }
+  }
+
+  function showError() {
+    AppUtils.showError("⚠️ Unable to load client rankings.");
   }
 
   return {
-    renderTopPaidClients,
-    renderLowestPaidClients,
+    init,
+    destroy,
+    refresh,
+
+    // Legacy widgets still used by existing pages
+    renderTopPaidClients
   };
 })();
 
-export { ClientRanking };
+export { clientRankings };

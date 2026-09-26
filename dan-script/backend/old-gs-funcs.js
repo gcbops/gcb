@@ -323,35 +323,6 @@ function getHourlyChartData() {
     .map((r) => [String(r[0]), Number(r[1]) || 0]);
 }
 
-function addCurrMthTotalHrly(value) {
-  if (value === "" || value === null || value === undefined)
-    throw new Error("❌ No value provided.");
-
-  const sheet = getSheetSafe("Hourly History");
-  if (!sheet) throw new Error('❌ Sheet "Hourly History" not found.');
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 4) throw new Error("❌ Not enough data in Hourly History.");
-
-  const colE = sheet.getRange("E4:E" + lastRow).getValues();
-  const colF = sheet.getRange("F4:F" + lastRow).getValues();
-
-  const targetRow = colE.findIndex((e, i) => e[0] && !colF[i][0]);
-  if (targetRow === -1) throw new Error("⚠️ No empty F cell found to update.");
-
-  const rowNum = targetRow + 4;
-  const numVal = isNaN(Number(value)) ? value : Number(value);
-
-  sheet.getRange(`F${rowNum}`).setValue(numVal);
-  const monthYear = sheet.getRange(`E${rowNum}`).getValue();
-
-  return {
-    message: `✅ Added value to ${monthYear}`,
-    row: rowNum,
-    monthYear,
-  };
-}
-
 function clearAllRecords() {
   const sheet = getSheetSafe("Upsells");
   if (!sheet) throw new Error('❌ Sheet "Upsells" not found.');

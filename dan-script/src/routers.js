@@ -1,24 +1,16 @@
-import { allClientsPage } from "./pages/all-clients-page.js";
-import { upsellOverviewPage } from "./pages/upsell-overview-page.js";
-import { hourlyOverviewPage } from "./pages/hourly-overview-page.js";
-import { reportsExportDataPage } from "./pages/reports-export-data-page.js";
+import { clientDirectoryPage } from "./pages/client-directory-page.js";
+import { reportsDataExportPage } from "./pages/reports-data-export-page.js";
 import { reportsMonthlyReportPage } from "./pages/reports-monthly-report-page.js";
 import { reportsAnnualReportPage } from "./pages/reports-annual-report-page.js";
 import { settingsConfigurationPage } from "./pages/config-page.js";
-import { activeClientsPage } from "./pages/active-clients-page.js";
-import { addManualHoursPage } from "./pages/add-manual-hours-page.js";
-import { allManualProjectsPage } from "./pages/all-manual-projects-page.js";
+import { clientActivityPage } from "./pages/client-activity-page.js";
 import { billingOwedHoursPage } from "./pages/billing-owed-hours-page.js";
 import { billingPaidHoursPage } from "./pages/billing-paid-hours-page.js";
 import { dailyOverviewPage } from "./pages/daily-overview-page.js";
 import { growthComparisonOverviewPage } from "./pages/growth-comparison-overview-page.js";
 import { HomePage } from "./pages/home-page.js";
 import { monthlyOverviewPage } from "./pages/monthly-overview-page.js";
-import { outstandingClientsPage } from "./pages/outstanding-clients-page.js";
-import { performanceDailyPage } from "./pages/performance-daily-page.js";
 import { performanceTargetPage } from "./pages/performance-target-page.js";
-import { performanceYearlyPage } from "./pages/performance-yearly-page.js";
-import { topClientsPage } from "./pages/top-clients-page.js";
 import { yearlyOverviewPage } from "./pages/yearly-overview-page.js";
 import { ChartModule } from "./charts.js";
 import { PageLoaderModule } from "./page-loader.js";
@@ -27,7 +19,15 @@ import { AppUI } from "./app-ui.js";
 import { AppShellModule } from "./app-shell.js";
 import { AppUtils } from "./utils.js";
 import { integrationsConfigurationPage } from "./pages/integration-page.js";
-import { externalSheetsManagerPage } from "./pages/external-sheets-manager-page.js";
+import { clientRankingsPage } from "./pages/client-ranking-page.js";
+import { clientOpportunitiesPage } from "./pages/client-opportunities-page.js";
+import { projectRankingsPage } from "./pages/project-rankings-page.js";
+import { projectDirectoryPage } from "./pages/project-directory-page.js";
+import { billingOverviewPage } from "./pages/billing-overview-page.js";
+import { billingInvoiceStatusPage } from "./pages/billing-invoice-status-page.js";
+import { performanceOverviewPage } from "./pages/performance-overview.js";
+import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
+import { clientDetailsPage } from "./pages/client-details.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -42,42 +42,43 @@ const RouterModule = (() => {
    * initializing.
    */
   let pendingPage = null;
+  let parentPage = null;
+
+  const isEmbedded = window !== window.top;
+  const isDirectGas = !isEmbedded;
+  const GITHUB_ORIGIN = "https://gcbops.github.io";
 
   const routes = {
     home: HomePage,
-
-    addManualHours: addManualHoursPage,
-    externalSheetsManager: externalSheetsManagerPage,
 
     dailyOverview: dailyOverviewPage,
     monthlyOverview: monthlyOverviewPage,
     yearlyOverview: yearlyOverviewPage,
     growthComparisonOverview: growthComparisonOverviewPage,
 
-    topClients: topClientsPage,
-    activeClients: activeClientsPage,
-    outstandingClients: outstandingClientsPage,
-    allClients: allClientsPage,
+    clientDirectory: clientDirectoryPage,
+    clientActivity: clientActivityPage,
+    clientRankings: clientRankingsPage,
+    clientOpportunities: clientOpportunitiesPage,
+    clientDetails: clientDetailsPage,
 
-    upsellOverview: upsellOverviewPage,
+    projectRankings: projectRankingsPage,
+    projectDirectory: projectDirectoryPage,
 
-    allManualProjects: allManualProjectsPage,
-
-    hourlyOverview: hourlyOverviewPage,
-
-    settingsConfiguration: settingsConfigurationPage,
-
+    billingOverview: billingOverviewPage,
     billingPaidHours: billingPaidHoursPage,
     billingOwedHours: billingOwedHoursPage,
+    billingInvoiceStatus: billingInvoiceStatusPage,
 
-    performanceYearly: performanceYearlyPage,
-    performanceDaily: performanceDailyPage,
+    performanceProductivity: performanceProductivityPage,
+    performanceOverview: performanceOverviewPage,
     performanceTarget: performanceTargetPage,
 
-    reportsExportData: reportsExportDataPage,
+    reportsDataExport: reportsDataExportPage,
     reportsMonthlyReport: reportsMonthlyReportPage,
     reportsAnnualReport: reportsAnnualReportPage,
 
+    settingsConfiguration: settingsConfigurationPage,
     integrationsConfiguration: integrationsConfigurationPage,
   };
 
@@ -95,6 +96,73 @@ const RouterModule = (() => {
 
   function getCurrentPage() {
     return currentPage;
+  }
+
+  function pushHistory(pageName) {
+    if (isDirectGas) {
+      console.log("[RouterModule] Direct GAS history:", pageName);
+
+      history.pushState({ gcbPage: pageName }, "", window.location.href);
+
+      return;
+    }
+
+    console.log("[RouterModule] Sending navigation to GitHub:", {
+      page: pageName,
+      targetOrigin: GITHUB_ORIGIN,
+      parentOrigin: window.parent.location?.origin,
+    });
+
+    window.parent.postMessage(
+      {
+        type: "GCB_NAVIGATION",
+        page: pageName,
+      },
+      GITHUB_ORIGIN,
+    );
+  }
+
+  function handlePopState(event) {
+    if (isDirectGas) {
+      const page = event.state?.gcbPage;
+
+      console.log("[RouterModule] Browser history:", {
+        state: event.state,
+        page,
+      });
+
+      if (isValidRoute(page)) {
+        go(page, false);
+      }
+
+      return;
+    }
+
+    // GitHub wrapper owns browser history.
+    // It will send the requested page back to us.
+  }
+
+  function handleParentNavigation(event) {
+    if (event.origin !== GITHUB_ORIGIN) {
+      return;
+    }
+
+    if (event.data?.type !== "GCB_HISTORY_NAVIGATION") {
+      return;
+    }
+
+    const page = event.data.page;
+
+    if (!isValidRoute(page)) {
+      return;
+    }
+
+    if (!initialized) {
+      parentPage = page;
+      return;
+    }
+
+    go(page, false);
   }
 
   /**
@@ -129,6 +197,12 @@ const RouterModule = (() => {
          */
         AppUI.init();
 
+        window.addEventListener("popstate", handlePopState);
+
+        if (isEmbedded) {
+          window.addEventListener("message", handleParentNavigation);
+        }
+
         /*
          * ------------------------------------------------
          * 3. Restore previous page
@@ -145,7 +219,9 @@ const RouterModule = (() => {
          */
         const initialPage = isValidRoute(pendingPage)
           ? pendingPage
-          : restoredPage;
+          : isValidRoute(parentPage)
+            ? parentPage
+            : restoredPage;
 
         /*
          * Clear pending navigation before
@@ -165,7 +241,7 @@ const RouterModule = (() => {
          * 5. Load initial page
          * ------------------------------------------------
          */
-        go(initialPage);
+        go(initialPage, false);
 
         return true;
       } catch (error) {
@@ -189,7 +265,7 @@ const RouterModule = (() => {
   /**
    * Navigate to a page.
    */
-  function go(pageName) {
+  function go(pageName, updateHistory = true) {
     /*
      * ------------------------------------------------
      * Router is not ready yet.
@@ -221,6 +297,10 @@ const RouterModule = (() => {
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
 
+    if (updateHistory) {
+      pushHistory(resolvedPageName);
+    }
+
     const page = routes[resolvedPageName];
 
     if (!page) {
@@ -251,6 +331,7 @@ const RouterModule = (() => {
      * ------------------------------------------------
      */
 
+    AppUtils.closeAllDrawers();
     DataTableModule.destroyAll();
     ChartModule.destroyAllCharts();
 
@@ -288,6 +369,10 @@ const RouterModule = (() => {
        * Update navigation.
        */
       AppUI.activateNavigation(resolvedPageName);
+
+      requestAnimationFrame(() => {
+        AppUI.playStaggerReveal();
+      });
     });
   }
 

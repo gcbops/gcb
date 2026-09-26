@@ -61,7 +61,7 @@ const ReportGenerator = (() => {
       })
       .withSuccessHandler((result) => {
         if (!result.exists) {
-          loading.setText("Generating Report...");
+          loading.setText("Generating Report");
           requestReportGeneration(cfg, type, btn, params, loading);
           return;
         }
@@ -119,7 +119,7 @@ const ReportGenerator = (() => {
           })
           .on(`click${ns}`, ".btn-generate", () => {
             if (loading) {
-              loading.setText("Generating Annual Report...");
+              loading.setText("Generating Annual Report");
             }
             requestReportGeneration(cfg, type, btn, params, loading);
             AppUtils.closeModal("#app-modal");

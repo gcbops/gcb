@@ -205,7 +205,8 @@ function sendEmailReport(report) {
       <table
         cellpadding="6"
         cellspacing="0"
-        border="0">
+        border="0"
+        class="scrollbar-hover">
 
         <tr>
           <td><b>Report</b></td>

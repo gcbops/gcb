@@ -1,5 +1,5 @@
-import { AppUtils } from "../utils.js";
 import { HourSummary } from "../hours/hour-summary.js";
+import { AppUtils } from "../utils.js";
 
 const ActivityToday = (() => {
   const ACTIVITY_TABLE_ID = "#table";
@@ -8,15 +8,13 @@ const ActivityToday = (() => {
 
   const SPECIAL_STATUSES = [
     "Moved to PM",
-    "Revision Done",
+    "Revisions Done",
     "Complete",
     "For QA",
   ];
 
   const resetableCacheKeyForUpdatingHours = [
     "cache_ActiveClients",
-    "cache_OutstandingAccounts",
-    "topPaidClients",
     "topProjects",
     "hoursSummary",
     "hourTotals",
@@ -40,14 +38,15 @@ const ActivityToday = (() => {
 
     updateFilterCounts(dataTable);
 
-    const $wrapper = $(".main-card");
+    const $wrapper = $(".activity-filter-buttons");
 
     setupFilterButton(
       $wrapper,
       ".not-done-div",
       ".not-done-text",
       "#dashFilter",
-      (row) => row[5] === "-",
+      '[data-activity-action="pending"]',
+      (row) => row[5] === "PENDING",
       dataTable,
     );
 
@@ -56,7 +55,8 @@ const ActivityToday = (() => {
       ".special-div",
       ".special-count",
       "#waitingFilter",
-      (row) => SPECIAL_STATUSES.includes(row[1]) && row[5] === "-",
+      '[data-activity-action="waiting"]',
+      (row) => SPECIAL_STATUSES.includes(row[1]) && row[5] === "PENDING",
       dataTable,
     );
   }
@@ -66,6 +66,7 @@ const ActivityToday = (() => {
     containerSelector,
     countSelector,
     buttonSelector,
+    mobileSelector,
     filter,
     dataTable,
   ) {
@@ -77,36 +78,77 @@ const ActivityToday = (() => {
 
     $wrapper.find(countSelector).text(count);
 
+    /*
+     * Desktop button.
+     */
     $(document)
       .off(`click.activityToday`, buttonSelector)
       .on(`click.activityToday`, buttonSelector, () => {
-        const $table = $(ACTIVITY_TABLE_ID);
+        toggleActivityFilter(dataTable, filter);
+      });
 
-        if (!$table.hasClass("gc-table-filtered")) {
-          $("#resetFilterCustom").show();
+    /*
+     * Mobile button.
+     */
+    $(document)
+      .off(`click.activityToday`, mobileSelector)
+      .on(`click.activityToday`, mobileSelector, function () {
+        toggleActivityFilter(dataTable, filter);
 
-          applyFilter(dataTable, filter);
+        /*
+         * Close mobile dropdown after selection.
+         */
+        this.blur();
 
-          $table.addClass("gc-table-filtered");
+        const dropdown = this.closest(".dropdown");
 
-          return;
+        if (dropdown) {
+          const dropdownButton = dropdown.querySelector(
+            '[data-bs-toggle="dropdown"]',
+          );
+
+          if (dropdownButton) {
+            const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+
+            if (instance) {
+              instance.hide();
+            }
+          }
         }
-
-        resetFilters(dataTable);
-
-        $table.removeClass("gc-table-filtered");
       });
   }
 
+  function toggleActivityFilter(dataTable, filter) {
+    const $table = $(ACTIVITY_TABLE_ID);
+
+    if (!$table.hasClass("gc-table-filtered")) {
+      $("#resetFilterCustom").show();
+
+      applyFilter(dataTable, filter);
+
+      $table.addClass("gc-table-filtered");
+
+      return;
+    }
+
+    resetFilters(dataTable);
+
+    $table.removeClass("gc-table-filtered");
+  }
+
   function applyFilter(dataTable, filter) {
-    $.fn.dataTable.ext.search = [filter];
+    $.fn.dataTable.ext.search = [(settings, rowData) => filter(rowData)];
 
     dataTable.draw();
   }
 
   function resetFilters(dataTable) {
     $.fn.dataTable.ext.search = [];
+
     dataTable.search("").columns().search("").draw();
+
+    $(ACTIVITY_TABLE_ID).removeClass("gc-table-filtered");
+
     $("#resetFilterCustom").hide();
   }
 
@@ -133,11 +175,11 @@ const ActivityToday = (() => {
           return;
         }
 
-        if (row[5] === "-") {
+        if (row[5] === "PENDING") {
           notDone++;
         }
 
-        if (SPECIAL_STATUSES.includes(row[1]) && row[5] === "-") {
+        if (SPECIAL_STATUSES.includes(row[1]) && row[5] === "PENDING") {
           special++;
         }
       });
@@ -187,9 +229,34 @@ const ActivityToday = (() => {
 
     setupClientSelector($selectClient, $taskForm);
 
-    $taskForm
-      .off("submit.activityToday")
-      .on("submit.activityToday", handleTaskSubmit);
+    // Mobile Add Activity
+    $(document)
+      .off("click.activityToday", '[data-activity-action="add"]')
+      .on(
+        "click.activityToday",
+        '[data-activity-action="add"]',
+        function (event) {
+          event.preventDefault();
+
+          openClientSelector($taskForm);
+
+          const dropdown = this.closest(".dropdown");
+
+          if (dropdown) {
+            const dropdownButton = dropdown.querySelector(
+              '[data-bs-toggle="dropdown"]',
+            );
+
+            if (dropdownButton) {
+              const instance = bootstrap.Dropdown.getInstance(dropdownButton);
+
+              if (instance) {
+                instance.hide();
+              }
+            }
+          }
+        },
+      );
 
     $("#submit-new-hours")
       .off("click.activityToday")
@@ -208,26 +275,30 @@ const ActivityToday = (() => {
       .on("click.activityToday", function (event) {
         event.preventDefault();
 
-        const $drawer = $taskForm.parents(".drawer-content");
-        const $firstGroup = $taskForm.find(".form-group").first();
-        const $icon = $selectClient.find("i");
-
-        $drawer
-          .toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5"))
-          .toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
-
-        $firstGroup.toggleClass("element-hidden");
-
-        $icon
-          .toggleClass("fa-plus", function () {
-            return $(this).hasClass("fa-minus");
-          })
-          .toggleClass("fa-minus", function () {
-            return $(this).hasClass("fa-plus");
-          });
-
-        AppUtils.openDrawer("#drawerManualAdd");
+        openClientSelector($taskForm);
       });
+  }
+
+  function openClientSelector($taskForm) {
+    const $drawer = $taskForm.parents(".drawer-content");
+    const $firstGroup = $taskForm.find(".form-group").first();
+    // const $icon = $selectClient.find("i");
+
+    $drawer
+      .toggleClass("drawer-grid-4", $drawer.hasClass("drawer-grid-5"))
+      .toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
+
+    $firstGroup.toggleClass("element-hidden");
+
+    // $icon
+    //   .toggleClass("fa-plus", function () {
+    //     return $(this).hasClass("fa-minus");
+    //   })
+    //   .toggleClass("fa-minus", function () {
+    //     return $(this).hasClass("fa-plus");
+    //   });
+
+    AppUtils.openDrawer("#drawerManualAdd");
   }
 
   function handleTaskSubmit(event) {
@@ -237,11 +308,11 @@ const ActivityToday = (() => {
 
     let $submitBtn = $form.find('button[type="submit"]');
 
-    const loading = AppUtils.setButtonLoading($submitBtn, "Saving ...");
-
     if (!$submitBtn.length) {
       $submitBtn = $("#submit-new-hours");
     }
+
+    const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
 
     const formData = {
       client: String($("#client").val() || "").trim(),
@@ -260,39 +331,15 @@ const ActivityToday = (() => {
       return;
     }
 
-    const normalizedClient = formData.client.trim().toLowerCase();
-
-    /*
-     * First try the external-sheets cache.
-     */
-    const externalClients = AppUtils.cacheGet("externalSheets");
-
-    if (Array.isArray(externalClients)) {
-      const externalClient = externalClients.find(
-        (item) =>
-          String(item?.clientName || "")
-            .trim()
-            .toLowerCase() === normalizedClient,
-      );
-
-      submitHours(externalClient);
-      return;
-    }
-
     /*
      * Cache does not exist.
      * Ask Apps Script directly.
      */
     google.script.run
       .withSuccessHandler((isExternal) => {
-        submitHours(
-          isExternal
-            ? {
-                clientName: formData.client,
-              }
-            : null,
-          loading,
-        );
+        const external = isExternal === true;
+
+        submitHours(external);
       })
       .withFailureHandler((err) => {
         console.error("isExternalClient failed:", err);
@@ -301,28 +348,25 @@ const ActivityToday = (() => {
           "Unable to determine client type.",
           "error",
         );
+
         loading.restore();
       })
       .isExternalClient(formData.client);
 
-    function submitHours(externalClient, loading) {
-      const isExternal = Boolean(externalClient);
-
+    function submitHours(isExternal) {
       const gscriptFunc = isExternal
         ? "recordExternalClientHoursFromForm"
         : "recordManualClientHoursFromForm";
 
       // console.log(`[Hours] Client: ${formData.client}`);
-
       // console.log(`[Hours] External: ${isExternal}`);
-
       // console.log(`[Hours] Function: ${gscriptFunc}`);
 
       AppUtils.submitForm({
         gscriptFunc,
         data: formData,
         $btn: $submitBtn,
-        loadingText: "Saving ...",
+        loadingText: "Saving",
 
         onSuccess: () => {
           handleTaskSaveSuccess(formData);
@@ -337,9 +381,9 @@ const ActivityToday = (() => {
       "success",
     );
 
-    google.script.run.pullClientProjects();
+    HourSummary.loadTodayChargedHours();
 
-    HourSummary.loadHourTotals(true);
+    google.script.run.syncClientProjects();
 
     clearClientCaches(formData.client);
 
@@ -395,7 +439,7 @@ const ActivityToday = (() => {
       return;
     }
 
-    const loading = AppUtils.setButtonLoading(btn, "Redirecting...");
+    const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
     google.script.run
       .withSuccessHandler((url) => {
@@ -420,40 +464,66 @@ const ActivityToday = (() => {
     const canEdit = hours > 0;
 
     return $(`
-    <div class="btn-group btn-group-sm">
+    <div class="dropleft btn-group">
       <button
         type="button"
-        class="btn action-btn add-client"
-        title="Add Client">
-        <i class="pe-7s-plus"></i>
+        class="p-0 btn border-0"
+        data-bs-toggle="dropdown"
+        aria-haspopup="true"
+        aria-expanded="false"
+        title="Activity actions"
+      >
+        <i class="pe-7s-more"></i>
       </button>
 
-      ${
-        canEdit
-          ? `
-            <button
-              type="button"
-              class="btn action-btn edit-today-hours"
-              title="Edit Today's Hours">
-              <i class="pe-7s-note"></i>
-            </button>
-          `
-          : ""
-      }
+      <div
+        tabindex="-1"
+        role="menu"
+        aria-hidden="true"
+        class="dropdown-menu"
+      >
+        <button
+          type="button"
+          id="add-hours"
+          class="dropdown-item add-hours"
+        >
+          <i class="pe-7s-plus me-2 text-primary"></i>
+          Add Hours
+        </button>
 
-      <button
-        type="button"
-        class="btn action-btn view-client"
-        title="View Client">
-        <i class="pe-7s-look"></i>
-      </button>
+        ${
+          canEdit
+            ? `
+              <button
+                type="button"
+                id="edit-today-hours"
+                class="dropdown-item edit-today-hours"
+              >
+                <i class="pe-7s-note me-2 text-primary"></i>
+                Edit Today's Hours
+              </button>
+            `
+            : ""
+        }
 
-      <button
-        type="button"
-        class="btn action-btn edit-client"
-        title="Edit Client">
-        <i class="pe-7s-note2"></i>
-      </button>
+        <button
+          type="button"
+          id="view-hour-history"
+          class="dropdown-item view-hour-history"
+        >
+          <i class="pe-7s-look me-2 text-success"></i>
+          View Recent
+        </button>
+
+        <button
+          type="button"
+          id="edit-client-sheet"
+          class="dropdown-item edit-client-sheet"
+        >
+          <i class="pe-7s-note2 me-2 text-info"></i>
+          View Sheet
+        </button>
+      </div>
     </div>
   `);
   }
@@ -502,6 +572,7 @@ const ActivityToday = (() => {
 
         updateActivityTable(data, dataTable);
         updateFilterCounts(dataTable);
+        HourSummary.loadTodayChargedHours();
 
         callback?.();
       })

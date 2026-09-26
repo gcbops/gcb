@@ -1,0 +1,690 @@
+<div class="row" id="hours-summary">
+
+  <!-- TOTAL HOURS -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Total Hours
+          </div>
+
+          <div class="h3 mb-0 font-weight-bold text-dark">
+            <span data-metric="total-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              hrs
+            </span>
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div
+            data-metric="lifetime"
+            class="text-primary font-weight-bold h4 mb-0 px-2 py-1 rounded bg-primary-light"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7">
+            of lifetime vol
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- COLLECTION RATE -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Collection Rate
+          </div>
+
+          <div class="h3 mb-0 font-weight-bold text-dark">
+            <span data-metric="paid-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              paid
+            </span>
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div
+            data-metric="collection"
+            class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7 mt-1">
+            clearance rate
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DEBT EXPOSURE -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Debt Exposure
+          </div>
+
+          <div class="h3 mb-0 font-weight-bold text-dark">
+            <span data-metric="owed-hours">0.0</span>
+            <span class="font-size-sm font-weight-normal text-secondary">
+              owed
+            </span>
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div
+            data-metric="debt"
+            class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7 mt-1">
+            invoice weight
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- NET HOURS YIELD -->
+  <div class="col-md-6 col-xl-3 mb-4">
+    <div class="card card-shadow-sm border-0 bg-white">
+      <div class="card-body d-flex justify-content-between align-items-center">
+
+        <div>
+          <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+            Net Hours Yield
+          </div>
+
+          <div
+            data-metric="net-hours"
+            class="h3 mb-0 font-weight-bold"
+          >
+            0.0
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div
+            data-metric="yield"
+            class="font-weight-bold h4 mb-0 px-2 py-1 rounded"
+          >
+            0%
+          </div>
+
+          <div class="text-muted font-size-xs opacity-7 mt-1">
+            net yield
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="row">
+    <div class="col-md-12 col-lg-9">
+        <div class="mb-3 card">
+            <div class="card-header-tab card-header">
+                <div class="card-header-title">
+                    <i class="header-icon lnr-rocket icon-gradient bg-tempting-azure"> </i>
+                    Monthly Overview
+                </div>
+                <ul class="nav">
+                    <li class="nav-item"><a class="active nav-link" data-bs-toggle="tab" data-bs-target="#tab-monthly-curr-year">Current</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-monthly-prev-year">Previous</a></li>
+                </ul>
+            </div>
+            <div class="tab-content">
+                <div class="tab-pane fade active show" id="tab-monthly-curr-year">
+                    <div class="widget-chart p-3">
+                        <div id="chart-monthly" style="height:440px;">
+                            <div class="bar-loader">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </div>
+                        <div class="widget-chart-content text-center mt-5">
+                            <div class="widget-description mt-0">
+                                <span class="ps-1" id="current-paid-growth"></span>
+                                <span class="text-muted opacity-8 ps-1">paid hours growth (vs last year)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="current-performance-summary">
+                        <!-- Collection Rate -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-1-1"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-1-1">
+                                    Collection Rate
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-1-1"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- Debt Exposure Rate -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-2-1"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-2-1">
+                                    Debt Exposure Rate
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-2-1"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- Net Hours Yield -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-3-1"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-3-1">
+                                    Net Hours Yield
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-3-1"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- Lifetime Volume -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-4-1"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-4-1">
+                                    % of Lifetime Vol
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-4-1"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-monthly-prev-year">
+                    <div class="widget-chart p-3">
+                        <div id="chart-monthly-prev-merged"  style="height:45dvh;">
+                            <div class="bar-loader">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </div>
+                        <div class="widget-chart-content text-center mt-5">
+                            <div class="widget-description mt-0">
+                                <span class="ps-1" id="previous-paid-growth"></span>
+                                <span class="text-muted opacity-8 ps-1">paid hours growth (vs last year)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="previous-performance-summary">
+                        <!-- Collection Rate -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-1-2"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-1-2">
+                                    Collection Rate
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-1-2"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- Debt Exposure Rate -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-2-2"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-2-2">
+                                    Debt Exposure Rate
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-2-2"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- Net Hours Yield -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-3-2"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-3-2">
+                                    Net Hours Yield
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-3-2"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- Lifetime Volume -->
+                        <div class="col-md-3">
+                            <div class="widget-content">
+                            <div class="widget-content-outer">
+                                <div class="widget-content-wrapper">
+                                <div class="widget-content-left">
+                                    <div
+                                    class="widget-numbers fsize-2 text-muted"
+                                    id="percent-4-2"
+                                    >
+                                    0%
+                                    </div>
+                                </div>
+
+                                <div class="widget-content-right">
+                                    <div class="text-muted opacity-6" id="label-4-2">
+                                    % of Lifetime Vol
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="widget-progress-wrapper mt-1">
+                                <div class="progress-bar-sm progress-bar-animated-alt progress">
+                                    <div
+                                    class="progress-bar"
+                                    id="progress-4-2"
+                                    style="width: 0%;"
+                                    ></div>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-12 col-lg-3">
+        <div class="mb-3 card" id="today-hours-summary">
+            <div class="card-body p-4">
+                <h5 class="card-title widget-card-title mb-2">Hours Today</h5>
+
+                <div class="row gy-0">
+                    <div class="col-12">
+                        <h4 class="mb-0" data-metric="today-hours">0.0</h4>
+                    </div>
+
+                    <div class="col-12 my-2">
+                        <div class="d-flex align-items-center">
+                        <span
+                            class="fs-6 bsb-w-25 bsb-h-25 rounded-circle d-flex align-items-center justify-content-center me-2 status-icon-sm"
+                            data-metric="today-hours-status"
+                        >
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
+
+                        <div>
+                            <span
+                            class="fs-7"
+                            data-metric="today-hours-change"
+                            >
+                            0%
+                            </span>
+
+                            <span
+                            class="fs-8 text-muted ms-1"
+                            data-metric="today-hours-label"
+                            >
+                            vs yesterday
+                            </span>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="chart-daily" style="height:120px;">
+                    <div class="bar-loader">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+                
+                <h5 class="card-title widget-card-title mt-3">Top Clients</h5>
+                <div class="scroll-area-sm scrollbar-hover">
+                    <div class="scrollbar-container">
+                        <div class="client-list" id="top-paid-clients">
+                            <div class="client-loading text-muted">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <h5 class="card-title widget-card-title mt-2">Top Projects</h5>
+                <div class="scroll-area-sm scrollbar-hover">
+                    <div class="scrollbar-container">
+                        <div class="project-list" id="top-projects">
+                            <div class="project-loading text-muted">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="main-card mb-3 card">
+          <div class="card-body">
+
+            <div class="d-flex align-items-start mb-3">
+
+                <h5 class="card-title widget-card-title mb-2">Active Clients This Month</h5>
+
+                <div class="ms-auto d-flex justify-content-end">
+
+                    <!-- DESKTOP CONTROLS -->
+                    <div class="responsive-desktop-actions d-flex">
+
+                        <div class="btn-group" id="categoryDtFilter">
+
+                            <a
+                                data-bs-toggle="dropdown"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                class="p-0 btn"
+                            >
+                                <span class="px-2">Show All</span>
+                                <i class="fa fa-angle-down ms-2 opacity-8"></i>
+                            </a>
+
+                            <div
+                                tabindex="-1"
+                                role="menu"
+                                aria-hidden="true"
+                                class="dropdown-menu dropdown-menu-right"
+                            >
+                                <button
+                                    type="button"
+                                    tabindex="0"
+                                    class="dropdown-item"
+                                    data-client-status="all"
+                                >
+                                    All
+                                </button>
+
+                                <button
+                                    type="button"
+                                    tabindex="0"
+                                    class="dropdown-item"
+                                    data-client-status="Online"
+                                >
+                                    Online
+                                </button>
+
+                                <button
+                                    type="button"
+                                    tabindex="0"
+                                    class="dropdown-item"
+                                    data-client-status="Idle"
+                                >
+                                    Idle
+                                </button>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- MOBILE CONTROLS -->
+                    <div class="responsive-mobile-actions dropdown mb-2">
+
+                        <button
+                            type="button"
+                            class="btn btn-light"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                            aria-label="Client status options"
+                            title="Client status options"
+                        >
+                            <i class="fa fa-ellipsis-v"></i>
+                        </button>
+
+                        <ul class="dropdown-menu dropdown-menu-end">
+
+                            <li>
+                                <h6 class="dropdown-header">
+                                    View
+                                </h6>
+                            </li>
+
+                            <li>
+                                <button
+                                    type="button"
+                                    class="dropdown-item"
+                                    data-client-status="all"
+                                >
+                                    All
+                                </button>
+                            </li>
+
+                            <li>
+                                <button
+                                    type="button"
+                                    class="dropdown-item"
+                                    data-client-status="Online"
+                                >
+                                    Online
+                                </button>
+                            </li>
+
+                            <li>
+                                <button
+                                    type="button"
+                                    class="dropdown-item"
+                                    data-client-status="Idle"
+                                >
+                                    Idle
+                                </button>
+                            </li>
+
+                        </ul>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="table-responsive mt-4">
+                <table
+                    id="active-clients"
+                    class="table table-hovered scrollbar-hover nowrap w-100"
+                >
+                    <thead>
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th>Client</th>
+                            <th class="text-center">History</th>
+                            <th class="text-center">Total Owed</th>
+                            <th class="text-center">Current Month Owed</th>
+                            <th class="text-center">Total Paid</th>
+                            <th class="text-center">Today</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="data-table-body" class="scrollbar-hover"></tbody>
+                </table>
+            </div>
+
+          </div>
+        </div>
+    </div>
+</div>
