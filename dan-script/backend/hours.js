@@ -408,62 +408,224 @@ function getTodayClientHours(clientName) {
       };
     }
 
-    const clientSheet = getSheetSafe(clientName);
-
-    if (!clientSheet) {
-      return {
-        success: false,
-        message: `Sheet "${clientName}" not found.`,
-        records: [],
-      };
-    }
+    clientName = String(clientName).trim();
 
     const startRow = 3;
-    const lastRow = clientSheet.getLastRow();
+    const today = formatDateSafe(new Date(), "M/d/yyyy");
 
-    if (lastRow < startRow) {
+    /*
+     * --------------------------------------------------
+     * 1. DETERMINE CLIENT TYPE
+     * --------------------------------------------------
+     */
+
+    const registrySheet = getSheetSafe("External Sheets");
+
+    let externalSpreadsheetId = null;
+
+    if (registrySheet && registrySheet.getLastRow() >= 2) {
+      const registryValues = registrySheet
+        .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
+        .getValues();
+
+      const normalizedClient = normalizeText(clientName);
+
+      const externalRow = registryValues.find(
+        (row) =>
+          normalizeText(String(row[1] || "")) === normalizedClient &&
+          String(row[0] || "").trim() !== "",
+      );
+
+      if (externalRow) {
+        externalSpreadsheetId = String(externalRow[0] || "").trim();
+      }
+    }
+
+    const isExternal = Boolean(externalSpreadsheetId);
+
+    /*
+     * ==================================================
+     * INTERNAL CLIENT
+     * ==================================================
+     *
+     * Keep the existing behavior.
+     */
+
+    if (!isExternal) {
+      const clientSheet = getSheetSafe(clientName);
+
+      if (!clientSheet) {
+        return {
+          success: false,
+          message: `Sheet "${clientName}" not found.`,
+          records: [],
+        };
+      }
+
+      const lastRow = clientSheet.getLastRow();
+
+      if (lastRow < startRow) {
+        return {
+          success: true,
+          records: [],
+        };
+      }
+
+      const rowCount = lastRow - startRow + 1;
+
+      // E:H
+      const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
+
+      const records = [];
+
+      data.forEach((row, index) => {
+        const [type, task, hours, date] = row;
+
+        const rowNumber = startRow + index;
+
+        const isToday = formatDateSafe(date, "M/d/yyyy") === today;
+
+        if (!isToday) {
+          return;
+        }
+
+        // Ignore completely empty rows.
+        if (
+          !type &&
+          !task &&
+          (hours === "" || hours === null || hours === undefined)
+        ) {
+          return;
+        }
+
+        records.push({
+          row: rowNumber,
+
+          /*
+           * Internal clients don't need source metadata.
+           */
+          sourceSheet: "",
+          sourceRow: null,
+
+          type: type || "",
+          task: task || "",
+          hours: Number(hours) || 0,
+          date: formatDateSafe(date, "M/d/yyyy"),
+        });
+      });
+
       return {
         success: true,
-        records: [],
+        records,
       };
     }
 
-    const rowCount = lastRow - startRow + 1;
+    /*
+     * ==================================================
+     * EXTERNAL CLIENT
+     * ==================================================
+     *
+     * IMPORTANT:
+     *
+     * The main client sheet is an IMPORTRANGE view.
+     *
+     * Therefore its row number must NOT be treated as
+     * the actual row inside the external project tab.
+     *
+     * Instead, scan the actual project sheets and return
+     * the real source sheet + source row.
+     */
 
-    // E:H
-    const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
+    let externalSS;
 
-    const today = formatDateSafe(new Date(), "M/d/yyyy");
+    try {
+      externalSS = SpreadsheetApp.openById(externalSpreadsheetId);
+    } catch (err) {
+      throw new Error(
+        `Unable to access the external spreadsheet for "${clientName}".`,
+      );
+    }
+
+    const projectSheets = externalSS
+      .getSheets()
+      .filter(
+        (sheet) =>
+          sheet.getName() !== "Projects" && sheet.getName() !== "BLANK",
+      );
 
     const records = [];
 
-    data.forEach((row, index) => {
-      const [type, task, hours, date] = row;
+    projectSheets.forEach((projectSheet) => {
+      const lastRow = projectSheet.getLastRow();
 
-      const rowNumber = startRow + index;
-
-      const isToday = formatDateSafe(date, "M/d/yyyy") === today;
-
-      if (!isToday) {
+      if (lastRow < startRow) {
         return;
       }
 
-      // Ignore completely empty rows.
-      if (
-        !type &&
-        !task &&
-        (hours === "" || hours === null || hours === undefined)
-      ) {
-        return;
-      }
+      const rowCount = lastRow - startRow + 1;
 
-      records.push({
-        row: rowNumber,
-        type: type || "",
-        task: task || "",
-        hours: Number(hours) || 0,
-        date: formatDateSafe(date, "M/d/yyyy"),
+      /*
+       * Read E:H from the actual project sheet.
+       */
+      const data = projectSheet.getRange(startRow, 5, rowCount, 4).getValues();
+
+      data.forEach((row, index) => {
+        const [type, task, hours, date] = row;
+
+        const sourceRow = startRow + index;
+
+        const isToday = formatDateSafe(date, "M/d/yyyy") === today;
+
+        if (!isToday) {
+          return;
+        }
+
+        /*
+         * Ignore completely empty rows.
+         */
+        if (
+          !type &&
+          !task &&
+          (hours === "" || hours === null || hours === undefined)
+        ) {
+          return;
+        }
+
+        records.push({
+          /*
+           * Keep row for frontend compatibility.
+           *
+           * For external clients this is NOT used as the
+           * physical external row.
+           */
+          row: sourceRow,
+
+          /*
+           * Actual source location.
+           */
+          sourceSheet: projectSheet.getName(),
+          sourceRow,
+
+          type: type || "",
+          task: task || "",
+          hours: Number(hours) || 0,
+          date: formatDateSafe(date, "M/d/yyyy"),
+        });
       });
+    });
+
+    /*
+     * Sort newest source rows first.
+     *
+     * Since records are already today's records,
+     * this mainly keeps the UI deterministic.
+     */
+    records.sort((a, b) => {
+      if (a.sourceSheet !== b.sourceSheet) {
+        return a.sourceSheet.localeCompare(b.sourceSheet);
+      }
+
+      return Number(a.sourceRow) - Number(b.sourceRow);
     });
 
     return {
@@ -487,12 +649,6 @@ function saveEditedTodayClientHours(formData) {
       throw new Error("Client is required.");
     }
 
-    const clientSheet = getSheetSafe(clientName);
-
-    if (!clientSheet) {
-      throw new Error(`Sheet "${clientName}" not found.`);
-    }
-
     const records = Array.isArray(formData.records) ? formData.records : [];
 
     if (!records.length) {
@@ -503,136 +659,396 @@ function saveEditedTodayClientHours(formData) {
     }
 
     const startRow = 3;
-    const lastRow = clientSheet.getLastRow();
-
-    if (lastRow < startRow) {
-      throw new Error("No records found.");
-    }
-
     const today = formatDateSafe(new Date(), "M/d/yyyy");
 
     /*
      * --------------------------------------------------
-     * 1. VALIDATE ALL REQUESTED ROWS FIRST
+     * 1. DETERMINE CLIENT TYPE
      * --------------------------------------------------
      */
 
-    const requestedRows = new Set();
+    const registrySheet = getSheetSafe("External Sheets");
 
-    records.forEach((record) => {
-      const rowNumber = Number(record.row);
+    let externalSpreadsheetId = null;
 
-      if (!Number.isInteger(rowNumber)) {
-        throw new Error("Invalid row number.");
+    if (registrySheet && registrySheet.getLastRow() >= 2) {
+      const registryValues = registrySheet
+        .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
+        .getValues();
+
+      const normalizedClient = normalizeText(clientName);
+
+      const externalRow = registryValues.find(
+        (row) =>
+          normalizeText(String(row[1] || "")) === normalizedClient &&
+          String(row[0] || "").trim() !== "",
+      );
+
+      if (externalRow) {
+        externalSpreadsheetId = String(externalRow[0] || "").trim();
       }
+    }
 
-      if (rowNumber < startRow || rowNumber > lastRow) {
-        throw new Error(`Row ${rowNumber} is no longer valid.`);
-      }
-
-      if (requestedRows.has(rowNumber)) {
-        throw new Error(`Duplicate row submitted: ${rowNumber}`);
-      }
-
-      requestedRows.add(rowNumber);
-    });
+    const isExternal = Boolean(externalSpreadsheetId);
 
     /*
-     * Read all E:H.
+     * ==================================================
+     * INTERNAL CLIENT
+     * ==================================================
+     *
+     * Existing behavior remains unchanged.
      */
-    const rowCount = lastRow - startRow + 1;
 
-    const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
+    if (!isExternal) {
+      const clientSheet = getSheetSafe(clientName);
 
-    /*
-     * Build a map of actual sheet rows.
-     */
-    const sheetRows = new Map();
+      if (!clientSheet) {
+        throw new Error(`Sheet "${clientName}" not found.`);
+      }
 
-    data.forEach((row, index) => {
-      const rowNumber = startRow + index;
+      const lastRow = clientSheet.getLastRow();
 
-      sheetRows.set(rowNumber, {
-        row: rowNumber,
-        type: row[0] || "",
-        task: row[1] || "",
-        hours: Number(row[2]) || 0,
-        date: row[3],
-        dateFormatted: formatDateSafe(row[3], "M/d/yyyy"),
+      if (lastRow < startRow) {
+        throw new Error("No records found.");
+      }
+
+      /*
+       * ------------------------------------------------
+       * Validate requested rows.
+       * ------------------------------------------------
+       */
+
+      const requestedRows = new Set();
+
+      records.forEach((record) => {
+        const rowNumber = Number(record.row);
+
+        if (!Number.isInteger(rowNumber)) {
+          throw new Error("Invalid row number.");
+        }
+
+        if (rowNumber < startRow || rowNumber > lastRow) {
+          throw new Error(`Row ${rowNumber} is no longer valid.`);
+        }
+
+        if (requestedRows.has(rowNumber)) {
+          throw new Error(`Duplicate row submitted: ${rowNumber}`);
+        }
+
+        requestedRows.add(rowNumber);
       });
-    });
+
+      /*
+       * Read E:H.
+       */
+      const rowCount = lastRow - startRow + 1;
+
+      const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
+
+      /*
+       * Build map of actual sheet rows.
+       */
+      const sheetRows = new Map();
+
+      data.forEach((row, index) => {
+        const rowNumber = startRow + index;
+
+        sheetRows.set(rowNumber, {
+          row: rowNumber,
+          type: row[0] || "",
+          task: row[1] || "",
+          hours: Number(row[2]) || 0,
+          date: row[3],
+          dateFormatted: formatDateSafe(row[3], "M/d/yyyy"),
+        });
+      });
+
+      /*
+       * Verify row + date.
+       */
+      records.forEach((record) => {
+        const rowNumber = Number(record.row);
+
+        const actual = sheetRows.get(rowNumber);
+
+        if (!actual) {
+          throw new Error(`Row ${rowNumber} could not be found.`);
+        }
+
+        if (actual.dateFormatted !== today) {
+          throw new Error(`Row ${rowNumber} is no longer a record from today.`);
+        }
+      });
+
+      /*
+       * Validate submitted values.
+       */
+      records.forEach((record) => {
+        if (record.action !== "delete" && record.action !== "update") {
+          throw new Error(`Invalid action for row ${record.row}.`);
+        }
+
+        if (record.action === "update") {
+          const type = String(record.type || "").trim();
+
+          const task = String(record.task || "").trim();
+
+          if (!type) {
+            throw new Error(`Type is required for row ${record.row}.`);
+          }
+
+          if (!task) {
+            throw new Error(`Task is required for row ${record.row}.`);
+          }
+
+          if (task.toLowerCase() === "loading...") {
+            throw new Error(`Invalid task for row ${record.row}.`);
+          }
+
+          const hours = Number(record.hours);
+
+          if (!Number.isFinite(hours) || hours < 0) {
+            throw new Error(`Invalid hours for row ${record.row}.`);
+          }
+        }
+      });
+
+      /*
+       * Apply internal updates.
+       */
+      records
+        .filter((record) => record.action === "update")
+        .forEach((record) => {
+          const rowNumber = Number(record.row);
+
+          clientSheet
+            .getRange(rowNumber, 5, 1, 3)
+            .setValues([
+              [
+                String(record.type).trim(),
+
+                String(record.task).trim(),
+
+                Number(record.hours),
+              ],
+            ]);
+        });
+
+      /*
+       * Delete internal records.
+       */
+      const deleteRows = records
+        .filter((record) => record.action === "delete")
+        .map((record) => Number(record.row));
+
+      if (deleteRows.length) {
+        deleteTodayRowsAndCompact(clientSheet, deleteRows, today, startRow);
+      }
+
+      return {
+        success: true,
+        message: "Today's records have been updated.",
+      };
+    }
+
+    /*
+     * ==================================================
+     * EXTERNAL CLIENT
+     * ==================================================
+     */
+
+    let externalSS;
+
+    try {
+      externalSS = SpreadsheetApp.openById(externalSpreadsheetId);
+    } catch (err) {
+      throw new Error(
+        `Unable to access the external spreadsheet for "${clientName}".`,
+      );
+    }
 
     /*
      * --------------------------------------------------
-     * 2. VERIFY ROW + DATE
+     * 2. VALIDATE AND RESOLVE SOURCE LOCATIONS
      * --------------------------------------------------
+     *
+     * Each external record MUST contain:
+     *
+     *   sourceSheet
+     *   sourceRow
+     *
+     * These identify the actual project tab and row.
      */
 
-    records.forEach((record) => {
-      const rowNumber = Number(record.row);
-      const actual = sheetRows.get(rowNumber);
+    const resolvedRecords = [];
 
-      if (!actual) {
-        throw new Error(`Row ${rowNumber} could not be found.`);
-      }
-
-      if (actual.dateFormatted !== today) {
-        throw new Error(`Row ${rowNumber} is no longer a record from today.`);
-      }
-    });
-
-    /*
-     * --------------------------------------------------
-     * 3. VALIDATE VALUES
-     * --------------------------------------------------
-     */
+    const requestedSources = new Set();
 
     records.forEach((record) => {
       if (record.action !== "delete" && record.action !== "update") {
         throw new Error(`Invalid action for row ${record.row}.`);
       }
 
+      const sourceSheetName = String(record.sourceSheet || "").trim();
+
+      const sourceRow = Number(record.sourceRow);
+
+      if (!sourceSheetName) {
+        throw new Error(
+          `Missing source sheet for external record ${record.row}.`,
+        );
+      }
+
+      if (!Number.isInteger(sourceRow) || sourceRow < startRow) {
+        throw new Error(
+          `Invalid source row for external record ${record.row}.`,
+        );
+      }
+
+      /*
+       * Prevent the same physical external row from
+       * being submitted twice.
+       */
+      const sourceKey = `${sourceSheetName}::${sourceRow}`;
+
+      if (requestedSources.has(sourceKey)) {
+        throw new Error(
+          `Duplicate external record submitted: ${sourceSheetName} row ${sourceRow}.`,
+        );
+      }
+
+      requestedSources.add(sourceKey);
+
+      /*
+       * Resolve the exact project tab.
+       */
+      const projectSheet = externalSS.getSheetByName(sourceSheetName);
+
+      if (!projectSheet) {
+        throw new Error(
+          `Project sheet "${sourceSheetName}" was not found in the external spreadsheet.`,
+        );
+      }
+
+      /*
+       * Never allow system tabs as source tabs.
+       */
+      if (
+        projectSheet.getName() === "Projects" ||
+        projectSheet.getName() === "BLANK"
+      ) {
+        throw new Error(`Invalid external source sheet "${sourceSheetName}".`);
+      }
+
+      const lastRow = projectSheet.getLastRow();
+
+      if (sourceRow > lastRow) {
+        throw new Error(
+          `External row ${sourceRow} no longer exists in "${sourceSheetName}".`,
+        );
+      }
+
+      /*
+       * Read the actual source record.
+       */
+      const actual = projectSheet.getRange(sourceRow, 5, 1, 4).getValues()[0];
+
+      const [actualType, actualTask, actualHours, actualDate] = actual;
+
+      const actualDateFormatted = formatDateSafe(actualDate, "M/d/yyyy");
+
+      /*
+       * The source record must still exist
+       * and still belong to today.
+       */
+      if (actualDateFormatted !== today) {
+        throw new Error(
+          `External record "${sourceSheetName}" row ${sourceRow} is no longer a record from today.`,
+        );
+      }
+
+      /*
+       * Ignore completely empty source rows.
+       */
+      if (
+        !actualType &&
+        !actualTask &&
+        (actualHours === "" ||
+          actualHours === null ||
+          actualHours === undefined) &&
+        !actualDate
+      ) {
+        throw new Error(
+          `External record "${sourceSheetName}" row ${sourceRow} no longer exists.`,
+        );
+      }
+
+      /*
+       * Validate submitted values.
+       */
       if (record.action === "update") {
         const type = String(record.type || "").trim();
+
         const task = String(record.task || "").trim();
 
         if (!type) {
-          throw new Error(`Type is required for row ${record.row}.`);
+          throw new Error(`Type is required for external record ${sourceRow}.`);
         }
 
         if (!task) {
-          throw new Error(`Task is required for row ${record.row}.`);
+          throw new Error(`Task is required for external record ${sourceRow}.`);
         }
 
         if (task.toLowerCase() === "loading...") {
-          throw new Error(`Invalid task for row ${record.row}.`);
+          throw new Error(`Invalid task for external record ${sourceRow}.`);
         }
 
         const hours = Number(record.hours);
 
         if (!Number.isFinite(hours) || hours < 0) {
-          throw new Error(`Invalid hours for row ${record.row}.`);
+          throw new Error(`Invalid hours for external record ${sourceRow}.`);
         }
       }
+
+      resolvedRecords.push({
+        record,
+        sheet: projectSheet,
+        sourceRow,
+        actual: {
+          type: actualType || "",
+          task: actualTask || "",
+          hours: Number(actualHours) || 0,
+          date: actualDate,
+          dateFormatted: actualDateFormatted,
+        },
+      });
     });
 
     /*
      * --------------------------------------------------
-     * 4. APPLY UPDATES
+     * 3. APPLY EXTERNAL UPDATES
      * --------------------------------------------------
      */
 
-    records
-      .filter((record) => record.action === "update")
-      .forEach((record) => {
-        const rowNumber = Number(record.row);
-
-        clientSheet
-          .getRange(rowNumber, 5, 1, 3)
+    resolvedRecords
+      .filter(({ record }) => record.action === "update")
+      .forEach(({ record, sheet, sourceRow }) => {
+        /*
+         * IMPORTANT:
+         *
+         * We write directly to the exact source
+         * project tab + exact source row.
+         *
+         * The frontend's "row" value is NOT used here.
+         */
+        sheet
+          .getRange(sourceRow, 5, 1, 3)
           .setValues([
             [
               String(record.type).trim(),
+
               String(record.task).trim(),
+
               Number(record.hours),
             ],
           ]);
@@ -640,21 +1056,52 @@ function saveEditedTodayClientHours(formData) {
 
     /*
      * --------------------------------------------------
-     * 5. DELETE RECORDS
+     * 4. GROUP EXTERNAL DELETIONS
      * --------------------------------------------------
      */
 
-    const deleteRows = records
-      .filter((record) => record.action === "delete")
-      .map((record) => Number(record.row));
+    const deleteGroups = new Map();
 
-    if (deleteRows.length) {
-      deleteTodayRowsAndCompact(clientSheet, deleteRows, today, startRow);
-    }
+    resolvedRecords
+      .filter(({ record }) => record.action === "delete")
+      .forEach(({ sheet, sourceRow }) => {
+        const sheetId = sheet.getSheetId();
+
+        if (!deleteGroups.has(sheetId)) {
+          deleteGroups.set(sheetId, {
+            sheet,
+            rows: [],
+          });
+        }
+
+        deleteGroups.get(sheetId).rows.push(sourceRow);
+      });
+
+    /*
+     * Delete/compact independently per
+     * actual external project tab.
+     */
+    deleteGroups.forEach(({ sheet, rows }) => {
+      deleteTodayRowsAndCompact(sheet, rows, today, startRow);
+    });
+
+    /*
+     * --------------------------------------------------
+     * 5. REFRESH MAIN IMPORTED VIEW
+     * --------------------------------------------------
+     *
+     * The main client sheet is only an imported/
+     * aggregated representation.
+     *
+     * The actual external project sheets are the
+     * source of truth.
+     */
+
+    combineExternalSheetData(externalSpreadsheetId);
 
     return {
       success: true,
-      message: "Today's records have been updated.",
+      message: "Today's external client records have been updated.",
     };
   } catch (err) {
     throw new Error(err.message || String(err));

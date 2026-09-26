@@ -88,7 +88,7 @@ const billingOverviewPage = (() => {
 
         renderBillingAnalytics(data, logMessage, refresh, loading);
       },
-      true,
+      false,
       refresh,
     );
   }

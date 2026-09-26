@@ -43,6 +43,10 @@ const RouterModule = (() => {
    */
   let pendingPage = null;
 
+  const isEmbedded = window !== window.top;
+  const isDirectGas = !isEmbedded;
+  const GITHUB_ORIGIN = "https://gcbops.github.io";
+
   const routes = {
     home: HomePage,
 
@@ -93,6 +97,60 @@ const RouterModule = (() => {
     return currentPage;
   }
 
+  function pushHistory(pageName) {
+    if (isDirectGas) {
+      history.pushState({ gcbPage: pageName }, "", window.location.href);
+
+      return;
+    }
+
+    window.parent.postMessage(
+      {
+        type: "GCB_NAVIGATION",
+        page: pageName,
+      },
+      GITHUB_ORIGIN,
+    );
+  }
+
+  function handlePopState(event) {
+    if (isDirectGas) {
+      const page = event.state?.gcbPage;
+
+      console.log("[RouterModule] Browser history:", {
+        state: event.state,
+        page,
+      });
+
+      if (isValidRoute(page)) {
+        go(page, false);
+      }
+
+      return;
+    }
+
+    // GitHub wrapper owns browser history.
+    // It will send the requested page back to us.
+  }
+
+  function handleParentNavigation(event) {
+    if (event.origin !== GITHUB_ORIGIN) {
+      return;
+    }
+
+    if (event.data?.type !== "GCB_HISTORY_NAVIGATION") {
+      return;
+    }
+
+    const page = event.data.page;
+
+    if (!isValidRoute(page)) {
+      return;
+    }
+
+    go(page, false);
+  }
+
   /**
    * Initialize router and application shell.
    */
@@ -124,6 +182,12 @@ const RouterModule = (() => {
          * ------------------------------------------------
          */
         AppUI.init();
+
+        window.addEventListener("popstate", handlePopState);
+
+        if (isEmbedded) {
+          window.addEventListener("message", handleParentNavigation);
+        }
 
         /*
          * ------------------------------------------------
@@ -161,7 +225,7 @@ const RouterModule = (() => {
          * 5. Load initial page
          * ------------------------------------------------
          */
-        go(initialPage);
+        go(initialPage, false);
 
         return true;
       } catch (error) {
@@ -185,7 +249,7 @@ const RouterModule = (() => {
   /**
    * Navigate to a page.
    */
-  function go(pageName) {
+  function go(pageName, updateHistory = true) {
     /*
      * ------------------------------------------------
      * Router is not ready yet.
@@ -216,6 +280,10 @@ const RouterModule = (() => {
      * ------------------------------------------------
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
+
+    if (updateHistory) {
+      pushHistory(resolvedPageName);
+    }
 
     const page = routes[resolvedPageName];
 

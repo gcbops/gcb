@@ -143,12 +143,27 @@ const TodayHoursEditor = (() => {
         return;
       }
 
+      const sourceRow = Number(record.sourceRow);
+
+      /*
+       * External records have actual source metadata.
+       *
+       * Internal records can leave these empty.
+       */
+      const sourceSheet = String(record.sourceSheet || "").trim();
+
+      const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
+
+      const isExternal = Boolean(sourceSheet && hasSourceRow);
+
       const taskOptions = buildTaskOptions(tasks, record.task);
 
       const $row = $(`
       <div
         class="today-hours-record border rounded p-3 mb-3"
         data-row="${rowNumber}"
+        data-source-sheet="${AppUtils.escapeHtml(sourceSheet)}"
+        data-source-row="${hasSourceRow ? sourceRow : ""}"
         data-action="update"
       >
         <div class="row">
@@ -171,6 +186,7 @@ const TodayHoursEditor = (() => {
 
             <select
               class="form-control today-hours-task js-select2-dynamic"
+              ${isExternal ? "disabled" : ""}
               required
             >
               ${taskOptions}
@@ -277,6 +293,7 @@ const TodayHoursEditor = (() => {
 
     if (!clientName) {
       AppUtils.showDashboardToast("Client is required.", "error");
+
       return;
     }
 
@@ -295,6 +312,17 @@ const TodayHoursEditor = (() => {
         return false;
       }
 
+      /*
+       * Actual external source metadata.
+       */
+      const sourceSheet = String($row.attr("data-source-sheet") || "").trim();
+
+      const sourceRowValue = $row.attr("data-source-row");
+
+      const sourceRow = Number(sourceRowValue);
+
+      const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
+
       const action =
         $row.attr("data-action") === "delete" ? "delete" : "update";
 
@@ -305,6 +333,13 @@ const TodayHoursEditor = (() => {
         records.push({
           row: rowNumber,
           action: "delete",
+
+          /*
+           * These are required for external clients.
+           * Internal clients will simply have empty values.
+           */
+          sourceSheet,
+          sourceRow: hasSourceRow ? sourceRow : null,
         });
 
         return;
@@ -342,9 +377,16 @@ const TodayHoursEditor = (() => {
       records.push({
         row: rowNumber,
         action: "update",
+
         type,
         task,
         hours,
+
+        /*
+         * Actual external source metadata.
+         */
+        sourceSheet,
+        sourceRow: hasSourceRow ? sourceRow : null,
       });
     });
 
@@ -354,6 +396,7 @@ const TodayHoursEditor = (() => {
 
     if (!records.length) {
       AppUtils.showDashboardToast("No changes to save.", "info");
+
       return;
     }
 

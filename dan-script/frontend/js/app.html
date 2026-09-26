@@ -1878,14 +1878,36 @@
           bottomStart: ["info"],
           bottomEnd: ["paging"]
         },
-        paging: true,
+        // paging: true,
+        paging: false,
+        scrollCollapse: true,
+        scrollY: "400px",
         pageLength: 5,
         lengthMenu: [
           [5, 10, 25],
           [5, 10, 25]
         ],
+        // Add data-row (optional) and data-col to cells
+        createdRow(row, data, dataIndex) {
+          $(row).attr("data-row", dataIndex);
+        },
+        createdCell(td, cellData, rowData, rowIndex, colIndex) {
+          $(td).attr("data-col", colIndex);
+        },
         initComplete() {
           log("DataTable initComplete:", tableId);
+          if ($table.hasClass("table-hovered")) {
+            $table.find("tbody").addClass("table-hovered");
+          }
+          if (cleanTitle === "activity today") {
+            const $wrapper = $table.closest(".dataTable-wrapper, .dataTables_wrapper, div").first();
+            if ($wrapper.length) {
+              $wrapper.css("min-height", "200px");
+            } else {
+              $table.css("min-height", "200px");
+              $table.find("tbody").css("min-height", "200px");
+            }
+          }
           if (typeof callback === "function") {
             callback(this.api());
           }
@@ -1909,14 +1931,17 @@
       }
       const priorityMap = {
         "activity today": [0, -1],
-        clients: [0, 1, 2],
-        "top paid accounts": [0, 1],
-        "outstanding accounts": [0, 2],
-        "active clients": [0, 1, -1],
-        "external sheets": [0, 2, -1],
+        clients: [0, 2],
         "reports overview": [2, -1],
         "report history": [2, -1],
-        upsell: [0, 1]
+        activity: [0, 1, 2],
+        "project directory": [1, 3],
+        "paid hours": [0, 3],
+        "owed hours": [0, 3],
+        "invoiced hours": [0, 3],
+        "hours without status": [0, 3],
+        "yearly performance": [0, 1, 5],
+        "billing records export": [4, 5, -1]
       };
       const priorityColumns = priorityMap[cleanTitle] || [];
       tableOptions.columnDefs = [];
@@ -1924,12 +1949,6 @@
         tableOptions.columnDefs.push(
           ...withResponsivePriorities(totalColumns, priorityColumns)
         );
-      }
-      if (cleanTitle === "clients" || cleanTitle === "activity today" || cleanTitle === "upsell opportunities" || cleanTitle === "legacy clients" || cleanTitle === "project directory" || cleanTitle === "monthly billing analytics" || cleanTitle === "hours without status" || cleanTitle === "yearly performance" || cleanTitle === "billing records export" || cleanTitle === "reports overview") {
-        log("Initializing Client Directory");
-        tableOptions.paging = false;
-        tableOptions.scrollCollapse = true;
-        tableOptions.scrollY = "400px";
       }
       if (cleanTitle === "activity today") {
         log("Initializing Activity Today");
@@ -2347,11 +2366,17 @@
         if (!Number.isInteger(rowNumber) || rowNumber < 1) {
           return;
         }
+        const sourceRow = Number(record.sourceRow);
+        const sourceSheet = String(record.sourceSheet || "").trim();
+        const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
+        const isExternal = Boolean(sourceSheet && hasSourceRow);
         const taskOptions = buildTaskOptions(tasks, record.task);
         const $row = $(`
       <div
         class="today-hours-record border rounded p-3 mb-3"
         data-row="${rowNumber}"
+        data-source-sheet="${AppUtils.escapeHtml(sourceSheet)}"
+        data-source-row="${hasSourceRow ? sourceRow : ""}"
         data-action="update"
       >
         <div class="row">
@@ -2374,6 +2399,7 @@
 
             <select
               class="form-control today-hours-task js-select2-dynamic"
+              ${isExternal ? "disabled" : ""}
               required
             >
               ${taskOptions}
@@ -2464,11 +2490,21 @@
           hasValidationError = true;
           return false;
         }
+        const sourceSheet = String($row.attr("data-source-sheet") || "").trim();
+        const sourceRowValue = $row.attr("data-source-row");
+        const sourceRow = Number(sourceRowValue);
+        const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
         const action = $row.attr("data-action") === "delete" ? "delete" : "update";
         if (action === "delete") {
           records.push({
             row: rowNumber,
-            action: "delete"
+            action: "delete",
+            /*
+             * These are required for external clients.
+             * Internal clients will simply have empty values.
+             */
+            sourceSheet,
+            sourceRow: hasSourceRow ? sourceRow : null
           });
           return;
         }
@@ -2496,7 +2532,12 @@
           action: "update",
           type,
           task,
-          hours
+          hours,
+          /*
+           * Actual external source metadata.
+           */
+          sourceSheet,
+          sourceRow: hasSourceRow ? sourceRow : null
         });
       });
       if (hasValidationError) {
@@ -11911,7 +11952,7 @@
           }
           renderBillingAnalytics(data, logMessage, refresh, loading);
         },
-        true,
+        false,
         refresh
       );
     }
@@ -12951,7 +12992,7 @@
         </tr>
       `
       ).join("");
-      DataTableModule.init("Projects", "#client-projects", false, null, true);
+      DataTableModule.init("Projects", "#client-projects", false);
     }
     function renderPaidOwedHistory(data) {
       const table = document.querySelector("#client-paid-owed-history tbody");
@@ -13127,7 +13168,7 @@
       saveButton.addEventListener("click", () => {
         saveEditableInfo(
           clientName2,
-          field.key,
+          field,
           input.value.trim(),
           container.id,
           saveButton
@@ -13265,13 +13306,16 @@
   })();
 
   // src/routers.js
-  var RouterModule = /* @__PURE__ */ (() => {
+  var RouterModule = (() => {
     let currentPage = "home";
     let currentModule = null;
     let pageToken = 0;
     let initialized = false;
     let initializing = null;
     let pendingPage = null;
+    const isEmbedded = window !== window.top;
+    const isDirectGas = !isEmbedded;
+    const GITHUB_ORIGIN = "https://gcbops.github.io";
     const routes = {
       home: HomePage,
       dailyOverview: dailyOverviewPage,
@@ -13309,6 +13353,45 @@
     function getCurrentPage() {
       return currentPage;
     }
+    function pushHistory(pageName) {
+      if (isDirectGas) {
+        history.pushState({ gcbPage: pageName }, "", window.location.href);
+        return;
+      }
+      window.parent.postMessage(
+        {
+          type: "GCB_NAVIGATION",
+          page: pageName
+        },
+        GITHUB_ORIGIN
+      );
+    }
+    function handlePopState(event) {
+      if (isDirectGas) {
+        const page = event.state?.gcbPage;
+        console.log("[RouterModule] Browser history:", {
+          state: event.state,
+          page
+        });
+        if (isValidRoute(page)) {
+          go(page, false);
+        }
+        return;
+      }
+    }
+    function handleParentNavigation(event) {
+      if (event.origin !== GITHUB_ORIGIN) {
+        return;
+      }
+      if (event.data?.type !== "GCB_HISTORY_NAVIGATION") {
+        return;
+      }
+      const page = event.data.page;
+      if (!isValidRoute(page)) {
+        return;
+      }
+      go(page, false);
+    }
     async function init() {
       if (initialized) {
         return true;
@@ -13323,12 +13406,16 @@
             throw new Error("AppShellModule failed to initialize.");
           }
           AppUI.init();
+          window.addEventListener("popstate", handlePopState);
+          if (isEmbedded) {
+            window.addEventListener("message", handleParentNavigation);
+          }
           const savedPage = localStorage.getItem("gcb_currentPageGC");
           const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
           const initialPage = isValidRoute(pendingPage) ? pendingPage : restoredPage;
           pendingPage = null;
           initialized = true;
-          go(initialPage);
+          go(initialPage, false);
           return true;
         } catch (error) {
           console.error("[RouterModule] Initialization failed:", error);
@@ -13343,7 +13430,7 @@
       })();
       return initializing;
     }
-    function go(pageName) {
+    function go(pageName, updateHistory = true) {
       if (!initialized) {
         if (pageName === "home") {
           return;
@@ -13354,6 +13441,9 @@
         return;
       }
       const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
+      if (updateHistory) {
+        pushHistory(resolvedPageName);
+      }
       const page = routes[resolvedPageName];
       if (!page) {
         console.error(`[RouterModule] Route "${resolvedPageName}" not found.`);

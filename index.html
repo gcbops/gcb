@@ -34,8 +34,70 @@
 </head>
 
 <body>
+
   <iframe
-    src="https://script.google.com/macros/s/AKfycbz3o7AF_iFfgMCmd_vnRa4C9DbK9gqY-LsrE1v0OeM/exec"
+    id="gcb-app"
+    src="https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec"
   ></iframe>
+
+  <script>
+    const GCB_APP_ORIGIN = "https://script.google.com";
+    const iframe = document.getElementById("gcb-app");
+
+    let currentPage = "home";
+
+    if (!history.state?.gcbPage) {
+      history.replaceState(
+        { gcbPage: "home" },
+        "",
+        window.location.pathname,
+      );
+    } else {
+      currentPage = history.state.gcbPage;
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.origin !== GCB_APP_ORIGIN) {
+        return;
+      }
+
+      if (event.data?.type !== "GCB_NAVIGATION") {
+        return;
+      }
+
+      const page = event.data.page;
+
+      if (!page || page === currentPage) {
+        return;
+      }
+
+      currentPage = page;
+
+      history.pushState(
+        { gcbPage: page },
+        "",
+        window.location.pathname + "?page=" + encodeURIComponent(page),
+      );
+    });
+
+    window.addEventListener("popstate", (event) => {
+      const page = event.state?.gcbPage;
+
+      if (!page) {
+        return;
+      }
+
+      currentPage = page;
+
+      iframe.contentWindow.postMessage(
+        {
+          type: "GCB_HISTORY_NAVIGATION",
+          page,
+        },
+        GCB_APP_ORIGIN,
+      );
+    });
+  </script>
+  
 </body>
 </html>

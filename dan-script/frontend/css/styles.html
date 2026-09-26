@@ -679,7 +679,7 @@ scale(0.96)	Remove or change for a different entrance feel
 */
 .card.stagger {
   position: relative;
-  opacity: 0;
+  opacity: 0.3 !important;
   filter: blur(12px);
   transform: scale(0.96);
   transition: opacity 0.5s ease, filter 0.7s ease, transform 0.5s ease;
@@ -1020,6 +1020,14 @@ table.dataTable thead>tr>td.dt-ordering-desc .dt-column-order:after {
 table.dataTable thead>tr>th.dt-ordering-asc .dt-column-order:before, 
 table.dataTable thead>tr>td.dt-ordering-asc .dt-column-order:before{
     border-bottom-color: var(--gc-primary-color, #008B8B);
+}
+
+.dt-column-header .dt-column-order {
+    opacity: 0;
+}
+
+.dt-column-header:hover .dt-column-order {
+    opacity: 1;
 }
 
 /* --- DataTables Form Select --- */

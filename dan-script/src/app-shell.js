@@ -157,41 +157,6 @@ const AppShellModule = (() => {
     // initializeDropdownRecovery();
   }
 
-  // function initializeDropdownRecovery() {
-  //   if (document.documentElement.dataset.dropdownFix === "true") {
-  //     return;
-  //   }
-
-  //   document.documentElement.dataset.dropdownFix = "true";
-
-  //   document.addEventListener(
-  //     "click",
-  //     (e) => {
-  //       const toggle = e.target.closest?.('[data-bs-toggle="dropdown"]');
-
-  //       if (!toggle) {
-  //         return;
-  //       }
-
-  //       /*
-  //        * Only handle the actual toggle button.
-  //        * Do not interfere with clicks inside the menu.
-  //        */
-  //       if (toggle !== e.target && !toggle.contains(e.target)) {
-  //         return;
-  //       }
-
-  //       e.preventDefault();
-  //       e.stopPropagation();
-
-  //       const instance = bootstrap.Dropdown.getOrCreateInstance(toggle);
-
-  //       instance.toggle();
-  //     },
-  //     true,
-  //   );
-  // }
-
   function initializeSidebar() {
     const closeSidebarButtons = document.querySelectorAll(".close-sidebar-btn");
 

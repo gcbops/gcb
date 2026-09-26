@@ -188,7 +188,7 @@ const clientDetailsPage = (() => {
       )
       .join("");
 
-    DataTableModule.init("Projects", "#client-projects", false, null, true);
+    DataTableModule.init("Projects", "#client-projects", false);
     
   }
 
@@ -421,7 +421,7 @@ const clientDetailsPage = (() => {
     saveButton.addEventListener("click", () => {
       saveEditableInfo(
         clientName,
-        field.key,
+        field,
         input.value.trim(),
         container.id,
         saveButton,
