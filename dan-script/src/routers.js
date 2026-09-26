@@ -44,8 +44,15 @@ const RouterModule = (() => {
   let pendingPage = null;
   let parentPage = null;
 
-  const isEmbedded = window !== window.top;
+  /*
+   * Apps Script can have an internal iframe layer.
+   *
+   * Use window.top to determine whether the app is
+   * running inside the GitHub wrapper.
+   */
+  const isEmbedded = window.top !== window.self;
   const isDirectGas = !isEmbedded;
+
   const GITHUB_ORIGIN = "https://gcbops.github.io";
 
   const routes = {
@@ -100,20 +107,22 @@ const RouterModule = (() => {
 
   function pushHistory(pageName) {
     if (isDirectGas) {
-      console.log("[RouterModule] Direct GAS history:", pageName);
-
-      history.pushState({ gcbPage: pageName }, "", window.location.href);
+      history.pushState(
+        { gcbPage: pageName },
+        "",
+        window.location.href,
+      );
 
       return;
     }
 
-    console.log("[RouterModule] Sending navigation to GitHub:", {
-      page: pageName,
-      targetOrigin: GITHUB_ORIGIN,
-      parentOrigin: window.parent.location?.origin,
-    });
-
-    window.parent.postMessage(
+    /*
+     * Use window.top instead of window.parent.
+     *
+     * Apps Script may introduce its own iframe layer,
+     * so window.parent may not be the GitHub wrapper.
+     */
+    window.top.postMessage(
       {
         type: "GCB_NAVIGATION",
         page: pageName,
@@ -126,11 +135,6 @@ const RouterModule = (() => {
     if (isDirectGas) {
       const page = event.state?.gcbPage;
 
-      console.log("[RouterModule] Browser history:", {
-        state: event.state,
-        page,
-      });
-
       if (isValidRoute(page)) {
         go(page, false);
       }
@@ -138,11 +142,16 @@ const RouterModule = (() => {
       return;
     }
 
-    // GitHub wrapper owns browser history.
-    // It will send the requested page back to us.
+    /*
+     * When embedded, the GitHub wrapper owns browser
+     * history and sends navigation back to GAS.
+     */
   }
 
   function handleParentNavigation(event) {
+    /*
+     * Only accept messages from our GitHub wrapper.
+     */
     if (event.origin !== GITHUB_ORIGIN) {
       return;
     }
@@ -157,6 +166,10 @@ const RouterModule = (() => {
       return;
     }
 
+    /*
+     * Parent navigation can arrive before the router
+     * has finished initializing.
+     */
     if (!initialized) {
       parentPage = page;
       return;
@@ -197,10 +210,16 @@ const RouterModule = (() => {
          */
         AppUI.init();
 
-        window.addEventListener("popstate", handlePopState);
+        window.addEventListener(
+          "popstate",
+          handlePopState,
+        );
 
         if (isEmbedded) {
-          window.addEventListener("message", handleParentNavigation);
+          window.addEventListener(
+            "message",
+            handleParentNavigation,
+          );
         }
 
         /*
@@ -208,26 +227,30 @@ const RouterModule = (() => {
          * 3. Restore previous page
          * ------------------------------------------------
          */
-        const savedPage = localStorage.getItem("gcb_currentPageGC");
+        const savedPage =
+          localStorage.getItem("gcb_currentPageGC");
 
-        const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
+        const restoredPage =
+          isValidRoute(savedPage)
+            ? savedPage
+            : "home";
 
         /*
-         * Only use pendingPage if it is a valid route.
-         *
-         * Otherwise restore the page from localStorage.
+         * Parent page takes priority when supplied.
          */
-        const initialPage = isValidRoute(pendingPage)
-          ? pendingPage
-          : isValidRoute(parentPage)
-            ? parentPage
-            : restoredPage;
+        const initialPage =
+          isValidRoute(pendingPage)
+            ? pendingPage
+            : isValidRoute(parentPage)
+              ? parentPage
+              : restoredPage;
 
         /*
          * Clear pending navigation before
          * marking the router ready.
          */
         pendingPage = null;
+        parentPage = null;
 
         /*
          * ------------------------------------------------
@@ -245,12 +268,17 @@ const RouterModule = (() => {
 
         return true;
       } catch (error) {
-        console.error("[RouterModule] Initialization failed:", error);
+        console.error(
+          "[RouterModule] Initialization failed:",
+          error,
+        );
 
         initialized = false;
 
         AppUtils.showError(
-          `Application initialization failed: ${error?.message || error}`,
+          `Application initialization failed: ${
+            error?.message || error
+          }`,
         );
 
         return false;
@@ -269,15 +297,12 @@ const RouterModule = (() => {
     /*
      * ------------------------------------------------
      * Router is not ready yet.
-     *
-     * Remember the requested page instead of
-     * immediately trying to navigate.
      * ------------------------------------------------
      */
     if (!initialized) {
       /*
        * Do not allow the default "home" navigation
-       * to override a page restored from localStorage.
+       * to override a requested page.
        */
       if (pageName === "home") {
         return;
@@ -295,8 +320,16 @@ const RouterModule = (() => {
      * Resolve route
      * ------------------------------------------------
      */
-    const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
+    const resolvedPageName =
+      isValidRoute(pageName)
+        ? pageName
+        : "home";
 
+    /*
+     * ------------------------------------------------
+     * Update browser/wrapper history
+     * ------------------------------------------------
+     */
     if (updateHistory) {
       pushHistory(resolvedPageName);
     }
@@ -304,7 +337,9 @@ const RouterModule = (() => {
     const page = routes[resolvedPageName];
 
     if (!page) {
-      console.error(`[RouterModule] Route "${resolvedPageName}" not found.`);
+      console.error(
+        `[RouterModule] Route "${resolvedPageName}" not found.`,
+      );
 
       return;
     }
@@ -312,7 +347,10 @@ const RouterModule = (() => {
     /*
      * Don't reload the same page unnecessarily.
      */
-    if (resolvedPageName === currentPage && currentModule) {
+    if (
+      resolvedPageName === currentPage &&
+      currentModule
+    ) {
       return;
     }
 
@@ -330,7 +368,6 @@ const RouterModule = (() => {
      * Cleanup BEFORE replacing page DOM
      * ------------------------------------------------
      */
-
     AppUtils.closeAllDrawers();
     DataTableModule.destroyAll();
     ChartModule.destroyAllCharts();
@@ -350,30 +387,35 @@ const RouterModule = (() => {
      * Load page
      * ------------------------------------------------
      */
-    PageLoaderModule.loadPage(resolvedPageName, () => {
-      /*
-       * Ignore stale callbacks.
-       */
-      if (token !== pageToken) {
-        return;
-      }
+    PageLoaderModule.loadPage(
+      resolvedPageName,
+      () => {
+        /*
+         * Ignore stale callbacks.
+         */
+        if (token !== pageToken) {
+          return;
+        }
 
-      /*
-       * Initialize page.
-       */
-      page.init?.(token);
+        /*
+         * Initialize page.
+         */
+        page.init?.(token);
 
-      currentModule = page;
+        currentModule = page;
 
-      /*
-       * Update navigation.
-       */
-      AppUI.activateNavigation(resolvedPageName);
+        /*
+         * Update navigation.
+         */
+        AppUI.activateNavigation(
+          resolvedPageName,
+        );
 
-      requestAnimationFrame(() => {
-        AppUI.playStaggerReveal();
-      });
-    });
+        requestAnimationFrame(() => {
+          AppUI.playStaggerReveal();
+        });
+      },
+    );
   }
 
   return {

@@ -41,138 +41,112 @@
   ></iframe>
 
   <script>
-    const GCB_APP_ORIGIN = "*";
-    const GCB_GAS_HOST_SUFFIX = "-script.googleusercontent.com";
-    const iframe = document.getElementById("gcb-app");
+  const GCB_APP_ORIGIN = "*";
+  const GCB_GAS_HOST_SUFFIX = "-script.googleusercontent.com";
+  const iframe = document.getElementById("gcb-app");
 
-    console.log("[GCB Wrapper] Initialized:", {
-  appOrigin: GCB_APP_ORIGIN,
-  iframeSrc: iframe.src,
-  parentOrigin: window.location.origin,
-});
+  const validPage = (page) =>
+    typeof page === "string" && page.trim() !== "";
 
-    const validPage = (page) =>
-      typeof page === "string" && page.trim() !== "";
+  const getPageFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("page");
+  };
 
-    const getPageFromUrl = () => {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("page");
-    };
+  function isGcbGasOrigin(origin) {
+    try {
+      return new URL(origin).hostname.endsWith(GCB_GAS_HOST_SUFFIX);
+    } catch {
+      return false;
+    }
+  }
 
-    function isGcbGasOrigin(origin) {
-      try {
-        return new URL(origin).hostname.endsWith(GCB_GAS_HOST_SUFFIX);
-      } catch {
-        return false;
-      }
+  let currentPage = getPageFromUrl() || "home";
+
+  /*
+   * Establish the initial history state.
+   * Keep the existing ?page= parameter.
+   */
+  if (!history.state?.gcbPage) {
+    history.replaceState(
+      { gcbPage: currentPage },
+      "",
+      window.location.href,
+    );
+  }
+
+  /*
+   * GAS → GitHub
+   */
+  window.addEventListener("message", (event) => {
+    if (!isGcbGasOrigin(event.origin)) {
+      return;
     }
 
-    let currentPage = getPageFromUrl() || "home";
-
-    // Establish the initial history state without removing ?page=...
-    if (!history.state?.gcbPage) {
-      history.replaceState(
-        { gcbPage: currentPage },
-        "",
-        window.location.href,
-      );
+    if (event.data?.type !== "GCB_NAVIGATION") {
+      return;
     }
 
-    window.addEventListener("message", (event) => {
-  console.log("[GCB Wrapper] Message received:", {
-    origin: event.origin,
-    expectedGasOrigin: "hostname ending with -script.googleusercontent.com",
-    data: event.data,
+    const page = event.data.page;
+
+    console.log("[GCB Wrapper] Navigation received:", page);
+
+    if (!validPage(page) || page === currentPage) {
+      return;
+    }
+
+    currentPage = page;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("page", page);
+
+    history.pushState(
+      { gcbPage: page },
+      "",
+      url.href,
+    );
+
+    console.log("[GCB Wrapper] URL updated:", url.href);
   });
 
-  if (!isGcbGasOrigin(event.origin)) {
-    console.warn("[GCB Wrapper] Rejected message origin:", event.origin);
-    return;
-  }
+  /*
+   * GitHub browser Back / Forward → GAS
+   */
+  window.addEventListener("popstate", (event) => {
+    const page =
+      event.state?.gcbPage ||
+      getPageFromUrl();
 
-  if (event.data?.type !== "GCB_NAVIGATION") {
-    console.warn("[GCB Wrapper] Unknown message type:", event.data);
-    return;
-  }
+    if (!validPage(page)) {
+      return;
+    }
 
-  const page = event.data.page;
+    currentPage = page;
 
-  console.log("[GCB Wrapper] Navigation received:", {
-    page,
-    currentPage,
-    urlBefore: window.location.href,
+    console.log("[GCB Wrapper] History navigation:", page);
+
+    iframe.contentWindow.postMessage(
+      {
+        type: "GCB_HISTORY_NAVIGATION",
+        page,
+      },
+      GCB_APP_ORIGIN,
+    );
   });
 
-  if (!validPage(page) || page === currentPage) {
-    console.log("[GCB Wrapper] Navigation ignored:", {
-      valid: validPage(page),
-      samePage: page === currentPage,
-    });
-    return;
-  }
-
-  currentPage = page;
-
-  const url = new URL(window.location.href);
-  url.searchParams.set("page", page);
-
-  history.pushState(
-    { gcbPage: page },
-    "",
-    url.href,
-  );
-
-  console.log("[GCB Wrapper] URL updated:", window.location.href);
-});
-
-    window.addEventListener("popstate", (event) => {
-  const page =
-    event.state?.gcbPage ||
-    getPageFromUrl();
-
-  console.log("[GCB Wrapper] Browser popstate:", {
-    state: event.state,
-    page,
-    url: window.location.href,
-    targetOrigin: GCB_APP_ORIGIN,
+  /*
+   * Send the current page to GAS after the iframe loads.
+   */
+  iframe.addEventListener("load", () => {
+    iframe.contentWindow.postMessage(
+      {
+        type: "GCB_HISTORY_NAVIGATION",
+        page: currentPage,
+      },
+      GCB_APP_ORIGIN,
+    );
   });
-
-  if (!validPage(page)) {
-    return;
-  }
-
-  currentPage = page;
-
-  console.log("[GCB Wrapper] Sending history navigation to GAS:", {
-    page,
-    targetOrigin: GCB_APP_ORIGIN,
-  });
-
-  iframe.contentWindow.postMessage(
-    {
-      type: "GCB_HISTORY_NAVIGATION",
-      page,
-    },
-    GCB_APP_ORIGIN,
-  );
-});
-
-    iframe.addEventListener("load", () => {
-  console.log("[GCB Wrapper] iframe loaded:", {
-    src: iframe.src,
-    currentPage,
-    targetOrigin: GCB_APP_ORIGIN,
-  });
-
-  iframe.contentWindow.postMessage(
-    {
-      type: "GCB_HISTORY_NAVIGATION",
-      page: currentPage,
-    },
-    GCB_APP_ORIGIN,
-  );
-});
-  </script>
+</script>
   
 </body>
 </html>
