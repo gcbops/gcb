@@ -42,13 +42,11 @@ const RouterModule = (() => {
    * initializing.
    */
   let pendingPage = null;
-  let parentPage = null;
 
   const GITHUB_ORIGIN = "https://gcbops.github.io";
 
   const isGitHubEmbedded = window.GCB_IS_GITHUB_EMBEDDED === true;
 
-  const isEmbedded = isGitHubEmbedded;
   const isDirectGas = !isGitHubEmbedded;
 
   const routes = {
@@ -133,11 +131,6 @@ const RouterModule = (() => {
     if (isDirectGas) {
       const page = event.state?.gcbPage;
 
-      console.log("[Router] Direct GAS popstate:", {
-        state: event.state,
-        page,
-      });
-
       if (isValidRoute(page)) {
         go(page, false);
       }
@@ -148,31 +141,6 @@ const RouterModule = (() => {
     /*
      * GitHub owns browser history when embedded.
      */
-  }
-
-  function handleParentNavigation(event) {
-    if (event.origin !== GITHUB_ORIGIN) {
-      return;
-    }
-
-    if (event.data?.type !== "GCB_HISTORY_NAVIGATION") {
-      return;
-    }
-
-    const page = event.data.page;
-
-    if (!isValidRoute(page)) {
-      return;
-    }
-
-    console.log("[Router] Received GitHub history:", page);
-
-    if (!initialized) {
-      parentPage = page;
-      return;
-    }
-
-    go(page, false);
   }
 
   /**
@@ -210,14 +178,6 @@ const RouterModule = (() => {
         window.addEventListener("popstate", handlePopState);
 
         /*
-         * Only listen for parent navigation when
-         * actually running inside the GitHub wrapper.
-         */
-        if (isGitHubEmbedded) {
-          window.addEventListener("message", handleParentNavigation);
-        }
-
-        /*
          * ------------------------------------------------
          * 3. Restore previous page
          * ------------------------------------------------
@@ -229,12 +189,9 @@ const RouterModule = (() => {
          */
         const initialPage = isValidRoute(pendingPage)
           ? pendingPage
-          : isValidRoute(parentPage)
-            ? parentPage
-            : restoredPage;
+          : restoredPage;
 
         pendingPage = null;
-        parentPage = null;
 
         /*
          * ------------------------------------------------
@@ -273,14 +230,6 @@ const RouterModule = (() => {
    * Navigate to a page.
    */
   function go(pageName, updateHistory = true) {
-    console.log("[Router] go:", {
-      pageName,
-      updateHistory,
-      currentPage,
-      initialized,
-      isEmbedded,
-      isDirectGas,
-    });
 
     /*
      * ------------------------------------------------
@@ -305,11 +254,6 @@ const RouterModule = (() => {
      * ------------------------------------------------
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
-
-    console.log("[Router] History check:", {
-      updateHistory,
-      page: resolvedPageName,
-    });
 
     if (updateHistory) {
       pushHistory(resolvedPageName);

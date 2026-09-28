@@ -13313,56 +13313,9 @@
     let initialized = false;
     let initializing = null;
     let pendingPage = null;
-    let parentPage = null;
     const GITHUB_ORIGIN = "https://gcbops.github.io";
-    const GITHUB_HOST = "gcbops.github.io";
-    const isGitHubEmbedded = (() => {
-      try {
-        return new URL(document.referrer).hostname === GITHUB_HOST;
-      } catch {
-        return false;
-      }
-    })();
-    const isEmbedded = isGitHubEmbedded;
+    const isGitHubEmbedded = window.GCB_IS_GITHUB_EMBEDDED === true;
     const isDirectGas = !isGitHubEmbedded;
-    console.log("[Router] FULL ENVIRONMENT TEST:", {
-      href: window.location.href,
-      origin: window.location.origin,
-      referrer: document.referrer,
-      search: window.location.search,
-      hash: window.location.hash,
-      parentHref: (() => {
-        try {
-          return window.parent.location.href;
-        } catch (err) {
-          return `BLOCKED: ${err.message}`;
-        }
-      })(),
-      parentOrigin: (() => {
-        try {
-          return window.parent.location.origin;
-        } catch (err) {
-          return `BLOCKED: ${err.message}`;
-        }
-      })(),
-      topHref: (() => {
-        try {
-          return window.top.location.href;
-        } catch (err) {
-          return `BLOCKED: ${err.message}`;
-        }
-      })(),
-      topOrigin: (() => {
-        try {
-          return window.top.location.origin;
-        } catch (err) {
-          return `BLOCKED: ${err.message}`;
-        }
-      })(),
-      parentIsTop: window.parent === window.top,
-      parentIsSelf: window.parent === window,
-      topIsSelf: window.top === window
-    });
     const routes = {
       home: HomePage,
       dailyOverview: dailyOverviewPage,
@@ -13409,17 +13362,10 @@
       return currentPage;
     }
     function pushHistory(pageName) {
-      console.log("[Router] pushHistory:", {
-        pageName,
-        isEmbedded,
-        isDirectGas
-      });
       if (isDirectGas) {
-        console.log("[Router] Direct GAS \u2192 pushState");
         history.pushState({ gcbPage: pageName }, "", window.location.href);
         return;
       }
-      console.log("[Router] GAS \u2192 GitHub:", pageName);
       window.top.postMessage(
         {
           type: "GCB_NAVIGATION",
@@ -13431,33 +13377,11 @@
     function handlePopState(event) {
       if (isDirectGas) {
         const page = event.state?.gcbPage;
-        console.log("[Router] Direct GAS popstate:", {
-          state: event.state,
-          page
-        });
         if (isValidRoute(page)) {
           go(page, false);
         }
         return;
       }
-    }
-    function handleParentNavigation(event) {
-      if (event.origin !== GITHUB_ORIGIN) {
-        return;
-      }
-      if (event.data?.type !== "GCB_HISTORY_NAVIGATION") {
-        return;
-      }
-      const page = event.data.page;
-      if (!isValidRoute(page)) {
-        return;
-      }
-      console.log("[Router] Received GitHub history:", page);
-      if (!initialized) {
-        parentPage = page;
-        return;
-      }
-      go(page, false);
     }
     async function init() {
       if (initialized) {
@@ -13474,13 +13398,9 @@
           }
           AppUI.init();
           window.addEventListener("popstate", handlePopState);
-          if (isGitHubEmbedded) {
-            window.addEventListener("message", handleParentNavigation);
-          }
           const restoredPage = getInitialPage();
-          const initialPage = isValidRoute(pendingPage) ? pendingPage : isValidRoute(parentPage) ? parentPage : restoredPage;
+          const initialPage = isValidRoute(pendingPage) ? pendingPage : restoredPage;
           pendingPage = null;
-          parentPage = null;
           initialized = true;
           go(initialPage, false);
           return true;
@@ -13498,14 +13418,6 @@
       return initializing;
     }
     function go(pageName, updateHistory = true) {
-      console.log("[Router] go:", {
-        pageName,
-        updateHistory,
-        currentPage,
-        initialized,
-        isEmbedded,
-        isDirectGas
-      });
       if (!initialized) {
         if (pageName === "home") {
           return;
@@ -13516,10 +13428,6 @@
         return;
       }
       const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
-      console.log("[Router] History check:", {
-        updateHistory,
-        page: resolvedPageName
-      });
       if (updateHistory) {
         pushHistory(resolvedPageName);
       }

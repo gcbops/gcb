@@ -75,7 +75,10 @@
 </head>
 
 
-<body>
+<body
+  data-gcb-initial-page="<?!= initialPage ?>"
+  data-gcb-github-embedded="<?!= isGitHubEmbedded ?>"
+>
 
   <!-- =========================
        Application Shell
@@ -485,8 +488,11 @@
   </div>
 
   <script>
-    window.GCB_INITIAL_PAGE = "<?!= initialPage ?>";
-    window.GCB_IS_GITHUB_EMBEDDED = <?!= isGitHubEmbedded ? "true" : "false" ?>;
+    window.GCB_INITIAL_PAGE =
+      document.body.dataset.gcbInitialPage || "home";
+
+    window.GCB_IS_GITHUB_EMBEDDED =
+      document.body.dataset.gcbGithubEmbedded === "true";
   </script>
 
   <!-- =========================

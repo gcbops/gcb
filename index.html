@@ -52,7 +52,7 @@
 
       url.searchParams.set("wrapper", "github");
 
-      if (page) {
+      if (page && page !== "home") {
         url.searchParams.set("page", page);
       }
 
@@ -63,14 +63,79 @@
       iframe.src = getGasUrl(page);
     }
 
-    const initialPage = getPageFromUrl();
+    function updateGitHubUrl(page, replace = false) {
+      const url = new URL(window.location.href);
 
+      if (page && page !== "home") {
+        url.searchParams.set("page", page);
+      } else {
+        url.searchParams.delete("page");
+      }
+
+      const state = {
+        gcbPage: page || "home",
+      };
+
+      if (replace) {
+        window.history.replaceState(state, "", url);
+      } else {
+        window.history.pushState(state, "", url);
+      }
+    }
+
+    /*
+    * ------------------------------------------------
+    * Initial state
+    * ------------------------------------------------
+    */
+
+    const initialPage = getPageFromUrl() || "home";
+
+    updateGitHubUrl(initialPage, true);
     loadGasPage(initialPage);
+
+    /*
+    * ------------------------------------------------
+    * GAS → GitHub navigation
+    * ------------------------------------------------
+    */
+
+    window.addEventListener("message", (event) => {
+      if (
+        event.origin !== "https://script.googleusercontent.com" &&
+        !event.origin.endsWith(".script.googleusercontent.com")
+      ) {
+        return;
+      }
+
+      if (event.data?.type !== "GCB_NAVIGATION") {
+        return;
+      }
+
+      const page = event.data.page;
+
+      if (!page) {
+        return;
+      }
+
+      console.log("[GitHub] Navigation received:", page);
+
+      updateGitHubUrl(page);
+    });
+
+    /*
+    * ------------------------------------------------
+    * Browser Back / Forward
+    * ------------------------------------------------
+    */
 
     window.addEventListener("popstate", (event) => {
       const page =
         event.state?.gcbPage ||
-        getPageFromUrl();
+        getPageFromUrl() ||
+        "home";
+
+      console.log("[GitHub] popstate:", page);
 
       loadGasPage(page);
     });
