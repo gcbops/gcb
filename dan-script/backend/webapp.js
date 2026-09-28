@@ -1,9 +1,11 @@
 function doGet(e) {
   const requestedPage = e?.parameter?.page || "home";
+  const isGitHubEmbedded = e?.parameter?.wrapper === "github";
 
   const template = HtmlService.createTemplateFromFile("index");
 
   template.initialPage = requestedPage;
+  template.isGitHubEmbedded = isGitHubEmbedded;
 
   return template
     .evaluate()

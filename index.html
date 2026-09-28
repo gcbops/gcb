@@ -43,16 +43,37 @@
 
     const iframe = document.getElementById("gcb-app");
 
-    const params = new URLSearchParams(window.location.search);
-    const page = params.get("page");
-
-    const gasUrl = new URL(GCB_GAS_URL);
-
-    if (page) {
-      gasUrl.searchParams.set("page", page);
+    function getPageFromUrl() {
+      return new URLSearchParams(window.location.search).get("page");
     }
 
-    iframe.src = gasUrl.href;
+    function getGasUrl(page) {
+      const url = new URL(GCB_GAS_URL);
+
+      url.searchParams.set("wrapper", "github");
+
+      if (page) {
+        url.searchParams.set("page", page);
+      }
+
+      return url.href;
+    }
+
+    function loadGasPage(page) {
+      iframe.src = getGasUrl(page);
+    }
+
+    const initialPage = getPageFromUrl();
+
+    loadGasPage(initialPage);
+
+    window.addEventListener("popstate", (event) => {
+      const page =
+        event.state?.gcbPage ||
+        getPageFromUrl();
+
+      loadGasPage(page);
+    });
   </script>
 
 </body>

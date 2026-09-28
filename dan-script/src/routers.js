@@ -45,72 +45,11 @@ const RouterModule = (() => {
   let parentPage = null;
 
   const GITHUB_ORIGIN = "https://gcbops.github.io";
-  const GITHUB_HOST = "gcbops.github.io";
 
-  /*
-   * Apps Script itself uses an internal iframe even when
-   * the app is opened directly.
-   *
-   * Therefore window.top !== window.self does NOT reliably
-   * mean the app is inside the GitHub wrapper.
-   *
-   * Detect the GitHub wrapper from the document referrer.
-   */
-  const isGitHubEmbedded = (() => {
-    try {
-      return new URL(document.referrer).hostname === GITHUB_HOST;
-    } catch {
-      return false;
-    }
-  })();
+  const isGitHubEmbedded = window.GCB_IS_GITHUB_EMBEDDED === true;
 
   const isEmbedded = isGitHubEmbedded;
   const isDirectGas = !isGitHubEmbedded;
-
-  console.log("[Router] FULL ENVIRONMENT TEST:", {
-    href: window.location.href,
-    origin: window.location.origin,
-    referrer: document.referrer,
-
-    search: window.location.search,
-    hash: window.location.hash,
-
-    parentHref: (() => {
-      try {
-        return window.parent.location.href;
-      } catch (err) {
-        return `BLOCKED: ${err.message}`;
-      }
-    })(),
-
-    parentOrigin: (() => {
-      try {
-        return window.parent.location.origin;
-      } catch (err) {
-        return `BLOCKED: ${err.message}`;
-      }
-    })(),
-
-    topHref: (() => {
-      try {
-        return window.top.location.href;
-      } catch (err) {
-        return `BLOCKED: ${err.message}`;
-      }
-    })(),
-
-    topOrigin: (() => {
-      try {
-        return window.top.location.origin;
-      } catch (err) {
-        return `BLOCKED: ${err.message}`;
-      }
-    })(),
-
-    parentIsTop: window.parent === window.top,
-    parentIsSelf: window.parent === window,
-    topIsSelf: window.top === window,
-  });
 
   const routes = {
     home: HomePage,
@@ -175,29 +114,11 @@ const RouterModule = (() => {
   }
 
   function pushHistory(pageName) {
-    console.log("[Router] pushHistory:", {
-      pageName,
-      isEmbedded,
-      isDirectGas,
-    });
-
-    /*
-     * Direct Apps Script:
-     * Let the GAS app manage its own history.
-     */
     if (isDirectGas) {
-      console.log("[Router] Direct GAS → pushState");
-
       history.pushState({ gcbPage: pageName }, "", window.location.href);
 
       return;
     }
-
-    /*
-     * GitHub wrapper:
-     * Send navigation to the actual GitHub page.
-     */
-    console.log("[Router] GAS → GitHub:", pageName);
 
     window.top.postMessage(
       {
