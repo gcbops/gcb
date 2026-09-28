@@ -48,6 +48,12 @@ const RouterModule = (() => {
   const isDirectGas = !isEmbedded;
   const GITHUB_ORIGIN = "https://gcbops.github.io";
 
+  console.log("[Router] Environment:", {
+    isEmbedded,
+    isDirectGas,
+    origin: window.location.origin,
+  });
+
   const routes = {
     home: HomePage,
 
@@ -89,6 +95,8 @@ const RouterModule = (() => {
   }
 
   function setCurrentPage(pageName) {
+    console.log("[RouterModule] setCurrentPage():", pageName);
+    
     currentPage = pageName;
 
     localStorage.setItem("gcb_currentPageGC", pageName);
@@ -99,21 +107,23 @@ const RouterModule = (() => {
   }
 
   function pushHistory(pageName) {
+    console.log("[Router] pushHistory:", {
+      pageName,
+      isEmbedded,
+      isDirectGas,
+    });
+
     if (isDirectGas) {
-      console.log("[RouterModule] Direct GAS history:", pageName);
+      console.log("[Router] Direct GAS → pushState");
 
       history.pushState({ gcbPage: pageName }, "", window.location.href);
 
       return;
     }
 
-    console.log("[RouterModule] Sending navigation to GitHub:", {
-      page: pageName,
-      targetOrigin: GITHUB_ORIGIN,
-      parentOrigin: window.parent.location?.origin,
-    });
+    console.log("[Router] GAS → GitHub:", pageName);
 
-    window.parent.postMessage(
+    window.top.postMessage(
       {
         type: "GCB_NAVIGATION",
         page: pageName,
@@ -274,6 +284,14 @@ const RouterModule = (() => {
      * immediately trying to navigate.
      * ------------------------------------------------
      */
+    console.log("[Router] go:", {
+      pageName,
+      updateHistory,
+      currentPage,
+      initialized,
+      isEmbedded,
+    });
+
     if (!initialized) {
       /*
        * Do not allow the default "home" navigation
@@ -296,6 +314,11 @@ const RouterModule = (() => {
      * ------------------------------------------------
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
+    
+    console.log("[Router] History check:", {
+      updateHistory,
+      page: resolvedPageName,
+    });
 
     if (updateHistory) {
       pushHistory(resolvedPageName);
