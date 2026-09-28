@@ -1,8 +1,17 @@
-function doGet() {
+function doGet(e) {
+  console.log("[doGet] ===== REQUEST =====");
+  console.log("[doGet] Parameters:", e?.parameter);
+  console.log("[doGet] page:", e?.parameter?.page);
+  console.log("[doGet] Query string:", e?.queryString);
+  console.log("[doGet] ===== END REQUEST =====");
+
   return HtmlService.createTemplateFromFile("index")
     .evaluate()
     .setTitle("Go Crayons GS")
-    .addMetaTag("viewport", "width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no")
+    .addMetaTag(
+      "viewport",
+      "width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no",
+    )
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 

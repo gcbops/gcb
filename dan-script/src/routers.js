@@ -67,11 +67,49 @@ const RouterModule = (() => {
   const isEmbedded = isGitHubEmbedded;
   const isDirectGas = !isGitHubEmbedded;
 
-  console.log("[Router] Environment:", {
-    isEmbedded,
-    isDirectGas,
-    referrer: document.referrer,
+  console.log("[Router] FULL ENVIRONMENT TEST:", {
+    href: window.location.href,
     origin: window.location.origin,
+    referrer: document.referrer,
+
+    search: window.location.search,
+    hash: window.location.hash,
+
+    parentHref: (() => {
+      try {
+        return window.parent.location.href;
+      } catch (err) {
+        return `BLOCKED: ${err.message}`;
+      }
+    })(),
+
+    parentOrigin: (() => {
+      try {
+        return window.parent.location.origin;
+      } catch (err) {
+        return `BLOCKED: ${err.message}`;
+      }
+    })(),
+
+    topHref: (() => {
+      try {
+        return window.top.location.href;
+      } catch (err) {
+        return `BLOCKED: ${err.message}`;
+      }
+    })(),
+
+    topOrigin: (() => {
+      try {
+        return window.top.location.origin;
+      } catch (err) {
+        return `BLOCKED: ${err.message}`;
+      }
+    })(),
+
+    parentIsTop: window.parent === window.top,
+    parentIsSelf: window.parent === window,
+    topIsSelf: window.top === window,
   });
 
   const routes = {
