@@ -101,14 +101,10 @@
     */
 
     window.addEventListener("message", (event) => {
-      if (
-        event.origin !== "https://script.googleusercontent.com" &&
-        !event.origin.endsWith(".script.googleusercontent.com")
-      ) {
-      console.log("[GitHub] Navigation received die");
-
-        return;
-      }
+      console.log("[GitHub] Navigation message:", {
+        origin: event.origin,
+        data: event.data,
+      });
 
       if (event.data?.type !== "GCB_NAVIGATION") {
         return;
@@ -136,8 +132,6 @@
         event.state?.gcbPage ||
         getPageFromUrl() ||
         "home";
-
-      console.log("[GitHub] popstate:", page);
 
       loadGasPage(page);
     });
