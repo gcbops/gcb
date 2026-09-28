@@ -101,10 +101,13 @@
     */
 
     window.addEventListener("message", (event) => {
-      console.log("[GitHub] Navigation message:", {
-        origin: event.origin,
-        data: event.data,
-      });
+      if (
+        event.origin !== "https://script.googleusercontent.com" &&
+        !event.origin.endsWith(".script.googleusercontent.com")
+      ) {
+        console.error("[GitHub] Ignored message from:", event.origin);
+        return;
+      }
 
       if (event.data?.type !== "GCB_NAVIGATION") {
         return;
@@ -115,8 +118,6 @@
       if (!page) {
         return;
       }
-
-      console.log("[GitHub] Navigation received:", page);
 
       updateGitHubUrl(page);
     });
