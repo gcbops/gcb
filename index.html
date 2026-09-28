@@ -101,12 +101,11 @@
     */
 
     window.addEventListener("message", (event) => {
-      if (
-        event.origin !== "https://script.googleusercontent.com" &&
-        !event.origin.endsWith(".script.googleusercontent.com")
-      ) {
-        return;
-      }
+      console.log("[GitHub] MESSAGE RECEIVED:", {
+        origin: event.origin,
+        data: event.data,
+        source: event.source,
+      });
 
       if (event.data?.type !== "GCB_NAVIGATION") {
         return;

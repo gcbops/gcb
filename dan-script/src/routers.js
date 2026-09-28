@@ -118,13 +118,21 @@ const RouterModule = (() => {
       return;
     }
 
-    window.top.postMessage(
-      {
-        type: "GCB_NAVIGATION",
-        page: pageName,
-      },
-      GITHUB_ORIGIN,
-    );
+    console.log("[Router] Sending GitHub navigation:", pageName);
+
+    try {
+      window.top.postMessage(
+        {
+          type: "GCB_NAVIGATION",
+          page: pageName,
+        },
+        GITHUB_ORIGIN,
+      );
+
+      console.log("[Router] GitHub navigation postMessage sent.");
+    } catch (error) {
+      console.error("[Router] GitHub navigation postMessage failed:", error);
+    }
   }
 
   function handlePopState(event) {
