@@ -118,8 +118,6 @@ const RouterModule = (() => {
       return;
     }
 
-    console.log("[Router] Sending GitHub navigation:", pageName);
-
     try {
       window.top.postMessage(
         {
@@ -129,7 +127,6 @@ const RouterModule = (() => {
         GITHUB_ORIGIN,
       );
 
-      console.log("[Router] GitHub navigation postMessage sent.");
     } catch (error) {
       console.error("[Router] GitHub navigation postMessage failed:", error);
     }
