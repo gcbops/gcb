@@ -44,13 +44,33 @@ const RouterModule = (() => {
   let pendingPage = null;
   let parentPage = null;
 
-  const isEmbedded = window !== window.top;
-  const isDirectGas = !isEmbedded;
   const GITHUB_ORIGIN = "https://gcbops.github.io";
+  const GITHUB_HOST = "gcbops.github.io";
+
+  /*
+   * Apps Script itself uses an internal iframe even when
+   * the app is opened directly.
+   *
+   * Therefore window.top !== window.self does NOT reliably
+   * mean the app is inside the GitHub wrapper.
+   *
+   * Detect the GitHub wrapper from the document referrer.
+   */
+  const isGitHubEmbedded = (() => {
+    try {
+      return new URL(document.referrer).hostname === GITHUB_HOST;
+    } catch {
+      return false;
+    }
+  })();
+
+  const isEmbedded = isGitHubEmbedded;
+  const isDirectGas = !isGitHubEmbedded;
 
   console.log("[Router] Environment:", {
     isEmbedded,
     isDirectGas,
+    referrer: document.referrer,
     origin: window.location.origin,
   });
 
@@ -95,8 +115,6 @@ const RouterModule = (() => {
   }
 
   function setCurrentPage(pageName) {
-    console.log("[RouterModule] setCurrentPage():", pageName);
-    
     currentPage = pageName;
 
     localStorage.setItem("gcb_currentPageGC", pageName);
@@ -113,6 +131,10 @@ const RouterModule = (() => {
       isDirectGas,
     });
 
+    /*
+     * Direct Apps Script:
+     * Let the GAS app manage its own history.
+     */
     if (isDirectGas) {
       console.log("[Router] Direct GAS → pushState");
 
@@ -121,6 +143,10 @@ const RouterModule = (() => {
       return;
     }
 
+    /*
+     * GitHub wrapper:
+     * Send navigation to the actual GitHub page.
+     */
     console.log("[Router] GAS → GitHub:", pageName);
 
     window.top.postMessage(
@@ -136,7 +162,7 @@ const RouterModule = (() => {
     if (isDirectGas) {
       const page = event.state?.gcbPage;
 
-      console.log("[RouterModule] Browser history:", {
+      console.log("[Router] Direct GAS popstate:", {
         state: event.state,
         page,
       });
@@ -148,8 +174,9 @@ const RouterModule = (() => {
       return;
     }
 
-    // GitHub wrapper owns browser history.
-    // It will send the requested page back to us.
+    /*
+     * GitHub owns browser history when embedded.
+     */
   }
 
   function handleParentNavigation(event) {
@@ -166,6 +193,8 @@ const RouterModule = (() => {
     if (!isValidRoute(page)) {
       return;
     }
+
+    console.log("[Router] Received GitHub history:", page);
 
     if (!initialized) {
       parentPage = page;
@@ -209,7 +238,11 @@ const RouterModule = (() => {
 
         window.addEventListener("popstate", handlePopState);
 
-        if (isEmbedded) {
+        /*
+         * Only listen for parent navigation when
+         * actually running inside the GitHub wrapper.
+         */
+        if (isGitHubEmbedded) {
           window.addEventListener("message", handleParentNavigation);
         }
 
@@ -223,9 +256,7 @@ const RouterModule = (() => {
         const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
 
         /*
-         * Only use pendingPage if it is a valid route.
-         *
-         * Otherwise restore the page from localStorage.
+         * GitHub URL/history takes priority.
          */
         const initialPage = isValidRoute(pendingPage)
           ? pendingPage
@@ -233,11 +264,8 @@ const RouterModule = (() => {
             ? parentPage
             : restoredPage;
 
-        /*
-         * Clear pending navigation before
-         * marking the router ready.
-         */
         pendingPage = null;
+        parentPage = null;
 
         /*
          * ------------------------------------------------
@@ -276,27 +304,21 @@ const RouterModule = (() => {
    * Navigate to a page.
    */
   function go(pageName, updateHistory = true) {
-    /*
-     * ------------------------------------------------
-     * Router is not ready yet.
-     *
-     * Remember the requested page instead of
-     * immediately trying to navigate.
-     * ------------------------------------------------
-     */
     console.log("[Router] go:", {
       pageName,
       updateHistory,
       currentPage,
       initialized,
       isEmbedded,
+      isDirectGas,
     });
 
+    /*
+     * ------------------------------------------------
+     * Router is not ready yet.
+     * ------------------------------------------------
+     */
     if (!initialized) {
-      /*
-       * Do not allow the default "home" navigation
-       * to override a page restored from localStorage.
-       */
       if (pageName === "home") {
         return;
       }
@@ -314,7 +336,7 @@ const RouterModule = (() => {
      * ------------------------------------------------
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
-    
+
     console.log("[Router] History check:", {
       updateHistory,
       page: resolvedPageName,
@@ -353,7 +375,6 @@ const RouterModule = (() => {
      * Cleanup BEFORE replacing page DOM
      * ------------------------------------------------
      */
-
     AppUtils.closeAllDrawers();
     DataTableModule.destroyAll();
     ChartModule.destroyAllCharts();
@@ -374,23 +395,14 @@ const RouterModule = (() => {
      * ------------------------------------------------
      */
     PageLoaderModule.loadPage(resolvedPageName, () => {
-      /*
-       * Ignore stale callbacks.
-       */
       if (token !== pageToken) {
         return;
       }
 
-      /*
-       * Initialize page.
-       */
       page.init?.(token);
 
       currentModule = page;
 
-      /*
-       * Update navigation.
-       */
       AppUI.activateNavigation(resolvedPageName);
 
       requestAnimationFrame(() => {

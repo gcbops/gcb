@@ -13314,9 +13314,23 @@
     let initializing = null;
     let pendingPage = null;
     let parentPage = null;
-    const isEmbedded = window !== window.top;
-    const isDirectGas = !isEmbedded;
     const GITHUB_ORIGIN = "https://gcbops.github.io";
+    const GITHUB_HOST = "gcbops.github.io";
+    const isGitHubEmbedded = (() => {
+      try {
+        return new URL(document.referrer).hostname === GITHUB_HOST;
+      } catch {
+        return false;
+      }
+    })();
+    const isEmbedded = isGitHubEmbedded;
+    const isDirectGas = !isGitHubEmbedded;
+    console.log("[Router] Environment:", {
+      isEmbedded,
+      isDirectGas,
+      referrer: document.referrer,
+      origin: window.location.origin
+    });
     const routes = {
       home: HomePage,
       dailyOverview: dailyOverviewPage,
@@ -13348,7 +13362,6 @@
       return typeof pageName === "string" && !!routes[pageName];
     }
     function setCurrentPage(pageName) {
-      console.log("[RouterModule] setCurrentPage():", pageName);
       currentPage = pageName;
       localStorage.setItem("gcb_currentPageGC", pageName);
     }
@@ -13356,34 +13369,29 @@
       return currentPage;
     }
     function pushHistory(pageName) {
-      console.log("[RouterModule] pushHistory() called:", {
+      console.log("[Router] pushHistory:", {
         pageName,
-        isDirectGas,
         isEmbedded,
-        githubOrigin: GITHUB_ORIGIN
+        isDirectGas
       });
       if (isDirectGas) {
-        console.log("[RouterModule] Using GAS history.pushState");
+        console.log("[Router] Direct GAS \u2192 pushState");
         history.pushState({ gcbPage: pageName }, "", window.location.href);
         return;
       }
-      console.log("[RouterModule] Sending GCB_NAVIGATION to parent:", {
-        page: pageName,
-        targetOrigin: GITHUB_ORIGIN
-      });
-      window.parent.postMessage(
+      console.log("[Router] GAS \u2192 GitHub:", pageName);
+      window.top.postMessage(
         {
           type: "GCB_NAVIGATION",
           page: pageName
         },
         GITHUB_ORIGIN
       );
-      console.log("[RouterModule] postMessage() completed");
     }
     function handlePopState(event) {
       if (isDirectGas) {
         const page = event.state?.gcbPage;
-        console.log("[RouterModule] Browser history:", {
+        console.log("[Router] Direct GAS popstate:", {
           state: event.state,
           page
         });
@@ -13404,6 +13412,7 @@
       if (!isValidRoute(page)) {
         return;
       }
+      console.log("[Router] Received GitHub history:", page);
       if (!initialized) {
         parentPage = page;
         return;
@@ -13425,13 +13434,14 @@
           }
           AppUI.init();
           window.addEventListener("popstate", handlePopState);
-          if (isEmbedded) {
+          if (isGitHubEmbedded) {
             window.addEventListener("message", handleParentNavigation);
           }
           const savedPage = localStorage.getItem("gcb_currentPageGC");
           const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
           const initialPage = isValidRoute(pendingPage) ? pendingPage : isValidRoute(parentPage) ? parentPage : restoredPage;
           pendingPage = null;
+          parentPage = null;
           initialized = true;
           go(initialPage, false);
           return true;
@@ -13449,7 +13459,7 @@
       return initializing;
     }
     function go(pageName, updateHistory = true) {
-      console.log("[RouterModule] go() called:", {
+      console.log("[Router] go:", {
         pageName,
         updateHistory,
         currentPage,
@@ -13467,11 +13477,9 @@
         return;
       }
       const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
-      console.log("[RouterModule] About to update history:", {
-        resolvedPageName,
+      console.log("[Router] History check:", {
         updateHistory,
-        isEmbedded,
-        isDirectGas
+        page: resolvedPageName
       });
       if (updateHistory) {
         pushHistory(resolvedPageName);
