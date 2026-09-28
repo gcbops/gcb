@@ -1,11 +1,11 @@
 function doGet(e) {
-  console.log("[doGet] ===== REQUEST =====");
-  console.log("[doGet] Parameters:", e?.parameter);
-  console.log("[doGet] page:", e?.parameter?.page);
-  console.log("[doGet] Query string:", e?.queryString);
-  console.log("[doGet] ===== END REQUEST =====");
+  const requestedPage = e?.parameter?.page || "home";
 
-  return HtmlService.createTemplateFromFile("index")
+  const template = HtmlService.createTemplateFromFile("index");
+
+  template.initialPage = requestedPage;
+
+  return template
     .evaluate()
     .setTitle("Go Crayons GS")
     .addMetaTag(

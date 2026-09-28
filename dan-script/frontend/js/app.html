@@ -13393,6 +13393,14 @@
     function isValidRoute(pageName) {
       return typeof pageName === "string" && !!routes[pageName];
     }
+    function getInitialPage() {
+      const templatePage = window.GCB_INITIAL_PAGE;
+      if (isValidRoute(templatePage)) {
+        return templatePage;
+      }
+      const savedPage = localStorage.getItem("gcb_currentPageGC");
+      return isValidRoute(savedPage) ? savedPage : "home";
+    }
     function setCurrentPage(pageName) {
       currentPage = pageName;
       localStorage.setItem("gcb_currentPageGC", pageName);
@@ -13469,8 +13477,7 @@
           if (isGitHubEmbedded) {
             window.addEventListener("message", handleParentNavigation);
           }
-          const savedPage = localStorage.getItem("gcb_currentPageGC");
-          const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
+          const restoredPage = getInitialPage();
           const initialPage = isValidRoute(pendingPage) ? pendingPage : isValidRoute(parentPage) ? parentPage : restoredPage;
           pendingPage = null;
           parentPage = null;

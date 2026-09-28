@@ -152,6 +152,18 @@ const RouterModule = (() => {
     return typeof pageName === "string" && !!routes[pageName];
   }
 
+  function getInitialPage() {
+    const templatePage = window.GCB_INITIAL_PAGE;
+
+    if (isValidRoute(templatePage)) {
+      return templatePage;
+    }
+
+    const savedPage = localStorage.getItem("gcb_currentPageGC");
+
+    return isValidRoute(savedPage) ? savedPage : "home";
+  }
+
   function setCurrentPage(pageName) {
     currentPage = pageName;
 
@@ -289,12 +301,10 @@ const RouterModule = (() => {
          * 3. Restore previous page
          * ------------------------------------------------
          */
-        const savedPage = localStorage.getItem("gcb_currentPageGC");
-
-        const restoredPage = isValidRoute(savedPage) ? savedPage : "home";
+        const restoredPage = getInitialPage();
 
         /*
-         * GitHub URL/history takes priority.
+         * Explicit navigation requests take priority.
          */
         const initialPage = isValidRoute(pendingPage)
           ? pendingPage
