@@ -91,14 +91,70 @@ const RouterModule = (() => {
 
   function getInitialPage() {
     const templatePage = window.GCB_INITIAL_PAGE;
+    const savedPage = localStorage.getItem("gcb_currentPageGC");
 
+    // console.log("[Router] getInitialPage()", {
+    //   isGitHubEmbedded,
+    //   isDirectGas,
+    //   templatePage,
+    //   savedPage,
+    // });
+
+    /*
+     * ------------------------------------------------
+     * Direct Apps Script deployment
+     * ------------------------------------------------
+     *
+     * Apps Script cannot update the outer /exec URL,
+     * so restore the last page from localStorage.
+     */
+    if (isDirectGas) {
+      if (isValidRoute(savedPage)) {
+        // console.log(
+        //   "[Router] Direct GAS: restoring page from localStorage:",
+        //   savedPage,
+        // );
+
+        return savedPage;
+      }
+
+      if (isValidRoute(templatePage)) {
+        // console.log(
+        //   "[Router] Direct GAS: using GCB_INITIAL_PAGE:",
+        //   templatePage,
+        // );
+
+        return templatePage;
+      }
+
+      // console.log("[Router] Direct GAS: falling back to home.");
+
+      return "home";
+    }
+
+    /*
+     * ------------------------------------------------
+     * GitHub embedded deployment
+     * ------------------------------------------------
+     *
+     * Keep the existing GitHub behavior.
+     */
     if (isValidRoute(templatePage)) {
+      // console.log("[Router] GitHub: using GCB_INITIAL_PAGE:", templatePage);
+
       return templatePage;
     }
 
-    const savedPage = localStorage.getItem("gcb_currentPageGC");
+    if (isValidRoute(savedPage)) {
+      // console.log(
+      //   "[Router] GitHub: restoring page from localStorage:",
+      //   savedPage,
+      // );
 
-    return isValidRoute(savedPage) ? savedPage : "home";
+      return savedPage;
+    }
+
+    return "home";
   }
 
   function setCurrentPage(pageName) {

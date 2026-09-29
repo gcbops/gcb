@@ -103,7 +103,7 @@
     window.addEventListener("message", (event) => {
       const allowedOrigin =
           event.origin === "https://script.googleusercontent.com" ||
-          event.origin.endsWith("script.googleusercontent.com");
+          event.origin.endsWith("-script.googleusercontent.com");
       {
         console.error("[GitHub] Origin from:", event.origin);
         return;
