@@ -113,7 +113,7 @@ const RouterModule = (() => {
 
   function pushHistory(pageName) {
     if (isDirectGas) {
-      history.pushState({ gcbPage: pageName }, "", window.location.href);
+      // history.pushState({ gcbPage: pageName }, "", window.location.href);
 
       return;
     }
@@ -134,11 +134,11 @@ const RouterModule = (() => {
 
   function handlePopState(event) {
     if (isDirectGas) {
-      const page = event.state?.gcbPage;
+      // const page = event.state?.gcbPage;
 
-      if (isValidRoute(page)) {
-        go(page, false);
-      }
+      // if (isValidRoute(page)) {
+      //   go(page, false);
+      // }
 
       return;
     }

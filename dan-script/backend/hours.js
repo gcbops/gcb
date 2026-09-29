@@ -1,3 +1,157 @@
+const ActivityValidation = (() => {
+  const MAX_CLIENT_NAME_LENGTH = 100;
+  const MAX_TYPE_LENGTH = 100;
+  const MAX_TASK_LENGTH = 500;
+
+  const MIN_HOURS = 0;
+  const MAX_HOURS = 24;
+
+  function clientActivityForm(formData) {
+    Validation.requireObject(formData, "Form data");
+
+    const client = Validation.requiredString(formData.client, "Client", {
+      maxLength: MAX_CLIENT_NAME_LENGTH,
+    });
+
+    const hour = Validation.number(formData.hour, "Hours", {
+      min: MIN_HOURS,
+      max: MAX_HOURS,
+    });
+
+    const type = Validation.requiredString(formData.type, "Type", {
+      maxLength: MAX_TYPE_LENGTH,
+    });
+
+    const task = Validation.requiredString(formData.task, "Task", {
+      maxLength: MAX_TASK_LENGTH,
+    });
+
+    if (task.toLowerCase() === "loading...") {
+      throw new Error("Please enter a valid task.");
+    }
+
+    return {
+      client,
+      hour,
+      type,
+      task,
+    };
+  }
+
+  function todayHoursRecord(record, index = 0) {
+    Validation.requireObject(record, `Record ${index + 1}`);
+
+    const row = Validation.integer(record.row, `Record ${index + 1} row`, {
+      min: Validation.START_ROW,
+    });
+
+    const recordAction = Validation.action(
+      record.action,
+      `Record ${index + 1} action`,
+    );
+
+    const sourceSheet = Validation.optionalString(
+      record.sourceSheet,
+      `Record ${index + 1} source sheet`,
+      {
+        maxLength: 100,
+      },
+    );
+
+    let sourceRow = null;
+
+    if (
+      record.sourceRow !== null &&
+      record.sourceRow !== undefined &&
+      String(record.sourceRow).trim() !== ""
+    ) {
+      sourceRow = Validation.integer(
+        record.sourceRow,
+        `Record ${index + 1} source row`,
+        {
+          min: Validation.START_ROW,
+        },
+      );
+    }
+
+    if (recordAction === "delete") {
+      return {
+        row,
+        action: "delete",
+        sourceSheet,
+        sourceRow,
+      };
+    }
+
+    const type = Validation.requiredString(
+      record.type,
+      `Record ${index + 1} type`,
+      {
+        maxLength: MAX_TYPE_LENGTH,
+      },
+    );
+
+    const task = Validation.requiredString(
+      record.task,
+      `Record ${index + 1} task`,
+      {
+        maxLength: MAX_TASK_LENGTH,
+      },
+    );
+
+    if (task.toLowerCase() === "loading...") {
+      throw new Error(`Invalid task for record ${index + 1}.`);
+    }
+
+    const hours = Validation.number(record.hours, `Record ${index + 1} hours`, {
+      min: MIN_HOURS,
+      max: MAX_HOURS,
+    });
+
+    return {
+      row,
+      action: "update",
+      type,
+      task,
+      hours,
+      sourceSheet,
+      sourceRow,
+    };
+  }
+
+  function todayHoursRecords(records) {
+    if (!Array.isArray(records)) {
+      throw new Error("Records must be an array.");
+    }
+
+    if (!records.length) {
+      return [];
+    }
+
+    const normalized = [];
+    const rows = new Set();
+
+    records.forEach((record, index) => {
+      const normalizedRecord = todayHoursRecord(record, index);
+
+      if (rows.has(normalizedRecord.row)) {
+        throw new Error(`Duplicate row submitted: ${normalizedRecord.row}`);
+      }
+
+      rows.add(normalizedRecord.row);
+      normalized.push(normalizedRecord);
+    });
+
+    return normalized;
+  }
+
+  return {
+    clientActivityForm,
+    todayHoursRecord,
+    todayHoursRecords,
+  };
+})();
+
 function recordManualClientHours(clientName, task, hours, date = new Date()) {
   if (!isNonEmptyString(clientName)) {
     return logResponse("Invalid client name provided.");
@@ -33,51 +187,7 @@ function recordManualClientHours(clientName, task, hours, date = new Date()) {
 }
 
 function validateManualHoursFormData(formData) {
-  if (!formData || typeof formData !== "object") {
-    throw new Error("Invalid form data.");
-  }
-
-  const client = String(formData.client ?? "").trim();
-  const type = String(formData.type ?? "").trim();
-  const task = String(formData.task ?? "").trim();
-  const hourValue = String(formData.hour ?? "").trim();
-
-  if (!client) {
-    throw new Error("Client is required.");
-  }
-
-  if (!type) {
-    throw new Error("Type is required.");
-  }
-
-  if (!task) {
-    throw new Error("Task is required.");
-  }
-
-  if (task.toLowerCase() === "loading...") {
-    throw new Error("Please select a valid task.");
-  }
-
-  if (!hourValue) {
-    throw new Error("Hours are required.");
-  }
-
-  const hours = Number(hourValue);
-
-  if (!Number.isFinite(hours)) {
-    throw new Error("Hours must be a valid number.");
-  }
-
-  if (hours <= 0) {
-    throw new Error("Hours must be greater than 0.");
-  }
-
-  return {
-    client,
-    type,
-    task,
-    hours,
-  };
+  return ActivityValidation.clientActivityForm(formData);
 }
 
 function recordClientHoursToSheet(sheet, data) {
@@ -131,7 +241,7 @@ function recordClientHoursToSheet(sheet, data) {
 
 function recordManualClientHoursFromForm(formData) {
   try {
-    const data = validateManualHoursFormData(formData);
+    const data = ActivityValidation.clientActivityForm(formData);
 
     const clientSheet = getSheetSafe(data.client);
 
@@ -139,7 +249,11 @@ function recordManualClientHoursFromForm(formData) {
       throw new Error(`Sheet "${data.client}" not found.`);
     }
 
-    return recordClientHoursToSheet(clientSheet, data);
+    return recordClientHoursToSheet(clientSheet, {
+      type: data.type,
+      task: data.task,
+      hours: data.hour,
+    });
   } catch (err) {
     throw new Error(err.message || String(err));
   }
@@ -147,9 +261,7 @@ function recordManualClientHoursFromForm(formData) {
 
 function recordExternalClientHoursFromForm(formData) {
   try {
-    const data = validateManualHoursFormData(formData);
-
-    const ss = getSpreadsheet();
+    const data = ActivityValidation.clientActivityForm(formData);
 
     const registrySheet = getSheetSafe("External Sheets");
 
@@ -157,24 +269,12 @@ function recordExternalClientHoursFromForm(formData) {
       throw new Error("External Sheets registry not found.");
     }
 
-    /*
-     * External Sheets registry:
-     *
-     * A = Spreadsheet ID
-     * B = Client Name
-     * C = Projects
-     * D = Status
-     * E = ...
-     */
     const values = registrySheet
       .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
       .getValues();
 
     const normalizedClient = normalizeText(data.client);
 
-    /*
-     * Find the external client.
-     */
     const externalRow = values.find(
       (row) =>
         normalizeText(String(row[1] || "")) === normalizedClient &&
@@ -195,9 +295,6 @@ function recordExternalClientHoursFromForm(formData) {
       );
     }
 
-    /*
-     * Open the client's external spreadsheet.
-     */
     let externalSS;
 
     try {
@@ -208,14 +305,7 @@ function recordExternalClientHoursFromForm(formData) {
       );
     }
 
-    /*
-     * Find the project/task tab INSIDE the external spreadsheet.
-     */
-    const taskName = String(data.task || "").trim();
-
-    if (!taskName) {
-      throw new Error("Project/task is required.");
-    }
+    const taskName = data.task;
 
     const projectSheet = externalSS.getSheetByName(taskName);
 
@@ -225,24 +315,18 @@ function recordExternalClientHoursFromForm(formData) {
       );
     }
 
-    /*
-     * Prevent writing to registry/system sheets.
-     */
     const sheetName = projectSheet.getName();
 
     if (sheetName === "Projects" || sheetName === "BLANK") {
       throw new Error(`Invalid project sheet "${sheetName}".`);
     }
 
-    /*
-     * Record directly into the external client's
-     * project/task sheet.
-     */
-    const result = recordClientHoursToSheet(projectSheet, data);
+    const result = recordClientHoursToSheet(projectSheet, {
+      type: data.type,
+      task: data.task,
+      hours: data.hour,
+    });
 
-    /*
-     * Rebuild/refresh aggregated external-sheet data.
-     */
     combineExternalSheetData(spreadsheetId);
 
     return result;
@@ -639,17 +723,13 @@ function getTodayClientHours(clientName) {
 
 function saveEditedTodayClientHours(formData) {
   try {
-    if (!formData || !formData.client) {
-      throw new Error("Client is required.");
-    }
+    Validation.requireObject(formData, "Form data");
 
-    const clientName = String(formData.client).trim();
+    const clientName = Validation.requiredString(formData.client, "Client", {
+      maxLength: Validation.MAX_CLIENT_NAME_LENGTH,
+    });
 
-    if (!clientName) {
-      throw new Error("Client is required.");
-    }
-
-    const records = Array.isArray(formData.records) ? formData.records : [];
+    const records = ActivityValidation.todayHoursRecords(formData.records);
 
     if (!records.length) {
       return {
@@ -1591,7 +1671,3 @@ function getGrowthComparisonSummary(currentYear, comparisonYear) {
     },
   };
 }
-
-
-
-

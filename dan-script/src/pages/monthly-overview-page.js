@@ -22,10 +22,17 @@ const monthlyOverviewPage = (() => {
   function loadCurrentMonthLogChart(showLoading = true) {
     const month = Number($("#chartMonthFilter").val());
     const year = Number($("#chartYearFilter").val());
-    
-    if (!month || !year) {
+
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      AppUtils.showError("Please select a valid month.");
       return;
     }
+
+    if (!Number.isInteger(year) || year < 2024) {
+      AppUtils.showError("Please select a valid year.");
+      return;
+    }
+
     if (showLoading) {
       showCurrentMonthLogChartLoading();
     }

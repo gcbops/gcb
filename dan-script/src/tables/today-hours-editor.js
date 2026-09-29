@@ -1,11 +1,18 @@
 import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
+import { ValidationModule } from "../validations.js";
 
 const TodayHoursEditor = (() => {
   const MODAL_ID = "#app-modal";
   const RECORDS_ID = "#todayHoursRecords";
   const CLIENT_ID = "#editTodayClient";
   const CACHE_PREFIX = "todayManualHours_";
+
+  const MAX_TYPE_LENGTH = 100;
+  const MAX_TASK_LENGTH = 500;
+
+  const MIN_HOURS = 0;
+  const MAX_HOURS = 24;
 
   function open(clientName) {
     clientName = String(clientName || "").trim();
@@ -303,91 +310,49 @@ const TodayHoursEditor = (() => {
     $modal.find(".today-hours-record").each(function () {
       const $row = $(this);
 
-      const rowNumber = Number($row.attr("data-row"));
+      const record = {
+        row: Number($row.attr("data-row")),
 
-      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
-        AppUtils.showDashboardToast("Invalid record row.", "error");
+        action: $row.attr("data-action") === "delete" ? "delete" : "update",
 
-        hasValidationError = true;
-        return false;
-      }
+        sourceSheet: String($row.attr("data-source-sheet") || "").trim(),
 
-      /*
-       * Actual external source metadata.
-       */
-      const sourceSheet = String($row.attr("data-source-sheet") || "").trim();
+        sourceRow: (() => {
+          const value = $row.attr("data-source-row");
 
-      const sourceRowValue = $row.attr("data-source-row");
+          if (value === undefined || value === null || value === "") {
+            return null;
+          }
 
-      const sourceRow = Number(sourceRowValue);
-
-      const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
-
-      const action =
-        $row.attr("data-action") === "delete" ? "delete" : "update";
+          return Number(value);
+        })(),
+      };
 
       /*
-       * Deleted records don't need their form values.
+       * Deleted rows don't need form values.
        */
-      if (action === "delete") {
-        records.push({
-          row: rowNumber,
-          action: "delete",
-
-          /*
-           * These are required for external clients.
-           * Internal clients will simply have empty values.
-           */
-          sourceSheet,
-          sourceRow: hasSourceRow ? sourceRow : null,
-        });
-
+      if (record.action === "delete") {
+        records.push(record);
         return;
       }
 
-      const type = String($row.find(".today-hours-type").val() || "").trim();
+      record.type = String($row.find(".today-hours-type").val() || "").trim();
 
-      const task = String($row.find(".today-hours-task").val() || "").trim();
+      record.task = String($row.find(".today-hours-task").val() || "").trim();
 
-      const hoursValue = $row.find(".today-hours-hours").val();
+      record.hours = $row.find(".today-hours-hours").val();
 
-      const hours = Number(hoursValue);
+      const validation = todayHoursRecord(record);
 
-      if (!type) {
-        AppUtils.showDashboardToast("Type is required.", "error");
+      if (!validation.valid) {
+        AppUtils.showDashboardToast(validation.message, "error");
 
         hasValidationError = true;
+
         return false;
       }
 
-      if (!task || task.toLowerCase() === "loading...") {
-        AppUtils.showDashboardToast("Please enter a valid task.", "error");
-
-        hasValidationError = true;
-        return false;
-      }
-
-      if (hoursValue === "" || !Number.isFinite(hours) || hours < 0) {
-        AppUtils.showDashboardToast("Please enter valid hours.", "error");
-
-        hasValidationError = true;
-        return false;
-      }
-
-      records.push({
-        row: rowNumber,
-        action: "update",
-
-        type,
-        task,
-        hours,
-
-        /*
-         * Actual external source metadata.
-         */
-        sourceSheet,
-        sourceRow: hasSourceRow ? sourceRow : null,
-      });
+      records.push(validation.value);
     });
 
     if (hasValidationError) {
@@ -413,10 +378,7 @@ const TodayHoursEditor = (() => {
       $btn: $saveButton,
       loadingText: "Saving changes",
 
-      onSuccess: (response) => {
-        /*
-         * Clear caches affected by today's hours.
-         */
+      onSuccess: () => {
         AppUtils.cacheClear(`${CACHE_PREFIX}${clientName}`);
 
         AppUtils.cacheClear(`getClientHourLogData_${clientName}`);
@@ -436,6 +398,121 @@ const TodayHoursEditor = (() => {
       },
     });
   }
+
+  function todayHoursRecord(record) {
+    const row = Number(record.row);
+
+    if (!Number.isInteger(row) || row < 3) {
+      return {
+        valid: false,
+        message: "Invalid record row.",
+      };
+    }
+
+    const action = record.action === "delete" ? "delete" : "update";
+
+    if (action === "delete") {
+      return {
+        valid: true,
+        value: {
+          row,
+          action,
+          sourceSheet: String(record.sourceSheet || "").trim(),
+          sourceRow:
+            record.sourceRow === null ||
+            record.sourceRow === undefined ||
+            record.sourceRow === ""
+              ? null
+              : Number(record.sourceRow),
+        },
+      };
+    }
+
+    const type = ValidationModule.requiredString(record.type, "Type", {
+      maxLength: MAX_TYPE_LENGTH,
+    });
+
+    if (!type.valid) {
+      return type;
+    }
+
+    const task = ValidationModule.requiredString(record.task, "Task", {
+      maxLength: MAX_TASK_LENGTH,
+    });
+
+    if (!task.valid) {
+      return task;
+    }
+
+    if (task.value.toLowerCase() === "loading...") {
+      return {
+        valid: false,
+        message: "Please enter a valid task.",
+      };
+    }
+
+    const hours = ValidationModule.number(record.hours, "Hours", {
+      min: MIN_HOURS,
+      max: MAX_HOURS,
+    });
+
+    if (!hours.valid) {
+      return hours;
+    }
+
+    return {
+      valid: true,
+      value: {
+        row,
+        action,
+        type: type.value,
+        task: task.value,
+        hours: hours.value,
+        sourceSheet: String(record.sourceSheet || "").trim(),
+        sourceRow:
+          record.sourceRow === null ||
+          record.sourceRow === undefined ||
+          record.sourceRow === ""
+            ? null
+            : Number(record.sourceRow),
+      },
+    };
+  }
+
+  // function todayHoursRecords(records) {
+  //   if (!Array.isArray(records)) {
+  //     return {
+  //       valid: false,
+  //       message: "Invalid records.",
+  //     };
+  //   }
+
+  //   const normalized = [];
+  //   const rows = new Set();
+
+  //   for (const record of records) {
+  //     const result = todayHoursRecord(record);
+
+  //     if (!result.valid) {
+  //       return result;
+  //     }
+
+  //     if (rows.has(result.value.row)) {
+  //       return {
+  //         valid: false,
+  //         message: `Duplicate row submitted: ${result.value.row}`,
+  //       };
+  //     }
+
+  //     rows.add(result.value.row);
+  //     normalized.push(result.value);
+  //   }
+
+  //   return {
+  //     valid: true,
+  //     value: normalized,
+  //   };
+  // }
 
   return {
     open,

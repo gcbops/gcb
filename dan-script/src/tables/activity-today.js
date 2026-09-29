@@ -1,10 +1,18 @@
 import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
+import { ValidationModule } from "../validations.js";
+import { DataTableModule } from "./data-table.js";
 
 const ActivityToday = (() => {
   const ACTIVITY_TABLE_ID = "#table";
   const ACTIVITY_CACHE_KEY = "cache_ActivityToday";
   const REFRESH_INTERVAL = 10000;
+  const MAX_CLIENT_NAME_LENGTH = 100;
+  const MAX_TYPE_LENGTH = 100;
+  const MAX_TASK_LENGTH = 500;
+
+  const MIN_HOURS = 0;
+  const MAX_HOURS = 24;
 
   const SPECIAL_STATUSES = [
     "Moved to PM",
@@ -312,8 +320,6 @@ const ActivityToday = (() => {
       $submitBtn = $("#submit-new-hours");
     }
 
-    const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
-
     const formData = {
       client: String($("#client").val() || "").trim(),
       hour: String($("#hour").val() || "").trim(),
@@ -321,20 +327,19 @@ const ActivityToday = (() => {
       task: String($("#task").val() || "").trim(),
     };
 
-    if (Object.values(formData).some((value) => !value)) {
-      AppUtils.showDashboardToast(
-        "Please fill out all required fields!",
-        "error",
-      );
-      loading.restore();
+    const validation = clientActivityForm(formData);
+
+    if (!validation.valid) {
+      AppUtils.showDashboardToast(validation.message, "error");
 
       return;
     }
 
-    /*
-     * Cache does not exist.
-     * Ask Apps Script directly.
-     */
+    const validatedData = validation.value;
+
+    const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
+    $("#taskForm").find("select, input.form-control").prop("disabled", true);
+
     google.script.run
       .withSuccessHandler((isExternal) => {
         const external = isExternal === true;
@@ -349,30 +354,90 @@ const ActivityToday = (() => {
           "error",
         );
 
+        $("#taskForm")
+          .find("select, input.form-control")
+          .prop("disabled", false);
+
         loading.restore();
       })
-      .isExternalClient(formData.client);
+      .isExternalClient(validatedData.client);
 
     function submitHours(isExternal) {
       const gscriptFunc = isExternal
         ? "recordExternalClientHoursFromForm"
         : "recordManualClientHoursFromForm";
 
-      // console.log(`[Hours] Client: ${formData.client}`);
-      // console.log(`[Hours] External: ${isExternal}`);
-      // console.log(`[Hours] Function: ${gscriptFunc}`);
-
       AppUtils.submitForm({
         gscriptFunc,
-        data: formData,
+        data: validatedData,
         $btn: $submitBtn,
         loadingText: "Saving",
-
         onSuccess: () => {
+          $("#taskForm")
+            .find("select, input.form-control")
+            .prop("disabled", false);
+
           handleTaskSaveSuccess(formData);
+        },
+        onError: () => {
+          $("#taskForm")
+            .find("select, input.form-control")
+            .prop("disabled", false);
         },
       });
     }
+  }
+
+  function clientActivityForm(data) {
+    const client = ValidationModule.requiredString(data.client, "Client", {
+      maxLength: MAX_CLIENT_NAME_LENGTH,
+    });
+
+    if (!client.valid) {
+      return client;
+    }
+
+    const hour = ValidationModule.number(data.hour, "Hours", {
+      min: MIN_HOURS,
+      max: MAX_HOURS,
+    });
+
+    if (!hour.valid) {
+      return hour;
+    }
+
+    const type = ValidationModule.requiredString(data.type, "Type", {
+      maxLength: MAX_TYPE_LENGTH,
+    });
+
+    if (!type.valid) {
+      return type;
+    }
+
+    const task = ValidationModule.requiredString(data.task, "Task", {
+      maxLength: MAX_TASK_LENGTH,
+    });
+
+    if (!task.valid) {
+      return task;
+    }
+
+    if (task.value.toLowerCase() === "loading...") {
+      return {
+        valid: false,
+        message: "Please enter a valid task.",
+      };
+    }
+
+    return {
+      valid: true,
+      value: {
+        client: client.value,
+        hour: hour.value,
+        type: type.value,
+        task: task.value,
+      },
+    };
   }
 
   function handleTaskSaveSuccess(formData) {
@@ -383,15 +448,33 @@ const ActivityToday = (() => {
 
     HourSummary.loadTodayChargedHours();
 
-    google.script.run.syncClientProjects();
+    const activityTable = DataTableModule.getInstance("#table");
 
-    clearClientCaches(formData.client);
+    if (activityTable) {
+      refreshActivityTable(activityTable);
+    }
+
+    const task = $("#task").val();
+    const client = formData.client;
+
+    const cacheKey = `gcb_getTaskOptions_${client}`;
+    const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
+
+    if (!cachedTasks.includes(task)) {
+      google.script.run.syncClientProjects();
+    }
+
+    clearClientCaches(client);
 
     AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
 
     resetYearlyChartCaches();
 
     $("#hour").val("");
+  }
+
+  function refreshActivityTable(dataTable) {
+    loadActivity(dataTable, null, true);
   }
 
   function resetYearlyChartCaches(startYear = 2024) {
@@ -401,6 +484,8 @@ const ActivityToday = (() => {
 
     for (let year = startYear; year <= currentYear; year++) {
       keys.push(`chartData_yearly_${year}`);
+      keys.push(`chartData_yearly_monthly_hours_${year}`);
+      keys.push(`chartData_monthly_hours_by_year_${year}`);
     }
 
     AppUtils.resetCacheKeys(keys);
@@ -557,10 +642,9 @@ const ActivityToday = (() => {
     isRefreshing = false;
   }
 
-  function loadActivity(dataTable, callback) {
-    if (!dataTable || isRefreshing) {
+  function loadActivity(dataTable, callback, force = false) {
+    if (!dataTable || (isRefreshing && !force)) {
       callback?.();
-
       return;
     }
 

@@ -38,7 +38,7 @@ const growthComparisonOverviewPage = (() => {
     }
 
     // Default: previous year + current year
-    $year.val([currentYear - 1, currentYear]);
+    $year.val([currentYear - 1, currentYear].filter((year) => year >= 2024));
 
     AppUtils.initSelect2($year, {
       closeOnSelect: false,
@@ -58,9 +58,10 @@ const growthComparisonOverviewPage = (() => {
     const selectedYears = $("#monthlyHoursYearFilter")
       .val()
       ?.map(Number)
-      .filter(Boolean);
+      .filter((year) => Number.isInteger(year) && year >= 2024);
 
     if (!selectedYears?.length) {
+      AppUtils.showError("Please select at least one year.");
       return;
     }
 

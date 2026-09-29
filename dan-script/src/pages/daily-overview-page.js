@@ -1,6 +1,7 @@
 import { AppUtils } from "../utils.js";
 import { ChartModule } from "../charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
+import { ValidationModule } from "../validations.js";
 
 const dailyOverviewPage = (() => {
   const DATE_RANGE_CACHE_KEY = "dailyOverviewSelectedRange";
@@ -67,13 +68,80 @@ const dailyOverviewPage = (() => {
         }
 
         const startDate = formatDate(dates[0]);
-
         const endDate = formatDate(dates[1] || dates[0]);
 
-        saveDateRange(startDate, endDate);
+        const validation = validateDateRange(startDate, endDate);
 
-        loadDailyOverviewChart(startDate, endDate);
+        if (!validation.valid) {
+          AppUtils.showError(validation.message);
+          return;
+        }
+
+        const { startDate: validatedStartDate, endDate: validatedEndDate } =
+          validation.value;
+
+        saveDateRange(validatedStartDate, validatedEndDate);
+
+        loadDailyOverviewChart(validatedStartDate, validatedEndDate);
       });
+  }
+
+  function validateDateRange(startDate, endDate) {
+    const start = ValidationModule.requiredString(startDate, "Start date", {
+      maxLength: 10,
+      rejectFormula: false,
+    });
+
+    if (!start.valid) {
+      return start;
+    }
+
+    const end = ValidationModule.requiredString(endDate, "End date", {
+      maxLength: 10,
+      rejectFormula: false,
+    });
+
+    if (!end.valid) {
+      return end;
+    }
+
+    const startValue = parseLocalDate(start.value);
+    const endValue = parseLocalDate(end.value);
+
+    if (
+      Number.isNaN(startValue.getTime()) ||
+      Number.isNaN(endValue.getTime())
+    ) {
+      return {
+        valid: false,
+        message: "Invalid date range.",
+      };
+    }
+
+    if (startValue > endValue) {
+      return {
+        valid: false,
+        message: "Start date cannot be after end date.",
+      };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (startValue > today || endValue > today) {
+      return {
+        valid: false,
+        message: "Dates cannot be in the future.",
+      };
+    }
+
+    return {
+      valid: true,
+      value: {
+        startDate: start.value,
+        endDate: end.value,
+      },
+    };
   }
 
   function loadInitialChart() {

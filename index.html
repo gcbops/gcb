@@ -101,11 +101,11 @@
     */
 
     window.addEventListener("message", (event) => {
-      if (
-        event.origin !== "https://script.googleusercontent.com" &&
-        !event.origin.endsWith(".script.googleusercontent.com")
-      ) {
-        console.error("[GitHub] Ignored message from:", event.origin);
+      const allowedOrigin =
+          event.origin === "https://script.googleusercontent.com" ||
+          event.origin.endsWith("script.googleusercontent.com");
+      {
+        console.error("[GitHub] Origin from:", event.origin);
         return;
       }
 

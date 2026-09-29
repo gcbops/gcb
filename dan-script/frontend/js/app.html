@@ -1387,11 +1387,80 @@
     };
   })();
 
+  // src/validations.js
+  var ValidationModule = /* @__PURE__ */ (() => {
+    function requiredString(value, label, { maxLength = 500 } = {}) {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (result.length > maxLength) {
+        return {
+          valid: false,
+          message: `${label} must not exceed ${maxLength} characters.`
+        };
+      }
+      if (/^[=+\-@]/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} contains an invalid spreadsheet expression.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function number(value, label, { min = -Infinity, max = Infinity } = {}) {
+      if (value === "" || value === null || value === void 0) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      const result = Number(value);
+      if (!Number.isFinite(result)) {
+        return {
+          valid: false,
+          message: `${label} must be a valid number.`
+        };
+      }
+      if (result < min) {
+        return {
+          valid: false,
+          message: `${label} must be at least ${min}.`
+        };
+      }
+      if (result > max) {
+        return {
+          valid: false,
+          message: `${label} must not exceed ${max}.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    return {
+      requiredString,
+      number
+    };
+  })();
+
   // src/tables/activity-today.js
   var ActivityToday = /* @__PURE__ */ (() => {
     const ACTIVITY_TABLE_ID = "#table";
     const ACTIVITY_CACHE_KEY = "cache_ActivityToday";
     const REFRESH_INTERVAL = 1e4;
+    const MAX_CLIENT_NAME_LENGTH = 100;
+    const MAX_TYPE_LENGTH = 100;
+    const MAX_TASK_LENGTH = 500;
+    const MIN_HOURS = 0;
+    const MAX_HOURS = 24;
     const SPECIAL_STATUSES = [
       "Moved to PM",
       "Revisions Done",
@@ -1585,21 +1654,20 @@
       if (!$submitBtn.length) {
         $submitBtn = $("#submit-new-hours");
       }
-      const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
       const formData = {
         client: String($("#client").val() || "").trim(),
         hour: String($("#hour").val() || "").trim(),
         type: String($("#type").val() || "").trim(),
         task: String($("#task").val() || "").trim()
       };
-      if (Object.values(formData).some((value) => !value)) {
-        AppUtils.showDashboardToast(
-          "Please fill out all required fields!",
-          "error"
-        );
-        loading.restore();
+      const validation = clientActivityForm(formData);
+      if (!validation.valid) {
+        AppUtils.showDashboardToast(validation.message, "error");
         return;
       }
+      const validatedData = validation.value;
+      const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
+      $("#taskForm").find("select, input.form-control").prop("disabled", true);
       google.script.run.withSuccessHandler((isExternal) => {
         const external = isExternal === true;
         submitHours(external);
@@ -1609,20 +1677,67 @@
           "Unable to determine client type.",
           "error"
         );
+        $("#taskForm").find("select, input.form-control").prop("disabled", false);
         loading.restore();
-      }).isExternalClient(formData.client);
+      }).isExternalClient(validatedData.client);
       function submitHours(isExternal) {
         const gscriptFunc = isExternal ? "recordExternalClientHoursFromForm" : "recordManualClientHoursFromForm";
         AppUtils.submitForm({
           gscriptFunc,
-          data: formData,
+          data: validatedData,
           $btn: $submitBtn,
           loadingText: "Saving",
           onSuccess: () => {
+            $("#taskForm").find("select, input.form-control").prop("disabled", false);
             handleTaskSaveSuccess(formData);
+          },
+          onError: () => {
+            $("#taskForm").find("select, input.form-control").prop("disabled", false);
           }
         });
       }
+    }
+    function clientActivityForm(data) {
+      const client = ValidationModule.requiredString(data.client, "Client", {
+        maxLength: MAX_CLIENT_NAME_LENGTH
+      });
+      if (!client.valid) {
+        return client;
+      }
+      const hour = ValidationModule.number(data.hour, "Hours", {
+        min: MIN_HOURS,
+        max: MAX_HOURS
+      });
+      if (!hour.valid) {
+        return hour;
+      }
+      const type = ValidationModule.requiredString(data.type, "Type", {
+        maxLength: MAX_TYPE_LENGTH
+      });
+      if (!type.valid) {
+        return type;
+      }
+      const task = ValidationModule.requiredString(data.task, "Task", {
+        maxLength: MAX_TASK_LENGTH
+      });
+      if (!task.valid) {
+        return task;
+      }
+      if (task.value.toLowerCase() === "loading...") {
+        return {
+          valid: false,
+          message: "Please enter a valid task."
+        };
+      }
+      return {
+        valid: true,
+        value: {
+          client: client.value,
+          hour: hour.value,
+          type: type.value,
+          task: task.value
+        }
+      };
     }
     function handleTaskSaveSuccess(formData) {
       AppUtils.showDashboardToast(
@@ -1630,17 +1745,32 @@
         "success"
       );
       HourSummary.loadTodayChargedHours();
-      google.script.run.syncClientProjects();
-      clearClientCaches(formData.client);
+      const activityTable = DataTableModule.getInstance("#table");
+      if (activityTable) {
+        refreshActivityTable(activityTable);
+      }
+      const task = $("#task").val();
+      const client = formData.client;
+      const cacheKey = `gcb_getTaskOptions_${client}`;
+      const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
+      if (!cachedTasks.includes(task)) {
+        google.script.run.syncClientProjects();
+      }
+      clearClientCaches(client);
       AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
       resetYearlyChartCaches();
       $("#hour").val("");
+    }
+    function refreshActivityTable(dataTable) {
+      loadActivity(dataTable, null, true);
     }
     function resetYearlyChartCaches(startYear = 2024) {
       const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
       const keys = [];
       for (let year = startYear; year <= currentYear; year++) {
         keys.push(`chartData_yearly_${year}`);
+        keys.push(`chartData_yearly_monthly_hours_${year}`);
+        keys.push(`chartData_monthly_hours_by_year_${year}`);
       }
       AppUtils.resetCacheKeys(keys);
     }
@@ -1758,8 +1888,8 @@
       }
       isRefreshing = false;
     }
-    function loadActivity(dataTable, callback) {
-      if (!dataTable || isRefreshing) {
+    function loadActivity(dataTable, callback, force = false) {
+      if (!dataTable || isRefreshing && !force) {
         callback?.();
         return;
       }
@@ -2257,6 +2387,10 @@
     const RECORDS_ID = "#todayHoursRecords";
     const CLIENT_ID = "#editTodayClient";
     const CACHE_PREFIX = "todayManualHours_";
+    const MAX_TYPE_LENGTH = 100;
+    const MAX_TASK_LENGTH = 500;
+    const MIN_HOURS = 0;
+    const MAX_HOURS = 24;
     function open(clientName) {
       clientName = String(clientName || "").trim();
       if (!clientName) {
@@ -2484,61 +2618,32 @@
       let hasValidationError = false;
       $modal.find(".today-hours-record").each(function() {
         const $row = $(this);
-        const rowNumber = Number($row.attr("data-row"));
-        if (!Number.isInteger(rowNumber) || rowNumber < 1) {
-          AppUtils.showDashboardToast("Invalid record row.", "error");
-          hasValidationError = true;
-          return false;
-        }
-        const sourceSheet = String($row.attr("data-source-sheet") || "").trim();
-        const sourceRowValue = $row.attr("data-source-row");
-        const sourceRow = Number(sourceRowValue);
-        const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
-        const action = $row.attr("data-action") === "delete" ? "delete" : "update";
-        if (action === "delete") {
-          records.push({
-            row: rowNumber,
-            action: "delete",
-            /*
-             * These are required for external clients.
-             * Internal clients will simply have empty values.
-             */
-            sourceSheet,
-            sourceRow: hasSourceRow ? sourceRow : null
-          });
+        const record = {
+          row: Number($row.attr("data-row")),
+          action: $row.attr("data-action") === "delete" ? "delete" : "update",
+          sourceSheet: String($row.attr("data-source-sheet") || "").trim(),
+          sourceRow: (() => {
+            const value = $row.attr("data-source-row");
+            if (value === void 0 || value === null || value === "") {
+              return null;
+            }
+            return Number(value);
+          })()
+        };
+        if (record.action === "delete") {
+          records.push(record);
           return;
         }
-        const type = String($row.find(".today-hours-type").val() || "").trim();
-        const task = String($row.find(".today-hours-task").val() || "").trim();
-        const hoursValue = $row.find(".today-hours-hours").val();
-        const hours = Number(hoursValue);
-        if (!type) {
-          AppUtils.showDashboardToast("Type is required.", "error");
+        record.type = String($row.find(".today-hours-type").val() || "").trim();
+        record.task = String($row.find(".today-hours-task").val() || "").trim();
+        record.hours = $row.find(".today-hours-hours").val();
+        const validation = todayHoursRecord(record);
+        if (!validation.valid) {
+          AppUtils.showDashboardToast(validation.message, "error");
           hasValidationError = true;
           return false;
         }
-        if (!task || task.toLowerCase() === "loading...") {
-          AppUtils.showDashboardToast("Please enter a valid task.", "error");
-          hasValidationError = true;
-          return false;
-        }
-        if (hoursValue === "" || !Number.isFinite(hours) || hours < 0) {
-          AppUtils.showDashboardToast("Please enter valid hours.", "error");
-          hasValidationError = true;
-          return false;
-        }
-        records.push({
-          row: rowNumber,
-          action: "update",
-          type,
-          task,
-          hours,
-          /*
-           * Actual external source metadata.
-           */
-          sourceSheet,
-          sourceRow: hasSourceRow ? sourceRow : null
-        });
+        records.push(validation.value);
       });
       if (hasValidationError) {
         return;
@@ -2556,7 +2661,7 @@
         },
         $btn: $saveButton,
         loadingText: "Saving changes",
-        onSuccess: (response) => {
+        onSuccess: () => {
           AppUtils.cacheClear(`${CACHE_PREFIX}${clientName}`);
           AppUtils.cacheClear(`getClientHourLogData_${clientName}`);
           AppUtils.cacheClear(`getClientHours_${clientName}`);
@@ -2569,6 +2674,64 @@
           AppUtils.closeModal(MODAL_ID);
         }
       });
+    }
+    function todayHoursRecord(record) {
+      const row = Number(record.row);
+      if (!Number.isInteger(row) || row < 3) {
+        return {
+          valid: false,
+          message: "Invalid record row."
+        };
+      }
+      const action = record.action === "delete" ? "delete" : "update";
+      if (action === "delete") {
+        return {
+          valid: true,
+          value: {
+            row,
+            action,
+            sourceSheet: String(record.sourceSheet || "").trim(),
+            sourceRow: record.sourceRow === null || record.sourceRow === void 0 || record.sourceRow === "" ? null : Number(record.sourceRow)
+          }
+        };
+      }
+      const type = ValidationModule.requiredString(record.type, "Type", {
+        maxLength: MAX_TYPE_LENGTH
+      });
+      if (!type.valid) {
+        return type;
+      }
+      const task = ValidationModule.requiredString(record.task, "Task", {
+        maxLength: MAX_TASK_LENGTH
+      });
+      if (!task.valid) {
+        return task;
+      }
+      if (task.value.toLowerCase() === "loading...") {
+        return {
+          valid: false,
+          message: "Please enter a valid task."
+        };
+      }
+      const hours = ValidationModule.number(record.hours, "Hours", {
+        min: MIN_HOURS,
+        max: MAX_HOURS
+      });
+      if (!hours.valid) {
+        return hours;
+      }
+      return {
+        valid: true,
+        value: {
+          row,
+          action,
+          type: type.value,
+          task: task.value,
+          hours: hours.value,
+          sourceSheet: String(record.sourceSheet || "").trim(),
+          sourceRow: record.sourceRow === null || record.sourceRow === void 0 || record.sourceRow === "" ? null : Number(record.sourceRow)
+        }
+      };
     }
     return {
       open
@@ -2599,8 +2762,6 @@
             return;
           }
           const clientName = String(row[0] || "").trim();
-          console.log($btn);
-          console.log(clientName);
           if (!clientName) {
             AppUtils.showError("No client name found.");
             return;
@@ -6635,37 +6796,68 @@
       });
     }
     function drawMonthlyHoursByYearChart(ctx, type, data, animated = false) {
-      const datasets = Object.entries(data || {}).map(([year, rows]) => {
-        const monthlyData = Array(12).fill(0);
-        (rows || []).forEach(([monthIndex, hours]) => {
-          if (Number.isInteger(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
-            monthlyData[monthIndex] = Number(hours) || 0;
-          }
-        });
-        const peakIndex = getPeakIndex(monthlyData);
-        return {
-          label: year,
-          data: monthlyData,
-          backgroundColor: monthlyData.map(
-            (value, index) => index === peakIndex ? "rgba(14, 165, 233, 1)" : createGradient(
-              ctx,
-              "rgba(14, 165, 233, 0.85)",
-              "rgba(14, 165, 233, 0.45)"
-            )
-          ),
-          borderColor: "#0ea5e9",
-          borderWidth: monthlyData.map(
-            (value, index) => index === peakIndex ? 2 : 1
-          ),
-          borderRadius: 6,
-          borderSkipped: false,
-          barPercentage: 0.8,
-          categoryPercentage: 0.75,
-          hoverBackgroundColor: "rgba(14, 165, 233, 1)",
-          hoverBorderColor: "#0284c7",
-          hoverBorderWidth: 1
-        };
-      });
+      const yearColors = [
+        {
+          base: "rgba(14, 165, 233, 0.85)",
+          light: "rgba(14, 165, 233, 0.45)",
+          peak: "rgba(14, 165, 233, 1)",
+          border: "#0284c7"
+        },
+        {
+          base: "rgba(139, 92, 246, 0.85)",
+          light: "rgba(139, 92, 246, 0.45)",
+          peak: "rgba(139, 92, 246, 1)",
+          border: "#7c3aed"
+        },
+        {
+          base: "rgba(16, 185, 129, 0.85)",
+          light: "rgba(16, 185, 129, 0.45)",
+          peak: "rgba(16, 185, 129, 1)",
+          border: "#059669"
+        },
+        {
+          base: "rgba(245, 158, 11, 0.85)",
+          light: "rgba(245, 158, 11, 0.45)",
+          peak: "rgba(245, 158, 11, 1)",
+          border: "#d97706"
+        },
+        {
+          base: "rgba(236, 72, 153, 0.85)",
+          light: "rgba(236, 72, 153, 0.45)",
+          peak: "rgba(236, 72, 153, 1)",
+          border: "#db2777"
+        }
+      ];
+      const datasets = Object.entries(data || {}).map(
+        ([year, rows], yearIndex) => {
+          const monthlyData = Array(12).fill(0);
+          (rows || []).forEach(([monthIndex, hours]) => {
+            if (Number.isInteger(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
+              monthlyData[monthIndex] = Number(hours) || 0;
+            }
+          });
+          const peakIndex = getPeakIndex(monthlyData);
+          const colors = yearColors[yearIndex % yearColors.length];
+          return {
+            label: year,
+            data: monthlyData,
+            backgroundColor: monthlyData.map(
+              (value, index) => index === peakIndex ? colors.peak : createGradient(ctx, colors.base, colors.light)
+            ),
+            borderColor: colors.border,
+            borderWidth: monthlyData.map(
+              (value, index) => index === peakIndex ? 2 : 1
+            ),
+            borderRadius: 6,
+            borderSkipped: false,
+            barPercentage: 0.8,
+            categoryPercentage: 0.75,
+            hoverBackgroundColor: colors.peak,
+            hoverBorderColor: colors.border,
+            hoverBorderWidth: 1
+          };
+        }
+      );
       chartInstances[type] = new Chart(ctx, {
         type: "bar",
         data: {
@@ -8608,9 +8800,60 @@
         }
         const startDate = formatDate(dates[0]);
         const endDate = formatDate(dates[1] || dates[0]);
-        saveDateRange(startDate, endDate);
-        loadDailyOverviewChart(startDate, endDate);
+        const validation = validateDateRange(startDate, endDate);
+        if (!validation.valid) {
+          AppUtils.showError(validation.message);
+          return;
+        }
+        const { startDate: validatedStartDate, endDate: validatedEndDate } = validation.value;
+        saveDateRange(validatedStartDate, validatedEndDate);
+        loadDailyOverviewChart(validatedStartDate, validatedEndDate);
       });
+    }
+    function validateDateRange(startDate, endDate) {
+      const start = ValidationModule.requiredString(startDate, "Start date", {
+        maxLength: 10,
+        rejectFormula: false
+      });
+      if (!start.valid) {
+        return start;
+      }
+      const end = ValidationModule.requiredString(endDate, "End date", {
+        maxLength: 10,
+        rejectFormula: false
+      });
+      if (!end.valid) {
+        return end;
+      }
+      const startValue = parseLocalDate(start.value);
+      const endValue = parseLocalDate(end.value);
+      if (Number.isNaN(startValue.getTime()) || Number.isNaN(endValue.getTime())) {
+        return {
+          valid: false,
+          message: "Invalid date range."
+        };
+      }
+      if (startValue > endValue) {
+        return {
+          valid: false,
+          message: "Start date cannot be after end date."
+        };
+      }
+      const today = /* @__PURE__ */ new Date();
+      today.setHours(0, 0, 0, 0);
+      if (startValue > today || endValue > today) {
+        return {
+          valid: false,
+          message: "Dates cannot be in the future."
+        };
+      }
+      return {
+        valid: true,
+        value: {
+          startDate: start.value,
+          endDate: end.value
+        }
+      };
     }
     function loadInitialChart() {
       if (!datePicker) {
@@ -8710,7 +8953,7 @@
       for (let year = 2024; year <= currentYear; year++) {
         $year.append(`<option value="${year}">${year}</option>`);
       }
-      $year.val([currentYear - 1, currentYear]);
+      $year.val([currentYear - 1, currentYear].filter((year) => year >= 2024));
       AppUtils.initSelect2($year, {
         closeOnSelect: false,
         placeholder: "Select years"
@@ -8722,8 +8965,9 @@
       });
     }
     function loadMonthlyHoursChart(showLoading = true) {
-      const selectedYears = $("#monthlyHoursYearFilter").val()?.map(Number).filter(Boolean);
+      const selectedYears = $("#monthlyHoursYearFilter").val()?.map(Number).filter((year) => Number.isInteger(year) && year >= 2024);
       if (!selectedYears?.length) {
+        AppUtils.showError("Please select at least one year.");
         return;
       }
       if (showLoading) {
@@ -9631,7 +9875,12 @@
     function loadCurrentMonthLogChart(showLoading = true) {
       const month = Number($("#chartMonthFilter").val());
       const year = Number($("#chartYearFilter").val());
-      if (!month || !year) {
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        AppUtils.showError("Please select a valid month.");
+        return;
+      }
+      if (!Number.isInteger(year) || year < 2024) {
+        AppUtils.showError("Please select a valid year.");
         return;
       }
       if (showLoading) {
@@ -10367,7 +10616,8 @@
     }
     function loadYearlyMonthlyHoursChart(showLoading = true, selectedYear = null) {
       const year = selectedYear ?? Number($("#chartYearFilter").val());
-      if (!year) {
+      if (!Number.isInteger(year) || year < 2024) {
+        AppUtils.showError("Please select a valid year.");
         return;
       }
       if (showLoading) {
@@ -13363,10 +13613,8 @@
     }
     function pushHistory(pageName) {
       if (isDirectGas) {
-        history.pushState({ gcbPage: pageName }, "", window.location.href);
         return;
       }
-      console.log("[Router] Sending GitHub navigation:", pageName);
       try {
         window.top.postMessage(
           {
@@ -13375,17 +13623,12 @@
           },
           GITHUB_ORIGIN
         );
-        console.log("[Router] GitHub navigation postMessage sent.");
       } catch (error) {
         console.error("[Router] GitHub navigation postMessage failed:", error);
       }
     }
     function handlePopState(event) {
       if (isDirectGas) {
-        const page = event.state?.gcbPage;
-        if (isValidRoute(page)) {
-          go(page, false);
-        }
         return;
       }
     }

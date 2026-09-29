@@ -985,51 +985,85 @@ const ChartModule = (() => {
   }
 
   function drawMonthlyHoursByYearChart(ctx, type, data, animated = false) {
-    const datasets = Object.entries(data || {}).map(([year, rows]) => {
-      const monthlyData = Array(12).fill(0);
+    const yearColors = [
+      {
+        base: "rgba(14, 165, 233, 0.85)",
+        light: "rgba(14, 165, 233, 0.45)",
+        peak: "rgba(14, 165, 233, 1)",
+        border: "#0284c7",
+      },
+      {
+        base: "rgba(139, 92, 246, 0.85)",
+        light: "rgba(139, 92, 246, 0.45)",
+        peak: "rgba(139, 92, 246, 1)",
+        border: "#7c3aed",
+      },
+      {
+        base: "rgba(16, 185, 129, 0.85)",
+        light: "rgba(16, 185, 129, 0.45)",
+        peak: "rgba(16, 185, 129, 1)",
+        border: "#059669",
+      },
+      {
+        base: "rgba(245, 158, 11, 0.85)",
+        light: "rgba(245, 158, 11, 0.45)",
+        peak: "rgba(245, 158, 11, 1)",
+        border: "#d97706",
+      },
+      {
+        base: "rgba(236, 72, 153, 0.85)",
+        light: "rgba(236, 72, 153, 0.45)",
+        peak: "rgba(236, 72, 153, 1)",
+        border: "#db2777",
+      },
+    ];
 
-      (rows || []).forEach(([monthIndex, hours]) => {
-        if (
-          Number.isInteger(monthIndex) &&
-          monthIndex >= 0 &&
-          monthIndex < 12
-        ) {
-          monthlyData[monthIndex] = Number(hours) || 0;
-        }
-      });
+    const datasets = Object.entries(data || {}).map(
+      ([year, rows], yearIndex) => {
+        const monthlyData = Array(12).fill(0);
 
-      const peakIndex = getPeakIndex(monthlyData);
+        (rows || []).forEach(([monthIndex, hours]) => {
+          if (
+            Number.isInteger(monthIndex) &&
+            monthIndex >= 0 &&
+            monthIndex < 12
+          ) {
+            monthlyData[monthIndex] = Number(hours) || 0;
+          }
+        });
 
-      return {
-        label: year,
-        data: monthlyData,
+        const peakIndex = getPeakIndex(monthlyData);
 
-        backgroundColor: monthlyData.map((value, index) =>
-          index === peakIndex
-            ? "rgba(14, 165, 233, 1)"
-            : createGradient(
-                ctx,
-                "rgba(14, 165, 233, 0.85)",
-                "rgba(14, 165, 233, 0.45)",
-              ),
-        ),
+        const colors = yearColors[yearIndex % yearColors.length];
 
-        borderColor: "#0ea5e9",
-        borderWidth: monthlyData.map((value, index) =>
-          index === peakIndex ? 2 : 1,
-        ),
+        return {
+          label: year,
+          data: monthlyData,
 
-        borderRadius: 6,
-        borderSkipped: false,
+          backgroundColor: monthlyData.map((value, index) =>
+            index === peakIndex
+              ? colors.peak
+              : createGradient(ctx, colors.base, colors.light),
+          ),
 
-        barPercentage: 0.8,
-        categoryPercentage: 0.75,
+          borderColor: colors.border,
 
-        hoverBackgroundColor: "rgba(14, 165, 233, 1)",
-        hoverBorderColor: "#0284c7",
-        hoverBorderWidth: 1,
-      };
-    });
+          borderWidth: monthlyData.map((value, index) =>
+            index === peakIndex ? 2 : 1,
+          ),
+
+          borderRadius: 6,
+          borderSkipped: false,
+
+          barPercentage: 0.8,
+          categoryPercentage: 0.75,
+
+          hoverBackgroundColor: colors.peak,
+          hoverBorderColor: colors.border,
+          hoverBorderWidth: 1,
+        };
+      },
+    );
 
     chartInstances[type] = new Chart(ctx, {
       type: "bar",

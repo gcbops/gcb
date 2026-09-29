@@ -23,7 +23,8 @@ const yearlyOverviewPage = (() => {
   ) {
     const year = selectedYear ?? Number($("#chartYearFilter").val());
 
-    if (!year) {
+    if (!Number.isInteger(year) || year < 2024) {
+      AppUtils.showError("Please select a valid year.");
       return;
     }
 

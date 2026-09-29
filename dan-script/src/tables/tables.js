@@ -39,8 +39,6 @@ const TableModule = (() => {
           }
 
           const clientName = String(row[0] || "").trim();
-          console.log($btn);
-          console.log(clientName);
 
           if (!clientName) {
             AppUtils.showError("No client name found.");

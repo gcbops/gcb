@@ -171,15 +171,23 @@ function getCurrentYearTargetChartData() {
 
 function getCurrentMonthLogChartData(month, year) {
   try {
+    const validatedMonth = Validation.integer(month, "Month", {
+      min: 1,
+      max: 12,
+    });
+
+    const validatedYear = Validation.integer(year, "Year", {
+      min: 2024,
+    });
+
     const sheet = getSheetSafe("Data Generator For Chart");
 
     if (!sheet) {
       return [];
     }
 
-    // Set the requested month/year.
-    sheet.getRange("AR3").setValue(Number(month));
-    sheet.getRange("AR6").setValue(Number(year));
+    sheet.getRange("AR3").setValue(validatedMonth);
+    sheet.getRange("AR6").setValue(validatedYear);
 
     SpreadsheetApp.flush();
 
@@ -204,7 +212,9 @@ function getYearlyMonthlyHoursChartData(year) {
       return [];
     }
 
-    const selectedYear = Number(year);
+    const selectedYear = Validation.integer(year, "Year", {
+      min: 2024,
+    });
 
     if (!selectedYear) {
       return [];
@@ -238,9 +248,15 @@ function getMonthlyHoursByYears(years) {
       return {};
     }
 
-    const selectedYears = (Array.isArray(years) ? years : [])
-      .map(Number)
-      .filter((year) => Number.isFinite(year));
+    const selectedYears = [
+      ...new Set(
+        (Array.isArray(years) ? years : []).map((year) =>
+          Validation.integer(year, "Year", {
+            min: 2024,
+          }),
+        ),
+      ),
+    ];
 
     if (!selectedYears.length) {
       return {};

@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "node build/build.js && node build/build-html.js",
+    "deploy": "npm run build && clasp push && clasp version \"GCB deployment\" && clasp update-deployment AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT",
     "watch": "chokidar \"src/**/*.js\" -c \"npm run build\"",
     "lint": "eslint src/**/*.js",
     "lint:fix": "eslint src/**/*.js --fix"
