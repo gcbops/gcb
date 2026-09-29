@@ -101,12 +101,10 @@
     */
 
     window.addEventListener("message", (event) => {
-      if (event.source !== iframe.contentWindow) {
-        console.log("[GitHub] event source:", event.source);
-        console.log("[GitHub] iframe contentWindow:", iframe.contentWindow);
-        console.error("[GitHub] Ignored message from unexpected source:", event.origin);
-        return;
-      }
+      console.log("[GitHub] event source:", event.source);
+      console.log("[GitHub] iframe contentWindow:", iframe.contentWindow);
+      console.log("[GitHub] event origin:", event.origin);
+      console.log("[GitHub] event data:", event.data);
 
       if (event.data?.type !== "GCB_NAVIGATION") {
         return;
