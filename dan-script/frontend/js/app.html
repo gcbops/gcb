@@ -13598,11 +13598,23 @@
     }
     function getInitialPage() {
       const templatePage = window.GCB_INITIAL_PAGE;
+      const savedPage = localStorage.getItem("gcb_currentPageGC");
+      if (isDirectGas) {
+        if (isValidRoute(savedPage)) {
+          return savedPage;
+        }
+        if (isValidRoute(templatePage)) {
+          return templatePage;
+        }
+        return "home";
+      }
       if (isValidRoute(templatePage)) {
         return templatePage;
       }
-      const savedPage = localStorage.getItem("gcb_currentPageGC");
-      return isValidRoute(savedPage) ? savedPage : "home";
+      if (isValidRoute(savedPage)) {
+        return savedPage;
+      }
+      return "home";
     }
     function setCurrentPage(pageName) {
       currentPage = pageName;

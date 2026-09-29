@@ -101,11 +101,8 @@
     */
 
     window.addEventListener("message", (event) => {
-      const allowedOrigin =
-          event.origin === "https://script.googleusercontent.com" ||
-          event.origin.endsWith("-script.googleusercontent.com");
-      {
-        console.error("[GitHub] Origin from:", event.origin);
+      if (event.source !== iframe.contentWindow) {
+        console.error("[GitHub] Ignored message from unexpected source:", event.origin);
         return;
       }
 
