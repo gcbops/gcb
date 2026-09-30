@@ -79,10 +79,15 @@
         url.searchParams.delete("page");
       }
 
-      if (client) {
+      const normalizedClient =
+        typeof client === "string"
+          ? client.trim()
+          : "";
+
+      if (normalizedClient) {
         url.searchParams.set(
           "client",
-          client.replace(/\s+/g, "_"),
+          normalizedClient.replace(/\s+/g, "_"),
         );
       } else {
         url.searchParams.delete("client");
@@ -90,7 +95,7 @@
 
       const state = {
         gcbPage: page || "home",
-        gcbClient: client || "",
+        gcbClient: normalizedClient,
       };
 
       if (replace) {
@@ -114,7 +119,7 @@
     const initialClient =
       initialUrl.searchParams.get("client") || "";
 
-    updateGitHubUrl(initialPage, true);
+    updateGitHubUrl(initialPage, initialClient, true);
     loadGasPage(initialPage, initialClient);
 
     /*
