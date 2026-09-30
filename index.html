@@ -43,6 +43,19 @@
 
     const iframe = document.getElementById("gcb-app");
 
+    iframe.addEventListener("load", () => {
+  console.log("[GitHub] iframe loaded:", {
+    src: iframe.src,
+    parentUrl: window.location.href,
+    historyLength: window.history.length,
+    historyState: window.history.state,
+  });
+});
+
+iframe.addEventListener("error", (error) => {
+  console.error("[GitHub] iframe error:", error);
+});
+
     let navigationTimer = null;
     let navigationRequestId = 0;
     let restoringHistory = false;
@@ -239,30 +252,32 @@
     */
 
     window.addEventListener("popstate", (event) => {
-      console.log("[GitHub] popstate:", {
-        eventState: event.state,
-        historyState: window.history.state,
-        historyLength: window.history.length,
-        url: window.location.href,
-      });
+  console.log("[GitHub] ================= POPSTATE =================");
 
-      const page =
-        event.state?.gcbPage ||
-        getPageFromUrl() ||
-        "home";
+  console.log("[GitHub] popstate:", {
+    eventState: event.state,
+    historyState: window.history.state,
+    historyLength: window.history.length,
+    url: window.location.href,
+  });
 
-      const client =
-        event.state?.gcbClient ||
-        new URL(window.location.href).searchParams.get("client") ||
-        "";
+  const page =
+    event.state?.gcbPage ||
+    getPageFromUrl() ||
+    "home";
 
-      console.log("[GitHub] Restoring:", {
-        page,
-        client,
-      });
+  const client =
+    event.state?.gcbClient ||
+    new URL(window.location.href).searchParams.get("client") ||
+    "";
 
-      navigateGasPage(page, client);
-    });
+  console.log("[GitHub] Restoring:", {
+    page,
+    client,
+  });
+
+  navigateGasPage(page, client);
+});
 
   </script>
 
