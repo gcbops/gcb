@@ -211,6 +211,17 @@
         new URL(window.location.href).searchParams.get("client") ||
         "";
 
+      console.log("[GitHub] popstate:", {
+        page,
+        client,
+      });
+
+      console.log("[GitHub] Sending GCB_SET_PAGE to GAS:", {
+        page,
+        client,
+        iframeReady: !!iframe.contentWindow,
+      });
+
       navigateGasPage(page, client);
     });
 

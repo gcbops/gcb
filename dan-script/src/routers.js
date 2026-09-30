@@ -313,10 +313,6 @@ const RouterModule = (() => {
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
 
-    if (updateHistory) {
-      pushHistory(resolvedPageName, params);
-    }
-
     const page = routes[resolvedPageName];
 
     if (!page) {
@@ -330,6 +326,10 @@ const RouterModule = (() => {
      */
     if (resolvedPageName === currentPage && currentModule) {
       return;
+    }
+
+    if (updateHistory) {
+      pushHistory(resolvedPageName, params);
     }
 
     /*
@@ -394,14 +394,17 @@ const RouterModule = (() => {
       return;
     }
 
-    console.log("[Router] GitHub requested navigation:", {
+    console.log("[Router] GCB_SET_PAGE received:", {
       page,
       client,
+      currentPage: getCurrentPage(),
     });
 
     if (client) {
       sessionStorage.setItem("clientDetailsName", client.replace(/_/g, " "));
     }
+
+    console.log("[Router] Calling go():", page);
 
     go(page, false, {
       client,
