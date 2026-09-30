@@ -42,6 +42,8 @@
       "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
     const iframe = document.getElementById("gcb-app");
+    let navigationTimer = null;
+    let navigationRequestId = 0;
 
     function getPageFromUrl() {
       return new URLSearchParams(window.location.search).get("page");
@@ -137,15 +139,26 @@
     */
 
     function navigateGasPage(page, client = "") {
-      const url = getGasUrl(page, client);
+      const requestId = ++navigationRequestId;
 
-      console.log("[GitHub] Reloading GAS page:", {
-        page,
-        client,
-        url: url,
-      });
+      clearTimeout(navigationTimer);
 
-      iframe.contentWindow.location.replace(url);
+      navigationTimer = setTimeout(() => {
+        if (requestId !== navigationRequestId) {
+          return;
+        }
+
+        const url = getGasUrl(page, client);
+
+        console.log("[GitHub] Loading GAS page:", {
+          page,
+          client,
+          url,
+          requestId,
+        });
+
+        iframe.src = url;
+      }, 100);
     }
 
     /*
@@ -211,12 +224,6 @@
       console.log("[GitHub] popstate:", {
         page,
         client,
-      });
-
-      console.log("[GitHub] Sending GCB_SET_PAGE to GAS:", {
-        page,
-        client,
-        iframeReady: !!iframe.contentWindow,
       });
 
       navigateGasPage(page, client);
