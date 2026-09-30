@@ -382,6 +382,32 @@ const RouterModule = (() => {
     });
   }
 
+  window.addEventListener("message", (event) => {
+    if (event.data?.type !== "GCB_SET_PAGE") {
+      return;
+    }
+
+    const page = event.data.page;
+    const client = event.data.client || "";
+
+    if (!page) {
+      return;
+    }
+
+    console.log("[Router] GitHub requested navigation:", {
+      page,
+      client,
+    });
+
+    if (client) {
+      sessionStorage.setItem("clientDetailsName", client.replace(/_/g, " "));
+    }
+
+    go(page, false, {
+      client,
+    });
+  });
+
   return {
     go,
     init,

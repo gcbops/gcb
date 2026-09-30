@@ -136,35 +136,6 @@
     * ------------------------------------------------
     */
 
-    const GCB_HISTORY_KEY = "gcb_navigation_history";
-
-    function getStoredHistory() {
-      try {
-        return JSON.parse(
-          sessionStorage.getItem(GCB_HISTORY_KEY) || "[]",
-        );
-      } catch (error) {
-        console.error("[GitHub] Failed to read navigation history:", error);
-        return [];
-      }
-    }
-
-    function saveStoredHistory(history) {
-      sessionStorage.setItem(
-        GCB_HISTORY_KEY,
-        JSON.stringify(history),
-      );
-    }
-
-    function getCurrentNavigation() {
-      const url = new URL(window.location.href);
-
-      return {
-        page: url.searchParams.get("page") || "home",
-        client: url.searchParams.get("client") || "",
-      };
-    }
-
     function navigateGasPage(page, client = "") {
       if (!iframe.contentWindow) {
         return;
@@ -204,7 +175,7 @@
     */
 
     window.addEventListener("message", (event) => {
-      if (event.data?.type !== "GCB_SET_PAGE") {
+      if (event.data?.type !== "GCB_NAVIGATION") {
         return;
       }
 
@@ -215,23 +186,12 @@
         return;
       }
 
-      console.log("[GAS] Navigation received:", {
+      console.log("[GitHub] Navigation received:", {
         page,
         client,
       });
 
-      if (client) {
-        const clientName = client.replace(/_/g, " ");
-
-        sessionStorage.setItem(
-          "clientDetailsName",
-          clientName,
-        );
-      }
-
-      RouterModule.go(page, false, {
-        client,
-      });
+      updateGitHubUrl(page, client);
     });
 
     /*
@@ -250,11 +210,6 @@
         event.state?.gcbClient ||
         new URL(window.location.href).searchParams.get("client") ||
         "";
-
-      console.log("[GitHub] popstate:", {
-        page,
-        client,
-      });
 
       navigateGasPage(page, client);
     });
