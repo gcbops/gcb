@@ -3,6 +3,12 @@ function doGet(e) {
   const requestedClient = e?.parameter?.client || "";
   const isGitHubEmbedded = e?.parameter?.wrapper === "github";
 
+  console.log("[GAS] doGet:", {
+    requestedPage,
+    requestedClient,
+    isGitHubEmbedded,
+  });
+
   const template = HtmlService.createTemplateFromFile("index");
 
   template.initialPage = requestedPage;

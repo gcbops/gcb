@@ -137,11 +137,13 @@
     */
 
     function navigateGasPage(page, client = "") {
-      if (!iframe.contentWindow) {
-        return;
-      }
-
       const url = getGasUrl(page, client);
+
+      console.log("[GitHub] Reloading GAS page:", {
+        page,
+        client,
+        url: url,
+      });
 
       iframe.contentWindow.location.replace(url);
     }
