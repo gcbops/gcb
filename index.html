@@ -45,6 +45,7 @@
 
     let navigationTimer = null;
     let navigationRequestId = 0;
+    let restoringHistory = false;
 
     function getPageFromUrl() {
       return new URLSearchParams(window.location.search).get("page");
@@ -95,6 +96,18 @@
         iframe.src = url;
       }, 100);
     }
+
+    iframe.addEventListener("load", () => {
+      if (!restoringHistory) {
+        return;
+      }
+
+      console.log(
+        "[GitHub] History restoration completed.",
+      );
+
+      restoringHistory = false;
+    });
 
     function updateGitHubUrl(page, client = "", replace = false) {
       const url = new URL(window.location.href);
@@ -195,7 +208,25 @@
       console.log("[GitHub] Navigation received:", {
         page,
         client,
+        restoringHistory,
       });
+
+      /*
+      * When the browser is going Back/Forward, the GitHub
+      * history entry already exists.
+      *
+      * The GAS iframe is only being reloaded to display
+      * that existing history state.
+      *
+      * Do NOT push another GitHub history entry.
+      */
+      if (restoringHistory) {
+        console.log(
+          "[GitHub] Ignoring navigation during history restoration.",
+        );
+
+        return;
+      }
 
       updateGitHubUrl(page, client);
     });
@@ -221,6 +252,13 @@
         page,
         client,
       });
+
+      /*
+      * The browser has already moved to an existing
+      * history entry. Do not allow the GAS iframe's
+      * initialization to create another one.
+      */
+      restoringHistory = true;
 
       navigateGasPage(page, client);
     });

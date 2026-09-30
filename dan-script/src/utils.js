@@ -210,10 +210,6 @@ const AppUtils = (() => {
     args = [],
     onSuccess = null,
     onError = null,
-    $btn = null,
-    loadingText = "Loading",
-    successText = null,
-    restoreOnSuccess = true,
     staleCheck = true,
     log = false,
   } = {}) {
@@ -226,20 +222,6 @@ const AppUtils = (() => {
       staleCheck && typeof RouterModule?.getPageToken === "function"
         ? RouterModule.getPageToken()
         : null;
-
-    const $button = $btn?.length ? $btn : null;
-
-    let loading = null;
-
-    if ($button) {
-      loading = setButtonLoading($button[0], loadingText);
-    }
-
-    const restoreButton = () => {
-      if (loading) {
-        loading.restore();
-      }
-    };
 
     const isStale = () => {
       if (!staleCheck || requestToken === null) {
@@ -262,16 +244,7 @@ const AppUtils = (() => {
                 console.log(`[GScript] Ignored stale response: ${gscriptFunc}`);
               }
 
-              restoreButton();
               return;
-            }
-
-            if (loading) {
-              if (successText) {
-                loading.setSuccess(successText);
-              } else if (restoreOnSuccess) {
-                loading.restore();
-              }
             }
 
             if (typeof onSuccess === "function") {
@@ -284,34 +257,29 @@ const AppUtils = (() => {
                 console.log(`[GScript] Ignored stale error: ${gscriptFunc}`);
               }
 
-              restoreButton();
               return;
             }
-
-            restoreButton();
 
             if (log) {
               console.error(`[GScript] "${gscriptFunc}" failed:`, error);
             }
 
-            showError(error);
-
             if (typeof onError === "function") {
               onError(error);
+            } else {
+              showError(error);
             }
           })[gscriptFunc](...args);
       }, 0);
     } catch (error) {
-      restoreButton();
-
       if (log) {
         console.error(`[GScript] "${gscriptFunc}" threw an error:`, error);
       }
 
-      showError(error);
-
       if (typeof onError === "function") {
         onError(error);
+      } else {
+        showError(error);
       }
     }
   }
@@ -325,30 +293,6 @@ const AppUtils = (() => {
     log = false,
     reset = false,
   ) {
-    const requestToken = RouterModule.getPageToken();
-
-    const safeCallback = (data) => {
-      // Ignore response from an old page
-      if (requestToken !== RouterModule.getPageToken()) {
-        if (log) {
-          console.log(`[Cache] Ignored stale response: ${gFuncName}`);
-        }
-        return;
-      }
-
-      if (typeof callback === "function") {
-        callback(data);
-      }
-    };
-
-    /*
-     * Get cached data.
-     *
-     * cacheGet() should already handle:
-     * - gcb_ prefix
-     * - expiration
-     * - JSON parsing
-     */
     const cached = cacheGet(cacheKey);
 
     if (cached !== null) {
@@ -356,7 +300,9 @@ const AppUtils = (() => {
         console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
       }
 
-      safeCallback(cached);
+      if (typeof callback === "function") {
+        callback(cached);
+      }
     }
 
     /*
@@ -386,29 +332,32 @@ const AppUtils = (() => {
       );
     }
 
-    safeRun(() => {
-      google.script.run
-        .withSuccessHandler((data) => {
-          cacheSet(cacheKey, data);
+    gScriptRun({
+      gscriptFunc: gFuncName,
+      args,
 
-          safeCallback(data);
-        })
-        .withFailureHandler((err) => {
-          if (log) {
-            console.log(
-              `[Cache] Google Script call failed for "${gFuncName}":`,
-              err,
-            );
-          }
+      staleCheck: true,
+      log: false,
 
-          // Ignore errors from old pages
-          if (requestToken !== RouterModule.getPageToken()) {
-            return;
-          }
+      onSuccess: (data) => {
+        cacheSet(cacheKey, data);
 
-          showError(err);
-        })[gFuncName](...args);
-    }, 0);
+        if (typeof callback === "function") {
+          callback(data);
+        }
+      },
+
+      onError: (err) => {
+        if (log) {
+          console.log(
+            `[Cache] Google Script call failed for "${gFuncName}":`,
+            err,
+          );
+        }
+
+        showError(err);
+      },
+    });
   }
 
   // ---- EXTRA UTILS ----
@@ -754,32 +703,30 @@ const AppUtils = (() => {
       }
     };
 
-    try {
-      google.script.run
-        .withSuccessHandler((result) => {
-          if (loading) {
-            loading.setSuccess("Saved");
-          }
+    gScriptRun({
+      gscriptFunc,
+      args: [data],
 
-          if (typeof onSuccess === "function") {
-            onSuccess(result);
-          }
-        })
-        .withFailureHandler((err) => {
-          restoreButton();
+      onSuccess: (result) => {
+        if (loading) {
+          loading.setSuccess("Saved");
+        }
 
+        if (typeof onSuccess === "function") {
+          onSuccess(result);
+        }
+      },
+
+      onError: (err) => {
+        restoreButton();
+
+        if (typeof onError === "function") {
+          onError(err);
+        } else {
           showError(err);
-
-          if (typeof onError === "function") {
-            onError(err);
-          } else {
-            showError("Something went wrong!");
-          }
-        })[gscriptFunc](data);
-    } catch (err) {
-      restoreButton();
-      showError(err);
-    }
+        }
+      },
+    });
   }
 
   function setButtonLoading(btn, loadingText = "Loading", isSync = false) {

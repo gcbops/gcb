@@ -346,16 +346,21 @@ const clientDetailsPage = (() => {
   }
 
   function openClientSheet() {
-    google.script.run
-      .withSuccessHandler((url) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getClientSheetUrl",
+
+      args: [clientName],
+
+      onSuccess: (url) => {
         if (url) {
           window.open(url, "_blank");
         }
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         AppUtils.showError(error?.message || "Unable to open client sheet.");
-      })
-      .getClientSheetUrl(clientName);
+      },
+    });
   }
 
   function getEditableField(buttonId) {
@@ -542,15 +547,20 @@ const clientDetailsPage = (() => {
       input.disabled = true;
     }
 
-    google.script.run
-      .withSuccessHandler(() => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "updateClientInformation",
+
+      args: [clientName, field, value],
+
+      onSuccess: () => {
         restoreEditButton(containerId, value);
 
         AppUtils.showDashboardToast("Client information updated.", "success");
 
         AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName}`);
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         saveButton.disabled = false;
 
         if (input) {
@@ -562,8 +572,8 @@ const clientDetailsPage = (() => {
         AppUtils.showError(
           error?.message || "Unable to update client information.",
         );
-      })
-      .updateClientInformation(clientName, field, value);
+      },
+    });
   }
 
   function setText(selector, value) {

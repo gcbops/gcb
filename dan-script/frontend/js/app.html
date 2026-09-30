@@ -130,10 +130,6 @@
       args = [],
       onSuccess = null,
       onError = null,
-      $btn = null,
-      loadingText = "Loading",
-      successText = null,
-      restoreOnSuccess = true,
       staleCheck = true,
       log = false
     } = {}) {
@@ -142,16 +138,6 @@
         return;
       }
       const requestToken = staleCheck && typeof RouterModule?.getPageToken === "function" ? RouterModule.getPageToken() : null;
-      const $button = $btn?.length ? $btn : null;
-      let loading = null;
-      if ($button) {
-        loading = setButtonLoading($button[0], loadingText);
-      }
-      const restoreButton = () => {
-        if (loading) {
-          loading.restore();
-        }
-      };
       const isStale = () => {
         if (!staleCheck || requestToken === null) {
           return false;
@@ -168,15 +154,7 @@
               if (log) {
                 console.log(`[GScript] Ignored stale response: ${gscriptFunc}`);
               }
-              restoreButton();
               return;
-            }
-            if (loading) {
-              if (successText) {
-                loading.setSuccess(successText);
-              } else if (restoreOnSuccess) {
-                loading.restore();
-              }
             }
             if (typeof onSuccess === "function") {
               onSuccess(response);
@@ -186,49 +164,38 @@
               if (log) {
                 console.log(`[GScript] Ignored stale error: ${gscriptFunc}`);
               }
-              restoreButton();
               return;
             }
-            restoreButton();
             if (log) {
               console.error(`[GScript] "${gscriptFunc}" failed:`, error);
             }
-            showError(error);
             if (typeof onError === "function") {
               onError(error);
+            } else {
+              showError(error);
             }
           })[gscriptFunc](...args);
         }, 0);
       } catch (error) {
-        restoreButton();
         if (log) {
           console.error(`[GScript] "${gscriptFunc}" threw an error:`, error);
         }
-        showError(error);
         if (typeof onError === "function") {
           onError(error);
+        } else {
+          showError(error);
         }
       }
     }
     function cachedGScriptCall(cacheKey, gFuncName, args = [], callback, log = false, reset = false) {
-      const requestToken = RouterModule.getPageToken();
-      const safeCallback = (data) => {
-        if (requestToken !== RouterModule.getPageToken()) {
-          if (log) {
-            console.log(`[Cache] Ignored stale response: ${gFuncName}`);
-          }
-          return;
-        }
-        if (typeof callback === "function") {
-          callback(data);
-        }
-      };
       const cached = cacheGet(cacheKey);
       if (cached !== null) {
         if (log) {
           console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
         }
-        safeCallback(cached);
+        if (typeof callback === "function") {
+          callback(cached);
+        }
       }
       let shouldFetch = cached === null || cacheExpired(cacheKey);
       if (reset) {
@@ -246,23 +213,27 @@
           args
         );
       }
-      safeRun(() => {
-        google.script.run.withSuccessHandler((data) => {
+      gScriptRun({
+        gscriptFunc: gFuncName,
+        args,
+        staleCheck: true,
+        log: false,
+        onSuccess: (data) => {
           cacheSet(cacheKey, data);
-          safeCallback(data);
-        }).withFailureHandler((err) => {
+          if (typeof callback === "function") {
+            callback(data);
+          }
+        },
+        onError: (err) => {
           if (log) {
             console.log(
               `[Cache] Google Script call failed for "${gFuncName}":`,
               err
             );
           }
-          if (requestToken !== RouterModule.getPageToken()) {
-            return;
-          }
           showError(err);
-        })[gFuncName](...args);
-      }, 0);
+        }
+      });
     }
     function escapeHtml(value) {
       if (value === null || value === void 0) {
@@ -495,27 +466,26 @@
           loading.restore();
         }
       };
-      try {
-        google.script.run.withSuccessHandler((result) => {
+      gScriptRun({
+        gscriptFunc,
+        args: [data],
+        onSuccess: (result) => {
           if (loading) {
             loading.setSuccess("Saved");
           }
           if (typeof onSuccess === "function") {
             onSuccess(result);
           }
-        }).withFailureHandler((err) => {
+        },
+        onError: (err) => {
           restoreButton();
-          showError(err);
           if (typeof onError === "function") {
             onError(err);
           } else {
-            showError("Something went wrong!");
+            showError(err);
           }
-        })[gscriptFunc](data);
-      } catch (err) {
-        restoreButton();
-        showError(err);
-      }
+        }
+      });
     }
     function setButtonLoading(btn, loadingText = "Loading", isSync = false) {
       const $button = $(btn);
@@ -8828,12 +8798,11 @@
     }
     function syncBillingRecords(button) {
       const $button = $(button);
-      AppUtils.setButtonLoading($button, false, true);
-      DataTableModule.showLoader(TABLE_ID);
+      const loading = AppUtils.setButtonLoading($button, false, true);
       AppUtils.gScriptRun({
         gscriptFunc: "syncBillingRecords",
-        $btn: $button,
         onSuccess: (response) => {
+          loading.restore();
           if (!response?.success) {
             AppUtils.showError("Unable to sync Billing Records.");
             return;
@@ -8846,6 +8815,7 @@
           );
         },
         onError: (error) => {
+          loading.restore();
           AppUtils.showError(error?.message || "Failed to sync Billing Records.");
         }
       });
@@ -9134,12 +9104,12 @@
     }
     function syncBillingRecords(button) {
       const $button = $(button);
-      AppUtils.setButtonLoading($button, false, true);
+      const loading = AppUtils.setButtonLoading($button, false, true);
       DataTableModule.showLoader(TABLE_ID);
       AppUtils.gScriptRun({
         gscriptFunc: "syncBillingRecords",
-        $btn: $button,
         onSuccess: (response) => {
+          loading.restore();
           if (!response?.success) {
             AppUtils.showError("Unable to sync Billing Records.");
             return;
@@ -9152,6 +9122,7 @@
           );
         },
         onError: (error) => {
+          loading.restore();
           AppUtils.showError(error?.message || "Failed to sync Billing Records.");
         }
       });
@@ -13169,11 +13140,12 @@
     }
     function syncBillingRecords(button) {
       const $button = $(button);
-      AppUtils.setButtonLoading($button, false, true);
+      const loading = AppUtils.setButtonLoading($button, false, true);
+      DataTableModule.showLoader(UNTRACKED_TABLE_ID);
       AppUtils.gScriptRun({
         gscriptFunc: "syncBillingRecords",
-        $btn: $button,
         onSuccess: (response) => {
+          loading.restore();
           if (!response?.success) {
             AppUtils.showError("Unable to sync Billing Records.");
             return;
@@ -13186,6 +13158,7 @@
           );
         },
         onError: (error) => {
+          loading.restore();
           AppUtils.showError(error?.message || "Failed to sync Billing Records.");
         }
       });

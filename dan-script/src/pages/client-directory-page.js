@@ -236,6 +236,7 @@ const clientDirectoryPage = (() => {
 
     if (!clientNameResult.valid) {
       AppUtils.showDashboardToast(clientNameResult.message, "error");
+
       return;
     }
 
@@ -266,15 +267,17 @@ const clientDirectoryPage = (() => {
          * Failure here should not invalidate
          * the successfully-created sheet.
          */
-        google.script.run
-          .withSuccessHandler((result) => {
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncClientSheetList",
+
+          onSuccess: () => {
             AppUtils.confirmAction(
               "syncClientsList",
               "Synchronize Client Directory?",
               "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
               () => {
                 AppUtils.cacheClear("clientDirectoryData");
-                
+
                 ClientDirectory.refreshClientDirectory(
                   "clientDirectoryData",
                   () => {
@@ -286,15 +289,15 @@ const clientDirectoryPage = (() => {
                 );
               },
             );
-          })
-          .withFailureHandler((error) => {
+          },
+
+          onError: (error) => {
             console.error(
               "[clientDirectory] syncClientSheetList failed:",
               error,
             );
-          })
-          .syncClientSheetList();
-        
+          },
+        });
       },
     });
   }
