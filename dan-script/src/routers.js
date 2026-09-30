@@ -382,6 +382,8 @@ const RouterModule = (() => {
     });
   }
 
+  
+
   return {
     go,
     init,
@@ -392,4 +394,5 @@ const RouterModule = (() => {
 })();
 
 export { RouterModule };
+
 

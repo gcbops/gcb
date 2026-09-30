@@ -39,9 +39,10 @@
 
   <script>
     const GCB_GAS_URL =
-      "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
+      "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7tD6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
     const iframe = document.getElementById("gcb-app");
+
     let navigationTimer = null;
     let navigationRequestId = 0;
 
@@ -70,6 +71,29 @@
 
     function loadGasPage(page, client = "") {
       iframe.src = getGasUrl(page, client);
+    }
+
+    function navigateGasPage(page, client = "") {
+      const requestId = ++navigationRequestId;
+
+      clearTimeout(navigationTimer);
+
+      navigationTimer = setTimeout(() => {
+        if (requestId !== navigationRequestId) {
+          return;
+        }
+
+        const url = getGasUrl(page, client);
+
+        console.log("[GitHub] Loading GAS page:", {
+          page,
+          client,
+          url,
+          requestId,
+        });
+
+        iframe.contentWindow.location.replace(url);
+      }, 100);
     }
 
     function updateGitHubUrl(page, client = "", replace = false) {
@@ -130,35 +154,6 @@
       } else {
         window.history.pushState(state, "", url);
       }
-    }
-
-    /*
-    * ------------------------------------------------
-    * Persistent navigation history
-    * ------------------------------------------------
-    */
-
-    function navigateGasPage(page, client = "") {
-      const requestId = ++navigationRequestId;
-
-      clearTimeout(navigationTimer);
-
-      navigationTimer = setTimeout(() => {
-        if (requestId !== navigationRequestId) {
-          return;
-        }
-
-        const url = getGasUrl(page, client);
-
-        console.log("[GitHub] Loading GAS page:", {
-          page,
-          client,
-          url,
-          requestId,
-        });
-
-        iframe.src = url;
-      }, 100);
     }
 
     /*
