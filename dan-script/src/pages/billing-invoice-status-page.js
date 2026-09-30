@@ -450,15 +450,16 @@ const billingInvoiceStatusPage = (() => {
   function syncBillingRecords(button) {
     const $button = $(button);
 
-    const loading = AppUtils.setButtonLoading($button, false, true);
+    AppUtils.setButtonLoading($button, false, true);
 
-    google.script.run
-      .withSuccessHandler((response) => {
-        loading.restore();
+    AppUtils.gScriptRun({
+      gscriptFunc: "syncBillingRecords",
 
+      $btn: $button,
+
+      onSuccess: (response) => {
         if (!response?.success) {
           AppUtils.showError("Unable to sync Billing Records.");
-
           return;
         }
 
@@ -470,13 +471,12 @@ const billingInvoiceStatusPage = (() => {
           `Billing Records synced: ${response.records} record(s).`,
           "success",
         );
-      })
-      .withFailureHandler((error) => {
-        loading.restore();
+      },
 
+      onError: (error) => {
         AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      })
-      .syncBillingRecords();
+      },
+    });
   }
 
   function refreshInvoiceStatus() {

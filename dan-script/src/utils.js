@@ -204,6 +204,118 @@ const AppUtils = (() => {
     });
   }
 
+  // ---- GOOGLE SCRIPT CALL ----
+  function gScriptRun({
+    gscriptFunc,
+    args = [],
+    onSuccess = null,
+    onError = null,
+    $btn = null,
+    loadingText = "Loading",
+    successText = null,
+    restoreOnSuccess = true,
+    staleCheck = true,
+    log = false,
+  } = {}) {
+    if (!gscriptFunc) {
+      showError("No Google Apps Script function provided.");
+      return;
+    }
+
+    const requestToken =
+      staleCheck && typeof RouterModule?.getPageToken === "function"
+        ? RouterModule.getPageToken()
+        : null;
+
+    const $button = $btn?.length ? $btn : null;
+
+    let loading = null;
+
+    if ($button) {
+      loading = setButtonLoading($button[0], loadingText);
+    }
+
+    const restoreButton = () => {
+      if (loading) {
+        loading.restore();
+      }
+    };
+
+    const isStale = () => {
+      if (!staleCheck || requestToken === null) {
+        return false;
+      }
+
+      return requestToken !== RouterModule.getPageToken();
+    };
+
+    if (log) {
+      console.log(`[GScript] Calling "${gscriptFunc}" with args:`, args);
+    }
+
+    try {
+      safeRun(() => {
+        google.script.run
+          .withSuccessHandler((response) => {
+            if (isStale()) {
+              if (log) {
+                console.log(`[GScript] Ignored stale response: ${gscriptFunc}`);
+              }
+
+              restoreButton();
+              return;
+            }
+
+            if (loading) {
+              if (successText) {
+                loading.setSuccess(successText);
+              } else if (restoreOnSuccess) {
+                loading.restore();
+              }
+            }
+
+            if (typeof onSuccess === "function") {
+              onSuccess(response);
+            }
+          })
+          .withFailureHandler((error) => {
+            if (isStale()) {
+              if (log) {
+                console.log(`[GScript] Ignored stale error: ${gscriptFunc}`);
+              }
+
+              restoreButton();
+              return;
+            }
+
+            restoreButton();
+
+            if (log) {
+              console.error(`[GScript] "${gscriptFunc}" failed:`, error);
+            }
+
+            showError(error);
+
+            if (typeof onError === "function") {
+              onError(error);
+            }
+          })[gscriptFunc](...args);
+      }, 0);
+    } catch (error) {
+      restoreButton();
+
+      if (log) {
+        console.error(`[GScript] "${gscriptFunc}" threw an error:`, error);
+      }
+
+      showError(error);
+
+      if (typeof onError === "function") {
+        onError(error);
+      }
+    }
+  }
+
   // ---- GOOGLE SCRIPT CALL W/ CACHE ----
   function cachedGScriptCall(
     cacheKey,
@@ -739,7 +851,7 @@ const AppUtils = (() => {
       }
     };
 
-    if(isSync) {
+    if (isSync) {
       $button.prop("disabled", true);
       $button.find("i").addClass("fa-spin");
     } else {
@@ -1162,41 +1274,41 @@ const AppUtils = (() => {
   }
 
   /*
-     * ----------------------------------------------------------
-     * OPTIONAL CUSTOM ACTIONS
-     * ----------------------------------------------------------
-     */
-    // footerActions: {
-    //   main: [
-    //     {
-    //       label: "Clone",
-    //       icon: "pe-7s-copy",
-    //       className: "btn-info",
+   * ----------------------------------------------------------
+   * OPTIONAL CUSTOM ACTIONS
+   * ----------------------------------------------------------
+   */
+  // footerActions: {
+  //   main: [
+  //     {
+  //       label: "Clone",
+  //       icon: "pe-7s-copy",
+  //       className: "btn-info",
 
-    //       onClick: ($modal, $btn) => {
-    //         cloneProjects($btn);
-    //       },
-    //     },
-    //   ],
+  //       onClick: ($modal, $btn) => {
+  //         cloneProjects($btn);
+  //       },
+  //     },
+  //   ],
 
-    //   review: [
-    //     {
-    //       label: "Save Draft",
-    //       icon: "pe-7s-diskette",
-    //       onClick: ($modal, $btn) => {
-    //         saveFormulaDraft($modal, $btn);
-    //       },
-    //     },
+  //   review: [
+  //     {
+  //       label: "Save Draft",
+  //       icon: "pe-7s-diskette",
+  //       onClick: ($modal, $btn) => {
+  //         saveFormulaDraft($modal, $btn);
+  //       },
+  //     },
 
-    //     {
-    //       label: "Clone",
-    //       icon: "pe-7s-copy",
-    //       onClick: ($modal, $btn) => {
-    //         cloneProjects($btn);
-    //       },
-    //     },
-    //   ],
-    // },
+  //     {
+  //       label: "Clone",
+  //       icon: "pe-7s-copy",
+  //       onClick: ($modal, $btn) => {
+  //         cloneProjects($btn);
+  //       },
+  //     },
+  //   ],
+  // },
 
   function closeModal(modalSelector) {
     const modalEl = document.querySelector(modalSelector);
@@ -1529,55 +1641,55 @@ const AppUtils = (() => {
     });
   };
 
-//   sample use case:
-//   customActions: [
-//   {
-//     label: "Clone",
-//     icon: "pe-7s-copy",
-//     onClick: cloneProjects,
-//   },
-//   {
-//     label: "Archive",
-//     icon: "pe-7s-box2",
-//     onClick: archiveProjects,
-//   },
-//   {
-//     label: "Delete",
-//     icon: "pe-7s-trash",
-//     dividerBefore: true,
-//     onClick: deleteProjects,
-//   },
-// ],
+  //   sample use case:
+  //   customActions: [
+  //   {
+  //     label: "Clone",
+  //     icon: "pe-7s-copy",
+  //     onClick: cloneProjects,
+  //   },
+  //   {
+  //     label: "Archive",
+  //     icon: "pe-7s-box2",
+  //     onClick: archiveProjects,
+  //   },
+  //   {
+  //     label: "Delete",
+  //     icon: "pe-7s-trash",
+  //     dividerBefore: true,
+  //     onClick: deleteProjects,
+  //   },
+  // ],
 
-// AppUtils.openConfirmationModal({
-//   ns: "syncProject",
+  // AppUtils.openConfirmationModal({
+  //   ns: "syncProject",
 
-//   title: "Update Project List?",
+  //   title: "Update Project List?",
 
-//   message:
-//     "This will refresh the overall project list.",
+  //   message:
+  //     "This will refresh the overall project list.",
 
-//   customActions: [
-//     {
-//       label: "Clone",
-//       icon: "pe-7s-copy",
-//       onClick: ($modal, $btn) => {
-//         cloneProjects($btn);
-//       },
-//     },
-//     {
-//       label: "Archive",
-//       icon: "pe-7s-box2",
-//       onClick: ($modal, $btn) => {
-//         archiveProjects($btn);
-//       },
-//     },
-//   ],
+  //   customActions: [
+  //     {
+  //       label: "Clone",
+  //       icon: "pe-7s-copy",
+  //       onClick: ($modal, $btn) => {
+  //         cloneProjects($btn);
+  //       },
+  //     },
+  //     {
+  //       label: "Archive",
+  //       icon: "pe-7s-box2",
+  //       onClick: ($modal, $btn) => {
+  //         archiveProjects($btn);
+  //       },
+  //     },
+  //   ],
 
-//   onProceed: ($modal, $btn) => {
-//     syncClientProjectsFromMain($btn);
-//   },
-// });
+  //   onProceed: ($modal, $btn) => {
+  //     syncClientProjectsFromMain($btn);
+  //   },
+  // });
 
   return {
     // cache
@@ -1588,6 +1700,7 @@ const AppUtils = (() => {
     resetCacheKeys,
 
     // gscript
+    gScriptRun,
     cachedGScriptCall,
 
     // html

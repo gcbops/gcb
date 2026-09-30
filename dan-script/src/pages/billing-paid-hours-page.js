@@ -379,15 +379,18 @@ const billingPaidHoursPage = (() => {
   function syncBillingRecords(button) {
     const $button = $(button);
 
-    const loading = AppUtils.setButtonLoading($button, false, true);
+    AppUtils.setButtonLoading($button, false, true);
 
-    google.script.run
-      .withSuccessHandler((response) => {
-        loading.restore();
+    DataTableModule.showLoader(TABLE_ID);
 
+    AppUtils.gScriptRun({
+      gscriptFunc: "syncBillingRecords",
+
+      $btn: $button,
+
+      onSuccess: (response) => {
         if (!response?.success) {
           AppUtils.showError("Unable to sync Billing Records.");
-
           return;
         }
 
@@ -399,13 +402,12 @@ const billingPaidHoursPage = (() => {
           `Billing Records synced: ${response.records} record(s).`,
           "success",
         );
-      })
-      .withFailureHandler((error) => {
-        loading.restore();
+      },
 
+      onError: (error) => {
         AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      })
-      .syncBillingRecords();
+      },
+    });
   }
 
   function refreshPaidHours() {

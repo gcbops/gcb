@@ -125,6 +125,91 @@
         }, delay);
       });
     }
+    function gScriptRun({
+      gscriptFunc,
+      args = [],
+      onSuccess = null,
+      onError = null,
+      $btn = null,
+      loadingText = "Loading",
+      successText = null,
+      restoreOnSuccess = true,
+      staleCheck = true,
+      log = false
+    } = {}) {
+      if (!gscriptFunc) {
+        showError("No Google Apps Script function provided.");
+        return;
+      }
+      const requestToken = staleCheck && typeof RouterModule?.getPageToken === "function" ? RouterModule.getPageToken() : null;
+      const $button = $btn?.length ? $btn : null;
+      let loading = null;
+      if ($button) {
+        loading = setButtonLoading($button[0], loadingText);
+      }
+      const restoreButton = () => {
+        if (loading) {
+          loading.restore();
+        }
+      };
+      const isStale = () => {
+        if (!staleCheck || requestToken === null) {
+          return false;
+        }
+        return requestToken !== RouterModule.getPageToken();
+      };
+      if (log) {
+        console.log(`[GScript] Calling "${gscriptFunc}" with args:`, args);
+      }
+      try {
+        safeRun(() => {
+          google.script.run.withSuccessHandler((response) => {
+            if (isStale()) {
+              if (log) {
+                console.log(`[GScript] Ignored stale response: ${gscriptFunc}`);
+              }
+              restoreButton();
+              return;
+            }
+            if (loading) {
+              if (successText) {
+                loading.setSuccess(successText);
+              } else if (restoreOnSuccess) {
+                loading.restore();
+              }
+            }
+            if (typeof onSuccess === "function") {
+              onSuccess(response);
+            }
+          }).withFailureHandler((error) => {
+            if (isStale()) {
+              if (log) {
+                console.log(`[GScript] Ignored stale error: ${gscriptFunc}`);
+              }
+              restoreButton();
+              return;
+            }
+            restoreButton();
+            if (log) {
+              console.error(`[GScript] "${gscriptFunc}" failed:`, error);
+            }
+            showError(error);
+            if (typeof onError === "function") {
+              onError(error);
+            }
+          })[gscriptFunc](...args);
+        }, 0);
+      } catch (error) {
+        restoreButton();
+        if (log) {
+          console.error(`[GScript] "${gscriptFunc}" threw an error:`, error);
+        }
+        showError(error);
+        if (typeof onError === "function") {
+          onError(error);
+        }
+      }
+    }
     function cachedGScriptCall(cacheKey, gFuncName, args = [], callback, log = false, reset = false) {
       const requestToken = RouterModule.getPageToken();
       const safeCallback = (data) => {
@@ -943,6 +1028,7 @@
       clearAppCache,
       resetCacheKeys,
       // gscript
+      gScriptRun,
       cachedGScriptCall,
       // html
       getHtmlVersion,
@@ -8742,23 +8828,27 @@
     }
     function syncBillingRecords(button) {
       const $button = $(button);
-      const loading = AppUtils.setButtonLoading($button, false, true);
-      google.script.run.withSuccessHandler((response) => {
-        loading.restore();
-        if (!response?.success) {
-          AppUtils.showError("Unable to sync Billing Records.");
-          return;
+      AppUtils.setButtonLoading($button, false, true);
+      DataTableModule.showLoader(TABLE_ID);
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncBillingRecords",
+        $btn: $button,
+        onSuccess: (response) => {
+          if (!response?.success) {
+            AppUtils.showError("Unable to sync Billing Records.");
+            return;
+          }
+          AppUtils.cacheClear(CACHE_KEY);
+          loadOwedHours(true);
+          AppUtils.showDashboardToast(
+            `Billing Records synced: ${response.records} record(s).`,
+            "success"
+          );
+        },
+        onError: (error) => {
+          AppUtils.showError(error?.message || "Failed to sync Billing Records.");
         }
-        AppUtils.cacheClear(CACHE_KEY);
-        loadOwedHours(true);
-        AppUtils.showDashboardToast(
-          `Billing Records synced: ${response.records} record(s).`,
-          "success"
-        );
-      }).withFailureHandler((error) => {
-        loading.restore();
-        AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      }).syncBillingRecords();
+      });
     }
     function refreshOwedHours() {
       AppUtils.cacheClear(CACHE_KEY);
@@ -9044,23 +9134,27 @@
     }
     function syncBillingRecords(button) {
       const $button = $(button);
-      const loading = AppUtils.setButtonLoading($button, false, true);
-      google.script.run.withSuccessHandler((response) => {
-        loading.restore();
-        if (!response?.success) {
-          AppUtils.showError("Unable to sync Billing Records.");
-          return;
+      AppUtils.setButtonLoading($button, false, true);
+      DataTableModule.showLoader(TABLE_ID);
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncBillingRecords",
+        $btn: $button,
+        onSuccess: (response) => {
+          if (!response?.success) {
+            AppUtils.showError("Unable to sync Billing Records.");
+            return;
+          }
+          AppUtils.cacheClear(CACHE_KEY);
+          loadPaidHours(true);
+          AppUtils.showDashboardToast(
+            `Billing Records synced: ${response.records} record(s).`,
+            "success"
+          );
+        },
+        onError: (error) => {
+          AppUtils.showError(error?.message || "Failed to sync Billing Records.");
         }
-        AppUtils.cacheClear(CACHE_KEY);
-        loadPaidHours(true);
-        AppUtils.showDashboardToast(
-          `Billing Records synced: ${response.records} record(s).`,
-          "success"
-        );
-      }).withFailureHandler((error) => {
-        loading.restore();
-        AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      }).syncBillingRecords();
+      });
     }
     function refreshPaidHours() {
       AppUtils.cacheClear(CACHE_KEY);
@@ -13075,23 +13169,26 @@
     }
     function syncBillingRecords(button) {
       const $button = $(button);
-      const loading = AppUtils.setButtonLoading($button, false, true);
-      google.script.run.withSuccessHandler((response) => {
-        loading.restore();
-        if (!response?.success) {
-          AppUtils.showError("Unable to sync Billing Records.");
-          return;
+      AppUtils.setButtonLoading($button, false, true);
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncBillingRecords",
+        $btn: $button,
+        onSuccess: (response) => {
+          if (!response?.success) {
+            AppUtils.showError("Unable to sync Billing Records.");
+            return;
+          }
+          AppUtils.cacheClear(CACHE_KEY);
+          loadInvoiceStatus(true);
+          AppUtils.showDashboardToast(
+            `Billing Records synced: ${response.records} record(s).`,
+            "success"
+          );
+        },
+        onError: (error) => {
+          AppUtils.showError(error?.message || "Failed to sync Billing Records.");
         }
-        AppUtils.cacheClear(CACHE_KEY);
-        loadInvoiceStatus(true);
-        AppUtils.showDashboardToast(
-          `Billing Records synced: ${response.records} record(s).`,
-          "success"
-        );
-      }).withFailureHandler((error) => {
-        loading.restore();
-        AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      }).syncBillingRecords();
+      });
     }
     function refreshInvoiceStatus() {
       AppUtils.cacheClear(CACHE_KEY);

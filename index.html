@@ -39,7 +39,7 @@
 
   <script>
     const GCB_GAS_URL =
-      "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7tD6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
+      "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
     const iframe = document.getElementById("gcb-app");
 
@@ -92,7 +92,7 @@
           requestId,
         });
 
-        iframe.src = url;
+        iframe.contentWindow.location.replace(url);
       }, 100);
     }
 
@@ -155,6 +155,7 @@
         window.history.pushState(state, "", url);
       }
     }
+
 
     /*
     * ------------------------------------------------
