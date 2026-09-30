@@ -73,16 +73,41 @@
     function updateGitHubUrl(page, client = "", replace = false) {
       const url = new URL(window.location.href);
 
-      if (page && page !== "home") {
-        url.searchParams.set("page", page);
-      } else {
-        url.searchParams.delete("page");
-      }
-
       const normalizedClient =
         typeof client === "string"
           ? client.trim()
           : "";
+
+      const normalizedPage = page || "home";
+
+      const currentPage =
+        url.searchParams.get("page") || "home";
+
+      const currentClient =
+        url.searchParams.get("client") || "";
+
+      const normalizedCurrentClient =
+        currentClient.trim().replace(/_/g, " ");
+
+      const normalizedRequestedClient =
+        normalizedClient.replace(/_/g, " ");
+
+      /*
+      * Do not create a new history entry
+      * if we are already on this exact page/client.
+      */
+      if (
+        normalizedPage === currentPage &&
+        normalizedRequestedClient === normalizedCurrentClient
+      ) {
+        return;
+      }
+
+      if (normalizedPage !== "home") {
+        url.searchParams.set("page", normalizedPage);
+      } else {
+        url.searchParams.delete("page");
+      }
 
       if (normalizedClient) {
         url.searchParams.set(
@@ -94,7 +119,7 @@
       }
 
       const state = {
-        gcbPage: page || "home",
+        gcbPage: normalizedPage,
         gcbClient: normalizedClient,
       };
 
