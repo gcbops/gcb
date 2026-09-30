@@ -112,35 +112,12 @@
     function updateGitHubUrl(page, client = "", replace = false) {
       const url = new URL(window.location.href);
 
-      const normalizedClient =
-        typeof client === "string"
-          ? client.trim()
-          : "";
-
       const normalizedPage = page || "home";
 
-      const currentPage =
-        url.searchParams.get("page") || "home";
-
-      const currentClient =
-        url.searchParams.get("client") || "";
-
-      const normalizedCurrentClient =
-        currentClient.trim().replace(/_/g, " ");
-
-      const normalizedRequestedClient =
-        normalizedClient.replace(/_/g, " ");
-
-      /*
-      * Do not create a new history entry
-      * if we are already on this exact page/client.
-      */
-      if (
-        normalizedPage === currentPage &&
-        normalizedRequestedClient === normalizedCurrentClient
-      ) {
-        return;
-      }
+      const normalizedClient =
+        typeof client === "string"
+          ? client.trim().replace(/_/g, " ")
+          : "";
 
       if (normalizedPage !== "home") {
         url.searchParams.set("page", normalizedPage);
@@ -162,11 +139,29 @@
         gcbClient: normalizedClient,
       };
 
+      console.log(
+        replace
+          ? "[GitHub] replaceState:"
+          : "[GitHub] pushState:",
+        {
+          page: normalizedPage,
+          client: normalizedClient,
+          url: url.href,
+          historyLength: window.history.length,
+        },
+      );
+
       if (replace) {
         window.history.replaceState(state, "", url);
       } else {
         window.history.pushState(state, "", url);
       }
+
+      console.log("[GitHub] History after update:", {
+        historyLength: window.history.length,
+        currentUrl: window.location.href,
+        state: window.history.state,
+      });
     }
 
 
@@ -186,6 +181,12 @@
 
     updateGitHubUrl(initialPage, initialClient, true);
     loadGasPage(initialPage, initialClient);
+
+    console.log("[GitHub] Initial history:", {
+      historyLength: window.history.length,
+      url: window.location.href,
+      state: window.history.state,
+    });
 
     /*
     * ------------------------------------------------
@@ -238,6 +239,13 @@
     */
 
     window.addEventListener("popstate", (event) => {
+      console.log("[GitHub] popstate:", {
+        eventState: event.state,
+        historyState: window.history.state,
+        historyLength: window.history.length,
+        url: window.location.href,
+      });
+
       const page =
         event.state?.gcbPage ||
         getPageFromUrl() ||
@@ -248,17 +256,10 @@
         new URL(window.location.href).searchParams.get("client") ||
         "";
 
-      console.log("[GitHub] popstate:", {
+      console.log("[GitHub] Restoring:", {
         page,
         client,
       });
-
-      /*
-      * The browser has already moved to an existing
-      * history entry. Do not allow the GAS iframe's
-      * initialization to create another one.
-      */
-      restoringHistory = true;
 
       navigateGasPage(page, client);
     });
