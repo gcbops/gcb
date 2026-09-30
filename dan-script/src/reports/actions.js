@@ -231,6 +231,7 @@
 import { ReportService } from "./service";
 import { AppUtils } from "../utils";
 import { ReportGenerator } from "./generator";
+import { ValidationModule } from "../validations";
 
 const ReportActions = (() => {
   function downloadLatestPDF(btn, loading, reportType) {
@@ -363,7 +364,22 @@ const ReportActions = (() => {
   const handleBtnGenerateYearlyReport = ($btn) => {
     const selectYear = $("#yearly-report-year");
     const type = "yearly";
-    const year = selectYear.val();
+
+    const yearResult = ValidationModule.number(
+      selectYear.val(),
+      "Report year",
+      {
+        min: 2024,
+        max: new Date().getFullYear(),
+      },
+    );
+
+    if (!yearResult.valid) {
+      AppUtils.showDashboardToast(yearResult.message, "warning");
+      return;
+    }
+
+    const year = yearResult.value;
 
     selectYear.prop("disabled", true);
 
@@ -401,8 +417,30 @@ const ReportActions = (() => {
     const selectMonth = $("#monthly-report-month");
     const selectYear = $("#monthly-report-year");
 
-    const month = selectMonth.val();
-    const year = selectYear.val();
+    const monthResult = ValidationModule.requiredString(
+      selectMonth.val(),
+      "Report month",
+      { maxLength: 20 },
+    );
+
+    if (!monthResult.valid) {
+      AppUtils.showDashboardToast(monthResult.message, "warning");
+      return;
+    }
+
+    const yearResult = ValidationModule.number(
+      selectYear.val(),
+      "Report year",
+      { min: 2024, max: new Date().getFullYear() },
+    );
+
+    if (!yearResult.valid) {
+      AppUtils.showDashboardToast(yearResult.message, "warning");
+      return;
+    }
+
+    const month = monthResult.value;
+    const year = yearResult.value;
     const type = "monthly";
 
     selectMonth.prop("disabled", true);

@@ -1,5 +1,6 @@
 import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
+import { ValidationModule } from "../validations.js";
 
 const settingsConfigurationPage = (() => {
   let initialized = false;
@@ -294,14 +295,6 @@ const settingsConfigurationPage = (() => {
     RouterModule.go("integrationsConfiguration");
   }
 
-  function isValidCellRef(ref) {
-    return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
-  }
-
-  function isValidFormula(formula) {
-    return /^=\s*[A-Z]+\(/i.test(formula) || /^=.+[A-Z0-9]/i.test(formula);
-  }
-
   function startMasterFormulaOperation() {
     masterFormulaOperationId++;
 
@@ -327,40 +320,29 @@ const settingsConfigurationPage = (() => {
   }
 
   function getMasterFormulaFormData($modal) {
-    const cellRef = String($modal.find("#masterFormulaCell").val() || "")
-      .trim()
-      .toUpperCase();
+    const cellRefResult = ValidationModule.cellReference(
+      $modal.find("#masterFormulaCell").val(),
+      "Cell reference",
+    );
 
-    const formula = String(
-      $modal.find("#masterFormulaValue").val() || "",
-    ).trim();
-
-    if (!cellRef) {
-      AppUtils.showDashboardToast("Cell reference is required.", "error");
+    if (!cellRefResult.valid) {
+      AppUtils.showDashboardToast(cellRefResult.message, "error");
       return null;
     }
 
-    if (!isValidCellRef(cellRef)) {
-      AppUtils.showDashboardToast(
-        "Invalid cell reference. Example: B39 or AB25.",
-        "error",
-      );
-      return null;
-    }
+    const formulaResult = ValidationModule.formula(
+      $modal.find("#masterFormulaValue").val(),
+      "Formula",
+    );
 
-    if (!formula) {
-      AppUtils.showDashboardToast("Formula is required.", "error");
-      return null;
-    }
-
-    if (!isValidFormula(formula)) {
-      AppUtils.showDashboardToast("Invalid Google Sheets formula.", "error");
+    if (!formulaResult.valid) {
+      AppUtils.showDashboardToast(formulaResult.message, "error");
       return null;
     }
 
     return {
-      cellRef,
-      formula,
+      cellRef: cellRefResult.value,
+      formula: formulaResult.value,
     };
   }
 
@@ -457,7 +439,7 @@ const settingsConfigurationPage = (() => {
 
         <button
           type="button"
-          class="btn btn-secondary btn-back"
+          class="btn btn-secondary btn-modal-back"
         >
           Back
         </button>
@@ -482,6 +464,7 @@ const settingsConfigurationPage = (() => {
             label: "Apply to External Main Sheet",
             icon: "pe-7s-shuffle",
             onClick: ($modal, $btn) => {
+              AppUtils.lockModal(MODAL_ID);
               applyFormulaToExternalProjectsFromModal(
                 $modal,
                 $(MODAL_ID).find(".btn-proceed"),
@@ -493,6 +476,7 @@ const settingsConfigurationPage = (() => {
             label: "Apply to External Internal Sheets",
             icon: "pe-7s-shuffle",
             onClick: ($modal, $btn) => {
+              AppUtils.lockModal(MODAL_ID);
               applyFormulaToExternalProjectSheetsFromModal(
                 $modal,
                 $(MODAL_ID).find(".btn-proceed"),
@@ -528,18 +512,22 @@ const settingsConfigurationPage = (() => {
 
             let isValid = true;
 
-            /*
-             * Validate Cell Reference.
-             */
-            if (!$cellInput.val().trim()) {
+            const cellRefResult = ValidationModule.cellReference(
+              $cellInput.val(),
+              "Cell reference",
+            );
+
+            const formulaResult = ValidationModule.formula(
+              $formulaValue.val(),
+              "Formula",
+            );
+
+            if (!cellRefResult.valid) {
               $cellInput.addClass("is-invalid");
               isValid = false;
             }
 
-            /*
-             * Validate Formula.
-             */
-            if (!$formulaValue.val().trim()) {
+            if (!formulaResult.valid) {
               $formulaValue.addClass("is-invalid");
               isValid = false;
             }
@@ -575,6 +563,8 @@ const settingsConfigurationPage = (() => {
 
           .on(`click${ns}`, ".btn-proceed", () => {
             const $btn = $modal.find(".btn-proceed");
+
+            AppUtils.lockModal(MODAL_ID);
 
             if (isNotMain === "btnDeployExternalProjectsInternalSheetFormula") {
               applyFormulaToExternalProjectSheetsFromModal($modal, $btn);

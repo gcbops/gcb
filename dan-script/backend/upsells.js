@@ -1,4 +1,42 @@
 function addUpsellEntry(data) {
+  // requireAuthorizedUser();
+
+  Validation.requireObject(data, "Upsell data");
+
+  const clientName = Validation.requiredString(data.clientName, "Client name", {
+    maxLength: 100,
+  });
+
+  const screenshot = Validation.optionalString(data.screenshot, "Screenshot", {
+    maxLength: 500,
+  });
+
+  const upsellHours = Validation.number(data.upsellHours, "Upsell hours", {
+    min: Number.EPSILON,
+  });
+
+  let totalHours = "";
+
+  if (
+    data.totalHours !== "" &&
+    data.totalHours !== null &&
+    data.totalHours !== undefined
+  ) {
+    totalHours = Validation.number(data.totalHours, "Orasan hours", {
+      min: Number.EPSILON,
+    });
+  }
+
+  const orasanDate = Validation.optionalString(data.orasanDate, "Orasan date", {
+    maxLength: 100,
+  });
+
+  const reportedDate = Validation.requiredString(
+    data.reportedDate,
+    "Reported date",
+    { maxLength: 100 },
+  );
+
   const sheet = getSheetSafe("Upsells");
 
   if (!sheet) {
@@ -14,17 +52,17 @@ function addUpsellEntry(data) {
     emptyIndex >= 0 ? startRow + emptyIndex : sheet.getLastRow() + 1;
 
   const rowData = [
-    data.clientName || "",
-    data.screenshot || "",
-    Number(data.upsellHours) || "",
-    Number(data.totalHours) || "",
-    data.orasanDate || "",
-    data.reportedDate || "",
+    clientName,
+    screenshot,
+    upsellHours,
+    totalHours,
+    orasanDate,
+    reportedDate,
   ];
 
   sheet.getRange(nextRow, 1, 1, rowData.length).setValues([rowData]);
 
-  return `✅ Added upsell entry for ${data.clientName || "Unknown Client"}`;
+  return `Added upsell entry for ${clientName}`;
 }
 
 function getUpsellSummary() {

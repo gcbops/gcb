@@ -246,6 +246,8 @@ function getProjectRankings() {
 }
 
 function syncClientProjects() {
+  //   requireAuthorizedUser();
+  
   const clientsSheet = getSheetSafe("Client Names");
   const projectsSheet = getSheetSafe("Projects");
 

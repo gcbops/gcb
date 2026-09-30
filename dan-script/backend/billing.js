@@ -10,6 +10,8 @@
  * I = Payment Status
  */
 function syncBillingRecords() {
+  //   requireAuthorizedUser();
+  
   try {
     const ss = getSpreadsheet();
 

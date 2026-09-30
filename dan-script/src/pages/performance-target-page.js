@@ -1,5 +1,6 @@
 import { HourTargetProgress } from "../hours/hour-target-progress.js";
 import { AppUtils } from "../utils.js";
+import { ValidationModule } from "../validations.js";
 
 const performanceTargetPage = (() => {
   let initialized = false;
@@ -130,6 +131,8 @@ const performanceTargetPage = (() => {
 
     const currentValueText = Number.isFinite(currentValue) ? currentValue : "";
 
+    const ns = ".performanceTargetModal";
+
     const header =
       "<div>" +
       '<h5 class="modal-title font-weight-bold mb-0">' +
@@ -144,6 +147,7 @@ const performanceTargetPage = (() => {
       "</div>";
 
     const body =
+      '<div id="target-form-body">' +
       '<form id="performance-target-form">' +
       '<div class="form-group mb-0 text-left">' +
       "<label " +
@@ -171,48 +175,91 @@ const performanceTargetPage = (() => {
       "</span>" +
       "</div>" +
       "</div>" +
-      "</form>";
+      "</form>" +
+      "</div>" +
+      '<div id="target-review-body" class="d-none">' +
+      '<h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>' +
+      "<p>Please review the target change before applying it.</p>" +
+      '<div class="text-left font-size-sm">' +
+      '<div class="d-flex justify-content-between">' +
+      '<span class="text-muted">' +
+      label +
+      "</span>" +
+      '<strong id="target-review-value"></strong>' +
+      "</div>" +
+      "</div>" +
+      "</div>";
 
     const footer =
-      "<button " +
-      'type="button" ' +
-      'class="btn btn-light btn-cancel-target">' +
+      '<div id="target-form-footer" class="d-flex gap-2">' +
+      '<button type="button" class="btn btn-light btn-cancel-target">' +
       "Cancel" +
       "</button>" +
-      "<button " +
-      'type="button" ' +
-      'class="btn btn-primary btn-save-target">' +
+      '<button type="button" class="btn btn-primary btn-save-target">' +
       "Save Changes" +
-      "</button>";
+      "</button>" +
+      "</div>" +
+      '<div id="target-review-footer" class="d-flex gap-2 d-none">' +
+      '<button type="button" class="btn btn-secondary btn-modal-back-target">' +
+      "Back" +
+      "</button>" +
+      '<button type="button" class="btn btn-success btn-proceed-target">' +
+      "Proceed" +
+      "</button>" +
+      "</div>";
 
     AppUtils.openModal(TARGET_MODAL_ID, {
       size: "md",
       placement: "center",
 
-      header: header,
-      body: body,
-      footer: footer,
+      header,
+      body,
+      footer,
 
       onOpen($modal) {
-        const namespace = ".performanceTargetModal";
-
         $modal
-          .off(namespace)
-          .on("click" + namespace, ".btn-cancel-target", () => {
+          .off(ns)
+
+          // Cancel -> Close modal
+          .on(`click${ns}`, ".btn-cancel-target", () => {
             AppUtils.closeModal(TARGET_MODAL_ID);
           })
-          .on("click" + namespace, ".btn-save-target", () => {
-            confirmTargetUpdate($modal, type);
+
+          // Save Changes -> Validate and show review step
+          .on(`click${ns}`, ".btn-save-target", () => {
+            showTargetReview($modal, type);
+          })
+
+          // Back -> Return to form
+          .on(`click${ns}`, ".btn-back-target", () => {
+            $modal
+              .find("#target-review-body, #target-review-footer")
+              .addClass("d-none");
+
+            $modal
+              .find("#target-form-body, #target-form-footer")
+              .removeClass("d-none");
+          })
+
+          // Proceed -> Save target
+          .on(`click${ns}`, ".btn-proceed-target", () => {
+            const $button = $modal.find(".btn-proceed-target");
+
+            AppUtils.lockModal(TARGET_MODAL_ID);
+
+            const newValue = Number($modal.find(`#${inputId}`).val());
+
+            savePerformanceTarget(type, newValue, $button);
           });
       },
 
       onClose($modal) {
-        $modal.off(".performanceTargetModal");
+        $modal.off(ns);
       },
     });
   }
 
-  function confirmTargetUpdate($modal, type) {
+  function showTargetReview($modal, type) {
     const isDaily = type === "daily";
 
     const inputId = isDaily
@@ -220,54 +267,39 @@ const performanceTargetPage = (() => {
       : "#performance-monthly-target";
 
     const label = isDaily ? "Daily Target" : "Monthly Target";
-
     const unit = isDaily ? "hrs/day" : "hrs";
 
-    const newValue = Number($modal.find(inputId).val());
+    const rawValue = $modal.find(inputId).val();
+
+    const newValueResult = ValidationModule.number(rawValue, label, {
+      min: Number.EPSILON,
+    });
+
+    if (!newValueResult.valid) {
+      AppUtils.showError(newValueResult.message);
+      return;
+    }
+
+    const newValue = newValueResult.value;
 
     const currentValue = isDaily
       ? Number(targetData?.dailyTarget)
       : Number(targetData?.monthlyTarget);
-
-    if (!Number.isFinite(newValue) || newValue <= 0) {
-      AppUtils.showError(`${label} must be greater than 0.`);
-      return;
-    }
 
     if (newValue === currentValue) {
       AppUtils.showError(`No ${label.toLowerCase()} changes were made.`);
       return;
     }
 
-    AppUtils.openConfirmationModal({
-      ns: ".performanceTargetConfirm",
+    $modal
+      .find("#target-review-value")
+      .text(`${formatHours(newValue)} ${unit}`);
 
-      title: `Update ${label}`,
+    $modal.find("#target-form-body, #target-form-footer").addClass("d-none");
 
-      message: `
-      <p class="mb-3">
-        Are you sure you want to update this target?
-      </p>
-
-      <div class="text-left font-size-sm">
-        <div class="d-flex justify-content-between">
-          <span class="text-muted">
-            ${label}
-          </span>
-
-          <strong>
-            ${formatHours(newValue)} ${unit}
-          </strong>
-        </div>
-      </div>
-    `,
-
-      onProceed: ($confirmModal, $proceedButton) => {
-        savePerformanceTarget(type, newValue, $proceedButton);
-      },
-
-      onBack: () => {},
-    });
+    $modal
+      .find("#target-review-body, #target-review-footer")
+      .removeClass("d-none");
   }
 
   function savePerformanceTarget(type, value, proceedButton) {

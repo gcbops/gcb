@@ -51,7 +51,11 @@ const billingInvoiceStatusPage = (() => {
 
     document.addEventListener("click", handleClick);
 
-    document.addEventListener("change", handleChange);
+    $(document).on(
+      "change",
+      "#invoice-status-year-filter, #invoice-status-month-filter",
+      handleChange,
+    );
   }
 
   function handleClick(event) {

@@ -1,6 +1,7 @@
 import { AppUtils } from "../utils.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { TableClientSelector } from "../tables/client-selector.js";
+import { ValidationModule } from "../validations.js";
 
 const clientDirectoryPage = (() => {
   let bound = false;
@@ -158,7 +159,7 @@ const clientDirectoryPage = (() => {
         >
           <button
             type="button"
-            class="btn btn-secondary btn-back"
+            class="btn btn-secondary btn-modal-back"
           >
             Back
           </button>
@@ -204,6 +205,7 @@ const clientDirectoryPage = (() => {
            */
           .on(`click${namespace}`, ".btn-proceed", () => {
             const $button = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
 
             submitAddClient($modal, $button);
           });
@@ -227,11 +229,17 @@ const clientDirectoryPage = (() => {
       return;
     }
 
-    const clientName = String($modal.find("#sheet_name").val() || "").trim();
+    const clientNameResult = ValidationModule.sheetName(
+      $modal.find("#sheet_name").val(),
+      "Client name",
+    );
 
-    if (!clientName) {
+    if (!clientNameResult.valid) {
+      AppUtils.showDashboardToast(clientNameResult.message, "error");
       return;
     }
+
+    const clientName = clientNameResult.value;
 
     AppUtils.submitForm({
       gscriptFunc: "createClientSheet",
@@ -259,22 +267,34 @@ const clientDirectoryPage = (() => {
          * the successfully-created sheet.
          */
         google.script.run
+          .withSuccessHandler((result) => {
+            AppUtils.confirmAction(
+              "syncClientsList",
+              "Synchronize Client Directory?",
+              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+              () => {
+                AppUtils.cacheClear("clientDirectoryData");
+                
+                ClientDirectory.refreshClientDirectory(
+                  "clientDirectoryData",
+                  () => {
+                    AppUtils.showDashboardToast(
+                      "Clients refreshed successfully.",
+                      "success",
+                    );
+                  },
+                );
+              },
+            );
+          })
           .withFailureHandler((error) => {
-            console.error("[clientDirectory] syncClientSheetList failed:", error);
-
-            AppUtils.showError("Syncing error!");
+            console.error(
+              "[clientDirectory] syncClientSheetList failed:",
+              error,
+            );
           })
           .syncClientSheetList();
-
-        /*
-         * The directory data is now stale.
-         */
-        AppUtils.cacheClear("clientDirectoryData");
-
-        /*
-         * Reload the directory using fresh data.
-         */
-        ClientDirectory.refreshClientDirectory("clientDirectoryData");
+        
       },
     });
   }
@@ -380,7 +400,7 @@ const clientDirectoryPage = (() => {
         >
           <button
             type="button"
-            class="btn btn-secondary btn-back"
+            class="btn btn-secondary btn-modal-back"
           >
             Back
           </button>
@@ -427,6 +447,8 @@ const clientDirectoryPage = (() => {
           .on(`click${namespace}`, ".btn-proceed", () => {
             const $button = $modal.find(".btn-proceed");
 
+            AppUtils.lockModal(MODAL_ID);
+
             createExternalSheet($modal, $button);
           });
       },
@@ -449,13 +471,32 @@ const clientDirectoryPage = (() => {
       return;
     }
 
-    const clientName = String(
-      $modal.find("#externalClientName").val() || "",
-    ).trim();
+    const clientNameResult = ValidationModule.sheetName(
+      $modal.find("#externalClientName").val(),
+      "Client name",
+    );
 
-    const projects = String(
-      $modal.find("#externalProjects").val() || "",
-    ).trim();
+    if (!clientNameResult.valid) {
+      AppUtils.showDashboardToast(clientNameResult.message, "error");
+      return;
+    }
+
+    const clientName = clientNameResult.value;
+
+    const projectsResult = ValidationModule.requiredString(
+      $modal.find("#externalProjects").val(),
+      "Projects",
+      {
+        maxLength: 5000,
+      },
+    );
+
+    if (!projectsResult.valid) {
+      AppUtils.showDashboardToast(projectsResult.message, "error");
+      return;
+    }
+
+    const projects = projectsResult.value;
 
     if (!clientName || !projects) {
       return;
@@ -487,15 +528,34 @@ const clientDirectoryPage = (() => {
          * Keep the client sheet list synchronized.
          */
         google.script.run
+          .withSuccessHandler((result) => {
+            AppUtils.confirmAction(
+              "syncClientsList",
+              "Synchronize Client Directory?",
+              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+              () => {
+                AppUtils.cacheClear("clientDirectoryData");
+                
+                ClientDirectory.refreshClientDirectory(
+                  "clientDirectoryData",
+                  () => {
+                    AppUtils.showDashboardToast(
+                      "Clients refreshed successfully.",
+                      "success",
+                    );
+                  },
+                );
+              },
+            );
+          })
           .withFailureHandler((error) => {
-            console.error("[clientDirectory] syncClientSheetList failed:", error);
+            console.error(
+              "[clientDirectory] syncClientSheetList failed:",
+              error,
+            );
           })
           .syncClientSheetList();
-
-        /*
-         * Reload the directory.
-         */
-        ClientDirectory.refreshClientDirectory("clientDirectoryData");
+        
       })
       .withFailureHandler((error) => {
         console.error("[clientDirectory] createExternalSheet failed:", error);

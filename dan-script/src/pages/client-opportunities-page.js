@@ -1,6 +1,7 @@
 import { AppUtils } from "../utils.js";
 import { DataTableModule } from "../tables/data-table.js";
 import { ChartModule } from "../charts.js";
+import { ValidationModule } from "../validations.js";
 
 const clientOpportunitiesPage = (() => {
   let bound = false;
@@ -13,10 +14,10 @@ const clientOpportunitiesPage = (() => {
   const UPSELL_RECORDS_CACHE_KEY = "upsellRecords";
   const UPSELL_SUMMARY_CACHE_KEY = "upsellSummary";
 
-  const UPSELL_MODAL_ID = "#app-modal";
+  const MODAL_ID = "#app-modal";
+
   const UPSELL_MODAL_NS = ".clientOpportunitiesUpsell";
 
-  const HOURLY_MODAL_ID = "#app-modal";
   const HOURLY_MODAL_NS = ".clientOpportunitiesHourly";
 
   const LEGACY_CLIENTS_CACHE_KEY = "legacyClients";
@@ -43,8 +44,8 @@ const clientOpportunitiesPage = (() => {
 
     $page.off(".clientOpportunities");
 
-    $(UPSELL_MODAL_ID).off(UPSELL_MODAL_NS);
-    $(HOURLY_MODAL_ID).off(HOURLY_MODAL_NS);
+    $(MODAL_ID).off(UPSELL_MODAL_NS);
+    $(MODAL_ID).off(HOURLY_MODAL_NS);
 
     DataTableModule.destroy(UPSELL_TABLE_ID);
   }
@@ -264,15 +265,16 @@ const clientOpportunitiesPage = (() => {
   // ----------------------------------------------------------
 
   function openUpsellModal() {
-    AppUtils.openModal(UPSELL_MODAL_ID, {
+    AppUtils.openModal(MODAL_ID, {
       size: "lg",
       placement: "center",
 
       header: `
-        <strong>Add Upsell Opportunity</strong>
-      `,
+      <strong>Add Upsell Opportunity</strong>
+    `,
 
       body: `
+      <div id="upsell-form-body">
         <form id="upsellOpportunityForm">
 
           <div class="position-relative form-group">
@@ -353,9 +355,47 @@ const clientOpportunitiesPage = (() => {
           </div>
 
         </form>
-      `,
+      </div>
+
+      <div id="upsell-review-body" class="d-none">
+        <p class="mb-3">
+          Please review the upsell entry before submitting.
+        </p>
+
+        <div class="mb-2">
+          <strong>Client:</strong>
+          <span id="upsell-review-client"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Upsell Hours:</strong>
+          <span id="upsell-review-hours"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Orasan Hours:</strong>
+          <span id="upsell-review-total-hours"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Orasan Date:</strong>
+          <span id="upsell-review-orasan-date"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Reported Date:</strong>
+          <span id="upsell-review-reported-date"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Screenshot:</strong>
+          <span id="upsell-review-screenshot"></span>
+        </div>
+      </div>
+    `,
 
       footer: `
+      <div id="upsell-form-footer">
         <button
           type="button"
           class="btn btn-secondary btn-cancel"
@@ -369,16 +409,49 @@ const clientOpportunitiesPage = (() => {
         >
           Save Upsell
         </button>
-      `,
+      </div>
+
+      <div id="upsell-review-footer" class="d-none">
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
 
       onOpen($modal) {
         $modal
           .off(UPSELL_MODAL_NS)
           .on(`click${UPSELL_MODAL_NS}`, ".btn-cancel", () => {
-            AppUtils.closeModal(UPSELL_MODAL_ID);
+            AppUtils.closeModal(MODAL_ID);
           })
           .on(`click${UPSELL_MODAL_NS}`, ".btn-save", () => {
             submitUpsell($modal);
+          })
+          .on(`click${UPSELL_MODAL_NS}`, ".btn-back", () => {
+            $modal
+              .find("#upsell-review-body, #upsell-review-footer")
+              .addClass("d-none");
+
+            $modal
+              .find("#upsell-form-body, #upsell-form-footer")
+              .removeClass("d-none");
+          })
+          .on(`click${UPSELL_MODAL_NS}`, ".btn-proceed", () => {
+            const data = $modal.data("upsell-data");
+            const $button = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
+
+            submitUpsellToServer($modal, data, $button);
           });
       },
 
@@ -395,66 +468,109 @@ const clientOpportunitiesPage = (() => {
       return;
     }
 
-    const $submitBtn = $modal.find(".btn-save");
+    const clientNameResult = ValidationModule.requiredString(
+      $form.find("#opportunity-clientName").val(),
+      "Client name",
+      { maxLength: 100 },
+    );
 
-    const data = {
-      clientName: String(
-        $form.find("#opportunity-clientName").val() || "",
-      ).trim(),
-
-      screenshot: String(
-        $form.find("#opportunity-screenshot").val() || "",
-      ).trim(),
-
-      upsellHours: String(
-        $form.find("#opportunity-upsellHours").val() || "",
-      ).trim(),
-
-      totalHours: String(
-        $form.find("#opportunity-totalHours").val() || "",
-      ).trim(),
-
-      orasanDate: String(
-        $form.find("#opportunity-orasanDate").val() || "",
-      ).trim(),
-
-      reportedDate: String(
-        $form.find("#opportunity-reportedDate").val() || "",
-      ).trim(),
-    };
-
-    if (!data.clientName || !data.upsellHours || !data.reportedDate) {
-      AppUtils.showError("Please fill out all required fields!");
+    if (!clientNameResult.valid) {
+      AppUtils.showError(clientNameResult.message);
       return;
     }
 
-    AppUtils.confirmAction(
-      "submitUpsellForm",
-      "Submit Upsell Entry?",
-      `
-        Are you sure you want to log an upsell entry
-        of ${AppUtils.escapeHtml(data.upsellHours)}
-        hours for ${AppUtils.escapeHtml(data.clientName)}?
-      `,
-      () => {
-        AppUtils.submitForm({
-          gscriptFunc: "addUpsellEntry",
-          data,
-          $btn: $submitBtn,
-          loadingText: "Saving upsell",
+    const screenshot = String(
+      $form.find("#opportunity-screenshot").val() || "",
+    ).trim();
 
-          onSuccess: () => {
-            handleUpsellSaveSuccess();
-          },
-        });
-      },
+    const upsellHoursResult = ValidationModule.number(
+      $form.find("#opportunity-upsellHours").val(),
+      "Upsell hours",
+      { min: Number.EPSILON },
     );
+
+    if (!upsellHoursResult.valid) {
+      AppUtils.showError(upsellHoursResult.message);
+      return;
+    }
+
+    const totalHoursRaw = String(
+      $form.find("#opportunity-totalHours").val() || "",
+    ).trim();
+
+    let totalHours = "";
+
+    if (totalHoursRaw) {
+      const result = ValidationModule.number(totalHoursRaw, "Orasan hours", {
+        min: Number.EPSILON,
+      });
+
+      if (!result.valid) {
+        AppUtils.showError(result.message);
+        return;
+      }
+
+      totalHours = result.value;
+    }
+
+    const orasanDate = String(
+      $form.find("#opportunity-orasanDate").val() || "",
+    ).trim();
+
+    const reportedDateResult = ValidationModule.requiredString(
+      $form.find("#opportunity-reportedDate").val(),
+      "Reported date",
+      { maxLength: 100 },
+    );
+
+    if (!reportedDateResult.valid) {
+      AppUtils.showError(reportedDateResult.message);
+      return;
+    }
+
+    const data = {
+      clientName: clientNameResult.value,
+      screenshot,
+      upsellHours: upsellHoursResult.value,
+      totalHours,
+      orasanDate,
+      reportedDate: reportedDateResult.value,
+    };
+
+    // Populate review
+    $modal.find("#upsell-review-client").text(data.clientName);
+    $modal.find("#upsell-review-hours").text(`${data.upsellHours} hrs`);
+    $modal.find("#upsell-review-total-hours").text(`${data.totalHours} hrs`);
+    $modal.find("#upsell-review-orasan-date").text(data.orasanDate);
+    $modal.find("#upsell-review-reported-date").text(data.reportedDate);
+    $modal.find("#upsell-review-screenshot").text(data.screenshot);
+
+    $modal.data("upsell-data", data);
+
+    $modal.find("#upsell-form-body, #upsell-form-footer").addClass("d-none");
+
+    $modal
+      .find("#upsell-review-body, #upsell-review-footer")
+      .removeClass("d-none");
+  }
+
+  function submitUpsellToServer($modal, data, $submitBtn) {
+    AppUtils.submitForm({
+      gscriptFunc: "addUpsellEntry",
+      data,
+      $btn: $submitBtn,
+      loadingText: "Saving upsell",
+
+      onSuccess: () => {
+        handleUpsellSaveSuccess();
+      },
+    });
   }
 
   function handleUpsellSaveSuccess() {
     AppUtils.showDashboardToast("Record added successfully!", "success");
 
-    AppUtils.closeModal(UPSELL_MODAL_ID);
+    AppUtils.closeModal(MODAL_ID);
 
     AppUtils.resetCacheKeys([
       UPSELL_RECORDS_CACHE_KEY,
@@ -568,15 +684,16 @@ const clientOpportunitiesPage = (() => {
   // ----------------------------------------------------------
 
   function openHourlyModal() {
-    AppUtils.openModal(HOURLY_MODAL_ID, {
+    AppUtils.openModal(MODAL_ID, {
       size: "md",
       placement: "center",
 
       header: `
-        <strong>Add Current Month Total</strong>
-      `,
+      <strong>Add Current Month Total</strong>
+    `,
 
       body: `
+      <div id="hourly-form-body">
         <form id="addOpportunityHourlyForm">
 
           <div class="position-relative form-group">
@@ -595,9 +712,21 @@ const clientOpportunitiesPage = (() => {
           </div>
 
         </form>
-      `,
+      </div>
+
+      <div id="hourly-review-body" class="d-none">
+        <p class="mb-2">
+          Please review the current month total before submitting.
+        </p>
+
+        <div class="fw-semibold fs-5">
+          <span id="hourly-review-value"></span> hrs
+        </div>
+      </div>
+    `,
 
       footer: `
+      <div id="hourly-form-footer">
         <button
           type="button"
           class="btn btn-secondary btn-cancel"
@@ -611,16 +740,50 @@ const clientOpportunitiesPage = (() => {
         >
           Save Total
         </button>
-      `,
+      </div>
+
+      <div id="hourly-review-footer" class="d-none">
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
 
       onOpen($modal) {
         $modal
           .off(HOURLY_MODAL_NS)
           .on(`click${HOURLY_MODAL_NS}`, ".btn-cancel", () => {
-            AppUtils.closeModal(HOURLY_MODAL_ID);
+            AppUtils.closeModal(MODAL_ID);
           })
           .on(`click${HOURLY_MODAL_NS}`, ".btn-save", () => {
             submitHourlyTotal($modal);
+          })
+          .on(`click${HOURLY_MODAL_NS}`, ".btn-back", () => {
+            $modal
+              .find("#hourly-review-body, #hourly-review-footer")
+              .addClass("d-none");
+
+            $modal
+              .find("#hourly-form-body, #hourly-form-footer")
+              .removeClass("d-none");
+          })
+          .on(`click${HOURLY_MODAL_NS}`, ".btn-proceed", () => {
+            const value = $modal.data("hourly-total-value");
+            const $button = $modal.find(".btn-proceed");
+
+            AppUtils.lockModal(MODAL_ID);
+
+            submitHourlyTotalToServer($modal, value, $button);
           });
       },
 
@@ -633,37 +796,46 @@ const clientOpportunitiesPage = (() => {
   function submitHourlyTotal($modal) {
     const $input = $modal.find("#opportunity-hourly-value");
 
-    const value = String($input.val() || "").trim();
+    const result = ValidationModule.number(
+      $input.val(),
+      "Current month total",
+      { min: Number.EPSILON },
+    );
 
-    const $submitBtn = $modal.find(".btn-save");
-
-    if (!value) {
-      AppUtils.showError("Please enter the current month total.");
+    if (!result.valid) {
+      AppUtils.showError(result.message);
       return;
     }
 
-    AppUtils.confirmAction(
-      "addMonthTotal",
-      "Submit Total Hours?",
-      "Do you want to submit the current month total hour for hourly projects?",
-      () => {
-        AppUtils.submitForm({
-          gscriptFunc: "addCurrMthTotalHrly",
-          data: value,
-          $btn: $submitBtn,
-          loadingText: "Saving",
+    const numericValue = result.value;
 
-          onSuccess: () => {
-            AppUtils.showDashboardToast("Successfully added total!", "success");
+    $modal.find("#hourly-review-value").text(numericValue.toFixed(2));
 
-            AppUtils.closeModal(HOURLY_MODAL_ID);
+    $modal.data("hourly-total-value", numericValue);
 
-            loadHourlyChart(true);
-            loadTotalHourlyHours();
-          },
-        });
+    $modal.find("#hourly-form-body, #hourly-form-footer").addClass("d-none");
+
+    $modal
+      .find("#hourly-review-body, #hourly-review-footer")
+      .removeClass("d-none");
+  }
+
+  function submitHourlyTotalToServer($modal, value, $submitBtn) {
+    AppUtils.submitForm({
+      gscriptFunc: "addCurrMthTotalHrly",
+      data: value,
+      $btn: $submitBtn,
+      loadingText: "Saving",
+
+      onSuccess: () => {
+        AppUtils.showDashboardToast("Successfully added total!", "success");
+
+        AppUtils.closeModal(MODAL_ID);
+
+        loadHourlyChart(true);
+        loadTotalHourlyHours();
       },
-    );
+    });
   }
 
   return {

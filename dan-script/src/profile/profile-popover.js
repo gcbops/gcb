@@ -80,7 +80,9 @@ const ProfilePopoverModule = (() => {
 
     hide();
 
-    RouterModule.go("clientDetails");
+    RouterModule.go("clientDetails", true, {
+      client: clientName,
+    });
   }
 
   function openAddHours(clientName) {

@@ -235,11 +235,14 @@ const ClientDataService = (() => {
 
     const toggleSummary = () => {
       const isHidden = summary.classList.contains("is-collapsing");
+      const screen = AppUtils.checkScreen();
 
       if (isHidden) {
         showTodaySummary(summary, more, remaining, container);
       } else {
-        hideTodaySummary(summary, more, container);
+        if (!screen.isMobile) {
+          hideTodaySummary(summary, more, container);
+        }
       }
     };
 

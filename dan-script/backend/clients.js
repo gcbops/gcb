@@ -236,11 +236,10 @@ function getClientSheetUrl(name) {
 }
 
 function createClientSheet(input) {
-  if (!input || !isNonEmptyString(input.name)) {
-    throw new Error("Client name cannot be empty.");
-  }
+  //   requireAuthorizedUser();
+  Validation.requireObject(input, "Client data");
 
-  const sheetName = input.name.trim();
+  const sheetName = Validation.sheetName(input.name, "Client name");
 
   if (sheetExists(sheetName)) {
     throw new Error(`Sheet "${sheetName}" already exists.`);
@@ -256,6 +255,7 @@ function createClientSheet(input) {
   const newSheet = template.copyTo(ss);
 
   newSheet.setName(sheetName);
+  newSheet.showSheet();
 
   SpreadsheetApp.flush();
 

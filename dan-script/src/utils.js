@@ -444,6 +444,29 @@ const AppUtils = (() => {
     return Math.abs(number) <= 1 ? number * 100 : number;
   }
 
+  function checkScreen() {
+    const width = window.innerWidth;
+
+    const isMobile = width < 768;
+    const isTablet = width >= 768 && width < 992;
+    const isDesktop = width >= 992;
+
+    const isTouch = window.matchMedia("(pointer: coarse)").matches;
+
+    const hasHover = window.matchMedia("(hover: hover)").matches;
+
+    return {
+      width,
+
+      isMobile,
+      isTablet,
+      isDesktop,
+
+      isTouch,
+      hasHover,
+    };
+  }
+
   // ---- OTHER UTILS ----
 
   function showDashboardToast(msg, type = "success") {
@@ -697,10 +720,22 @@ const AppUtils = (() => {
 
       // Restore outline class if it was swapped
       const originalOutlineClass = $button.data("original-outline-class");
+
       if (originalOutlineClass) {
         const solidClass = originalOutlineClass.replace("btn-outline-", "btn-");
+
         $button.removeClass(solidClass).addClass(originalOutlineClass);
+
         $button.removeData("original-outline-class");
+      }
+
+      /*
+       * Unlock the modal if this operation locked it.
+       */
+      const $modal = $(".modal");
+
+      if ($modal.length && $modal.attr("data-modal-locked") === "true") {
+        AppUtils.unlockModal(`#${$modal.attr("id")}`);
       }
     };
 
@@ -743,6 +778,17 @@ const AppUtils = (() => {
     }
 
     const modalEl = $modal[0];
+
+    $modal.removeAttr("data-modal-locked").attr({
+      "data-bs-backdrop": "static",
+      "data-bs-keyboard": "true",
+    });
+
+    $modal
+      .find(".modal-header .btn-close, .btn-modal-back, .btn-modal-back-target")
+      .prop("disabled", false)
+      .removeAttr("aria-disabled")
+      .removeClass("disabled");
 
     if (!modalEl.id) {
       console.error(
@@ -1194,6 +1240,47 @@ const AppUtils = (() => {
     $closeTrigger.remove();
   }
 
+  function lockModal(modalSelector) {
+    const $modal = $(modalSelector);
+
+    if (!$modal.length) {
+      return;
+    }
+
+    $modal.attr({
+      "data-bs-backdrop": "static",
+      "data-bs-keyboard": "false",
+      "data-modal-locked": "true",
+    });
+
+    $modal
+      .find(".modal-header .btn-close, .btn-modal-back")
+      .prop("disabled", true)
+      .attr("aria-disabled", "true")
+      .addClass("disabled");
+  }
+
+  function unlockModal(modalSelector) {
+    const $modal = $(modalSelector);
+
+    if (!$modal.length) {
+      return;
+    }
+
+    $modal.attr({
+      "data-bs-backdrop": "static",
+      "data-bs-keyboard": "true",
+    });
+
+    $modal.removeAttr("data-modal-locked");
+
+    $modal
+      .find(".modal-header .btn-close, .btn-modal-back")
+      .prop("disabled", false)
+      .removeAttr("aria-disabled")
+      .removeClass("disabled");
+  }
+
   function openConfirmationModal({
     ns,
     title,
@@ -1333,7 +1420,7 @@ const AppUtils = (() => {
 
           <button
             type="button"
-            class="btn btn-secondary btn-back"
+            class="btn btn-secondary btn-modal-back"
           >
             Cancel
           </button>
@@ -1357,7 +1444,7 @@ const AppUtils = (() => {
       /*
        * Cancel / Back.
        */
-      $appModal.on(`click${eventNs}`, ".btn-back", function (event) {
+      $appModal.on(`click${eventNs}`, ".btn-modal-back", function (event) {
         event.preventDefault();
 
         $appModal.off(".AppUtilsConfirmation");
@@ -1515,6 +1602,7 @@ const AppUtils = (() => {
     formatHours,
     formatPercent,
     parsePercent,
+    checkScreen,
 
     showDashboardToast,
     initSelect2,
@@ -1527,6 +1615,8 @@ const AppUtils = (() => {
     closeAllDrawers,
     openModal,
     closeModal,
+    lockModal,
+    unlockModal,
     openConfirmationModal,
     confirmAction,
   };

@@ -7,6 +7,8 @@ const clientDetailsPage = (() => {
   let bound = false;
   let clientName = "";
 
+  const isGitHubEmbedded = window.GCB_IS_GITHUB_EMBEDDED === true;
+
   const CACHE_KEY_PREFIX = "clientDetails_";
 
   let clientDetailsData = null;
@@ -19,12 +21,20 @@ const clientDetailsPage = (() => {
 
     bound = true;
 
-    clientName = String(
-      sessionStorage.getItem("clientDetailsName") || "",
-    ).trim();
+    const urlClient = String(window.GCB_INITIAL_CLIENT || "").trim();
+
+    if (isGitHubEmbedded && urlClient) {
+      clientName = urlClient.replace(/_/g, " ");
+
+      sessionStorage.setItem("clientDetailsName", clientName);
+    } else {
+      clientName = String(
+        sessionStorage.getItem("clientDetailsName") || "",
+      ).trim();
+    }
 
     if (!clientName) {
-      RouterModule.go("home");
+      RouterModule.go("clientDetails");
       console.error("No client selected.");
       return;
     }

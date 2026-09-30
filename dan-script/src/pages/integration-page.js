@@ -189,7 +189,7 @@ const integrationsConfigurationPage = (() => {
 
       <!-- REVIEW ACTION FOOTER -->
       <div id="review-modal-footer" class="d-flex gap-2 d-none">
-        <button type="button" class="btn btn-secondary btn-back">
+        <button type="button" class="btn btn-secondary btn-modal-back">
           Back
         </button>
         <button type="button" class="btn btn-success btn-proceed">
@@ -226,6 +226,8 @@ const integrationsConfigurationPage = (() => {
           // Proceed Click -> Runs original integration submission engine
           .on(`click${ns}`, ".btn-proceed", () => {
             const $btn = $modal.find(".btn-proceed");
+
+            AppUtils.lockModal(MODAL_ID);
             saveIntegration(integration, $modal, $btn);
           });
 

@@ -245,15 +245,18 @@ function updatePerformanceTarget(type, value) {
       throw new Error('Sheet "Other Analytics" was not found.');
     }
 
-    const target = Number(value);
+    const target = Validation.number(value, "Performance target", {
+      min: Number.EPSILON,
+    });
 
-    if (!Number.isFinite(target) || target <= 0) {
-      throw new Error("Target must be greater than 0.");
-    }
+    const targetType = Validation.enumValue(type, "performance target type", [
+      "daily",
+      "monthly",
+    ]);
 
-    if (type === "monthly") {
+    if (targetType === "monthly") {
       sheet.getRange("R2").setValue(target);
-    } else if (type === "daily") {
+    } else if (targetType === "daily") {
       sheet.getRange("S2").setValue(target);
     } else {
       throw new Error("Invalid performance target type.");
@@ -263,7 +266,7 @@ function updatePerformanceTarget(type, value) {
 
     return {
       success: true,
-      type,
+      targetType,
       value: target,
     };
   } catch (err) {

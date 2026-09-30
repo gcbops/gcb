@@ -44,7 +44,11 @@ const billingPaidHoursPage = (() => {
 
     document.addEventListener("click", handleClick);
 
-    document.addEventListener("change", handleChange);
+    $(document).on(
+      "change",
+      "#paid-hours-year-filter, #paid-hours-month-filter",
+      handleChange,
+    );
   }
 
   function handleClick(event) {

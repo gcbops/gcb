@@ -47,7 +47,7 @@
       return new URLSearchParams(window.location.search).get("page");
     }
 
-    function getGasUrl(page) {
+    function getGasUrl(page, client = "") {
       const url = new URL(GCB_GAS_URL);
 
       url.searchParams.set("wrapper", "github");
@@ -56,14 +56,21 @@
         url.searchParams.set("page", page);
       }
 
+      if (client) {
+        url.searchParams.set(
+          "client",
+          client.replace(/\s+/g, "_"),
+        );
+      }
+
       return url.href;
     }
 
-    function loadGasPage(page) {
-      iframe.src = getGasUrl(page);
+    function loadGasPage(page, client = "") {
+      iframe.src = getGasUrl(page, client);
     }
 
-    function updateGitHubUrl(page, replace = false) {
+    function updateGitHubUrl(page, client = "", replace = false) {
       const url = new URL(window.location.href);
 
       if (page && page !== "home") {
@@ -72,8 +79,18 @@
         url.searchParams.delete("page");
       }
 
+      if (client) {
+        url.searchParams.set(
+          "client",
+          client.replace(/\s+/g, "_"),
+        );
+      } else {
+        url.searchParams.delete("client");
+      }
+
       const state = {
         gcbPage: page || "home",
+        gcbClient: client || "",
       };
 
       if (replace) {
@@ -89,10 +106,16 @@
     * ------------------------------------------------
     */
 
-    const initialPage = getPageFromUrl() || "home";
+    const initialUrl = new URL(window.location.href);
+
+    const initialPage =
+      initialUrl.searchParams.get("page") || "home";
+
+    const initialClient =
+      initialUrl.searchParams.get("client") || "";
 
     updateGitHubUrl(initialPage, true);
-    loadGasPage(initialPage);
+    loadGasPage(initialPage, initialClient);
 
     /*
     * ------------------------------------------------
@@ -101,22 +124,18 @@
     */
 
     window.addEventListener("message", (event) => {
-      console.log("[GitHub] event source:", event.source);
-      console.log("[GitHub] iframe contentWindow:", iframe.contentWindow);
-      console.log("[GitHub] event origin:", event.origin);
-      console.log("[GitHub] event data:", event.data);
-
       if (event.data?.type !== "GCB_NAVIGATION") {
         return;
       }
 
       const page = event.data.page;
+      const client = event.data.client || "";
 
       if (!page) {
         return;
       }
 
-      updateGitHubUrl(page);
+      updateGitHubUrl(page, client);
     });
 
     /*

@@ -41,7 +41,14 @@ function getIntegrationConfigStatus(integration) {
 
   let value = "";
 
-  switch (integration) {
+  const integrationType = Validation.enumValue(integration, "integration", [
+    "gmail",
+    "discord",
+    "sheets",
+    "drive",
+  ]);
+
+  switch (integrationType) {
     case "gmail":
       value = getNotificationEmail();
       break;
@@ -59,7 +66,7 @@ function getIntegrationConfigStatus(integration) {
       break;
 
     default:
-      throw new Error(`Unsupported integration: ${integration}`);
+      throw new Error(`Unsupported integration: ${integrationType}`);
   }
 
   return {
@@ -71,59 +78,53 @@ function getIntegrationConfigStatus(integration) {
 function saveIntegration(integration, value) {
   // requireAuthorizedUser();
 
-  if (!value || typeof value !== "string") {
-    throw new Error("A configuration value is required.");
-  }
+  const integrationType = Validation.enumValue(integration, "integration", [
+    "gmail",
+    "discord",
+    "sheets",
+    "drive",
+  ]);
 
-  const cleanValue = value.trim();
+  const cleanValue = Validation.requiredString(value, "Configuration value", {
+    maxLength: 500,
+  });
 
-  if (!cleanValue) {
-    throw new Error("A configuration value is required.");
-  }
-
-  switch (integration) {
+  switch (integrationType) {
     case "gmail":
-      validateEmail(cleanValue);
+      Validation.email(cleanValue, "Notification email");
 
       PropertiesService.getScriptProperties().setProperty(
         "NOTIFICATION_EMAIL",
         cleanValue,
       );
-
       break;
 
     case "discord":
-      validateDiscordWebhook(cleanValue);
+      Validation.discordWebhook(cleanValue, "Discord webhook");
 
       PropertiesService.getScriptProperties().setProperty(
         "DISCORD_WEBHOOK_URL",
         cleanValue,
       );
-
       break;
 
     case "sheets":
-      validateSpreadsheetId(cleanValue);
+      Validation.spreadsheetId(cleanValue, "Spreadsheet ID");
 
       PropertiesService.getScriptProperties().setProperty(
         "SPREADSHEET_ID",
         cleanValue,
       );
-
       break;
 
     case "drive":
-      validateDriveFolderId(cleanValue);
+      Validation.driveFolderId(cleanValue, "Drive folder ID");
 
       PropertiesService.getScriptProperties().setProperty(
         "REPORT_FOLDER_ID",
         cleanValue,
       );
-
       break;
-
-    default:
-      throw new Error(`Integration "${integration}" is not supported yet.`);
   }
 
   /*
@@ -134,43 +135,16 @@ function saveIntegration(integration, value) {
 
   return {
     success: true,
-    integration,
+    integration: integrationType,
   };
-}
-
-function validateEmail(value) {
-  const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  if (!pattern.test(value)) {
-    throw new Error("Please enter a valid email address.");
-  }
-}
-
-function validateDiscordWebhook(value) {
-  if (
-    !value.startsWith("https://discord.com/api/webhooks/") &&
-    !value.startsWith("https://discordapp.com/api/webhooks/")
-  ) {
-    throw new Error("Please enter a valid Discord webhook URL.");
-  }
-}
-
-function validateSpreadsheetId(value) {
-  if (!/^[a-zA-Z0-9_-]{20,}$/.test(value)) {
-    throw new Error("Please enter a valid Google Spreadsheet ID.");
-  }
-}
-
-function validateDriveFolderId(value) {
-  if (!/^[a-zA-Z0-9_-]{20,}$/.test(value)) {
-    throw new Error("Please enter a valid Google Drive folder ID.");
-  }
 }
 
 function saveIntegrationSettings(data) {
   // requireAuthorizedUser();
 
   const properties = PropertiesService.getScriptProperties();
+
+  Validation.requireObject(data, "Integration settings");
 
   const errors = [];
 
@@ -179,48 +153,35 @@ function saveIntegrationSettings(data) {
   const spreadsheetId = String(data?.spreadsheetId || "").trim();
   const reportFolderId = String(data?.reportFolderId || "").trim();
 
-  /*
-   * Notification Email
-   */
   if (email) {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailPattern.test(email)) {
-      errors.push("Invalid notification email.");
+    try {
+      Validation.email(email, "Notification email");
+    } catch (err) {
+      errors.push(err.message);
     }
   }
 
-  /*
-   * Discord Webhook
-   */
   if (discord) {
-    const discordPattern =
-      /^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/.+$/;
-
-    if (!discordPattern.test(discord)) {
-      errors.push("Invalid Discord webhook URL.");
+    try {
+      Validation.discordWebhook(discord, "Discord webhook");
+    } catch (err) {
+      errors.push(err.message);
     }
   }
 
-  /*
-   * Google Spreadsheet ID
-   */
   if (spreadsheetId) {
-    const spreadsheetIdPattern = /^[a-zA-Z0-9_-]{20,}$/;
-
-    if (!spreadsheetIdPattern.test(spreadsheetId)) {
-      errors.push("Invalid Google Spreadsheet ID.");
+    try {
+      Validation.spreadsheetId(spreadsheetId, "Spreadsheet ID");
+    } catch (err) {
+      errors.push(err.message);
     }
   }
 
-  /*
-   * Google Drive Report Folder ID
-   */
   if (reportFolderId) {
-    const folderIdPattern = /^[a-zA-Z0-9_-]{10,}$/;
-
-    if (!folderIdPattern.test(reportFolderId)) {
-      errors.push("Invalid Report Folder ID.");
+    try {
+      Validation.driveFolderId(reportFolderId, "Report folder ID");
+    } catch (err) {
+      errors.push(err.message);
     }
   }
 

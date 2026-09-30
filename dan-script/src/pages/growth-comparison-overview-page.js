@@ -9,7 +9,7 @@ const growthComparisonOverviewPage = (() => {
 
     initMonthlyHoursChart();
 
-    ChartModule.loadChart("yearly");
+    // ChartModule.loadChart("yearly");
   }
 
   function destroy() {

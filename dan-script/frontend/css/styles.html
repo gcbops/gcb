@@ -10,7 +10,46 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+
+  /* ── Button / primary shades ── */
+
   --gc-primary-color: #008B8B; 
+  --gc-primary-light: #D9EEEE;   /* 85% white + 15% primary */
+  --gc-primary-soft:  #EBF6F6;   /* 92% white + 8% primary  */
+  --gc-primary-dark:  #006F6F;   /* 80% primary + 20% black */
+  --gc-primary-muted: #2B8285;   /* 60% primary + 40% gray  */
+  --gc-primary-subtle:#C0E9E9;
+
+  --gc-primary:   #0d6efd;  /* blue */
+  --gc-alternate: #6f42c1;  /* violet */
+  --gc-info:      #0dcaf0;  /* cyan */
+  --gc-warning:   #ffc107;  /* yellow */
+  --gc-danger:    #dc3545;  /* red */
+  --gc-success:   #198754;  /* green */
+
+  /* ── Button / interactive shades ── */
+  --gc-primary-hover-bg:       #007A7A;  /* 88% primary + 12% black */
+  --gc-primary-hover-border:   #007272;  /* 82% primary + 18% black */
+  --gc-primary-active-bg:      #007272;  /* 82% primary + 18% black */
+  --gc-primary-active-border:  #006A6A;  /* 76% primary + 24% black */
+  --gc-primary-disabled-bg:    #59B4B4;  /* 65% primary + 35% white */
+  --gc-primary-disabled-border:#73BFBF;  /* 55% primary + 45% white */
+  --gc-primary-outline-disabled-color:  #66B9B9; /* 60% + 40% white */
+  --gc-primary-outline-disabled-border: #80C5C5; /* 50% + 50% white */
+  --gc-primary-focus-ring:     rgba(0, 139, 139, 0.15);
+
+  /* ── Text shades ── */
+  --gc-text-muted:  #268386;  /* 65% primary + 35% gray */
+  --gc-text-light:  #B3DCDC;  /* 30% primary + 70% white */
+  --gc-text-dark:   #006868;  /* 75% primary + 25% black */
+
+  /* ── Gradient endpoints (match primary) ── */
+  --gc-grad-60: rgba(0, 139, 139, 0.6);
+  --gc-grad-70: rgba(0, 139, 139, 0.7);
+  --gc-grad-80: rgba(0, 139, 139, 0.8);
+  --gc-grad-45: rgba(0, 139, 139, 0.45);
+  --gc-grad-15: rgba(0, 139, 139, 0.15);
+  --gc-grad-cool: rgba(6, 182, 212, 0.6);
 }
 
 body {
@@ -283,179 +322,129 @@ textarea:disabled {
     color: #008B8B;
 }
 
-/* Custom Bootstrap-style button class using your brand color */
+/* Custom Bootstrap-style button and background class using your brand color */
+
+/* ── Solid button ── */
 .btn-gc {
   color: #fff;
-  background-color: var(--gc-primary-color, #008B8B); /* fallback indigo if var not set */
-  border-color: var(--gc-primary-color, #008B8B);
+  background-color: var(--gc-primary-color);
+  border-color: var(--gc-primary-color);
   box-shadow: none;
 }
-
 .btn-gc:hover {
   color: #fff;
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000 12%);
-  border-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000 18%);
+  background-color: var(--gc-primary-hover-bg);
+  border-color: var(--gc-primary-hover-border);
 }
-
 .btn-gc:focus,
 .btn-gc.focus,
 .btn-gc:focus-visible {
   color: #fff !important;
-  background-color: var(--gc-primary-color, #008B8B) !important;
-  border-color: var(--gc-primary-color, #008B8B) !important;
-  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--gc-primary-color, #008B8B), transparent, 85%) !important;
+  background-color: var(--gc-primary-color) !important;
+  border-color: var(--gc-primary-color) !important;
+  box-shadow: 0 0 0 0.2rem var(--gc-primary-focus-ring) !important;
 }
-
 .btn-gc:active,
 .btn-gc.active,
 .show > .btn-gc.dropdown-toggle {
   color: #fff !important;
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000 18%) !important;
-  border-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000 24%) !important;
+  background-color: var(--gc-primary-active-bg) !important;
+  border-color: var(--gc-primary-active-border) !important;
   box-shadow: none !important;
 }
-
 .btn-gc:disabled,
 .btn-gc.disabled {
   color: #fff;
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff 35%);
-  border-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff 45%);
+  background-color: var(--gc-primary-disabled-bg);
+  border-color: var(--gc-primary-disabled-border);
   opacity: 0.65;
   box-shadow: none;
 }
 
-/* Outline variant: .btn-outline-gc */
+/* ── Outline button ── */
 .btn-outline-gc {
-  color: var(--gc-primary-color, #008B8B);
-  border-color: var(--gc-primary-color, #008B8B);
+  color: var(--gc-primary-color);
+  border-color: var(--gc-primary-color);
   background: transparent;
   box-shadow: none;
 }
-
 .btn-outline-gc:hover {
   color: #fff;
-  background-color: var(--gc-primary-color, #008B8B);
-  border-color: var(--gc-primary-color, #008B8B);
+  background-color: var(--gc-primary-color);
+  border-color: var(--gc-primary-color);
   box-shadow: none;
 }
-
 .btn-outline-gc:focus,
 .btn-outline-gc.focus,
 .btn-outline-gc:focus-visible {
   color: #fff;
-  background-color: var(--gc-primary-color, #008B8B);
-  border-color: var(--gc-primary-color, #008B8B);
-  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--gc-primary-color, #008B8B), transparent, 85%);
+  background-color: var(--gc-primary-color);
+  border-color: var(--gc-primary-color);
+  box-shadow: 0 0 0 0.2rem var(--gc-primary-focus-ring);
 }
-
 .btn-outline-gc:active,
 .btn-outline-gc.active,
 .show > .btn-outline-gc.dropdown-toggle {
   color: #fff;
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000 12%);
-  border-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000 18%);
+  background-color: var(--gc-primary-hover-bg);
+  border-color: var(--gc-primary-hover-border);
   box-shadow: none;
 }
-
 .btn-outline-gc:disabled,
 .btn-outline-gc.disabled {
-  color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff 40%);
+  color: var(--gc-primary-outline-disabled-color);
   background-color: transparent;
-  border-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff 50%);
+  border-color: var(--gc-primary-outline-disabled-border);
   opacity: 0.65;
   box-shadow: none;
 }
 
-/* Text color utility using your brand color (like Bootstrap's text-success, text-info, etc.) */
-.text-gc {
-  color: var(--gc-primary-color, #008B8B) !important;
-}
+/* ── Text utilities ── */
+.text-gc       { color: var(--gc-primary-color) !important; }
+.text-gc-muted { color: var(--gc-text-muted)    !important; }
+.text-gc-light { color: var(--gc-text-light)    !important; }
+.text-gc-dark  { color: var(--gc-text-dark)     !important; }
 
-/* Optional: muted / softer version of your brand color */
-.text-gc-muted {
-  color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #6c757d, 35%) !important;
-}
+/* ── Background ── */
+.bg-gc       { background-color: var(--gc-primary-color)  !important; }
+.bg-gc-light { background-color: var(--gc-primary-light)  !important; }
+.bg-gc-soft  { background-color: var(--gc-primary-soft)   !important; }
+.bg-gc-dark  { background-color: var(--gc-primary-dark)   !important; }
+.bg-gc-muted { background-color: var(--gc-primary-muted)  !important; }
+.bg-gc-subtle{ background-color: var(--gc-primary-subtle) !important; }
 
-/* Optional: very light/tinted version for backgrounds or subtle text */
-.text-gc-light {
-  color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff, 70%) !important;
-}
-
-/* Optional: darker version for hover states or emphasis */
-.text-gc-dark {
-  color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000, 25%) !important;
-}
-
-/* Solid background using your brand color (like Bootstrap's bg-primary, bg-light, etc.) */
-.bg-gc {
-  background-color: var(--gc-primary-color, #008B8B) !important;
-}
-
-/* Light tint of your brand color */
-.bg-gc-light {
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff, 85%) !important;
-}
-
-/* Subtle/soft version */
-.bg-gc-soft {
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #fff, 92%) !important;
-}
-
-/* Darker shade of your brand color */
-.bg-gc-dark {
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #000, 20%) !important;
-}
-
-/* Muted, desaturated version */
-.bg-gc-muted {
-  background-color: color-mix(in srgb, var(--gc-primary-color, #008B8B), #6c757d, 40%) !important;
-}
-
-/* Gradient backgrounds using your brand color (Architect-UI style) */
-/* Using rgba(0, 139, 139, ...) instead of white/black hex */
-
-/* Subtle horizontal gradient */
+/* ── Gradients ── */
 .bg-gc-gradient {
   background: linear-gradient(90deg,
-    var(--gc-primary-color, #008B8B) 0%,
-    rgba(0, 139, 139, 0.6) 100%) !important;
+    var(--gc-primary-color) 0%,
+    var(--gc-grad-60) 100%) !important;
 }
-
-/* Diagonal gradient (top-left to bottom-right) */
 .bg-gc-gradient-diag {
   background: linear-gradient(135deg,
-    var(--gc-primary-color, #008B8B) 0%,
-    rgba(0, 139, 139, 0.7) 100%) !important;
+    var(--gc-primary-color) 0%,
+    var(--gc-grad-70) 100%) !important;
 }
-
-/* Warm blend: brand color to a lighter tint */
 .bg-gc-gradient-warm {
   background: linear-gradient(135deg,
-    var(--gc-primary-color, #008B8B) 0%,
-    rgba(0, 139, 139, 0.8) 100%) !important;
+    var(--gc-primary-color) 0%,
+    var(--gc-grad-80) 100%) !important;
 }
-
-/* Cool blend: brand color to cyan/blue tint */
 .bg-gc-gradient-cool {
   background: linear-gradient(135deg,
-    var(--gc-primary-color, #008B8B) 0%,
-    rgba(6, 182, 212, 0.6) 100%) !important;
+    var(--gc-primary-color) 0%,
+    var(--gc-grad-cool) 100%) !important;
 }
-
-/* Deep blend: brand color to a darker shade */
 .bg-gc-gradient-deep {
   background: linear-gradient(135deg,
-    rgba(0, 0, 0, 0.1) 0%,
-    rgba(0, 0, 0, 0.35) 100%),
-    var(--gc-primary-color, #008B8B) !important;
+    rgba(0,0,0,0.1) 0%,
+    rgba(0,0,0,0.35) 100%),
+    var(--gc-primary-color) !important;
 }
-
-/* Multi-stop gradient (Architect-UI style) */
 .bg-gc-gradient-multi {
   background: linear-gradient(135deg,
-    var(--gc-primary-color, #008B8B) 0%,
-    rgba(0, 139, 139, 0.45) 50%,
-    rgba(0, 139, 139, 0.15) 100%) !important;
+    var(--gc-primary-color) 0%,
+    var(--gc-grad-45) 50%,
+    var(--gc-grad-15) 100%) !important;
 }
 
 
@@ -806,7 +795,6 @@ scale(0.96)	Remove or change for a different entrance feel
   justify-content: space-between;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(0,0,0,0.06);
-  cursor: pointer;
   position: sticky;
   top: 0;
   z-index: 5;
@@ -819,7 +807,7 @@ scale(0.96)	Remove or change for a different entrance feel
 }
 
 .drawer-header .drawer-title {
-  color: rgba(38, 64, 130, .7);
+  color: var(--gc-primary-color);
   font-size: .88rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -878,9 +866,13 @@ scale(0.96)	Remove or change for a different entrance feel
   display: none;
 }
 
+.drawer-bottom.drawer-minimized .drawer-content {
+  padding: 0 !important;
+}
+
 /* Minimized state: show only header bar */
 .drawer-bottom.drawer-minimized {
-  transform: translateY(calc(100% - 60px)); /* adjust to match header height */
+  transform: translateY(calc(100% - 50px)); /* adjust to match header height */
 }
 
 /* --- Close Button (legacy absolute positioning still works if you keep it) --- */
@@ -890,13 +882,13 @@ scale(0.96)	Remove or change for a different entrance feel
   right: 12px;
   background: transparent;
   border: none;
-  font-size: clamp(16px, 3vw, 20px);
+  font-size: clamp(18px, 3vw, 20px);
   cursor: pointer;
   z-index: 20;
 }
 
-.drawer-close:hover {
-  color: #6d7ae0;
+.drawer-close:hover, .drawer-minimize:hover {
+  color: #000;
   font-weight: 900;
 }
 
@@ -1469,7 +1461,7 @@ table.dataTable thead>tr>td.dt-ordering-asc .dt-column-order:before{
 }
 
 .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
-  color: #dc3545;
+  color: var(--gc-danger);
   opacity: 1;
 }
 
@@ -1558,6 +1550,15 @@ table.dataTable thead>tr>td.dt-ordering-asc .dt-column-order:before{
   outline: none;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
   border-color: #adb5bd;
+}
+
+/* Mobile */
+@media (max-width: 767.98px) {
+  .select2.select2-container .select2-selection.select2-selection--multiple,
+  .select2.select2-container .select2-selection .select2-selection__arrow,
+  .select2.select2-container .select2-selection {
+    height: auto;
+  }
 }
 
 
@@ -1673,11 +1674,11 @@ textarea {
 /* Validation: invalid */
 .was-validated .custom-select:invalid,
 .custom-select.is-invalid {
-  border-color: #dc3545;
+  border-color: var(--gc-danger);
 }
 .was-validated .custom-select:invalid:focus,
 .custom-select.is-invalid:focus {
-  border-color: #dc3545;
+  border-color: var(--gc-danger);
   box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, .25);
 }
 .was-validated .custom-select:invalid ~ .invalid-feedback,
@@ -2448,31 +2449,31 @@ td .bar-loader span {
 
 .client-icon-primary,
 .project-icon-primary {
-  color: #6f42c1;
+  color: var(--gc-alternate);
   background: rgba(111, 66, 193, 0.10);
 }
 
 .client-icon-success,
 .project-icon-success {
-  color: #198754;
+  color: var(--gc-success);
   background: rgba(25, 135, 84, 0.10);
 }
 
 .client-icon-info,
 .project-icon-info {
-  color: #0dcaf0;
+  color: var(--gc-info);
   background: rgba(13, 202, 240, 0.10);
 }
 
 .client-icon-warning,
 .project-icon-warning {
-  color: #ffc107;
+  color: var(--gc-warning);
   background: rgba(255, 193, 7, 0.12);
 }
 
 .client-icon-danger,
 .project-icon-danger {
-  color: #dc3545;
+  color: var(--gc-danger);
   background: rgba(220, 53, 69, 0.10);
 }
 
@@ -2524,7 +2525,7 @@ td .bar-loader span {
   justify-content: center;
 
   background: rgba(111, 66, 193, 0.10);
-  color: #6f42c1;
+  color: var(--gc-alternate);
 
   font-size: 12px;
   font-weight: 600;

@@ -157,19 +157,7 @@ function getExternalSheets() {
 function createExternalSheet(data) {
   //   requireAuthorizedUser();
 
-  if (!data || typeof data !== "object") {
-    throw new Error("Invalid external sheet data.");
-  }
-
-  const clientName = String(data.clientName || "").trim();
-
-  if (!clientName) {
-    throw new Error("Client name is required.");
-  }
-
-  if (clientName.length > 100) {
-    throw new Error("Client name is too long.");
-  }
+  const clientName = Validation.sheetName(data.clientName, "Client name");
 
   const projects = normalizeProjectNames(data.projects);
 
@@ -312,21 +300,11 @@ function normalizeProjectNames(projects) {
         .split(",")
         .map((project) => project.trim())
         .filter(Boolean)
-        .map(sanitizeSheetName)
-        .filter(Boolean),
+        .map(Validation.sanitizeSheetName)
+        .filter(Boolean)
+        .map((project) => Validation.sheetName(project, "Project name")),
     ),
   ];
-}
-
-/**
- * Make project name safe for a Google Sheet tab.
- */
-function sanitizeSheetName(name) {
-  return String(name)
-    .trim()
-    .replace(/[\[\]\*\?\/\\:]/g, "-")
-    .substring(0, 100)
-    .trim();
 }
 
 /**
@@ -334,6 +312,8 @@ function sanitizeSheetName(name) {
  * in the main spreadsheet.
  */
 function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
+  //   requireAuthorizedUser();
+
   const ss = getSpreadsheet();
 
   let sheet = getSheetSafe("External Sheets");
@@ -775,6 +755,8 @@ function isExternalClient(clientName) {
 }
 
 function combineExternalSheetData(spreadsheetId) {
+  //   requireAuthorizedUser();
+
   const ss = SpreadsheetApp.openById(spreadsheetId);
   const dest = ss.getSheetByName("Projects");
 

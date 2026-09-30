@@ -153,6 +153,8 @@ const ActivityValidation = (() => {
 })();
 
 function recordManualClientHours(clientName, task, hours, date = new Date()) {
+  //   requireAuthorizedUser();
+
   if (!isNonEmptyString(clientName)) {
     return logResponse("Invalid client name provided.");
   }
@@ -191,6 +193,8 @@ function validateManualHoursFormData(formData) {
 }
 
 function recordClientHoursToSheet(sheet, data) {
+  //   requireAuthorizedUser();
+
   const { type, task, hours } = data;
 
   const startRow = 3;
@@ -240,6 +244,8 @@ function recordClientHoursToSheet(sheet, data) {
 }
 
 function recordManualClientHoursFromForm(formData) {
+  //   requireAuthorizedUser();
+
   try {
     const data = ActivityValidation.clientActivityForm(formData);
 
@@ -260,6 +266,8 @@ function recordManualClientHoursFromForm(formData) {
 }
 
 function recordExternalClientHoursFromForm(formData) {
+  //   requireAuthorizedUser();
+
   try {
     const data = ActivityValidation.clientActivityForm(formData);
 
@@ -722,6 +730,8 @@ function getTodayClientHours(clientName) {
 }
 
 function saveEditedTodayClientHours(formData) {
+  //   requireAuthorizedUser();
+
   try {
     Validation.requireObject(formData, "Form data");
 
@@ -1189,6 +1199,8 @@ function saveEditedTodayClientHours(formData) {
 }
 
 function deleteTodayRowsAndCompact(sheet, deleteRows, today, startRow) {
+  //   requireAuthorizedUser();
+
   const lastRow = sheet.getLastRow();
 
   if (lastRow < startRow) {
@@ -1345,29 +1357,41 @@ function getYearHoursSummary(year) {
 }
 
 function addCurrMthTotalHrly(value) {
-  if (value === "" || value === null || value === undefined)
-    throw new Error("❌ No value provided.");
+  // requireAuthorizedUser();
+
+  const numVal = Validation.number(value, "Current month total", {
+    min: Number.EPSILON,
+  });
 
   const sheet = getSheetSafe("Hourly History");
-  if (!sheet) throw new Error('❌ Sheet "Hourly History" not found.');
+
+  if (!sheet) {
+    throw new Error('Sheet "Hourly History" not found.');
+  }
 
   const lastRow = sheet.getLastRow();
-  if (lastRow < 4) throw new Error("❌ Not enough data in Hourly History.");
+
+  if (lastRow < 4) {
+    throw new Error("Not enough data in Hourly History.");
+  }
 
   const colE = sheet.getRange("E4:E" + lastRow).getValues();
   const colF = sheet.getRange("F4:F" + lastRow).getValues();
 
   const targetRow = colE.findIndex((e, i) => e[0] && !colF[i][0]);
-  if (targetRow === -1) throw new Error("⚠️ No empty F cell found to update.");
+
+  if (targetRow === -1) {
+    throw new Error("No empty F cell found to update.");
+  }
 
   const rowNum = targetRow + 4;
-  const numVal = isNaN(Number(value)) ? value : Number(value);
 
   sheet.getRange(`F${rowNum}`).setValue(numVal);
+
   const monthYear = sheet.getRange(`E${rowNum}`).getValue();
 
   return {
-    message: `✅ Added value to ${monthYear}`,
+    message: `Added value to ${monthYear}`,
     row: rowNum,
     monthYear,
   };

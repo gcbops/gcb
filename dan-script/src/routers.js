@@ -27,7 +27,7 @@ import { billingOverviewPage } from "./pages/billing-overview-page.js";
 import { billingInvoiceStatusPage } from "./pages/billing-invoice-status-page.js";
 import { performanceOverviewPage } from "./pages/performance-overview.js";
 import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
-import { clientDetailsPage } from "./pages/client-details.js";
+import { clientDetailsPage } from "./pages/client-details-page.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -167,10 +167,8 @@ const RouterModule = (() => {
     return currentPage;
   }
 
-  function pushHistory(pageName) {
+  function pushHistory(pageName, params = {}) {
     if (isDirectGas) {
-      // history.pushState({ gcbPage: pageName }, "", window.location.href);
-
       return;
     }
 
@@ -179,10 +177,10 @@ const RouterModule = (() => {
         {
           type: "GCB_NAVIGATION",
           page: pageName,
+          client: params.client || null,
         },
         GITHUB_ORIGIN,
       );
-
     } catch (error) {
       console.error("[Router] GitHub navigation postMessage failed:", error);
     }
@@ -290,8 +288,7 @@ const RouterModule = (() => {
   /**
    * Navigate to a page.
    */
-  function go(pageName, updateHistory = true) {
-
+  function go(pageName, updateHistory = true, params = {}) {
     /*
      * ------------------------------------------------
      * Router is not ready yet.
@@ -317,7 +314,7 @@ const RouterModule = (() => {
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
 
     if (updateHistory) {
-      pushHistory(resolvedPageName);
+      pushHistory(resolvedPageName, params);
     }
 
     const page = routes[resolvedPageName];

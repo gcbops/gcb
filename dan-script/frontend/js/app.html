@@ -274,6 +274,22 @@
       }
       return Math.abs(number) <= 1 ? number * 100 : number;
     }
+    function checkScreen() {
+      const width = window.innerWidth;
+      const isMobile = width < 768;
+      const isTablet = width >= 768 && width < 992;
+      const isDesktop = width >= 992;
+      const isTouch = window.matchMedia("(pointer: coarse)").matches;
+      const hasHover = window.matchMedia("(hover: hover)").matches;
+      return {
+        width,
+        isMobile,
+        isTablet,
+        isDesktop,
+        isTouch,
+        hasHover
+      };
+    }
     function showDashboardToast(msg, type = "success") {
       if (typeof toastr === "undefined") {
         console.warn("Toastr not found:", msg);
@@ -459,6 +475,10 @@
           $button.removeClass(solidClass).addClass(originalOutlineClass);
           $button.removeData("original-outline-class");
         }
+        const $modal = $(".modal");
+        if ($modal.length && $modal.attr("data-modal-locked") === "true") {
+          AppUtils.unlockModal(`#${$modal.attr("id")}`);
+        }
       };
       if (isSync) {
         $button.prop("disabled", true);
@@ -494,6 +514,11 @@
         return;
       }
       const modalEl = $modal[0];
+      $modal.removeAttr("data-modal-locked").attr({
+        "data-bs-backdrop": "static",
+        "data-bs-keyboard": "true"
+      });
+      $modal.find(".modal-header .btn-close, .btn-modal-back, .btn-modal-back-target").prop("disabled", false).removeAttr("aria-disabled").removeClass("disabled");
       if (!modalEl.id) {
         console.error(
           "AppUtils.openModal: Modal element must have an ID.",
@@ -722,6 +747,30 @@
       $closeTrigger.trigger("click");
       $closeTrigger.remove();
     }
+    function lockModal(modalSelector) {
+      const $modal = $(modalSelector);
+      if (!$modal.length) {
+        return;
+      }
+      $modal.attr({
+        "data-bs-backdrop": "static",
+        "data-bs-keyboard": "false",
+        "data-modal-locked": "true"
+      });
+      $modal.find(".modal-header .btn-close, .btn-modal-back").prop("disabled", true).attr("aria-disabled", "true").addClass("disabled");
+    }
+    function unlockModal(modalSelector) {
+      const $modal = $(modalSelector);
+      if (!$modal.length) {
+        return;
+      }
+      $modal.attr({
+        "data-bs-backdrop": "static",
+        "data-bs-keyboard": "true"
+      });
+      $modal.removeAttr("data-modal-locked");
+      $modal.find(".modal-header .btn-close, .btn-modal-back").prop("disabled", false).removeAttr("aria-disabled").removeClass("disabled");
+    }
     function openConfirmationModal({
       ns,
       title,
@@ -821,7 +870,7 @@
 
           <button
             type="button"
-            class="btn btn-secondary btn-back"
+            class="btn btn-secondary btn-modal-back"
           >
             Cancel
           </button>
@@ -837,7 +886,7 @@
       `
         });
         $appModal.off(".AppUtilsConfirmation");
-        $appModal.on(`click${eventNs}`, ".btn-back", function(event) {
+        $appModal.on(`click${eventNs}`, ".btn-modal-back", function(event) {
           event.preventDefault();
           $appModal.off(".AppUtilsConfirmation");
           if (typeof onBack === "function") {
@@ -906,6 +955,7 @@
       formatHours,
       formatPercent,
       parsePercent,
+      checkScreen,
       showDashboardToast,
       initSelect2,
       submitForm,
@@ -916,6 +966,8 @@
       closeAllDrawers,
       openModal,
       closeModal,
+      lockModal,
+      unlockModal,
       openConfirmationModal,
       confirmAction
     };
@@ -1414,6 +1466,40 @@
         value: result
       };
     }
+    function sheetName(value, label = "Sheet name", { maxLength = 100 } = {}) {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (result.length > maxLength) {
+        return {
+          valid: false,
+          message: `${label} must not exceed ${maxLength} characters.`
+        };
+      }
+      if (/[:\\/?*[\]]/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} contains characters that are not allowed in a sheet name.`
+        };
+      }
+      if (/^[=+\-@]/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} contains an invalid spreadsheet expression.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function sanitizeSheetName(name) {
+      return String(name ?? "").trim().replace(/\[|\]|\*|\?|\/|\\|:/g, "-").substring(0, 100).trim();
+    }
     function number(value, label, { min = -Infinity, max = Infinity } = {}) {
       if (value === "" || value === null || value === void 0) {
         return {
@@ -1445,9 +1531,143 @@
         value: result
       };
     }
+    function cellReference(value, label = "Cell reference") {
+      const result = String(value ?? "").trim().toUpperCase();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (!/^[A-Z]+[1-9][0-9]*$/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} is invalid. Example: B39 or AB25.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function formula(value, label = "Formula", { maxLength = 5e3 } = {}) {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (result.length > maxLength) {
+        return {
+          valid: false,
+          message: `${label} must not exceed ${maxLength} characters.`
+        };
+      }
+      if (!result.startsWith("=")) {
+        return {
+          valid: false,
+          message: `${label} must be a valid Google Sheets formula.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function email(value, label = "Email") {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (result.length > 254) {
+        return {
+          valid: false,
+          message: `${label} is too long.`
+        };
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} is invalid.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function discordWebhook(value, label = "Discord webhook") {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (!result.startsWith("https://discord.com/api/webhooks/") && !result.startsWith("https://discordapp.com/api/webhooks/")) {
+        return {
+          valid: false,
+          message: `${label} is invalid.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function spreadsheetId(value, label = "Spreadsheet ID") {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (!/^[a-zA-Z0-9_-]{20,}$/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} is invalid.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
+    function driveFolderId(value, label = "Drive folder ID") {
+      const result = String(value ?? "").trim();
+      if (!result) {
+        return {
+          valid: false,
+          message: `${label} is required.`
+        };
+      }
+      if (!/^[a-zA-Z0-9_-]{10,}$/.test(result)) {
+        return {
+          valid: false,
+          message: `${label} is invalid.`
+        };
+      }
+      return {
+        valid: true,
+        value: result
+      };
+    }
     return {
       requiredString,
-      number
+      sheetName,
+      sanitizeSheetName,
+      number,
+      cellReference,
+      formula,
+      email,
+      discordWebhook,
+      spreadsheetId,
+      driveFolderId
     };
   })();
 
@@ -3103,7 +3323,9 @@
         container.classList.add("opacity-0");
       }
       hide();
-      RouterModule.go("clientDetails");
+      RouterModule.go("clientDetails", true, {
+        client: clientName
+      });
     }
     function openAddHours(clientName) {
       hide();
@@ -3825,7 +4047,7 @@
         >
           <button
             type="button"
-            class="btn btn-secondary btn-back"
+            class="btn btn-secondary btn-modal-back"
           >
             Back
           </button>
@@ -3848,6 +4070,7 @@
             showFormStep($modal);
           }).on(`click${namespace}`, ".btn-proceed", () => {
             const $button = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
             submitAddClient($modal, $button);
           });
         },
@@ -3865,10 +4088,15 @@
         form.reportValidity();
         return;
       }
-      const clientName = String($modal.find("#sheet_name").val() || "").trim();
-      if (!clientName) {
+      const clientNameResult = ValidationModule.sheetName(
+        $modal.find("#sheet_name").val(),
+        "Client name"
+      );
+      if (!clientNameResult.valid) {
+        AppUtils.showDashboardToast(clientNameResult.message, "error");
         return;
       }
+      const clientName = clientNameResult.value;
       AppUtils.submitForm({
         gscriptFunc: "createClientSheet",
         data: {
@@ -3882,12 +4110,30 @@
             "Client sheet created successfully!",
             "success"
           );
-          google.script.run.withFailureHandler((error) => {
-            console.error("[clientDirectory] syncClientSheetList failed:", error);
-            AppUtils.showError("Syncing error!");
+          google.script.run.withSuccessHandler((result) => {
+            AppUtils.confirmAction(
+              "syncClientsList",
+              "Synchronize Client Directory?",
+              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+              () => {
+                AppUtils.cacheClear("clientDirectoryData");
+                ClientDirectory.refreshClientDirectory(
+                  "clientDirectoryData",
+                  () => {
+                    AppUtils.showDashboardToast(
+                      "Clients refreshed successfully.",
+                      "success"
+                    );
+                  }
+                );
+              }
+            );
+          }).withFailureHandler((error) => {
+            console.error(
+              "[clientDirectory] syncClientSheetList failed:",
+              error
+            );
           }).syncClientSheetList();
-          AppUtils.cacheClear("clientDirectoryData");
-          ClientDirectory.refreshClientDirectory("clientDirectoryData");
         }
       });
     }
@@ -3983,7 +4229,7 @@
         >
           <button
             type="button"
-            class="btn btn-secondary btn-back"
+            class="btn btn-secondary btn-modal-back"
           >
             Back
           </button>
@@ -4006,6 +4252,7 @@
             showFormStep($modal);
           }).on(`click${namespace}`, ".btn-proceed", () => {
             const $button = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
             createExternalSheet($modal, $button);
           });
         },
@@ -4023,12 +4270,27 @@
         form.reportValidity();
         return;
       }
-      const clientName = String(
-        $modal.find("#externalClientName").val() || ""
-      ).trim();
-      const projects = String(
-        $modal.find("#externalProjects").val() || ""
-      ).trim();
+      const clientNameResult = ValidationModule.sheetName(
+        $modal.find("#externalClientName").val(),
+        "Client name"
+      );
+      if (!clientNameResult.valid) {
+        AppUtils.showDashboardToast(clientNameResult.message, "error");
+        return;
+      }
+      const clientName = clientNameResult.value;
+      const projectsResult = ValidationModule.requiredString(
+        $modal.find("#externalProjects").val(),
+        "Projects",
+        {
+          maxLength: 5e3
+        }
+      );
+      if (!projectsResult.valid) {
+        AppUtils.showDashboardToast(projectsResult.message, "error");
+        return;
+      }
+      const projects = projectsResult.value;
       if (!clientName || !projects) {
         return;
       }
@@ -4044,10 +4306,30 @@
           "success"
         );
         AppUtils.cacheClear("clientDirectoryData");
-        google.script.run.withFailureHandler((error) => {
-          console.error("[clientDirectory] syncClientSheetList failed:", error);
+        google.script.run.withSuccessHandler((result2) => {
+          AppUtils.confirmAction(
+            "syncClientsList",
+            "Synchronize Client Directory?",
+            "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+            () => {
+              AppUtils.cacheClear("clientDirectoryData");
+              ClientDirectory.refreshClientDirectory(
+                "clientDirectoryData",
+                () => {
+                  AppUtils.showDashboardToast(
+                    "Clients refreshed successfully.",
+                    "success"
+                  );
+                }
+              );
+            }
+          );
+        }).withFailureHandler((error) => {
+          console.error(
+            "[clientDirectory] syncClientSheetList failed:",
+            error
+          );
         }).syncClientSheetList();
-        ClientDirectory.refreshClientDirectory("clientDirectoryData");
       }).withFailureHandler((error) => {
         console.error("[clientDirectory] createExternalSheet failed:", error);
         loading.restore();
@@ -4783,7 +5065,19 @@
     const handleBtnGenerateYearlyReport = ($btn) => {
       const selectYear = $("#yearly-report-year");
       const type = "yearly";
-      const year = selectYear.val();
+      const yearResult = ValidationModule.number(
+        selectYear.val(),
+        "Report year",
+        {
+          min: 2024,
+          max: (/* @__PURE__ */ new Date()).getFullYear()
+        }
+      );
+      if (!yearResult.valid) {
+        AppUtils.showDashboardToast(yearResult.message, "warning");
+        return;
+      }
+      const year = yearResult.value;
       selectYear.prop("disabled", true);
       const loading = AppUtils.setButtonLoading(
         $btn[0],
@@ -4808,8 +5102,26 @@
     const handleBtnGenerateMonthlyReport = ($btn) => {
       const selectMonth = $("#monthly-report-month");
       const selectYear = $("#monthly-report-year");
-      const month = selectMonth.val();
-      const year = selectYear.val();
+      const monthResult = ValidationModule.requiredString(
+        selectMonth.val(),
+        "Report month",
+        { maxLength: 20 }
+      );
+      if (!monthResult.valid) {
+        AppUtils.showDashboardToast(monthResult.message, "warning");
+        return;
+      }
+      const yearResult = ValidationModule.number(
+        selectYear.val(),
+        "Report year",
+        { min: 2024, max: (/* @__PURE__ */ new Date()).getFullYear() }
+      );
+      if (!yearResult.valid) {
+        AppUtils.showDashboardToast(yearResult.message, "warning");
+        return;
+      }
+      const month = monthResult.value;
+      const year = yearResult.value;
       const type = "monthly";
       selectMonth.prop("disabled", true);
       selectYear.prop("disabled", true);
@@ -5668,12 +5980,6 @@
       AppUtils.cacheSet("selectedIntegration", integration);
       RouterModule.go("integrationsConfiguration");
     }
-    function isValidCellRef(ref) {
-      return /^[A-Z]+[1-9][0-9]*$/i.test(ref);
-    }
-    function isValidFormula(formula) {
-      return /^=\s*[A-Z]+\(/i.test(formula) || /^=.+[A-Z0-9]/i.test(formula);
-    }
     function startMasterFormulaOperation() {
       masterFormulaOperationId++;
       if (masterFormulaTimer) {
@@ -5693,32 +5999,25 @@
       }
     }
     function getMasterFormulaFormData($modal) {
-      const cellRef = String($modal.find("#masterFormulaCell").val() || "").trim().toUpperCase();
-      const formula = String(
-        $modal.find("#masterFormulaValue").val() || ""
-      ).trim();
-      if (!cellRef) {
-        AppUtils.showDashboardToast("Cell reference is required.", "error");
+      const cellRefResult = ValidationModule.cellReference(
+        $modal.find("#masterFormulaCell").val(),
+        "Cell reference"
+      );
+      if (!cellRefResult.valid) {
+        AppUtils.showDashboardToast(cellRefResult.message, "error");
         return null;
       }
-      if (!isValidCellRef(cellRef)) {
-        AppUtils.showDashboardToast(
-          "Invalid cell reference. Example: B39 or AB25.",
-          "error"
-        );
-        return null;
-      }
-      if (!formula) {
-        AppUtils.showDashboardToast("Formula is required.", "error");
-        return null;
-      }
-      if (!isValidFormula(formula)) {
-        AppUtils.showDashboardToast("Invalid Google Sheets formula.", "error");
+      const formulaResult = ValidationModule.formula(
+        $modal.find("#masterFormulaValue").val(),
+        "Formula"
+      );
+      if (!formulaResult.valid) {
+        AppUtils.showDashboardToast(formulaResult.message, "error");
         return null;
       }
       return {
-        cellRef,
-        formula
+        cellRef: cellRefResult.value,
+        formula: formulaResult.value
       };
     }
     function openMasterFormulaModal(isNotMain = false) {
@@ -5810,7 +6109,7 @@
 
         <button
           type="button"
-          class="btn btn-secondary btn-back"
+          class="btn btn-secondary btn-modal-back"
         >
           Back
         </button>
@@ -5834,6 +6133,7 @@
               label: "Apply to External Main Sheet",
               icon: "pe-7s-shuffle",
               onClick: ($modal, $btn) => {
+                AppUtils.lockModal(MODAL_ID);
                 applyFormulaToExternalProjectsFromModal(
                   $modal,
                   $(MODAL_ID).find(".btn-proceed")
@@ -5844,6 +6144,7 @@
               label: "Apply to External Internal Sheets",
               icon: "pe-7s-shuffle",
               onClick: ($modal, $btn) => {
+                AppUtils.lockModal(MODAL_ID);
                 applyFormulaToExternalProjectSheetsFromModal(
                   $modal,
                   $(MODAL_ID).find(".btn-proceed")
@@ -5861,11 +6162,19 @@
             $cellInput.removeClass("is-invalid");
             $formulaValue.removeClass("is-invalid");
             let isValid = true;
-            if (!$cellInput.val().trim()) {
+            const cellRefResult = ValidationModule.cellReference(
+              $cellInput.val(),
+              "Cell reference"
+            );
+            const formulaResult = ValidationModule.formula(
+              $formulaValue.val(),
+              "Formula"
+            );
+            if (!cellRefResult.valid) {
               $cellInput.addClass("is-invalid");
               isValid = false;
             }
-            if (!$formulaValue.val().trim()) {
+            if (!formulaResult.valid) {
               $formulaValue.addClass("is-invalid");
               isValid = false;
             }
@@ -5878,6 +6187,7 @@
             $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
           }).on(`click${ns}`, ".btn-proceed", () => {
             const $btn = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
             if (isNotMain === "btnDeployExternalProjectsInternalSheetFormula") {
               applyFormulaToExternalProjectSheetsFromModal($modal, $btn);
             } else if (isNotMain === "btnDeployExternalProjectsMainSheetFormula") {
@@ -7919,10 +8229,13 @@
       }
       const toggleSummary = () => {
         const isHidden = summary.classList.contains("is-collapsing");
+        const screen = AppUtils.checkScreen();
         if (isHidden) {
           showTodaySummary(summary, more, remaining, container);
         } else {
-          hideTodaySummary(summary, more, container);
+          if (!screen.isMobile) {
+            hideTodaySummary(summary, more, container);
+          }
         }
       };
       more.addEventListener("click", toggleSummary);
@@ -8163,7 +8476,11 @@
       }
       eventsBound = true;
       document.addEventListener("click", handleClick);
-      document.addEventListener("change", handleChange);
+      $(document).on(
+        "change",
+        "#owed-hours-year-filter, #owed-hours-month-filter",
+        handleChange
+      );
     }
     function handleClick(event) {
       const button = event.target.closest('[data-action="sync-billing-records"]');
@@ -8487,7 +8804,11 @@
       }
       eventsBound = true;
       document.addEventListener("click", handleClick);
-      document.addEventListener("change", handleChange);
+      $(document).on(
+        "change",
+        "#paid-hours-year-filter, #paid-hours-month-filter",
+        handleChange
+      );
     }
     function handleClick(event) {
       const button = event.target.closest('[data-action="sync-billing-records"]');
@@ -8935,7 +9256,6 @@
     function init() {
       loadGrowthComparison("#growth-comparison");
       initMonthlyHoursChart();
-      ChartModule.loadChart("yearly");
     }
     function destroy() {
       $(document).off(".monthlyHoursByYear");
@@ -10268,9 +10588,10 @@
       const unit = isDaily ? "hrs/day" : "hrs";
       const currentValue = isDaily ? Number(targetData.dailyTarget) : Number(targetData.monthlyTarget);
       const currentValueText = Number.isFinite(currentValue) ? currentValue : "";
+      const ns = ".performanceTargetModal";
       const header = '<div><h5 class="modal-title font-weight-bold mb-0">Edit ' + label + '</h5><div class="font-size-xs text-muted mt-1">Update the ' + label.toLowerCase() + " used by performance calculations.</div></div>";
-      const body = '<form id="performance-target-form"><div class="form-group mb-0 text-left"><label for="' + inputId + '" class="form-label font-weight-bold">' + label + '</label><div class="input-group"><input type="number" id="' + inputId + '" class="form-control my-0" min="0" step="0.5" value="' + currentValueText + '" required><span class="input-group-text">' + unit + "</span></div></div></form>";
-      const footer = '<button type="button" class="btn btn-light btn-cancel-target">Cancel</button><button type="button" class="btn btn-primary btn-save-target">Save Changes</button>';
+      const body = '<div id="target-form-body"><form id="performance-target-form"><div class="form-group mb-0 text-left"><label for="' + inputId + '" class="form-label font-weight-bold">' + label + '</label><div class="input-group"><input type="number" id="' + inputId + '" class="form-control my-0" min="0" step="0.5" value="' + currentValueText + '" required><span class="input-group-text">' + unit + '</span></div></div></form></div><div id="target-review-body" class="d-none"><h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5><p>Please review the target change before applying it.</p><div class="text-left font-size-sm"><div class="d-flex justify-content-between"><span class="text-muted">' + label + '</span><strong id="target-review-value"></strong></div></div></div>';
+      const footer = '<div id="target-form-footer" class="d-flex gap-2"><button type="button" class="btn btn-light btn-cancel-target">Cancel</button><button type="button" class="btn btn-primary btn-save-target">Save Changes</button></div><div id="target-review-footer" class="d-flex gap-2 d-none"><button type="button" class="btn btn-secondary btn-modal-back-target">Back</button><button type="button" class="btn btn-success btn-proceed-target">Proceed</button></div>';
       AppUtils.openModal(TARGET_MODAL_ID, {
         size: "md",
         placement: "center",
@@ -10278,59 +10599,47 @@
         body,
         footer,
         onOpen($modal) {
-          const namespace = ".performanceTargetModal";
-          $modal.off(namespace).on("click" + namespace, ".btn-cancel-target", () => {
+          $modal.off(ns).on(`click${ns}`, ".btn-cancel-target", () => {
             AppUtils.closeModal(TARGET_MODAL_ID);
-          }).on("click" + namespace, ".btn-save-target", () => {
-            confirmTargetUpdate($modal, type);
+          }).on(`click${ns}`, ".btn-save-target", () => {
+            showTargetReview($modal, type);
+          }).on(`click${ns}`, ".btn-back-target", () => {
+            $modal.find("#target-review-body, #target-review-footer").addClass("d-none");
+            $modal.find("#target-form-body, #target-form-footer").removeClass("d-none");
+          }).on(`click${ns}`, ".btn-proceed-target", () => {
+            const $button = $modal.find(".btn-proceed-target");
+            AppUtils.lockModal(TARGET_MODAL_ID);
+            const newValue = Number($modal.find(`#${inputId}`).val());
+            savePerformanceTarget(type, newValue, $button);
           });
         },
         onClose($modal) {
-          $modal.off(".performanceTargetModal");
+          $modal.off(ns);
         }
       });
     }
-    function confirmTargetUpdate($modal, type) {
+    function showTargetReview($modal, type) {
       const isDaily = type === "daily";
       const inputId = isDaily ? "#performance-daily-target" : "#performance-monthly-target";
       const label = isDaily ? "Daily Target" : "Monthly Target";
       const unit = isDaily ? "hrs/day" : "hrs";
-      const newValue = Number($modal.find(inputId).val());
-      const currentValue = isDaily ? Number(targetData?.dailyTarget) : Number(targetData?.monthlyTarget);
-      if (!Number.isFinite(newValue) || newValue <= 0) {
-        AppUtils.showError(`${label} must be greater than 0.`);
+      const rawValue = $modal.find(inputId).val();
+      const newValueResult = ValidationModule.number(rawValue, label, {
+        min: Number.EPSILON
+      });
+      if (!newValueResult.valid) {
+        AppUtils.showError(newValueResult.message);
         return;
       }
+      const newValue = newValueResult.value;
+      const currentValue = isDaily ? Number(targetData?.dailyTarget) : Number(targetData?.monthlyTarget);
       if (newValue === currentValue) {
         AppUtils.showError(`No ${label.toLowerCase()} changes were made.`);
         return;
       }
-      AppUtils.openConfirmationModal({
-        ns: ".performanceTargetConfirm",
-        title: `Update ${label}`,
-        message: `
-      <p class="mb-3">
-        Are you sure you want to update this target?
-      </p>
-
-      <div class="text-left font-size-sm">
-        <div class="d-flex justify-content-between">
-          <span class="text-muted">
-            ${label}
-          </span>
-
-          <strong>
-            ${formatHours(newValue)} ${unit}
-          </strong>
-        </div>
-      </div>
-    `,
-        onProceed: ($confirmModal, $proceedButton) => {
-          savePerformanceTarget(type, newValue, $proceedButton);
-        },
-        onBack: () => {
-        }
-      });
+      $modal.find("#target-review-value").text(`${formatHours(newValue)} ${unit}`);
+      $modal.find("#target-form-body, #target-form-footer").addClass("d-none");
+      $modal.find("#target-review-body, #target-review-footer").removeClass("d-none");
     }
     function savePerformanceTarget(type, value, proceedButton) {
       const loading = proceedButton ? AppUtils.setButtonLoading(proceedButton, "Saving") : null;
@@ -11255,7 +11564,7 @@
 
       <!-- REVIEW ACTION FOOTER -->
       <div id="review-modal-footer" class="d-flex gap-2 d-none">
-        <button type="button" class="btn btn-secondary btn-back">
+        <button type="button" class="btn btn-secondary btn-modal-back">
           Back
         </button>
         <button type="button" class="btn btn-success btn-proceed">
@@ -11274,6 +11583,7 @@
             $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
           }).on(`click${ns}`, ".btn-proceed", () => {
             const $btn = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
             saveIntegration(integration, $modal, $btn);
           });
           loadIntegrationConfigStatus(integration, $modal);
@@ -11416,9 +11726,8 @@
     const UPSELL_BODY_ID = "opportunitiesUpsellBody";
     const UPSELL_RECORDS_CACHE_KEY = "upsellRecords";
     const UPSELL_SUMMARY_CACHE_KEY = "upsellSummary";
-    const UPSELL_MODAL_ID = "#app-modal";
+    const MODAL_ID = "#app-modal";
     const UPSELL_MODAL_NS = ".clientOpportunitiesUpsell";
-    const HOURLY_MODAL_ID = "#app-modal";
     const HOURLY_MODAL_NS = ".clientOpportunitiesHourly";
     const LEGACY_CLIENTS_CACHE_KEY = "legacyClients";
     function init() {
@@ -11436,8 +11745,8 @@
       bound = false;
       const $page = $(PAGE_ID);
       $page.off(".clientOpportunities");
-      $(UPSELL_MODAL_ID).off(UPSELL_MODAL_NS);
-      $(HOURLY_MODAL_ID).off(HOURLY_MODAL_NS);
+      $(MODAL_ID).off(UPSELL_MODAL_NS);
+      $(MODAL_ID).off(HOURLY_MODAL_NS);
       DataTableModule.destroy(UPSELL_TABLE_ID);
     }
     function bindActions() {
@@ -11586,13 +11895,14 @@
       return tr;
     }
     function openUpsellModal() {
-      AppUtils.openModal(UPSELL_MODAL_ID, {
+      AppUtils.openModal(MODAL_ID, {
         size: "lg",
         placement: "center",
         header: `
-        <strong>Add Upsell Opportunity</strong>
-      `,
+      <strong>Add Upsell Opportunity</strong>
+    `,
         body: `
+      <div id="upsell-form-body">
         <form id="upsellOpportunityForm">
 
           <div class="position-relative form-group">
@@ -11673,8 +11983,46 @@
           </div>
 
         </form>
-      `,
+      </div>
+
+      <div id="upsell-review-body" class="d-none">
+        <p class="mb-3">
+          Please review the upsell entry before submitting.
+        </p>
+
+        <div class="mb-2">
+          <strong>Client:</strong>
+          <span id="upsell-review-client"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Upsell Hours:</strong>
+          <span id="upsell-review-hours"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Orasan Hours:</strong>
+          <span id="upsell-review-total-hours"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Orasan Date:</strong>
+          <span id="upsell-review-orasan-date"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Reported Date:</strong>
+          <span id="upsell-review-reported-date"></span>
+        </div>
+
+        <div class="mb-2">
+          <strong>Screenshot:</strong>
+          <span id="upsell-review-screenshot"></span>
+        </div>
+      </div>
+    `,
         footer: `
+      <div id="upsell-form-footer">
         <button
           type="button"
           class="btn btn-secondary btn-cancel"
@@ -11688,12 +12036,37 @@
         >
           Save Upsell
         </button>
-      `,
+      </div>
+
+      <div id="upsell-review-footer" class="d-none">
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
         onOpen($modal) {
           $modal.off(UPSELL_MODAL_NS).on(`click${UPSELL_MODAL_NS}`, ".btn-cancel", () => {
-            AppUtils.closeModal(UPSELL_MODAL_ID);
+            AppUtils.closeModal(MODAL_ID);
           }).on(`click${UPSELL_MODAL_NS}`, ".btn-save", () => {
             submitUpsell($modal);
+          }).on(`click${UPSELL_MODAL_NS}`, ".btn-back", () => {
+            $modal.find("#upsell-review-body, #upsell-review-footer").addClass("d-none");
+            $modal.find("#upsell-form-body, #upsell-form-footer").removeClass("d-none");
+          }).on(`click${UPSELL_MODAL_NS}`, ".btn-proceed", () => {
+            const data = $modal.data("upsell-data");
+            const $button = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
+            submitUpsellToServer($modal, data, $button);
           });
         },
         onClose($modal) {
@@ -11706,55 +12079,85 @@
       if (!$form.length) {
         return;
       }
-      const $submitBtn = $modal.find(".btn-save");
-      const data = {
-        clientName: String(
-          $form.find("#opportunity-clientName").val() || ""
-        ).trim(),
-        screenshot: String(
-          $form.find("#opportunity-screenshot").val() || ""
-        ).trim(),
-        upsellHours: String(
-          $form.find("#opportunity-upsellHours").val() || ""
-        ).trim(),
-        totalHours: String(
-          $form.find("#opportunity-totalHours").val() || ""
-        ).trim(),
-        orasanDate: String(
-          $form.find("#opportunity-orasanDate").val() || ""
-        ).trim(),
-        reportedDate: String(
-          $form.find("#opportunity-reportedDate").val() || ""
-        ).trim()
-      };
-      if (!data.clientName || !data.upsellHours || !data.reportedDate) {
-        AppUtils.showError("Please fill out all required fields!");
+      const clientNameResult = ValidationModule.requiredString(
+        $form.find("#opportunity-clientName").val(),
+        "Client name",
+        { maxLength: 100 }
+      );
+      if (!clientNameResult.valid) {
+        AppUtils.showError(clientNameResult.message);
         return;
       }
-      AppUtils.confirmAction(
-        "submitUpsellForm",
-        "Submit Upsell Entry?",
-        `
-        Are you sure you want to log an upsell entry
-        of ${AppUtils.escapeHtml(data.upsellHours)}
-        hours for ${AppUtils.escapeHtml(data.clientName)}?
-      `,
-        () => {
-          AppUtils.submitForm({
-            gscriptFunc: "addUpsellEntry",
-            data,
-            $btn: $submitBtn,
-            loadingText: "Saving upsell",
-            onSuccess: () => {
-              handleUpsellSaveSuccess();
-            }
-          });
-        }
+      const screenshot = String(
+        $form.find("#opportunity-screenshot").val() || ""
+      ).trim();
+      const upsellHoursResult = ValidationModule.number(
+        $form.find("#opportunity-upsellHours").val(),
+        "Upsell hours",
+        { min: Number.EPSILON }
       );
+      if (!upsellHoursResult.valid) {
+        AppUtils.showError(upsellHoursResult.message);
+        return;
+      }
+      const totalHoursRaw = String(
+        $form.find("#opportunity-totalHours").val() || ""
+      ).trim();
+      let totalHours = "";
+      if (totalHoursRaw) {
+        const result = ValidationModule.number(totalHoursRaw, "Orasan hours", {
+          min: Number.EPSILON
+        });
+        if (!result.valid) {
+          AppUtils.showError(result.message);
+          return;
+        }
+        totalHours = result.value;
+      }
+      const orasanDate = String(
+        $form.find("#opportunity-orasanDate").val() || ""
+      ).trim();
+      const reportedDateResult = ValidationModule.requiredString(
+        $form.find("#opportunity-reportedDate").val(),
+        "Reported date",
+        { maxLength: 100 }
+      );
+      if (!reportedDateResult.valid) {
+        AppUtils.showError(reportedDateResult.message);
+        return;
+      }
+      const data = {
+        clientName: clientNameResult.value,
+        screenshot,
+        upsellHours: upsellHoursResult.value,
+        totalHours,
+        orasanDate,
+        reportedDate: reportedDateResult.value
+      };
+      $modal.find("#upsell-review-client").text(data.clientName);
+      $modal.find("#upsell-review-hours").text(`${data.upsellHours} hrs`);
+      $modal.find("#upsell-review-total-hours").text(`${data.totalHours} hrs`);
+      $modal.find("#upsell-review-orasan-date").text(data.orasanDate);
+      $modal.find("#upsell-review-reported-date").text(data.reportedDate);
+      $modal.find("#upsell-review-screenshot").text(data.screenshot);
+      $modal.data("upsell-data", data);
+      $modal.find("#upsell-form-body, #upsell-form-footer").addClass("d-none");
+      $modal.find("#upsell-review-body, #upsell-review-footer").removeClass("d-none");
+    }
+    function submitUpsellToServer($modal, data, $submitBtn) {
+      AppUtils.submitForm({
+        gscriptFunc: "addUpsellEntry",
+        data,
+        $btn: $submitBtn,
+        loadingText: "Saving upsell",
+        onSuccess: () => {
+          handleUpsellSaveSuccess();
+        }
+      });
     }
     function handleUpsellSaveSuccess() {
       AppUtils.showDashboardToast("Record added successfully!", "success");
-      AppUtils.closeModal(UPSELL_MODAL_ID);
+      AppUtils.closeModal(MODAL_ID);
       AppUtils.resetCacheKeys([
         UPSELL_RECORDS_CACHE_KEY,
         UPSELL_SUMMARY_CACHE_KEY
@@ -11831,13 +12234,14 @@
       }).getDirectCellValueSafe("Hourly History", "B8");
     }
     function openHourlyModal() {
-      AppUtils.openModal(HOURLY_MODAL_ID, {
+      AppUtils.openModal(MODAL_ID, {
         size: "md",
         placement: "center",
         header: `
-        <strong>Add Current Month Total</strong>
-      `,
+      <strong>Add Current Month Total</strong>
+    `,
         body: `
+      <div id="hourly-form-body">
         <form id="addOpportunityHourlyForm">
 
           <div class="position-relative form-group">
@@ -11856,8 +12260,20 @@
           </div>
 
         </form>
-      `,
+      </div>
+
+      <div id="hourly-review-body" class="d-none">
+        <p class="mb-2">
+          Please review the current month total before submitting.
+        </p>
+
+        <div class="fw-semibold fs-5">
+          <span id="hourly-review-value"></span> hrs
+        </div>
+      </div>
+    `,
         footer: `
+      <div id="hourly-form-footer">
         <button
           type="button"
           class="btn btn-secondary btn-cancel"
@@ -11871,12 +12287,37 @@
         >
           Save Total
         </button>
-      `,
+      </div>
+
+      <div id="hourly-review-footer" class="d-none">
+        <button
+          type="button"
+          class="btn btn-secondary btn-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
         onOpen($modal) {
           $modal.off(HOURLY_MODAL_NS).on(`click${HOURLY_MODAL_NS}`, ".btn-cancel", () => {
-            AppUtils.closeModal(HOURLY_MODAL_ID);
+            AppUtils.closeModal(MODAL_ID);
           }).on(`click${HOURLY_MODAL_NS}`, ".btn-save", () => {
             submitHourlyTotal($modal);
+          }).on(`click${HOURLY_MODAL_NS}`, ".btn-back", () => {
+            $modal.find("#hourly-review-body, #hourly-review-footer").addClass("d-none");
+            $modal.find("#hourly-form-body, #hourly-form-footer").removeClass("d-none");
+          }).on(`click${HOURLY_MODAL_NS}`, ".btn-proceed", () => {
+            const value = $modal.data("hourly-total-value");
+            const $button = $modal.find(".btn-proceed");
+            AppUtils.lockModal(MODAL_ID);
+            submitHourlyTotalToServer($modal, value, $button);
           });
         },
         onClose($modal) {
@@ -11886,31 +12327,34 @@
     }
     function submitHourlyTotal($modal) {
       const $input = $modal.find("#opportunity-hourly-value");
-      const value = String($input.val() || "").trim();
-      const $submitBtn = $modal.find(".btn-save");
-      if (!value) {
-        AppUtils.showError("Please enter the current month total.");
+      const result = ValidationModule.number(
+        $input.val(),
+        "Current month total",
+        { min: Number.EPSILON }
+      );
+      if (!result.valid) {
+        AppUtils.showError(result.message);
         return;
       }
-      AppUtils.confirmAction(
-        "addMonthTotal",
-        "Submit Total Hours?",
-        "Do you want to submit the current month total hour for hourly projects?",
-        () => {
-          AppUtils.submitForm({
-            gscriptFunc: "addCurrMthTotalHrly",
-            data: value,
-            $btn: $submitBtn,
-            loadingText: "Saving",
-            onSuccess: () => {
-              AppUtils.showDashboardToast("Successfully added total!", "success");
-              AppUtils.closeModal(HOURLY_MODAL_ID);
-              loadHourlyChart(true);
-              loadTotalHourlyHours();
-            }
-          });
+      const numericValue = result.value;
+      $modal.find("#hourly-review-value").text(numericValue.toFixed(2));
+      $modal.data("hourly-total-value", numericValue);
+      $modal.find("#hourly-form-body, #hourly-form-footer").addClass("d-none");
+      $modal.find("#hourly-review-body, #hourly-review-footer").removeClass("d-none");
+    }
+    function submitHourlyTotalToServer($modal, value, $submitBtn) {
+      AppUtils.submitForm({
+        gscriptFunc: "addCurrMthTotalHrly",
+        data: value,
+        $btn: $submitBtn,
+        loadingText: "Saving",
+        onSuccess: () => {
+          AppUtils.showDashboardToast("Successfully added total!", "success");
+          AppUtils.closeModal(MODAL_ID);
+          loadHourlyChart(true);
+          loadTotalHourlyHours();
         }
-      );
+      });
     }
     return {
       init,
@@ -12340,7 +12784,11 @@
       }
       eventsBound = true;
       document.addEventListener("click", handleClick);
-      document.addEventListener("change", handleChange);
+      $(document).on(
+        "change",
+        "#invoice-status-year-filter, #invoice-status-month-filter",
+        handleChange
+      );
     }
     function handleClick(event) {
       const button = event.target.closest('[data-action="sync-billing-records"]');
@@ -13098,10 +13546,11 @@
     };
   })();
 
-  // src/pages/client-details.js
-  var clientDetailsPage = /* @__PURE__ */ (() => {
+  // src/pages/client-details-page.js
+  var clientDetailsPage = (() => {
     let bound = false;
     let clientName = "";
+    const isGitHubEmbedded = window.GCB_IS_GITHUB_EMBEDDED === true;
     const CACHE_KEY_PREFIX = "clientDetails_";
     let clientDetailsData = null;
     let selectedHoursYear = null;
@@ -13110,11 +13559,17 @@
         return;
       }
       bound = true;
-      clientName = String(
-        sessionStorage.getItem("clientDetailsName") || ""
-      ).trim();
+      const urlClient = String(window.GCB_INITIAL_CLIENT || "").trim();
+      if (isGitHubEmbedded && urlClient) {
+        clientName = urlClient.replace(/_/g, " ");
+        sessionStorage.setItem("clientDetailsName", clientName);
+      } else {
+        clientName = String(
+          sessionStorage.getItem("clientDetailsName") || ""
+        ).trim();
+      }
       if (!clientName) {
-        RouterModule.go("home");
+        RouterModule.go("clientDetails");
         console.error("No client selected.");
         return;
       }
@@ -13623,7 +14078,7 @@
     function getCurrentPage() {
       return currentPage;
     }
-    function pushHistory(pageName) {
+    function pushHistory(pageName, params = {}) {
       if (isDirectGas) {
         return;
       }
@@ -13631,7 +14086,8 @@
         window.top.postMessage(
           {
             type: "GCB_NAVIGATION",
-            page: pageName
+            page: pageName,
+            client: params.client || null
           },
           GITHUB_ORIGIN
         );
@@ -13678,7 +14134,7 @@
       })();
       return initializing;
     }
-    function go(pageName, updateHistory = true) {
+    function go(pageName, updateHistory = true, params = {}) {
       if (!initialized) {
         if (pageName === "home") {
           return;
@@ -13690,7 +14146,7 @@
       }
       const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
       if (updateHistory) {
-        pushHistory(resolvedPageName);
+        pushHistory(resolvedPageName, params);
       }
       const page = routes[resolvedPageName];
       if (!page) {

@@ -44,7 +44,11 @@ const billingOwedHoursPage = (() => {
 
     document.addEventListener("click", handleClick);
 
-    document.addEventListener("change", handleChange);
+    $(document).on(
+      "change",
+      "#owed-hours-year-filter, #owed-hours-month-filter",
+      handleChange,
+    );
   }
 
   function handleClick(event) {

@@ -77,15 +77,46 @@ function getReportFolder() {
 }
 
 function saveReportPDF(config) {
+  // requireAuthorizedUser();
+
+  Validation.requireObject(config, "Report configuration");
+
+  const reportType = Validation.enumValue(config.reportType, "report type", [
+    "monthly",
+    "yearly",
+  ]);
+
+  const reportSheet = Validation.requiredString(
+    config.reportSheet,
+    "Report sheet",
+    { maxLength: 100 },
+  );
+
+  const logSheet = Validation.requiredString(
+    config.logSheet,
+    "Report log sheet",
+    { maxLength: 100 },
+  );
+
+  const latestLinkCell = config.latestLinkCell
+    ? Validation.requiredString(config.latestLinkCell, "Latest link cell", {
+        maxLength: 20,
+        rejectFormula: false,
+      })
+    : "";
+
   const ss = getSpreadsheet();
-  const sheet = getSheetSafe(config.reportSheet);
-  if (!sheet) return;
+  const sheet = getSheetSafe(reportSheet);
+
+  if (!sheet) {
+    throw new Error(`Report sheet "${reportSheet}" not found.`);
+  }
 
   const folder = getReportFolder();
 
   const reportNum = sheet.getRange("G1").getValue();
   const reportName = sheet.getRange("B1").getValue();
-  const pdfName = `${config.reportType}Report_${reportNum}_${reportName}.pdf`;
+  const pdfName = `${reportType}Report_${reportNum}_${reportName}.pdf`;
 
   const range = sheet.getDataRange();
   const formulas = range.getFormulas();
@@ -207,15 +238,15 @@ function saveReportPDF(config) {
     const file = folder.createFile(blob);
     const fileUrl = file.getUrl();
 
-    getSheetSafe(config.logSheet)?.appendRow([
+    getSheetSafe(logSheet)?.appendRow([
       new Date(),
       reportNum,
       reportName,
       fileUrl,
     ]);
 
-    if (config.latestLinkCell) {
-      getLabSheet()?.getRange(config.latestLinkCell).setValue(fileUrl);
+    if (latestLinkCell) {
+      getLabSheet()?.getRange(latestLinkCell).setValue(fileUrl);
     }
 
     const lab = getLabSheet();
@@ -290,15 +321,33 @@ function saveCustomReportPDF(type) {
 }
 
 function updateCustomReportPDF(type, month, year) {
+  // requireAuthorizedUser();
+
+  const reportType = Validation.enumValue(type, "report type", [
+    "monthly",
+    "yearly",
+  ]);
+
+  const reportYear = Validation.number(year, "Report year", {
+    min: 2024,
+    max: new Date().getFullYear(),
+  });
+
   const settings = getSheetSafe("Settings");
 
-  if (type === "monthly") {
-    settings.getRange("A3").setValue(month);
-    settings.getRange("A5").setValue(year);
-  } else if (type === "yearly") {
-    settings.getRange("A11").setValue(Number(year));
+  if (!settings) {
+    throw new Error('Sheet "Settings" not found.');
+  }
+
+  if (reportType === "monthly") {
+    const reportMonth = Validation.requiredString(month, "Report month", {
+      maxLength: 20,
+    });
+
+    settings.getRange("A3").setValue(reportMonth);
+    settings.getRange("A5").setValue(reportYear);
   } else {
-    throw new Error(`Unknown report type: ${type}`);
+    settings.getRange("A11").setValue(reportYear);
   }
 
   SpreadsheetApp.flush();
@@ -371,6 +420,8 @@ function isReportReady(type = "monthly") {
 }
 
 function saveReportPDF_Fallback1(config, pdfName) {
+  //   requireAuthorizedUser();
+
   const ss = getSpreadsheet();
   const sourceSheet = getSheetSafe(config.reportSheet);
   const tempName = `TempExport_${Date.now()}`;
@@ -435,6 +486,8 @@ function saveReportPDF_Fallback1(config, pdfName) {
 }
 
 function saveReportPDF_Fallback2(config, pdfName) {
+  //   requireAuthorizedUser();
+  
   const ss = getSpreadsheet();
   const sheet = getSheetSafe(config.reportSheet);
 
@@ -963,7 +1016,7 @@ function getReportsOverview() {
 }
 
 function getBillingRecordsForExport(startDate, endDate) {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
 
   const sheet =
     SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Billing Records");
@@ -1018,7 +1071,7 @@ function getBillingRecordsForExport(startDate, endDate) {
 }
 
 function saveBillingRecordsCSV(startDate, endDate) {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
 
   if (!startDate || !endDate) {
     throw new Error("A start date and end date are required.");
@@ -1132,7 +1185,7 @@ function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
 }
 
 function getBillingRecordsCSVExportCount() {
-  requireAuthorizedUser();
+  // requireAuthorizedUser();
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
     "BillingRecordsExport_Log",
