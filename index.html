@@ -43,14 +43,6 @@
 
     const iframe = document.getElementById("gcb-app");
 
-    iframe.addEventListener("load", () => {
-  console.log("[GitHub] iframe loaded:", {
-    src: iframe.src,
-    parentUrl: window.location.href,
-    historyLength: window.history.length,
-    historyState: window.history.state,
-  });
-});
 
 iframe.addEventListener("error", (error) => {
   console.error("[GitHub] iframe error:", error);
@@ -88,27 +80,27 @@ iframe.addEventListener("error", (error) => {
     }
 
     function navigateGasPage(page, client = "") {
-      const requestId = ++navigationRequestId;
+  const requestId = ++navigationRequestId;
 
-      clearTimeout(navigationTimer);
+  clearTimeout(navigationTimer);
 
-      navigationTimer = setTimeout(() => {
-        if (requestId !== navigationRequestId) {
-          return;
-        }
-
-        const url = getGasUrl(page, client);
-
-        console.log("[GitHub] Loading GAS page:", {
-          page,
-          client,
-          url,
-          requestId,
-        });
-
-        iframe.src = url;
-      }, 100);
+  navigationTimer = setTimeout(() => {
+    if (requestId !== navigationRequestId) {
+      return;
     }
+
+    const url = getGasUrl(page, client);
+
+    console.log("[GitHub] Loading GAS page:", {
+      page,
+      client,
+      url,
+      requestId,
+    });
+
+    iframe.contentWindow.location.replace(url);
+  }, 100);
+}
 
     iframe.addEventListener("load", () => {
       if (!restoringHistory) {
