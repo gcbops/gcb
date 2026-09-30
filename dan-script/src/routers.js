@@ -382,8 +382,6 @@ const RouterModule = (() => {
     });
   }
 
-  
-
   return {
     go,
     init,
