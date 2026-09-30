@@ -307,8 +307,12 @@ const performanceTargetPage = (() => {
       ? AppUtils.setButtonLoading(proceedButton, "Saving")
       : null;
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "updatePerformanceTarget",
+
+      args: [type, value],
+
+      onSuccess: (result) => {
         if (!result?.success) {
           loading?.restore();
 
@@ -320,22 +324,26 @@ const performanceTargetPage = (() => {
         loading?.setSuccess("Saved");
 
         AppUtils.showDashboardToast(
-          `${type === "daily" ? "Daily" : "Monthly"} target updated successfully.`,
+          `${
+            type === "daily" ? "Daily" : "Monthly"
+          } target updated successfully.`,
         );
 
         setTimeout(() => {
           AppUtils.closeModal(TARGET_MODAL_ID);
+
           refreshTargetData();
         }, 1000);
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         loading?.restore();
 
         AppUtils.showError(
           error?.message || "Unable to update performance target.",
         );
-      })
-      .updatePerformanceTarget(type, value);
+      },
+    });
   }
 
   function refreshTargetData() {

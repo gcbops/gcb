@@ -32,25 +32,53 @@ const integrationsConfigurationPage = (() => {
     },
     sheets: {
       title: "Google Sheets",
-      description: "Connect the application to your Google Spreadsheet.",
-      field: {
-        name: "spreadsheetId",
-        label: "Google Spreadsheet ID",
-        type: "text",
-        placeholder: "Enter Google Spreadsheet ID",
-      },
+      description:
+        "Connect the application to its Google Sheets and external sheet template.",
+      fields: [
+        {
+          name: "spreadsheetId",
+          label: "Google Spreadsheet ID",
+          type: "text",
+          placeholder: "Enter Google Spreadsheet ID",
+          help: "Main Google Spreadsheet used by the application.",
+        },
+        {
+          name: "externalSheetTemplateId",
+          label: "External Sheet Template ID",
+          type: "text",
+          placeholder: "Enter external sheet template ID",
+          help: "Google Sheet template cloned when creating external client sheets.",
+        },
+      ],
       logo: "https://s13.gifyu.com/images/bnmHH.png",
     },
     drive: {
       title: "Google Drive",
       description:
-        "Configure the Google Drive folder used to store generated reports.",
-      field: {
-        name: "reportFolderId",
-        label: "Report Folder ID",
-        type: "text",
-        placeholder: "Enter Google Drive folder ID",
-      },
+        "Configure the Google Drive folders used by the application.",
+      fields: [
+        {
+          name: "reportFolderId",
+          label: "Report Folder ID",
+          type: "text",
+          placeholder: "Enter Google Drive report folder ID",
+          help: "Folder used to store generated reports.",
+        },
+        {
+          name: "backupFolderId",
+          label: "Backup Folder ID",
+          type: "text",
+          placeholder: "Enter Google Drive backup folder ID",
+          help: "Folder used to store backups of application sheets.",
+        },
+        {
+          name: "mainSheetsFolderId",
+          label: "Main Sheets Folder ID",
+          type: "text",
+          placeholder: "Enter main sheets folder ID",
+          help: "Folder containing the application's main Google Sheets.",
+        },
+      ],
       logo: "https://s13.gifyu.com/images/bnmHK.png",
     },
   };
@@ -99,17 +127,20 @@ const integrationsConfigurationPage = (() => {
   };
 
   const loadData = () => {
-    google.script.run
-      .withSuccessHandler(updateIntegrationStatus)
-      .withFailureHandler((err) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getIntegrationStatus",
+
+      onSuccess: updateIntegrationStatus,
+
+      onError: (err) => {
         console.error("getIntegrationStatus failed:", err);
 
         AppUtils.showDashboardToast(
           "Failed to load integration status.",
           "error",
         );
-      })
-      .getIntegrationStatus();
+      },
+    });
   };
 
   function getIntegrationConfig(integration) {
@@ -256,32 +287,57 @@ const integrationsConfigurationPage = (() => {
 
   function buildBodyHtml(config) {
     const description = AppUtils.escapeHtml(config.description);
-    const fieldLabel = AppUtils.escapeHtml(config.field.label);
-    const fieldType = config.field.type;
-    const fieldName = AppUtils.escapeHtml(config.field.name);
-    const placeholder = AppUtils.escapeHtml(config.field.placeholder || "");
+
+    const fields = config.fields || [config.field];
 
     return `
-      <div class="integration-modal-description mb-4">
-        ${description}
-      </div>
-      <form id="integrationConfigForm">
-        <div class="position-relative form-group">
-          <label for="integrationConfigValue">${fieldLabel}</label>
-          <input
-            type="${fieldType}"
-            id="integrationConfigValue"
-            name="${fieldName}"
-            class="form-control"
-            placeholder="${placeholder}"
-            autocomplete="off"
-          >
-          <small id="integrationConfigHelp" class="form-text text-muted">
-            Leave blank to keep the current configuration.
-          </small>
-        </div>
-      </form>
-    `;
+    <div class="integration-modal-description mb-4">
+      ${description}
+    </div>
+
+    <form id="integrationConfigForm">
+      ${fields
+        .map((field) => {
+          const fieldLabel = AppUtils.escapeHtml(field.label);
+          const fieldType = field.type;
+          const fieldName = AppUtils.escapeHtml(field.name);
+          const placeholder = AppUtils.escapeHtml(field.placeholder || "");
+          const help = AppUtils.escapeHtml(
+            field.help || "Leave blank to keep the current configuration.",
+          );
+
+          return `
+            <div class="position-relative form-group mb-3">
+              <label for="integrationConfigValue-${fieldName}">
+                ${fieldLabel}
+              </label>
+
+              <input
+                type="${fieldType}"
+                id="integrationConfigValue-${fieldName}"
+                name="${fieldName}"
+                class="form-control"
+                placeholder="${placeholder}"
+                autocomplete="off"
+              >
+
+              <small
+                id="integrationConfigHelp-${fieldName}"
+                class="form-text text-muted"
+              >
+                ${help}
+              </small>
+
+              <div
+                id="${fieldName}IntegrationStatus"
+                class="integration-config-status mt-1"
+              ></div>
+            </div>
+          `;
+        })
+        .join("")}
+    </form>
+  `;
   }
 
   function buildFooterHtml() {
@@ -292,70 +348,163 @@ const integrationsConfigurationPage = (() => {
   }
 
   function loadIntegrationConfigStatus(integration, $modal) {
-    const $input = $modal.find("#integrationConfigValue");
-    const $help = $modal.find("#integrationConfigHelp");
+    AppUtils.gScriptRun({
+      gscriptFunc: "getIntegrationConfigStatus",
+      args: [integration],
 
-    google.script.run
-      .withSuccessHandler((data) => {
-        if (!data?.configured) {
-          $input.attr("placeholder", "Not configured");
+      onSuccess: (data) => {
+        if (integration !== "drive") {
+          const $input = $modal.find("#integrationConfigValue");
+
+          const $help = $modal.find("#integrationConfigHelp");
+
+          if (!data?.configured) {
+            $input.attr("placeholder", "Not configured");
+
+            $help
+              .removeClass("is-configured")
+              .text(
+                "No configuration has been saved yet. Enter a value to configure this integration.",
+              );
+
+            return;
+          }
+
+          $input.attr("placeholder", `Current: ${data.masked}`);
+
           $help
-            .removeClass("is-configured")
+            .addClass("is-configured")
             .text(
-              "No configuration has been saved yet. Enter a value to configure this integration.",
+              "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration.",
             );
+
           return;
         }
 
-        $input.attr("placeholder", `Current: ${data.masked}`);
-        $help
-          .addClass("is-configured")
-          .text(
-            "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration.",
-          );
-      })
-      .withFailureHandler((err) => {
+        /*
+         * Google Drive has multiple configuration values.
+         */
+        const fields = INTEGRATIONS.drive.fields;
+
+        fields.forEach((field) => {
+          const fieldData = data?.fields?.[field.name];
+
+          const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+
+          const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+
+          if (!$input.length) {
+            return;
+          }
+
+          if (!fieldData?.configured) {
+            $input.attr("placeholder", "Not configured");
+
+            $help
+              .removeClass("is-configured")
+              .text(field.help || "No configuration has been saved yet.");
+
+            return;
+          }
+
+          $input.attr("placeholder", `Current: ${fieldData.masked}`);
+
+          $help
+            .addClass("is-configured")
+            .text(
+              "Currently configured. Leave blank to keep the current value.",
+            );
+        });
+      },
+
+      onError: (err) => {
         console.error("getIntegrationConfigStatus failed:", err);
 
-        $input.attr("placeholder", "Unable to check current configuration");
-        $help
-          .removeClass("is-configured")
-          .text("Unable to check the current configuration.");
-      })
-      .getIntegrationConfigStatus(integration);
+        if (integration !== "drive") {
+          $modal
+            .find("#integrationConfigValue")
+            .attr("placeholder", "Unable to check current configuration");
+
+          $modal
+            .find("#integrationConfigHelp")
+            .removeClass("is-configured")
+            .text("Unable to check the current configuration.");
+
+          return;
+        }
+
+        INTEGRATIONS.drive.fields.forEach((field) => {
+          $modal
+            .find(`#integrationConfigValue-${field.name}`)
+            .attr("placeholder", "Unable to check current configuration");
+
+          $modal
+            .find(`#integrationConfigHelp-${field.name}`)
+            .removeClass("is-configured")
+            .text("Unable to check the current configuration.");
+        });
+      },
+    });
   }
 
   function saveIntegration(integration, $modal, $btn) {
-    const $input = $modal.find("#integrationConfigValue");
-    const value = $input.val().trim();
+    const config = getIntegrationConfig(integration);
 
-    if (!value) {
-      AppUtils.showDashboardToast("Please enter a value.", "error");
-      return;
+    const title = config?.title || "Integration";
+
+    let value;
+
+    if (integration === "drive") {
+      value = {};
+
+      config.fields.forEach((field) => {
+        value[field.name] = String(
+          $modal.find(`#integrationConfigValue-${field.name}`).val() || "",
+        ).trim();
+      });
+
+      const hasValue = Object.values(value).some(Boolean);
+
+      if (!hasValue) {
+        AppUtils.showDashboardToast(
+          "Please enter at least one value.",
+          "error",
+        );
+
+        return;
+      }
+    } else {
+      const $input = $modal.find("#integrationConfigValue");
+
+      value = String($input.val() || "").trim();
+
+      if (!value) {
+        AppUtils.showDashboardToast("Please enter a value.", "error");
+
+        return;
+      }
     }
 
     const loading = AppUtils.setButtonLoading($btn[0], "Saving");
 
-    const config = getIntegrationConfig(integration);
-    const title = config?.title || "Integration";
+    AppUtils.gScriptRun({
+      gscriptFunc: "saveIntegration",
+      args: [integration, value],
 
-    google.script.run
-      .withSuccessHandler(() => {
+      onSuccess: () => {
         loading.setSuccess("Configuration Saved");
-        
+
         AppUtils.closeModal(MODAL_ID);
-        
+
         AppUtils.showDashboardToast(
           `${title} configuration saved successfully!`,
           "success",
         );
 
-        // Assuming loadData() is in outer scope; if not, expose it or pass it in.
-        if (typeof loadData === "function") {
-          loadData();
-        }
-      })
-      .withFailureHandler((err) => {
+        loadData();
+      },
+
+      onError: (err) => {
         console.error("saveIntegration failed:", err);
 
         AppUtils.showDashboardToast(
@@ -364,8 +513,8 @@ const integrationsConfigurationPage = (() => {
         );
 
         loading.restore();
-      })
-      .saveIntegration(integration, value);
+      },
+    });
   }
 
   return {

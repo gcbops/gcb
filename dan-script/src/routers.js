@@ -93,12 +93,12 @@ const RouterModule = (() => {
     const templatePage = window.GCB_INITIAL_PAGE;
     const savedPage = localStorage.getItem("gcb_currentPageGC");
 
-    // console.log("[Router] getInitialPage()", {
-    //   isGitHubEmbedded,
-    //   isDirectGas,
-    //   templatePage,
-    //   savedPage,
-    // });
+    console.log("[Router] getInitialPage:", {
+      templatePage,
+      savedPage,
+      isGitHubEmbedded,
+      isDirectGas,
+    });
 
     /*
      * ------------------------------------------------
@@ -250,6 +250,12 @@ const RouterModule = (() => {
           ? pendingPage
           : restoredPage;
 
+          console.log("[Router] Initial page selected:", {
+  initialPage,
+  pendingPage,
+  restoredPage,
+});
+
         pendingPage = null;
 
         /*
@@ -265,6 +271,7 @@ const RouterModule = (() => {
          * ------------------------------------------------
          */
         go(initialPage, false);
+        
 
         return true;
       } catch (error) {
@@ -313,16 +320,16 @@ const RouterModule = (() => {
      */
     const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
 
-    if (updateHistory) {
-      pushHistory(resolvedPageName, params);
-    }
-
     const page = routes[resolvedPageName];
 
     if (!page) {
       console.error(`[RouterModule] Route "${resolvedPageName}" not found.`);
 
       return;
+    }
+
+    if (updateHistory) {
+      pushHistory(resolvedPageName, params);
     }
 
     /*

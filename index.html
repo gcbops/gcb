@@ -56,24 +56,28 @@ iframe.addEventListener("error", (error) => {
       return new URLSearchParams(window.location.search).get("page");
     }
 
-    function getGasUrl(page, client = "") {
-      const url = new URL(GCB_GAS_URL);
+    function getGasUrl(page, client = "", navigationId = "") {
+  const url = new URL(GCB_GAS_URL);
 
-      url.searchParams.set("wrapper", "github");
+  url.searchParams.set("wrapper", "github");
 
-      if (page && page !== "home") {
-        url.searchParams.set("page", page);
-      }
+  if (page && page !== "home") {
+    url.searchParams.set("page", page);
+  }
 
-      if (client) {
-        url.searchParams.set(
-          "client",
-          client.replace(/\s+/g, "_"),
-        );
-      }
+  if (client) {
+    url.searchParams.set(
+      "client",
+      client.replace(/\s+/g, "_"),
+    );
+  }
 
-      return url.href;
-    }
+  if (navigationId) {
+    url.searchParams.set("nav", navigationId);
+  }
+
+  return url.href;
+}
 
     function loadGasPage(page, client = "") {
       iframe.src = getGasUrl(page, client);
@@ -89,7 +93,11 @@ iframe.addEventListener("error", (error) => {
       return;
     }
 
-    const url = getGasUrl(page, client);
+    const url = getGasUrl(
+      page,
+      client,
+      `${Date.now()}_${requestId}`,
+    );
 
     console.log("[GitHub] Loading GAS page:", {
       page,

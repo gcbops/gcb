@@ -338,15 +338,20 @@ const ActivityToday = (() => {
     const validatedData = validation.value;
 
     const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
+
     $("#taskForm").find("select, input.form-control").prop("disabled", true);
 
-    google.script.run
-      .withSuccessHandler((isExternal) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "isExternalClient",
+      args: [validatedData.client],
+
+      onSuccess: (isExternal) => {
         const external = isExternal === true;
 
         submitHours(external);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         console.error("isExternalClient failed:", err);
 
         AppUtils.showDashboardToast(
@@ -359,8 +364,8 @@ const ActivityToday = (() => {
           .prop("disabled", false);
 
         loading.restore();
-      })
-      .isExternalClient(validatedData.client);
+      },
+    });
 
     function submitHours(isExternal) {
       const gscriptFunc = isExternal
@@ -372,6 +377,7 @@ const ActivityToday = (() => {
         data: validatedData,
         $btn: $submitBtn,
         loadingText: "Saving",
+
         onSuccess: () => {
           $("#taskForm")
             .find("select, input.form-control")
@@ -379,6 +385,7 @@ const ActivityToday = (() => {
 
           handleTaskSaveSuccess(formData);
         },
+
         onError: () => {
           $("#taskForm")
             .find("select, input.form-control")
@@ -461,7 +468,13 @@ const ActivityToday = (() => {
     const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
 
     if (!cachedTasks.includes(task)) {
-      google.script.run.syncClientProjects();
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncClientProjects",
+
+        onError: (error) => {
+          console.warn("[TaskSubmit] Failed to sync client projects:", error);
+        },
+      });
     }
 
     clearClientCaches(client);
@@ -516,6 +529,7 @@ const ActivityToday = (() => {
 
   function handleSheetView(e) {
     const clientName = String($("#client-view-hours").val() || "").trim();
+
     const btn = e.currentTarget;
 
     if (!clientName) {
@@ -526,18 +540,24 @@ const ActivityToday = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
-    google.script.run
-      .withSuccessHandler((url) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getClientSheetUrl",
+      args: [clientName],
+
+      onSuccess: (url) => {
         if (url) {
           window.open(url, "_blank");
         }
+
         loading.restore();
-      })
-      .withFailureHandler(() => {
+      },
+
+      onError: () => {
         AppUtils.showError("Sheet doesn't exist!");
+
         loading.restore();
-      })
-      .getClientSheetUrl(clientName);
+      },
+    });
   }
 
   /* ---------------------------------------------------------
@@ -650,17 +670,21 @@ const ActivityToday = (() => {
 
     isRefreshing = true;
 
-    google.script.run
-      .withSuccessHandler((data) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getDailyActivityData",
+
+      onSuccess: (data) => {
         isRefreshing = false;
 
         updateActivityTable(data, dataTable);
+
         updateFilterCounts(dataTable);
         HourSummary.loadTodayChargedHours();
 
         callback?.();
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         isRefreshing = false;
 
         console.error("Activity Today refresh failed:", error);
@@ -668,8 +692,8 @@ const ActivityToday = (() => {
         AppUtils.showError(error);
 
         callback?.();
-      })
-      .getDailyActivityData();
+      },
+    });
   }
 
   /* ---------------------------------------------------------

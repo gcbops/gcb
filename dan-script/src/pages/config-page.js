@@ -123,33 +123,6 @@ const settingsConfigurationPage = (() => {
     }
   }
 
-  // function applyBillingAnalyticsFormulas($btn) {
-  //   AppUtils.setButtonLoading($btn, true);
-
-  //   google.script.run
-  //     .withSuccessHandler((response) => {
-  //       AppUtils.setButtonLoading($btn, false);
-
-  //       if (!response?.success) {
-  //         AppUtils.showError("Unable to apply monthly billing formulas.");
-  //         return;
-  //       }
-
-  //       AppUtils.showDashboardToast(
-  //         `Monthly billing formulas applied to ${response.updated} client sheet(s).`,
-  //         "success",
-  //       );
-  //     })
-  //     .withFailureHandler((error) => {
-  //       AppUtils.setButtonLoading($btn, false);
-
-  //       AppUtils.showError(
-  //         error?.message || "Failed to apply monthly billing formulas.",
-  //       );
-  //     })
-  //     .applyBillingAnalyticsFormulas();
-  // }
-
   function clearCache(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Clearing cache");
 
@@ -163,13 +136,12 @@ const settingsConfigurationPage = (() => {
   }
 
   function syncExternalClientSheets(btn) {
-    const loading = AppUtils.setButtonLoading(
-      btn,
-      "Syncing sheets",
-    );
+    const loading = AppUtils.setButtonLoading(btn, "Syncing sheets");
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "reconcileExternalSheets",
+
+      onSuccess: (result) => {
         const count = Array.isArray(result) ? result.length : 0;
 
         AppUtils.showDashboardToast(
@@ -182,8 +154,9 @@ const settingsConfigurationPage = (() => {
         loading.setSuccess("Clients Synced");
 
         AppUtils.closeModal(MODAL_ID);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         console.error("reconcileExternalSheets failed:", err);
 
         AppUtils.showDashboardToast(
@@ -192,15 +165,17 @@ const settingsConfigurationPage = (() => {
         );
 
         loading.restore();
-      })
-      .reconcileExternalSheets();
+      },
+    });
   }
 
   function syncClientSheets(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Syncing clients");
 
-    google.script.run
-      .withSuccessHandler(() => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "syncClientSheetList",
+
+      onSuccess: () => {
         AppUtils.showDashboardToast(
           "Client list synced successfully!",
           "success",
@@ -209,8 +184,9 @@ const settingsConfigurationPage = (() => {
         loading.setSuccess("Clients Synced");
 
         AppUtils.closeModal(MODAL_ID);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         console.error("syncClientSheetList failed:", err);
 
         AppUtils.showDashboardToast(
@@ -219,15 +195,17 @@ const settingsConfigurationPage = (() => {
         );
 
         loading.restore();
-      })
-      .syncClientSheetList();
+      },
+    });
   }
 
   function syncClientProjectsFromMain(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Updating projects");
 
-    google.script.run
-      .withSuccessHandler(() => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "syncClientProjects",
+
+      onSuccess: () => {
         AppUtils.showDashboardToast(
           "Project data updated successfully.",
           "success",
@@ -236,8 +214,9 @@ const settingsConfigurationPage = (() => {
         loading.setSuccess("Projects Updated");
 
         AppUtils.closeModal(MODAL_ID);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         console.error("syncClientProjects failed:", err);
 
         AppUtils.showDashboardToast(
@@ -246,36 +225,34 @@ const settingsConfigurationPage = (() => {
         );
 
         loading.restore();
-      })
-      .syncClientProjects();
+      },
+    });
   }
 
   function BackupAllSheets(btn) {
+    const loading = AppUtils.setButtonLoading(btn, "Creating Backup");
 
-    const loading = AppUtils.setButtonLoading(
-      btn,
-      "Creating Backup",
-    );
+    AppUtils.gScriptRun({
+      gscriptFunc: "backupAllSheets",
 
-    google.script.run
-      .withSuccessHandler((result) => {
+      onSuccess: (result) => {
         AppUtils.showDashboardToast("Backup completed", "info");
-        
+
         console.log("Backup completed:", result);
-        
+
         loading.setSuccess("Backup Completed");
 
         AppUtils.closeModal(MODAL_ID);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         console.error("Backup failed:", err);
-        AppUtils.showDashboardToast(
-          "Something went wrong",
-          "error",
-        );
+
+        AppUtils.showDashboardToast("Something went wrong", "error");
+
         loading.restore();
-      })
-      .backupAllSheets();
+      },
+    });
   }
 
   function handleIntegrationListClick(e) {
@@ -597,8 +574,12 @@ const settingsConfigurationPage = (() => {
 
     const loading = AppUtils.setButtonLoading($btn[0], "Applying Formula");
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "applyFormulaToMainSheets",
+
+      args: [cellRef, formula],
+
+      onSuccess: (result) => {
         if (!isMasterFormulaOperationActive(operationId)) {
           return;
         }
@@ -623,8 +604,9 @@ const settingsConfigurationPage = (() => {
 
           openExternalProjectsConfirmation(cellRef, formula, operationId);
         }, 1000);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         if (!isMasterFormulaOperationActive(operationId)) {
           return;
         }
@@ -637,8 +619,8 @@ const settingsConfigurationPage = (() => {
           err?.message || "Failed to apply formula to the main spreadsheet.",
           "error",
         );
-      })
-      .applyFormulaToMainSheets(cellRef, formula);
+      },
+    });
   }
 
   function openExternalProjectsConfirmation(cellRef, formula, operationId) {
@@ -686,8 +668,12 @@ const settingsConfigurationPage = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Updating Projects");
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "applyFormulaToExternalProjects",
+
+      args: [cellRef, formula],
+
+      onSuccess: (result) => {
         if (!isMasterFormulaOperationActive(operationId)) {
           return;
         }
@@ -710,8 +696,9 @@ const settingsConfigurationPage = (() => {
 
           openExternalProjectSheetsConfirmation(cellRef, formula, operationId);
         }, 1000);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         if (!isMasterFormulaOperationActive(operationId)) {
           return;
         }
@@ -724,8 +711,8 @@ const settingsConfigurationPage = (() => {
           err?.message || "Failed to update External Projects.",
           "error",
         );
-      })
-      .applyFormulaToExternalProjects(cellRef, formula);
+      },
+    });
   }
 
   function openExternalProjectSheetsConfirmation(
@@ -787,8 +774,12 @@ const settingsConfigurationPage = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Updating Sheets");
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "applyFormulaToExternalProjectSheets",
+
+      args: [cellRef, formula],
+
+      onSuccess: (result) => {
         if (!isMasterFormulaOperationActive(operationId)) {
           return;
         }
@@ -803,8 +794,9 @@ const settingsConfigurationPage = (() => {
         );
 
         cancelMasterFormulaOperation();
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         if (!isMasterFormulaOperationActive(operationId)) {
           return;
         }
@@ -817,8 +809,8 @@ const settingsConfigurationPage = (() => {
           err?.message || "Failed to update external project sheets.",
           "error",
         );
-      })
-      .applyFormulaToExternalProjectSheets(cellRef, formula);
+      },
+    });
   }
 
   function handleTabShown(e) {

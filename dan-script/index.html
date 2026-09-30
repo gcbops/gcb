@@ -498,6 +498,13 @@
     window.GCB_IS_GITHUB_EMBEDDED =
       document.body.dataset.gcbGithubEmbedded === "true";
 
+      console.log("[GAS] Initial navigation state:", {
+  initialPage: window.GCB_INITIAL_PAGE,
+  initialClient: window.GCB_INITIAL_CLIENT,
+  githubEmbedded: window.GCB_IS_GITHUB_EMBEDDED,
+  href: window.location.href,
+});
+
   </script>
 
   <!-- =========================

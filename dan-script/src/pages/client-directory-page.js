@@ -481,6 +481,7 @@ const clientDirectoryPage = (() => {
 
     if (!clientNameResult.valid) {
       AppUtils.showDashboardToast(clientNameResult.message, "error");
+
       return;
     }
 
@@ -496,6 +497,7 @@ const clientDirectoryPage = (() => {
 
     if (!projectsResult.valid) {
       AppUtils.showDashboardToast(projectsResult.message, "error");
+
       return;
     }
 
@@ -510,8 +512,17 @@ const clientDirectoryPage = (() => {
       "Creating External Sheet",
     );
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "createExternalSheet",
+
+      args: [
+        {
+          clientName,
+          projects,
+        },
+      ],
+
+      onSuccess: (result) => {
         loading.setSuccess("Sheet Created");
 
         AppUtils.closeModal(MODAL_ID);
@@ -530,15 +541,17 @@ const clientDirectoryPage = (() => {
         /*
          * Keep the client sheet list synchronized.
          */
-        google.script.run
-          .withSuccessHandler((result) => {
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncClientSheetList",
+
+          onSuccess: () => {
             AppUtils.confirmAction(
               "syncClientsList",
               "Synchronize Client Directory?",
               "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
               () => {
                 AppUtils.cacheClear("clientDirectoryData");
-                
+
                 ClientDirectory.refreshClientDirectory(
                   "clientDirectoryData",
                   () => {
@@ -550,17 +563,18 @@ const clientDirectoryPage = (() => {
                 );
               },
             );
-          })
-          .withFailureHandler((error) => {
+          },
+
+          onError: (error) => {
             console.error(
               "[clientDirectory] syncClientSheetList failed:",
               error,
             );
-          })
-          .syncClientSheetList();
-        
-      })
-      .withFailureHandler((error) => {
+          },
+        });
+      },
+
+      onError: (error) => {
         console.error("[clientDirectory] createExternalSheet failed:", error);
 
         loading.restore();
@@ -569,11 +583,8 @@ const clientDirectoryPage = (() => {
           error?.message || "Failed to create external sheet.",
           "error",
         );
-      })
-      .createExternalSheet({
-        clientName,
-        projects,
-      });
+      },
+    });
   }
 
   /*

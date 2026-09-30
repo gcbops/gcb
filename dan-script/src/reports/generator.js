@@ -54,12 +54,16 @@ const ReportGenerator = (() => {
     const cfg = CONFIG[type];
     const reportName = cfg.reportName(params);
 
-    google.script.run
-      .withFailureHandler((err) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "checkExistingReport",
+      args: [type, reportName],
+
+      onError: (err) => {
         setGenerateState(type, false, loading);
         AppUtils.showError(err);
-      })
-      .withSuccessHandler((result) => {
+      },
+
+      onSuccess: (result) => {
         if (!result.exists) {
           loading.setText("Generating Report");
           requestReportGeneration(cfg, type, btn, params, loading);
@@ -67,8 +71,8 @@ const ReportGenerator = (() => {
         }
 
         showExistsModal(cfg, type, btn, params, result.report, loading);
-      })
-      .checkExistingReport(type, reportName);
+      },
+    });
   }
 
   function showExistsModal(cfg, type, btn, params, report, loading) {
@@ -133,42 +137,56 @@ const ReportGenerator = (() => {
   }
 
   function requestReportGeneration(cfg, type, btn, params, loading) {
-    google.script.run
-      .withFailureHandler((err) => handleGenerateError(type, btn, err, loading))
-      .withSuccessHandler(() => checkReportReady(cfg, type, btn, "", loading))
-      .updateCustomReportPDF(type, ...cfg.updateArgs(params));
+    AppUtils.gScriptRun({
+      gscriptFunc: "updateCustomReportPDF",
+      args: [type, ...cfg.updateArgs(params)],
+
+      onError: (err) => handleGenerateError(type, btn, err, loading),
+
+      onSuccess: () => checkReportReady(cfg, type, btn, "", loading),
+    });
   }
 
   function checkReportReady(cfg, type, btn, attempts = 0, loading) {
-  
     if (attempts >= REPORT_MAX_ATTEMPTS) {
       setGenerateState(type, false, loading);
+
       AppUtils.showError("Timed out waiting for report.");
       return;
     }
 
-    google.script.run
-      .withFailureHandler((err) => handleGenerateError(type, btn, err, loading))
-      .withSuccessHandler((ready) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "isReportReady",
+      args: [type],
+
+      onError: (err) => handleGenerateError(type, btn, err, loading),
+
+      onSuccess: (ready) => {
         if (!ready) {
           setTimeout(() => {
             checkReportReady(cfg, type, btn, attempts + 1, loading);
           }, REPORT_CHECK_INTERVAL);
+
           return;
         }
 
         saveReport(type, btn, cfg, loading);
-      })
-      .isReportReady(type);
+      },
+    });
   }
 
   function saveReport(type, btn, cfg, loading) {
-    google.script.run
-      .withFailureHandler((err) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "saveCustomReportPDF",
+      args: [type],
+
+      onError: (err) => {
         handleGenerateError(type, btn, err, loading);
-      })
-      .withSuccessHandler(() => {
+      },
+
+      onSuccess: () => {
         loading.setSuccess("Generated successfully");
+
         setGenerateState(type, false);
 
         cfg.reloadHistory(() => {
@@ -176,8 +194,8 @@ const ReportGenerator = (() => {
         });
 
         AppUtils.showDashboardToast(cfg.successMessage, "success");
-      })
-      .saveCustomReportPDF(type);
+      },
+    });
   }
 
   function generateMonthlyReport(month, year, btn, loading) {

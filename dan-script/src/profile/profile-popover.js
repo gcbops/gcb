@@ -117,8 +117,11 @@ const ProfilePopoverModule = (() => {
 
     AppUtils.showDashboardToast("Redirecting to sheet!", "info");
 
-    google.script.run
-      .withSuccessHandler((url) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "goToPresentClient",
+      args: [clientName],
+
+      onSuccess: (url) => {
         const clientUrl = String(url || "").trim();
 
         if (clientUrl.startsWith("http")) {
@@ -127,13 +130,14 @@ const ProfilePopoverModule = (() => {
         }
 
         AppUtils.showError(url);
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         console.error("[ProfilePopover] Failed to open client sheet:", error);
 
         AppUtils.showError(error?.message || error);
-      })
-      .goToPresentClient(clientName);
+      },
+    });
   }
 
   function setClientData(data = []) {

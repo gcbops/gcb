@@ -3,11 +3,31 @@ function doGet(e) {
   const requestedClient = e?.parameter?.client || "";
   const isGitHubEmbedded = e?.parameter?.wrapper === "github";
 
+  Logger.log(
+    "[doGet] Request: %s",
+    JSON.stringify({
+      parameter: e?.parameter,
+      queryString: e?.queryString || "",
+      requestedPage,
+      requestedClient,
+      isGitHubEmbedded,
+    }),
+  );
+
   const template = HtmlService.createTemplateFromFile("index");
 
   template.initialPage = requestedPage;
   template.initialClient = requestedClient;
   template.isGitHubEmbedded = isGitHubEmbedded;
+
+  Logger.log(
+    "[doGet] Template: %s",
+    JSON.stringify({
+      initialPage: template.initialPage,
+      initialClient: template.initialClient,
+      isGitHubEmbedded: template.isGitHubEmbedded,
+    }),
+  );
 
   return template
     .evaluate()

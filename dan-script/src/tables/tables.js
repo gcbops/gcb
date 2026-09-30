@@ -137,18 +137,22 @@ const TableModule = (() => {
 
     AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
 
-    google.script.run
-      .withSuccessHandler((url) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getClientSheetUrl",
+      args: [clientName],
+
+      onSuccess: (url) => {
         if (url && String(url).startsWith("http")) {
           window.open(url, "_blank");
         } else {
           AppUtils.showError("Invalid sheet URL.");
         }
-      })
-      .withFailureHandler(() => {
+      },
+
+      onError: () => {
         AppUtils.showError("Sheet doesn't exist!");
-      })
-      .getClientSheetUrl(clientName);
+      },
+    });
   }
 
   /* ============================================================

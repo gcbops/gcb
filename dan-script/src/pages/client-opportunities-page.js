@@ -124,8 +124,12 @@ const clientOpportunitiesPage = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
-    google.script.run
-      .withSuccessHandler((url) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getClientSheetUrl",
+
+      args: [sheetName],
+
+      onSuccess: (url) => {
         loading.restore();
 
         if (url && String(url).startsWith("http")) {
@@ -134,12 +138,14 @@ const clientOpportunitiesPage = (() => {
         }
 
         AppUtils.showError(errorMessage);
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         loading.restore();
+
         AppUtils.showError(err);
-      })
-      .getClientSheetUrl(sheetName);
+      },
+    });
   }
 
   function loadData() {
@@ -661,8 +667,12 @@ const clientOpportunitiesPage = (() => {
   }
 
   function loadTotalHourlyHours() {
-    google.script.run
-      .withSuccessHandler((value) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getDirectCellValueSafe",
+
+      args: ["Hourly History", "B8"],
+
+      onSuccess: (value) => {
         const $total = $("#opportunities-total-hourly-hours");
 
         if (!$total.length) {
@@ -670,13 +680,14 @@ const clientOpportunitiesPage = (() => {
         }
 
         $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
-      })
-      .withFailureHandler((err) => {
+      },
+
+      onError: (err) => {
         AppUtils.showError(err);
 
         AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
-      })
-      .getDirectCellValueSafe("Hourly History", "B8");
+      },
+    });
   }
 
   // ----------------------------------------------------------

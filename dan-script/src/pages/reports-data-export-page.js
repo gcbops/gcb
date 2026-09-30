@@ -184,17 +184,22 @@ const reportsDataExportPage = (() => {
   const loadBillingRecords = (startDate, endDate) => {
     DataTableModule.showLoader(BILLING_TABLE_ID);
 
-    google.script.run
-      .withSuccessHandler((data) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getBillingRecordsForExport",
+
+      args: [startDate, endDate],
+
+      onSuccess: (data) => {
         renderBillingRecords(data);
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         DataTableModule.showError(
           BILLING_TABLE_ID,
           error?.message || "Failed to load Billing Records.",
         );
-      })
-      .getBillingRecordsForExport(startDate, endDate);
+      },
+    });
   };
 
   function normalizeBillingStatus(value) {
@@ -299,6 +304,7 @@ const reportsDataExportPage = (() => {
 
     if (!dates.length) {
       AppUtils.showError("Please select a date range.");
+
       return;
     }
 
@@ -308,6 +314,7 @@ const reportsDataExportPage = (() => {
 
     if (startDate > endDate) {
       AppUtils.showError("The start date cannot be later than the end date.");
+
       return;
     }
 
@@ -315,14 +322,23 @@ const reportsDataExportPage = (() => {
 
     const loading = AppUtils.setButtonLoading(button, "Generating");
 
-    google.script.run
-      .withSuccessHandler((result) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "saveBillingRecordsCSV",
+
+      args: [startDate, endDate],
+
+      onSuccess: (result) => {
         if (loading) {
           loading.restore();
         }
 
+        /*
+         * The GAS call succeeded, but the server
+         * operation itself may still report failure.
+         */
         if (!result?.success || !result?.url) {
           AppUtils.showError("The Billing Records CSV could not be generated.");
+
           return;
         }
 
@@ -337,8 +353,9 @@ const reportsDataExportPage = (() => {
         window.open(result.url, "_blank");
 
         loadBillingCSVExportCount();
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         if (loading) {
           loading.restore();
         }
@@ -346,22 +363,25 @@ const reportsDataExportPage = (() => {
         AppUtils.showError(
           error?.message || "Failed to generate the Billing Records CSV.",
         );
-      })
-      .saveBillingRecordsCSV(startDate, endDate);
+      },
+    });
   };
 
   const loadBillingCSVExportCount = () => {
-    google.script.run
-      .withSuccessHandler((count) => {
+    AppUtils.gScriptRun({
+      gscriptFunc: "getBillingRecordsCSVExportCount",
+
+      onSuccess: (count) => {
         $("#csv-generated-count").text(Number(count || 0));
-      })
-      .withFailureHandler((error) => {
+      },
+
+      onError: (error) => {
         console.warn(
           "[ReportsDataExport] Failed to load CSV export count:",
           error,
         );
-      })
-      .getBillingRecordsCSVExportCount();
+      },
+    });
   };
 
   const updateSelectedRange = (startDate, endDate) => {

@@ -1944,18 +1944,23 @@
       const validatedData = validation.value;
       const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
       $("#taskForm").find("select, input.form-control").prop("disabled", true);
-      google.script.run.withSuccessHandler((isExternal) => {
-        const external = isExternal === true;
-        submitHours(external);
-      }).withFailureHandler((err) => {
-        console.error("isExternalClient failed:", err);
-        AppUtils.showDashboardToast(
-          "Unable to determine client type.",
-          "error"
-        );
-        $("#taskForm").find("select, input.form-control").prop("disabled", false);
-        loading.restore();
-      }).isExternalClient(validatedData.client);
+      AppUtils.gScriptRun({
+        gscriptFunc: "isExternalClient",
+        args: [validatedData.client],
+        onSuccess: (isExternal) => {
+          const external = isExternal === true;
+          submitHours(external);
+        },
+        onError: (err) => {
+          console.error("isExternalClient failed:", err);
+          AppUtils.showDashboardToast(
+            "Unable to determine client type.",
+            "error"
+          );
+          $("#taskForm").find("select, input.form-control").prop("disabled", false);
+          loading.restore();
+        }
+      });
       function submitHours(isExternal) {
         const gscriptFunc = isExternal ? "recordExternalClientHoursFromForm" : "recordManualClientHoursFromForm";
         AppUtils.submitForm({
@@ -2030,7 +2035,12 @@
       const cacheKey = `gcb_getTaskOptions_${client}`;
       const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
       if (!cachedTasks.includes(task)) {
-        google.script.run.syncClientProjects();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncClientProjects",
+          onError: (error) => {
+            console.warn("[TaskSubmit] Failed to sync client projects:", error);
+          }
+        });
       }
       clearClientCaches(client);
       AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
@@ -2072,15 +2082,20 @@
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Redirecting");
-      google.script.run.withSuccessHandler((url) => {
-        if (url) {
-          window.open(url, "_blank");
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
+        args: [clientName],
+        onSuccess: (url) => {
+          if (url) {
+            window.open(url, "_blank");
+          }
+          loading.restore();
+        },
+        onError: () => {
+          AppUtils.showError("Sheet doesn't exist!");
+          loading.restore();
         }
-        loading.restore();
-      }).withFailureHandler(() => {
-        AppUtils.showError("Sheet doesn't exist!");
-        loading.restore();
-      }).getClientSheetUrl(clientName);
+      });
     }
     function buildActionButtons(row = []) {
       const hours = parseHoursValue(row[4]);
@@ -2170,18 +2185,22 @@
         return;
       }
       isRefreshing = true;
-      google.script.run.withSuccessHandler((data) => {
-        isRefreshing = false;
-        updateActivityTable(data, dataTable);
-        updateFilterCounts(dataTable);
-        HourSummary.loadTodayChargedHours();
-        callback?.();
-      }).withFailureHandler((error) => {
-        isRefreshing = false;
-        console.error("Activity Today refresh failed:", error);
-        AppUtils.showError(error);
-        callback?.();
-      }).getDailyActivityData();
+      AppUtils.gScriptRun({
+        gscriptFunc: "getDailyActivityData",
+        onSuccess: (data) => {
+          isRefreshing = false;
+          updateActivityTable(data, dataTable);
+          updateFilterCounts(dataTable);
+          HourSummary.loadTodayChargedHours();
+          callback?.();
+        },
+        onError: (error) => {
+          isRefreshing = false;
+          console.error("Activity Today refresh failed:", error);
+          AppUtils.showError(error);
+          callback?.();
+        }
+      });
     }
     function updateActivityTable(data, dataTable) {
       if (!dataTable || !Array.isArray(data)) {
@@ -3114,15 +3133,20 @@
         return;
       }
       AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
-      google.script.run.withSuccessHandler((url) => {
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-        } else {
-          AppUtils.showError("Invalid sheet URL.");
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
+        args: [clientName],
+        onSuccess: (url) => {
+          if (url && String(url).startsWith("http")) {
+            window.open(url, "_blank");
+          } else {
+            AppUtils.showError("Invalid sheet URL.");
+          }
+        },
+        onError: () => {
+          AppUtils.showError("Sheet doesn't exist!");
         }
-      }).withFailureHandler(() => {
-        AppUtils.showError("Sheet doesn't exist!");
-      }).getClientSheetUrl(clientName);
+      });
     }
     function loadClientTasks(clientName) {
       if (!clientName) {
@@ -3406,17 +3430,22 @@
         return;
       }
       AppUtils.showDashboardToast("Redirecting to sheet!", "info");
-      google.script.run.withSuccessHandler((url) => {
-        const clientUrl = String(url || "").trim();
-        if (clientUrl.startsWith("http")) {
-          window.open(clientUrl, "_blank");
-          return;
+      AppUtils.gScriptRun({
+        gscriptFunc: "goToPresentClient",
+        args: [clientName],
+        onSuccess: (url) => {
+          const clientUrl = String(url || "").trim();
+          if (clientUrl.startsWith("http")) {
+            window.open(clientUrl, "_blank");
+            return;
+          }
+          AppUtils.showError(url);
+        },
+        onError: (error) => {
+          console.error("[ProfilePopover] Failed to open client sheet:", error);
+          AppUtils.showError(error?.message || error);
         }
-        AppUtils.showError(url);
-      }).withFailureHandler((error) => {
-        console.error("[ProfilePopover] Failed to open client sheet:", error);
-        AppUtils.showError(error?.message || error);
-      }).goToPresentClient(clientName);
+      });
     }
     function setClientData(data = []) {
       clientData = /* @__PURE__ */ new Map();
@@ -4166,30 +4195,34 @@
             "Client sheet created successfully!",
             "success"
           );
-          google.script.run.withSuccessHandler((result) => {
-            AppUtils.confirmAction(
-              "syncClientsList",
-              "Synchronize Client Directory?",
-              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
-              () => {
-                AppUtils.cacheClear("clientDirectoryData");
-                ClientDirectory.refreshClientDirectory(
-                  "clientDirectoryData",
-                  () => {
-                    AppUtils.showDashboardToast(
-                      "Clients refreshed successfully.",
-                      "success"
-                    );
-                  }
-                );
-              }
-            );
-          }).withFailureHandler((error) => {
-            console.error(
-              "[clientDirectory] syncClientSheetList failed:",
-              error
-            );
-          }).syncClientSheetList();
+          AppUtils.gScriptRun({
+            gscriptFunc: "syncClientSheetList",
+            onSuccess: () => {
+              AppUtils.confirmAction(
+                "syncClientsList",
+                "Synchronize Client Directory?",
+                "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+                () => {
+                  AppUtils.cacheClear("clientDirectoryData");
+                  ClientDirectory.refreshClientDirectory(
+                    "clientDirectoryData",
+                    () => {
+                      AppUtils.showDashboardToast(
+                        "Clients refreshed successfully.",
+                        "success"
+                      );
+                    }
+                  );
+                }
+              );
+            },
+            onError: (error) => {
+              console.error(
+                "[clientDirectory] syncClientSheetList failed:",
+                error
+              );
+            }
+          });
         }
       });
     }
@@ -4354,48 +4387,59 @@
         $btn[0],
         "Creating External Sheet"
       );
-      google.script.run.withSuccessHandler((result) => {
-        loading.setSuccess("Sheet Created");
-        AppUtils.closeModal(MODAL_ID);
-        AppUtils.showDashboardToast(
-          `External sheet created for ${result.clientName}.`,
-          "success"
-        );
-        AppUtils.cacheClear("clientDirectoryData");
-        google.script.run.withSuccessHandler((result2) => {
-          AppUtils.confirmAction(
-            "syncClientsList",
-            "Synchronize Client Directory?",
-            "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
-            () => {
-              AppUtils.cacheClear("clientDirectoryData");
-              ClientDirectory.refreshClientDirectory(
-                "clientDirectoryData",
+      AppUtils.gScriptRun({
+        gscriptFunc: "createExternalSheet",
+        args: [
+          {
+            clientName,
+            projects
+          }
+        ],
+        onSuccess: (result) => {
+          loading.setSuccess("Sheet Created");
+          AppUtils.closeModal(MODAL_ID);
+          AppUtils.showDashboardToast(
+            `External sheet created for ${result.clientName}.`,
+            "success"
+          );
+          AppUtils.cacheClear("clientDirectoryData");
+          AppUtils.gScriptRun({
+            gscriptFunc: "syncClientSheetList",
+            onSuccess: () => {
+              AppUtils.confirmAction(
+                "syncClientsList",
+                "Synchronize Client Directory?",
+                "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
                 () => {
-                  AppUtils.showDashboardToast(
-                    "Clients refreshed successfully.",
-                    "success"
+                  AppUtils.cacheClear("clientDirectoryData");
+                  ClientDirectory.refreshClientDirectory(
+                    "clientDirectoryData",
+                    () => {
+                      AppUtils.showDashboardToast(
+                        "Clients refreshed successfully.",
+                        "success"
+                      );
+                    }
                   );
                 }
               );
+            },
+            onError: (error) => {
+              console.error(
+                "[clientDirectory] syncClientSheetList failed:",
+                error
+              );
             }
+          });
+        },
+        onError: (error) => {
+          console.error("[clientDirectory] createExternalSheet failed:", error);
+          loading.restore();
+          AppUtils.showDashboardToast(
+            error?.message || "Failed to create external sheet.",
+            "error"
           );
-        }).withFailureHandler((error) => {
-          console.error(
-            "[clientDirectory] syncClientSheetList failed:",
-            error
-          );
-        }).syncClientSheetList();
-      }).withFailureHandler((error) => {
-        console.error("[clientDirectory] createExternalSheet failed:", error);
-        loading.restore();
-        AppUtils.showDashboardToast(
-          error?.message || "Failed to create external sheet.",
-          "error"
-        );
-      }).createExternalSheet({
-        clientName,
-        projects
+        }
       });
     }
     function validateAndShowReview($modal, formSelector) {
@@ -4913,17 +4957,22 @@
     function prepareReportGeneration(type, btn, params, loading) {
       const cfg = CONFIG[type];
       const reportName = cfg.reportName(params);
-      google.script.run.withFailureHandler((err) => {
-        setGenerateState(type, false, loading);
-        AppUtils.showError(err);
-      }).withSuccessHandler((result) => {
-        if (!result.exists) {
-          loading.setText("Generating Report");
-          requestReportGeneration(cfg, type, btn, params, loading);
-          return;
+      AppUtils.gScriptRun({
+        gscriptFunc: "checkExistingReport",
+        args: [type, reportName],
+        onError: (err) => {
+          setGenerateState(type, false, loading);
+          AppUtils.showError(err);
+        },
+        onSuccess: (result) => {
+          if (!result.exists) {
+            loading.setText("Generating Report");
+            requestReportGeneration(cfg, type, btn, params, loading);
+            return;
+          }
+          showExistsModal(cfg, type, btn, params, result.report, loading);
         }
-        showExistsModal(cfg, type, btn, params, result.report, loading);
-      }).checkExistingReport(type, reportName);
+      });
     }
     function showExistsModal(cfg, type, btn, params, report, loading) {
       const ns = `.${type}ReportModal`;
@@ -4975,7 +5024,12 @@
       });
     }
     function requestReportGeneration(cfg, type, btn, params, loading) {
-      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err, loading)).withSuccessHandler(() => checkReportReady(cfg, type, btn, "", loading)).updateCustomReportPDF(type, ...cfg.updateArgs(params));
+      AppUtils.gScriptRun({
+        gscriptFunc: "updateCustomReportPDF",
+        args: [type, ...cfg.updateArgs(params)],
+        onError: (err) => handleGenerateError(type, btn, err, loading),
+        onSuccess: () => checkReportReady(cfg, type, btn, "", loading)
+      });
     }
     function checkReportReady(cfg, type, btn, attempts = 0, loading) {
       if (attempts >= REPORT_MAX_ATTEMPTS) {
@@ -4983,27 +5037,37 @@
         AppUtils.showError("Timed out waiting for report.");
         return;
       }
-      google.script.run.withFailureHandler((err) => handleGenerateError(type, btn, err, loading)).withSuccessHandler((ready) => {
-        if (!ready) {
-          setTimeout(() => {
-            checkReportReady(cfg, type, btn, attempts + 1, loading);
-          }, REPORT_CHECK_INTERVAL);
-          return;
+      AppUtils.gScriptRun({
+        gscriptFunc: "isReportReady",
+        args: [type],
+        onError: (err) => handleGenerateError(type, btn, err, loading),
+        onSuccess: (ready) => {
+          if (!ready) {
+            setTimeout(() => {
+              checkReportReady(cfg, type, btn, attempts + 1, loading);
+            }, REPORT_CHECK_INTERVAL);
+            return;
+          }
+          saveReport(type, btn, cfg, loading);
         }
-        saveReport(type, btn, cfg, loading);
-      }).isReportReady(type);
+      });
     }
     function saveReport(type, btn, cfg, loading) {
-      google.script.run.withFailureHandler((err) => {
-        handleGenerateError(type, btn, err, loading);
-      }).withSuccessHandler(() => {
-        loading.setSuccess("Generated successfully");
-        setGenerateState(type, false);
-        cfg.reloadHistory(() => {
-          TableModule.highlightLatestRow(cfg.historyTableId, 0);
-        });
-        AppUtils.showDashboardToast(cfg.successMessage, "success");
-      }).saveCustomReportPDF(type);
+      AppUtils.gScriptRun({
+        gscriptFunc: "saveCustomReportPDF",
+        args: [type],
+        onError: (err) => {
+          handleGenerateError(type, btn, err, loading);
+        },
+        onSuccess: () => {
+          loading.setSuccess("Generated successfully");
+          setGenerateState(type, false);
+          cfg.reloadHistory(() => {
+            TableModule.highlightLatestRow(cfg.historyTableId, 0);
+          });
+          AppUtils.showDashboardToast(cfg.successMessage, "success");
+        }
+      });
     }
     function generateMonthlyReport(month, year, btn, loading) {
       prepareReportGeneration("monthly", btn, { month, year }, loading);
@@ -5070,16 +5134,21 @@
         }
         return;
       }
-      google.script.run.withSuccessHandler(() => {
-        handleReportSuccess(config.btn, config.successMessage, config.loading);
-      }).withFailureHandler((err) => {
-        handleReportFailure(
-          config.btn,
-          err,
-          config.errorMessage,
-          config.loading
-        );
-      })[config.reportMethod](report);
+      AppUtils.gScriptRun({
+        gscriptFunc: config.reportMethod,
+        args: [report],
+        onSuccess: () => {
+          handleReportSuccess(config.btn, config.successMessage, config.loading);
+        },
+        onError: (err) => {
+          handleReportFailure(
+            config.btn,
+            err,
+            config.errorMessage,
+            config.loading
+          );
+        }
+      });
     }
     function getLatestReport(reportType) {
       const report = ReportService.getLatestReport(reportType);
@@ -5105,18 +5174,24 @@
       const reportType = $btn.data("type");
       const successMessage = reportType === "Data Export" ? "CSV emailed successfully!" : "Email sent successfully!";
       const serverFunction = reportType === "Data Export" ? "sendBillingRecordsCSVEmail" : "sendRequestedEmailReport";
-      google.script.run.withSuccessHandler(
-        () => AppUtils.showDashboardToast(successMessage, "success")
-      ).withFailureHandler((err) => AppUtils.showError(err))[serverFunction](reportId);
+      AppUtils.gScriptRun({
+        gscriptFunc: serverFunction,
+        args: [reportId],
+        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+        onError: (err) => AppUtils.showError(err)
+      });
     };
     const handleDiscordReport = ($btn) => {
       const reportId = $btn.data("id");
       const reportType = $btn.data("type");
       const successMessage = reportType === "Data Export" ? "CSV sent to Discord successfully!" : "Discord notification sent!";
       const serverFunction = reportType === "Data Export" ? "sendBillingRecordsCSVDiscord" : "sendRequestedDiscordReport";
-      google.script.run.withSuccessHandler(
-        () => AppUtils.showDashboardToast(successMessage, "success")
-      ).withFailureHandler((err) => AppUtils.showError(err))[serverFunction](reportId);
+      AppUtils.gScriptRun({
+        gscriptFunc: serverFunction,
+        args: [reportId],
+        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+        onError: (err) => AppUtils.showError(err)
+      });
     };
     const handleBtnGenerateYearlyReport = ($btn) => {
       const selectYear = $("#yearly-report-year");
@@ -5139,21 +5214,26 @@
         $btn[0],
         "Analyzing Report Request..."
       );
-      google.script.run.withSuccessHandler((result) => {
-        if (!result.valid) {
+      AppUtils.gScriptRun({
+        gscriptFunc: "validateCustomYearlyReport",
+        args: [year],
+        onSuccess: (result) => {
+          if (!result.valid) {
+            ReportGenerator.setGenerateState(type, false, loading);
+            AppUtils.showDashboardToast(result.message, "warning");
+            return;
+          }
+          ReportGenerator.generateYearlyReport(year, $btn, loading);
+        },
+        onError: (err) => {
           ReportGenerator.setGenerateState(type, false, loading);
-          AppUtils.showDashboardToast(result.message, "warning");
-          return;
+          console.error(err);
+          AppUtils.showDashboardToast(
+            err.message || "Something went wrong.",
+            "error"
+          );
         }
-        ReportGenerator.generateYearlyReport(year, $btn, loading);
-      }).withFailureHandler((err) => {
-        ReportGenerator.setGenerateState(type, false, loading);
-        console.error(err);
-        AppUtils.showDashboardToast(
-          err.message || "Something went wrong.",
-          "error"
-        );
-      }).validateCustomYearlyReport(year);
+      });
     };
     const handleBtnGenerateMonthlyReport = ($btn) => {
       const selectMonth = $("#monthly-report-month");
@@ -5170,7 +5250,10 @@
       const yearResult = ValidationModule.number(
         selectYear.val(),
         "Report year",
-        { min: 2024, max: (/* @__PURE__ */ new Date()).getFullYear() }
+        {
+          min: 2024,
+          max: (/* @__PURE__ */ new Date()).getFullYear()
+        }
       );
       if (!yearResult.valid) {
         AppUtils.showDashboardToast(yearResult.message, "warning");
@@ -5185,21 +5268,26 @@
         $btn[0],
         "Analyzing Report Request..."
       );
-      google.script.run.withSuccessHandler((result) => {
-        if (!result.valid) {
+      AppUtils.gScriptRun({
+        gscriptFunc: "validateCustomMonthlyReport",
+        args: [month, year],
+        onSuccess: (result) => {
+          if (!result.valid) {
+            ReportGenerator.setGenerateState(type, false, loading);
+            AppUtils.showDashboardToast(result.message, "warning");
+            return;
+          }
+          ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
+        },
+        onError: (err) => {
           ReportGenerator.setGenerateState(type, false, loading);
-          AppUtils.showDashboardToast(result.message, "warning");
-          return;
+          console.error(err);
+          AppUtils.showDashboardToast(
+            err.message || "Something went wrong.",
+            "error"
+          );
         }
-        ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
-      }).withFailureHandler((err) => {
-        ReportGenerator.setGenerateState(type, false, loading);
-        console.error(err);
-        AppUtils.showDashboardToast(
-          err.message || "Something went wrong.",
-          "error"
-        );
-      }).validateCustomMonthlyReport(month, year);
+      });
     };
     const handleEmailLatestReport = ($btn, reportType) => {
       const loading = AppUtils.setButtonLoading($btn[0], "Sending email...");
@@ -5347,14 +5435,19 @@
     };
     const loadBillingRecords = (startDate, endDate) => {
       DataTableModule.showLoader(BILLING_TABLE_ID);
-      google.script.run.withSuccessHandler((data) => {
-        renderBillingRecords(data);
-      }).withFailureHandler((error) => {
-        DataTableModule.showError(
-          BILLING_TABLE_ID,
-          error?.message || "Failed to load Billing Records."
-        );
-      }).getBillingRecordsForExport(startDate, endDate);
+      AppUtils.gScriptRun({
+        gscriptFunc: "getBillingRecordsForExport",
+        args: [startDate, endDate],
+        onSuccess: (data) => {
+          renderBillingRecords(data);
+        },
+        onError: (error) => {
+          DataTableModule.showError(
+            BILLING_TABLE_ID,
+            error?.message || "Failed to load Billing Records."
+          );
+        }
+      });
     };
     function normalizeBillingStatus(value) {
       const status = String(value || "").toUpperCase();
@@ -5448,39 +5541,48 @@
       }
       const button = document.getElementById("btn-generate-billing-records-csv");
       const loading = AppUtils.setButtonLoading(button, "Generating");
-      google.script.run.withSuccessHandler((result) => {
-        if (loading) {
-          loading.restore();
+      AppUtils.gScriptRun({
+        gscriptFunc: "saveBillingRecordsCSV",
+        args: [startDate, endDate],
+        onSuccess: (result) => {
+          if (loading) {
+            loading.restore();
+          }
+          if (!result?.success || !result?.url) {
+            AppUtils.showError("The Billing Records CSV could not be generated.");
+            return;
+          }
+          AppUtils.showDashboardToast(
+            `CSV generated successfully (${result.recordCount} records).`
+          );
+          loadBillingRecords(startDate, endDate);
+          ReportsOverview.loadReportsOverview();
+          window.open(result.url, "_blank");
+          loadBillingCSVExportCount();
+        },
+        onError: (error) => {
+          if (loading) {
+            loading.restore();
+          }
+          AppUtils.showError(
+            error?.message || "Failed to generate the Billing Records CSV."
+          );
         }
-        if (!result?.success || !result?.url) {
-          AppUtils.showError("The Billing Records CSV could not be generated.");
-          return;
-        }
-        AppUtils.showDashboardToast(
-          `CSV generated successfully (${result.recordCount} records).`
-        );
-        loadBillingRecords(startDate, endDate);
-        ReportsOverview.loadReportsOverview();
-        window.open(result.url, "_blank");
-        loadBillingCSVExportCount();
-      }).withFailureHandler((error) => {
-        if (loading) {
-          loading.restore();
-        }
-        AppUtils.showError(
-          error?.message || "Failed to generate the Billing Records CSV."
-        );
-      }).saveBillingRecordsCSV(startDate, endDate);
+      });
     };
     const loadBillingCSVExportCount = () => {
-      google.script.run.withSuccessHandler((count) => {
-        $("#csv-generated-count").text(Number(count || 0));
-      }).withFailureHandler((error) => {
-        console.warn(
-          "[ReportsDataExport] Failed to load CSV export count:",
-          error
-        );
-      }).getBillingRecordsCSVExportCount();
+      AppUtils.gScriptRun({
+        gscriptFunc: "getBillingRecordsCSVExportCount",
+        onSuccess: (count) => {
+          $("#csv-generated-count").text(Number(count || 0));
+        },
+        onError: (error) => {
+          console.warn(
+            "[ReportsDataExport] Failed to load CSV export count:",
+            error
+          );
+        }
+      });
     };
     const updateSelectedRange = (startDate, endDate) => {
       const start = parseLocalDate(startDate);
@@ -5945,81 +6047,88 @@
       loading.setSuccess("Cleared Cache");
     }
     function syncExternalClientSheets(btn) {
-      const loading = AppUtils.setButtonLoading(
-        btn,
-        "Syncing sheets"
-      );
-      google.script.run.withSuccessHandler((result) => {
-        const count = Array.isArray(result) ? result.length : 0;
-        AppUtils.showDashboardToast(
-          count ? `${count} external sheet(s) synchronized successfully.` : "External sheets are already synchronized.",
-          "success"
-        );
-        loading.setSuccess("Clients Synced");
-        AppUtils.closeModal(MODAL_ID);
-      }).withFailureHandler((err) => {
-        console.error("reconcileExternalSheets failed:", err);
-        AppUtils.showDashboardToast(
-          "Failed to synchronize external client sheets. Please try again.",
-          "error"
-        );
-        loading.restore();
-      }).reconcileExternalSheets();
+      const loading = AppUtils.setButtonLoading(btn, "Syncing sheets");
+      AppUtils.gScriptRun({
+        gscriptFunc: "reconcileExternalSheets",
+        onSuccess: (result) => {
+          const count = Array.isArray(result) ? result.length : 0;
+          AppUtils.showDashboardToast(
+            count ? `${count} external sheet(s) synchronized successfully.` : "External sheets are already synchronized.",
+            "success"
+          );
+          loading.setSuccess("Clients Synced");
+          AppUtils.closeModal(MODAL_ID);
+        },
+        onError: (err) => {
+          console.error("reconcileExternalSheets failed:", err);
+          AppUtils.showDashboardToast(
+            "Failed to synchronize external client sheets. Please try again.",
+            "error"
+          );
+          loading.restore();
+        }
+      });
     }
     function syncClientSheets(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Syncing clients");
-      google.script.run.withSuccessHandler(() => {
-        AppUtils.showDashboardToast(
-          "Client list synced successfully!",
-          "success"
-        );
-        loading.setSuccess("Clients Synced");
-        AppUtils.closeModal(MODAL_ID);
-      }).withFailureHandler((err) => {
-        console.error("syncClientSheetList failed:", err);
-        AppUtils.showDashboardToast(
-          "Client list sync failed. Please try again.",
-          "error"
-        );
-        loading.restore();
-      }).syncClientSheetList();
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncClientSheetList",
+        onSuccess: () => {
+          AppUtils.showDashboardToast(
+            "Client list synced successfully!",
+            "success"
+          );
+          loading.setSuccess("Clients Synced");
+          AppUtils.closeModal(MODAL_ID);
+        },
+        onError: (err) => {
+          console.error("syncClientSheetList failed:", err);
+          AppUtils.showDashboardToast(
+            "Client list sync failed. Please try again.",
+            "error"
+          );
+          loading.restore();
+        }
+      });
     }
     function syncClientProjectsFromMain(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Updating projects");
-      google.script.run.withSuccessHandler(() => {
-        AppUtils.showDashboardToast(
-          "Project data updated successfully.",
-          "success"
-        );
-        loading.setSuccess("Projects Updated");
-        AppUtils.closeModal(MODAL_ID);
-      }).withFailureHandler((err) => {
-        console.error("syncClientProjects failed:", err);
-        AppUtils.showDashboardToast(
-          "Failed to update project data. Please try again.",
-          "error"
-        );
-        loading.restore();
-      }).syncClientProjects();
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncClientProjects",
+        onSuccess: () => {
+          AppUtils.showDashboardToast(
+            "Project data updated successfully.",
+            "success"
+          );
+          loading.setSuccess("Projects Updated");
+          AppUtils.closeModal(MODAL_ID);
+        },
+        onError: (err) => {
+          console.error("syncClientProjects failed:", err);
+          AppUtils.showDashboardToast(
+            "Failed to update project data. Please try again.",
+            "error"
+          );
+          loading.restore();
+        }
+      });
     }
     function BackupAllSheets(btn) {
-      const loading = AppUtils.setButtonLoading(
-        btn,
-        "Creating Backup"
-      );
-      google.script.run.withSuccessHandler((result) => {
-        AppUtils.showDashboardToast("Backup completed", "info");
-        console.log("Backup completed:", result);
-        loading.setSuccess("Backup Completed");
-        AppUtils.closeModal(MODAL_ID);
-      }).withFailureHandler((err) => {
-        console.error("Backup failed:", err);
-        AppUtils.showDashboardToast(
-          "Something went wrong",
-          "error"
-        );
-        loading.restore();
-      }).backupAllSheets();
+      const loading = AppUtils.setButtonLoading(btn, "Creating Backup");
+      AppUtils.gScriptRun({
+        gscriptFunc: "backupAllSheets",
+        onSuccess: (result) => {
+          AppUtils.showDashboardToast("Backup completed", "info");
+          console.log("Backup completed:", result);
+          loading.setSuccess("Backup Completed");
+          AppUtils.closeModal(MODAL_ID);
+        },
+        onError: (err) => {
+          console.error("Backup failed:", err);
+          AppUtils.showDashboardToast("Something went wrong", "error");
+          loading.restore();
+        }
+      });
     }
     function handleIntegrationListClick(e) {
       const item = e.target.closest(".integration-list-item");
@@ -6266,35 +6375,40 @@
       const { cellRef, formula } = data;
       const operationId = startMasterFormulaOperation();
       const loading = AppUtils.setButtonLoading($btn[0], "Applying Formula");
-      google.script.run.withSuccessHandler((result) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
-        console.log("applyFormulaToMainSheets:", result);
-        loading.setSuccess("Formula Applied");
-        AppUtils.showDashboardToast(
-          "Formula applied to the main spreadsheet.",
-          "success"
-        );
-        AppUtils.closeModal(MODAL_ID);
-        masterFormulaTimer = setTimeout(() => {
-          masterFormulaTimer = null;
+      AppUtils.gScriptRun({
+        gscriptFunc: "applyFormulaToMainSheets",
+        args: [cellRef, formula],
+        onSuccess: (result) => {
           if (!isMasterFormulaOperationActive(operationId)) {
             return;
           }
-          openExternalProjectsConfirmation(cellRef, formula, operationId);
-        }, 1e3);
-      }).withFailureHandler((err) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
+          console.log("applyFormulaToMainSheets:", result);
+          loading.setSuccess("Formula Applied");
+          AppUtils.showDashboardToast(
+            "Formula applied to the main spreadsheet.",
+            "success"
+          );
+          AppUtils.closeModal(MODAL_ID);
+          masterFormulaTimer = setTimeout(() => {
+            masterFormulaTimer = null;
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+            openExternalProjectsConfirmation(cellRef, formula, operationId);
+          }, 1e3);
+        },
+        onError: (err) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+          console.error("applyFormulaToMainSheets failed:", err);
+          loading.restore();
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to apply formula to the main spreadsheet.",
+            "error"
+          );
         }
-        console.error("applyFormulaToMainSheets failed:", err);
-        loading.restore();
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to apply formula to the main spreadsheet.",
-          "error"
-        );
-      }).applyFormulaToMainSheets(cellRef, formula);
+      });
     }
     function openExternalProjectsConfirmation(cellRef, formula, operationId) {
       if (!isMasterFormulaOperationActive(operationId)) {
@@ -6327,34 +6441,39 @@
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Updating Projects");
-      google.script.run.withSuccessHandler((result) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
-        console.log("applyFormulaToExternalProjects:", result);
-        loading.setSuccess("Formula Applied");
-        AppUtils.showDashboardToast(
-          `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
-          "success"
-        );
-        masterFormulaTimer = setTimeout(() => {
-          masterFormulaTimer = null;
+      AppUtils.gScriptRun({
+        gscriptFunc: "applyFormulaToExternalProjects",
+        args: [cellRef, formula],
+        onSuccess: (result) => {
           if (!isMasterFormulaOperationActive(operationId)) {
             return;
           }
-          openExternalProjectSheetsConfirmation(cellRef, formula, operationId);
-        }, 1e3);
-      }).withFailureHandler((err) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
+          console.log("applyFormulaToExternalProjects:", result);
+          loading.setSuccess("Formula Applied");
+          AppUtils.showDashboardToast(
+            `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
+            "success"
+          );
+          masterFormulaTimer = setTimeout(() => {
+            masterFormulaTimer = null;
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+            openExternalProjectSheetsConfirmation(cellRef, formula, operationId);
+          }, 1e3);
+        },
+        onError: (err) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+          console.error("applyFormulaToExternalProjects failed:", err);
+          loading.restore();
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to update External Projects.",
+            "error"
+          );
         }
-        console.error("applyFormulaToExternalProjects failed:", err);
-        loading.restore();
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to update External Projects.",
-          "error"
-        );
-      }).applyFormulaToExternalProjects(cellRef, formula);
+      });
     }
     function openExternalProjectSheetsConfirmation(cellRef, formula, operationId) {
       if (!isMasterFormulaOperationActive(operationId)) {
@@ -6392,28 +6511,33 @@
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Updating Sheets");
-      google.script.run.withSuccessHandler((result) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
+      AppUtils.gScriptRun({
+        gscriptFunc: "applyFormulaToExternalProjectSheets",
+        args: [cellRef, formula],
+        onSuccess: (result) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+          console.log("applyFormulaToExternalProjectSheets:", result);
+          loading.setSuccess("Sheets Updated");
+          AppUtils.showDashboardToast(
+            `External project sheets updated successfully: ${result.updated} sheet(s).`,
+            "success"
+          );
+          cancelMasterFormulaOperation();
+        },
+        onError: (err) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+          console.error("applyFormulaToExternalProjectSheets failed:", err);
+          loading.restore();
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to update external project sheets.",
+            "error"
+          );
         }
-        console.log("applyFormulaToExternalProjectSheets:", result);
-        loading.setSuccess("Sheets Updated");
-        AppUtils.showDashboardToast(
-          `External project sheets updated successfully: ${result.updated} sheet(s).`,
-          "success"
-        );
-        cancelMasterFormulaOperation();
-      }).withFailureHandler((err) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
-        console.error("applyFormulaToExternalProjectSheets failed:", err);
-        loading.restore();
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to update external project sheets.",
-          "error"
-        );
-      }).applyFormulaToExternalProjectSheets(cellRef, formula);
+      });
     }
     function handleTabShown(e) {
       const tab = e.target;
@@ -10708,26 +10832,31 @@
     }
     function savePerformanceTarget(type, value, proceedButton) {
       const loading = proceedButton ? AppUtils.setButtonLoading(proceedButton, "Saving") : null;
-      google.script.run.withSuccessHandler((result) => {
-        if (!result?.success) {
+      AppUtils.gScriptRun({
+        gscriptFunc: "updatePerformanceTarget",
+        args: [type, value],
+        onSuccess: (result) => {
+          if (!result?.success) {
+            loading?.restore();
+            AppUtils.showError("Unable to update performance target.");
+            return;
+          }
+          loading?.setSuccess("Saved");
+          AppUtils.showDashboardToast(
+            `${type === "daily" ? "Daily" : "Monthly"} target updated successfully.`
+          );
+          setTimeout(() => {
+            AppUtils.closeModal(TARGET_MODAL_ID);
+            refreshTargetData();
+          }, 1e3);
+        },
+        onError: (error) => {
           loading?.restore();
-          AppUtils.showError("Unable to update performance target.");
-          return;
+          AppUtils.showError(
+            error?.message || "Unable to update performance target."
+          );
         }
-        loading?.setSuccess("Saved");
-        AppUtils.showDashboardToast(
-          `${type === "daily" ? "Daily" : "Monthly"} target updated successfully.`
-        );
-        setTimeout(() => {
-          AppUtils.closeModal(TARGET_MODAL_ID);
-          refreshTargetData();
-        }, 1e3);
-      }).withFailureHandler((error) => {
-        loading?.restore();
-        AppUtils.showError(
-          error?.message || "Unable to update performance target."
-        );
-      }).updatePerformanceTarget(type, value);
+      });
     }
     function refreshTargetData() {
       loadTargetProgress(true);
@@ -11510,24 +11639,51 @@
       },
       sheets: {
         title: "Google Sheets",
-        description: "Connect the application to your Google Spreadsheet.",
-        field: {
-          name: "spreadsheetId",
-          label: "Google Spreadsheet ID",
-          type: "text",
-          placeholder: "Enter Google Spreadsheet ID"
-        },
+        description: "Connect the application to its Google Sheets and external sheet template.",
+        fields: [
+          {
+            name: "spreadsheetId",
+            label: "Google Spreadsheet ID",
+            type: "text",
+            placeholder: "Enter Google Spreadsheet ID",
+            help: "Main Google Spreadsheet used by the application."
+          },
+          {
+            name: "externalSheetTemplateId",
+            label: "External Sheet Template ID",
+            type: "text",
+            placeholder: "Enter external sheet template ID",
+            help: "Google Sheet template cloned when creating external client sheets."
+          }
+        ],
         logo: "https://s13.gifyu.com/images/bnmHH.png"
       },
       drive: {
         title: "Google Drive",
-        description: "Configure the Google Drive folder used to store generated reports.",
-        field: {
-          name: "reportFolderId",
-          label: "Report Folder ID",
-          type: "text",
-          placeholder: "Enter Google Drive folder ID"
-        },
+        description: "Configure the Google Drive folders used by the application.",
+        fields: [
+          {
+            name: "reportFolderId",
+            label: "Report Folder ID",
+            type: "text",
+            placeholder: "Enter Google Drive report folder ID",
+            help: "Folder used to store generated reports."
+          },
+          {
+            name: "backupFolderId",
+            label: "Backup Folder ID",
+            type: "text",
+            placeholder: "Enter Google Drive backup folder ID",
+            help: "Folder used to store backups of application sheets."
+          },
+          {
+            name: "mainSheetsFolderId",
+            label: "Main Sheets Folder ID",
+            type: "text",
+            placeholder: "Enter main sheets folder ID",
+            help: "Folder containing the application's main Google Sheets."
+          }
+        ],
         logo: "https://s13.gifyu.com/images/bnmHK.png"
       }
     };
@@ -11562,13 +11718,17 @@
       openIntegrationModal(integration);
     };
     const loadData = () => {
-      google.script.run.withSuccessHandler(updateIntegrationStatus).withFailureHandler((err) => {
-        console.error("getIntegrationStatus failed:", err);
-        AppUtils.showDashboardToast(
-          "Failed to load integration status.",
-          "error"
-        );
-      }).getIntegrationStatus();
+      AppUtils.gScriptRun({
+        gscriptFunc: "getIntegrationStatus",
+        onSuccess: updateIntegrationStatus,
+        onError: (err) => {
+          console.error("getIntegrationStatus failed:", err);
+          AppUtils.showDashboardToast(
+            "Failed to load integration status.",
+            "error"
+          );
+        }
+      });
     };
     function getIntegrationConfig(integration) {
       return INTEGRATIONS[integration] || null;
@@ -11672,31 +11832,47 @@
     }
     function buildBodyHtml(config) {
       const description = AppUtils.escapeHtml(config.description);
-      const fieldLabel = AppUtils.escapeHtml(config.field.label);
-      const fieldType = config.field.type;
-      const fieldName = AppUtils.escapeHtml(config.field.name);
-      const placeholder = AppUtils.escapeHtml(config.field.placeholder || "");
+      const fields = config.fields || [config.field];
       return `
-      <div class="integration-modal-description mb-4">
-        ${description}
-      </div>
-      <form id="integrationConfigForm">
-        <div class="position-relative form-group">
-          <label for="integrationConfigValue">${fieldLabel}</label>
-          <input
-            type="${fieldType}"
-            id="integrationConfigValue"
-            name="${fieldName}"
-            class="form-control"
-            placeholder="${placeholder}"
-            autocomplete="off"
-          >
-          <small id="integrationConfigHelp" class="form-text text-muted">
-            Leave blank to keep the current configuration.
-          </small>
-        </div>
-      </form>
-    `;
+    <div class="integration-modal-description mb-4">
+      ${description}
+    </div>
+
+    <form id="integrationConfigForm">
+      ${fields.map((field) => {
+        const fieldLabel = AppUtils.escapeHtml(field.label);
+        const fieldType = field.type;
+        const fieldName = AppUtils.escapeHtml(field.name);
+        const placeholder = AppUtils.escapeHtml(field.placeholder || "");
+        const help = AppUtils.escapeHtml(
+          field.help || "Leave blank to keep the current configuration."
+        );
+        return `
+            <div class="position-relative form-group mb-3">
+              <label for="integrationConfigValue-${fieldName}">
+                ${fieldLabel}
+              </label>
+
+              <input
+                type="${fieldType}"
+                id="integrationConfigValue-${fieldName}"
+                name="${fieldName}"
+                class="form-control"
+                placeholder="${placeholder}"
+                autocomplete="off"
+              >
+
+              <small
+                id="integrationConfigHelp-${fieldName}"
+                class="form-text text-muted"
+              >
+                ${help}
+              </small>
+            </div>
+          `;
+      }).join("")}
+    </form>
+  `;
     }
     function buildFooterHtml() {
       return `
@@ -11705,54 +11881,108 @@
     `;
     }
     function loadIntegrationConfigStatus(integration, $modal) {
-      const $input = $modal.find("#integrationConfigValue");
-      const $help = $modal.find("#integrationConfigHelp");
-      google.script.run.withSuccessHandler((data) => {
-        if (!data?.configured) {
-          $input.attr("placeholder", "Not configured");
-          $help.removeClass("is-configured").text(
-            "No configuration has been saved yet. Enter a value to configure this integration."
+      AppUtils.gScriptRun({
+        gscriptFunc: "getIntegrationConfigStatus",
+        args: [integration],
+        onSuccess: (data) => {
+          if (integration !== "drive") {
+            const $input = $modal.find("#integrationConfigValue");
+            const $help = $modal.find("#integrationConfigHelp");
+            if (!data?.configured) {
+              $input.attr("placeholder", "Not configured");
+              $help.removeClass("is-configured").text(
+                "No configuration has been saved yet. Enter a value to configure this integration."
+              );
+              return;
+            }
+            $input.attr("placeholder", `Current: ${data.masked}`);
+            $help.addClass("is-configured").text(
+              "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration."
+            );
+            return;
+          }
+          const fields = INTEGRATIONS.drive.fields;
+          fields.forEach((field) => {
+            const fieldData = data?.fields?.[field.name];
+            const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+            const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+            if (!$input.length) {
+              return;
+            }
+            if (!fieldData?.configured) {
+              $input.attr("placeholder", "Not configured");
+              $help.removeClass("is-configured").text(field.help || "No configuration has been saved yet.");
+              return;
+            }
+            $input.attr("placeholder", `Current: ${fieldData.masked}`);
+            $help.addClass("is-configured").text(
+              "Currently configured. Leave blank to keep the current value."
+            );
+          });
+        },
+        onError: (err) => {
+          console.error("getIntegrationConfigStatus failed:", err);
+          if (integration !== "drive") {
+            $modal.find("#integrationConfigValue").attr("placeholder", "Unable to check current configuration");
+            $modal.find("#integrationConfigHelp").removeClass("is-configured").text("Unable to check the current configuration.");
+            return;
+          }
+          INTEGRATIONS.drive.fields.forEach((field) => {
+            $modal.find(`#integrationConfigValue-${field.name}`).attr("placeholder", "Unable to check current configuration");
+            $modal.find(`#integrationConfigHelp-${field.name}`).removeClass("is-configured").text("Unable to check the current configuration.");
+          });
+        }
+      });
+    }
+    function saveIntegration(integration, $modal, $btn) {
+      const config = getIntegrationConfig(integration);
+      const title = config?.title || "Integration";
+      let value;
+      if (integration === "drive") {
+        value = {};
+        config.fields.forEach((field) => {
+          value[field.name] = String(
+            $modal.find(`#integrationConfigValue-${field.name}`).val() || ""
+          ).trim();
+        });
+        const hasValue = Object.values(value).some(Boolean);
+        if (!hasValue) {
+          AppUtils.showDashboardToast(
+            "Please enter at least one value.",
+            "error"
           );
           return;
         }
-        $input.attr("placeholder", `Current: ${data.masked}`);
-        $help.addClass("is-configured").text(
-          "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration."
-        );
-      }).withFailureHandler((err) => {
-        console.error("getIntegrationConfigStatus failed:", err);
-        $input.attr("placeholder", "Unable to check current configuration");
-        $help.removeClass("is-configured").text("Unable to check the current configuration.");
-      }).getIntegrationConfigStatus(integration);
-    }
-    function saveIntegration(integration, $modal, $btn) {
-      const $input = $modal.find("#integrationConfigValue");
-      const value = $input.val().trim();
-      if (!value) {
-        AppUtils.showDashboardToast("Please enter a value.", "error");
-        return;
+      } else {
+        const $input = $modal.find("#integrationConfigValue");
+        value = String($input.val() || "").trim();
+        if (!value) {
+          AppUtils.showDashboardToast("Please enter a value.", "error");
+          return;
+        }
       }
       const loading = AppUtils.setButtonLoading($btn[0], "Saving");
-      const config = getIntegrationConfig(integration);
-      const title = config?.title || "Integration";
-      google.script.run.withSuccessHandler(() => {
-        loading.setSuccess("Configuration Saved");
-        AppUtils.closeModal(MODAL_ID);
-        AppUtils.showDashboardToast(
-          `${title} configuration saved successfully!`,
-          "success"
-        );
-        if (typeof loadData === "function") {
+      AppUtils.gScriptRun({
+        gscriptFunc: "saveIntegration",
+        args: [integration, value],
+        onSuccess: () => {
+          loading.setSuccess("Configuration Saved");
+          AppUtils.closeModal(MODAL_ID);
+          AppUtils.showDashboardToast(
+            `${title} configuration saved successfully!`,
+            "success"
+          );
           loadData();
+        },
+        onError: (err) => {
+          console.error("saveIntegration failed:", err);
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to save integration configuration.",
+            "error"
+          );
+          loading.restore();
         }
-      }).withFailureHandler((err) => {
-        console.error("saveIntegration failed:", err);
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to save integration configuration.",
-          "error"
-        );
-        loading.restore();
-      }).saveIntegration(integration, value);
+      });
     }
     return {
       init,
@@ -11860,17 +12090,22 @@
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Redirecting");
-      google.script.run.withSuccessHandler((url) => {
-        loading.restore();
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-          return;
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
+        args: [sheetName],
+        onSuccess: (url) => {
+          loading.restore();
+          if (url && String(url).startsWith("http")) {
+            window.open(url, "_blank");
+            return;
+          }
+          AppUtils.showError(errorMessage);
+        },
+        onError: (err) => {
+          loading.restore();
+          AppUtils.showError(err);
         }
-        AppUtils.showError(errorMessage);
-      }).withFailureHandler((err) => {
-        loading.restore();
-        AppUtils.showError(err);
-      }).getClientSheetUrl(sheetName);
+      });
     }
     function loadData() {
       loadUpsellSummary();
@@ -12287,16 +12522,21 @@
       ChartModule.loadChart("hourly", false, false, forceRefresh);
     }
     function loadTotalHourlyHours() {
-      google.script.run.withSuccessHandler((value) => {
-        const $total = $("#opportunities-total-hourly-hours");
-        if (!$total.length) {
-          return;
+      AppUtils.gScriptRun({
+        gscriptFunc: "getDirectCellValueSafe",
+        args: ["Hourly History", "B8"],
+        onSuccess: (value) => {
+          const $total = $("#opportunities-total-hourly-hours");
+          if (!$total.length) {
+            return;
+          }
+          $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
+        },
+        onError: (err) => {
+          AppUtils.showError(err);
+          AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
         }
-        $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
-      }).withFailureHandler((err) => {
-        AppUtils.showError(err);
-        AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
-      }).getDirectCellValueSafe("Hourly History", "B8");
+      });
     }
     function openHourlyModal() {
       AppUtils.openModal(MODAL_ID, {
@@ -13883,13 +14123,18 @@
       }
     }
     function openClientSheet() {
-      google.script.run.withSuccessHandler((url) => {
-        if (url) {
-          window.open(url, "_blank");
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
+        args: [clientName],
+        onSuccess: (url) => {
+          if (url) {
+            window.open(url, "_blank");
+          }
+        },
+        onError: (error) => {
+          AppUtils.showError(error?.message || "Unable to open client sheet.");
         }
-      }).withFailureHandler((error) => {
-        AppUtils.showError(error?.message || "Unable to open client sheet.");
-      }).getClientSheetUrl(clientName);
+      });
     }
     function getEditableField(buttonId) {
       const fields = {
@@ -14028,20 +14273,25 @@
       if (input) {
         input.disabled = true;
       }
-      google.script.run.withSuccessHandler(() => {
-        restoreEditButton(containerId, value);
-        AppUtils.showDashboardToast("Client information updated.", "success");
-        AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName2}`);
-      }).withFailureHandler((error) => {
-        saveButton.disabled = false;
-        if (input) {
-          input.disabled = false;
+      AppUtils.gScriptRun({
+        gscriptFunc: "updateClientInformation",
+        args: [clientName2, field, value],
+        onSuccess: () => {
+          restoreEditButton(containerId, value);
+          AppUtils.showDashboardToast("Client information updated.", "success");
+          AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName2}`);
+        },
+        onError: (error) => {
+          saveButton.disabled = false;
+          if (input) {
+            input.disabled = false;
+          }
+          saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
+          AppUtils.showError(
+            error?.message || "Unable to update client information."
+          );
         }
-        saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
-        AppUtils.showError(
-          error?.message || "Unable to update client information."
-        );
-      }).updateClientInformation(clientName2, field, value);
+      });
     }
     function setText(selector, value) {
       const element = document.querySelector(selector);
@@ -14124,6 +14374,12 @@
     function getInitialPage() {
       const templatePage = window.GCB_INITIAL_PAGE;
       const savedPage = localStorage.getItem("gcb_currentPageGC");
+      console.log("[Router] getInitialPage:", {
+        templatePage,
+        savedPage,
+        isGitHubEmbedded,
+        isDirectGas
+      });
       if (isDirectGas) {
         if (isValidRoute(savedPage)) {
           return savedPage;
@@ -14187,6 +14443,11 @@
           window.addEventListener("popstate", handlePopState);
           const restoredPage = getInitialPage();
           const initialPage = isValidRoute(pendingPage) ? pendingPage : restoredPage;
+          console.log("[Router] Initial page selected:", {
+            initialPage,
+            pendingPage,
+            restoredPage
+          });
           pendingPage = null;
           initialized = true;
           go(initialPage, false);
@@ -14215,13 +14476,13 @@
         return;
       }
       const resolvedPageName = isValidRoute(pageName) ? pageName : "home";
-      if (updateHistory) {
-        pushHistory(resolvedPageName, params);
-      }
       const page = routes[resolvedPageName];
       if (!page) {
         console.error(`[RouterModule] Route "${resolvedPageName}" not found.`);
         return;
+      }
+      if (updateHistory) {
+        pushHistory(resolvedPageName, params);
       }
       if (resolvedPageName === currentPage && currentModule) {
         return;
