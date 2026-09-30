@@ -165,6 +165,21 @@
       };
     }
 
+    function navigateGasPage(page, client = "") {
+      if (!iframe.contentWindow) {
+        return;
+      }
+
+      iframe.contentWindow.postMessage(
+        {
+          type: "GCB_SET_PAGE",
+          page,
+          client,
+        },
+        "*",
+      );
+    }
+
     /*
     * ------------------------------------------------
     * Initial state
@@ -180,8 +195,6 @@
       initialUrl.searchParams.get("client") || "";
 
     updateGitHubUrl(initialPage, initialClient, true);
-    console.log("[GitHub] history length:", window.history.length);
-console.log("[GitHub] history state:", window.history.state);
     loadGasPage(initialPage, initialClient);
 
     /*
@@ -191,7 +204,7 @@ console.log("[GitHub] history state:", window.history.state);
     */
 
     window.addEventListener("message", (event) => {
-      if (event.data?.type !== "GCB_NAVIGATION") {
+      if (event.data?.type !== "GCB_SET_PAGE") {
         return;
       }
 
@@ -202,7 +215,23 @@ console.log("[GitHub] history state:", window.history.state);
         return;
       }
 
-      updateGitHubUrl(page, client);
+      console.log("[GAS] Navigation received:", {
+        page,
+        client,
+      });
+
+      if (client) {
+        const clientName = client.replace(/_/g, " ");
+
+        sessionStorage.setItem(
+          "clientDetailsName",
+          clientName,
+        );
+      }
+
+      RouterModule.go(page, false, {
+        client,
+      });
     });
 
     /*
@@ -227,8 +256,9 @@ console.log("[GitHub] history state:", window.history.state);
         client,
       });
 
-      loadGasPage(page, client);
+      navigateGasPage(page, client);
     });
+
   </script>
 
 </body>
