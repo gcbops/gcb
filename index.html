@@ -94,6 +94,14 @@
         `${Date.now()}_${requestId}`,
       );
 
+      console.log("[GitHub] NAVIGATE:", {
+        page,
+        client,
+        url,
+        parentUrl: window.location.href,
+        historyState: window.history.state,
+      });
+
       iframe.contentWindow.location.replace(url);
     }, 100);
   }
@@ -111,23 +119,6 @@
       historyLength: window.history.length,
       historyState: window.history.state,
     });
-  });
-
-  window.addEventListener("beforeunload", () => {
-    console.log("[GitHub] BEFOREUNLOAD");
-  });
-
-  window.addEventListener("pagehide", (event) => {
-    console.log("[GitHub] PAGEHIDE:", {
-      persisted: event.persisted,
-      url: window.location.href,
-      historyLength: window.history.length,
-      historyState: window.history.state,
-    });
-  });
-
-  window.addEventListener("visibilitychange", () => {
-    console.log("[GitHub] VISIBILITY:", document.visibilityState);
   });
 
   /*
