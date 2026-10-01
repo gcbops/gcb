@@ -186,14 +186,32 @@ iframe.addEventListener("error", (error) => {
 
     const initialUrl = new URL(window.location.href);
 
-    const initialPage =
-      initialUrl.searchParams.get("page") || "home";
+const initialPage =
+  initialUrl.searchParams.get("page") || "home";
 
-    const initialClient =
-      initialUrl.searchParams.get("client") || "";
+const initialClient =
+  initialUrl.searchParams.get("client") || "";
 
-    updateGitHubUrl(initialPage, initialClient, true);
-    loadGasPage(initialPage, initialClient);
+const initialState = {
+  gcbPage: initialPage,
+  gcbClient: initialClient,
+};
+
+window.history.replaceState(
+  initialState,
+  "",
+  initialUrl,
+);
+
+console.log("[GitHub] Initial history:", {
+  page: initialPage,
+  client: initialClient,
+  historyLength: window.history.length,
+  state: window.history.state,
+  url: window.location.href,
+});
+
+loadGasPage(initialPage, initialClient);
 
     console.log("[GitHub] Initial history:", {
       historyLength: window.history.length,
