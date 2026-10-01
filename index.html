@@ -255,6 +255,17 @@ loadGasPage(initialPage, initialClient);
   navigateGasPage(page, client);
 });
 
+window.addEventListener("beforeunload", () => {
+  console.log("[GitHub] BEFOREUNLOAD");
+});
+
+window.addEventListener("pagehide", (event) => {
+  console.log("[GitHub] PAGEHIDE:", {
+    persisted: event.persisted,
+    url: window.location.href,
+  });
+});
+
   </script>
 
 </body>
