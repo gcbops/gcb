@@ -41,7 +41,7 @@
   const GCB_GAS_URL =
     "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
-  const iframe = document.getElementById("gcb-app");
+  let iframe = document.getElementById("gcb-app");
 
   let navigationTimer = null;
   let navigationRequestId = 0;
@@ -74,8 +74,42 @@
     return url.href;
   }
 
+  function attachIframeLoadListener(targetIframe) {
+    targetIframe.addEventListener("load", () => {
+      console.log("[GitHub] iframe LOAD:", {
+        requestedUrl:
+          targetIframe.dataset.gcbRequestedUrl || "",
+        actualSrc: targetIframe.src,
+        parentUrl: window.location.href,
+        historyLength: window.history.length,
+        historyState: window.history.state,
+      });
+    });
+  }
+
   function loadGasPage(page, client = "") {
-    iframe.src = getGasUrl(page, client);
+    const url = getGasUrl(page, client);
+
+    iframe.dataset.gcbRequestedUrl = url;
+    iframe.src = url;
+  }
+
+  function replaceGasIframe(url) {
+    const oldIframe = iframe;
+
+    const newIframe = document.createElement("iframe");
+
+    newIframe.id = "gcb-app";
+    newIframe.src = url;
+    newIframe.dataset.gcbRequestedUrl = url;
+
+    attachIframeLoadListener(newIframe);
+
+    oldIframe.replaceWith(newIframe);
+
+    iframe = newIframe;
+
+    return newIframe;
   }
 
   function navigateGasPage(page, client = "") {
@@ -94,8 +128,6 @@
         `${Date.now()}_${requestId}`,
       );
 
-      iframe.dataset.gcbRequestedUrl = url;
-
       console.log("[GitHub] NAVIGATE:", {
         page,
         client,
@@ -104,25 +136,9 @@
         historyState: window.history.state,
       });
 
-      iframe.src = url;
+      replaceGasIframe(url);
     }, 100);
   }
-
-  /*
-   * ------------------------------------------------
-   * Diagnostics
-   * ------------------------------------------------
-   */
-
-  iframe.addEventListener("load", () => {
-    console.log("[GitHub] iframe LOAD:", {
-      requestedUrl: iframe.dataset.gcbRequestedUrl || "",
-      actualSrc: iframe.src,
-      parentUrl: window.location.href,
-      historyLength: window.history.length,
-      historyState: window.history.state,
-    });
-  });
 
   /*
    * ------------------------------------------------
@@ -191,6 +207,8 @@
     "",
     initialUrl,
   );
+
+  attachIframeLoadListener(iframe);
 
   loadGasPage(initialPage, initialClient);
 
