@@ -37,236 +37,221 @@
 
   <iframe id="gcb-app"></iframe>
 
-  <script>
-    const GCB_GAS_URL =
-      "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
+<script>
+  const GCB_GAS_URL =
+    "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
-    const iframe = document.getElementById("gcb-app");
+  const iframe = document.getElementById("gcb-app");
 
-    console.log("[GitHub] STARTUP:", {
-  href: window.location.href,
-  historyLength: window.history.length,
-  historyState: window.history.state,
-  referrer: document.referrer,
-});
+  let navigationTimer = null;
+  let navigationRequestId = 0;
+  let restoringHistory = false;
 
-    let navigationTimer = null;
-    let navigationRequestId = 0;
-    let restoringHistory = false;
+  function getPageFromUrl() {
+    return new URLSearchParams(window.location.search).get("page");
+  }
 
-    function getPageFromUrl() {
-      return new URLSearchParams(window.location.search).get("page");
+  function getGasUrl(page, client = "", navigationId = "") {
+    const url = new URL(GCB_GAS_URL);
+
+    url.searchParams.set("wrapper", "github");
+
+    if (page && page !== "home") {
+      url.searchParams.set("page", page);
     }
 
-    function getGasUrl(page, client = "", navigationId = "") {
-  const url = new URL(GCB_GAS_URL);
-
-  url.searchParams.set("wrapper", "github");
-
-  if (page && page !== "home") {
-    url.searchParams.set("page", page);
-  }
-
-  if (client) {
-    url.searchParams.set(
-      "client",
-      client.replace(/\s+/g, "_"),
-    );
-  }
-
-  if (navigationId) {
-    url.searchParams.set("nav", navigationId);
-  }
-
-  return url.href;
-}
-
-    function loadGasPage(page, client = "") {
-      iframe.src = getGasUrl(page, client);
+    if (client) {
+      url.searchParams.set(
+        "client",
+        client.replace(/\s+/g, "_"),
+      );
     }
 
-    function navigateGasPage(page, client = "") {
-  const requestId = ++navigationRequestId;
+    if (navigationId) {
+      url.searchParams.set("nav", navigationId);
+    }
 
-  clearTimeout(navigationTimer);
+    return url.href;
+  }
 
-  navigationTimer = setTimeout(() => {
-    if (requestId !== navigationRequestId) {
+  function loadGasPage(page, client = "") {
+    iframe.src = getGasUrl(page, client);
+  }
+
+  function navigateGasPage(page, client = "") {
+    const requestId = ++navigationRequestId;
+
+    clearTimeout(navigationTimer);
+
+    navigationTimer = setTimeout(() => {
+      if (requestId !== navigationRequestId) {
+        return;
+      }
+
+      const url = getGasUrl(
+        page,
+        client,
+        `${Date.now()}_${requestId}`,
+      );
+
+      iframe.src = url;
+    }, 100);
+  }
+
+  /*
+   * ------------------------------------------------
+   * Diagnostics
+   * ------------------------------------------------
+   */
+
+  iframe.addEventListener("load", () => {
+    console.log("[GitHub] iframe LOAD:", {
+      src: iframe.src,
+      parentUrl: window.location.href,
+      historyLength: window.history.length,
+      historyState: window.history.state,
+    });
+  });
+
+  window.addEventListener("beforeunload", () => {
+    console.log("[GitHub] BEFOREUNLOAD");
+  });
+
+  window.addEventListener("pagehide", (event) => {
+    console.log("[GitHub] PAGEHIDE:", {
+      persisted: event.persisted,
+      url: window.location.href,
+      historyLength: window.history.length,
+      historyState: window.history.state,
+    });
+  });
+
+  window.addEventListener("visibilitychange", () => {
+    console.log("[GitHub] VISIBILITY:", document.visibilityState);
+  });
+
+  /*
+   * ------------------------------------------------
+   * GitHub URL / history
+   * ------------------------------------------------
+   */
+
+  function updateGitHubUrl(page, client = "", replace = false) {
+    const url = new URL(window.location.href);
+
+    const normalizedPage = page || "home";
+
+    const normalizedClient =
+      typeof client === "string"
+        ? client.trim().replace(/_/g, " ")
+        : "";
+
+    if (normalizedPage !== "home") {
+      url.searchParams.set("page", normalizedPage);
+    } else {
+      url.searchParams.delete("page");
+    }
+
+    if (normalizedClient) {
+      url.searchParams.set(
+        "client",
+        normalizedClient.replace(/\s+/g, "_"),
+      );
+    } else {
+      url.searchParams.delete("client");
+    }
+
+    const state = {
+      gcbPage: normalizedPage,
+      gcbClient: normalizedClient,
+    };
+
+    if (replace) {
+      window.history.replaceState(state, "", url);
+    } else {
+      window.history.pushState(state, "", url);
+    }
+  }
+
+  /*
+   * ------------------------------------------------
+   * Initial state
+   * ------------------------------------------------
+   */
+
+  const initialUrl = new URL(window.location.href);
+
+  const initialPage =
+    initialUrl.searchParams.get("page") || "home";
+
+  const initialClient =
+    initialUrl.searchParams.get("client") || "";
+
+  const initialState = {
+    gcbPage: initialPage,
+    gcbClient: initialClient,
+  };
+
+  window.history.replaceState(
+    initialState,
+    "",
+    initialUrl,
+  );
+
+  loadGasPage(initialPage, initialClient);
+
+  /*
+   * ------------------------------------------------
+   * GAS → GitHub navigation
+   * ------------------------------------------------
+   */
+
+  window.addEventListener("message", (event) => {
+    if (event.data?.type !== "GCB_NAVIGATION") {
       return;
     }
 
-    const url = getGasUrl(
-      page,
-      client,
-      `${Date.now()}_${requestId}`,
-    );
+    const page = event.data.page;
+    const client = event.data.client || "";
 
-    console.log("[GitHub] Loading GAS page:", {
-      page,
-      client,
-      url,
-      requestId,
-    });
-
-    iframe.src = url;
-  }, 100);
-}
-
-    iframe.addEventListener("load", () => {
-  console.log("[GitHub] iframe LOAD:", {
-    src: iframe.src,
-    parentUrl: window.location.href,
-    historyLength: window.history.length,
-    historyState: window.history.state,
-  });
-});
-
-    function updateGitHubUrl(page, client = "", replace = false) {
-      const url = new URL(window.location.href);
-
-      const normalizedPage = page || "home";
-
-      console.log("[GitHub] NAV STATE:", {
-  page: normalizedPage,
-  historyLength: window.history.length,
-  historyState: window.history.state,
-});
-
-      const normalizedClient =
-        typeof client === "string"
-          ? client.trim().replace(/_/g, " ")
-          : "";
-
-      if (normalizedPage !== "home") {
-        url.searchParams.set("page", normalizedPage);
-      } else {
-        url.searchParams.delete("page");
-      }
-
-      if (normalizedClient) {
-        url.searchParams.set(
-          "client",
-          normalizedClient.replace(/\s+/g, "_"),
-        );
-      } else {
-        url.searchParams.delete("client");
-      }
-
-      const state = {
-        gcbPage: normalizedPage,
-        gcbClient: normalizedClient,
-      };
-
-      if (replace) {
-        window.history.replaceState(state, "", url);
-      } else {
-        window.history.pushState(state, "", url);
-      }
+    if (!page) {
+      return;
     }
 
+    if (restoringHistory) {
+      return;
+    }
 
-    /*
-    * ------------------------------------------------
-    * Initial state
-    * ------------------------------------------------
-    */
+    updateGitHubUrl(page, client);
+  });
 
-    const initialUrl = new URL(window.location.href);
+  /*
+   * ------------------------------------------------
+   * Browser Back / Forward
+   * ------------------------------------------------
+   */
 
-const initialPage =
-  initialUrl.searchParams.get("page") || "home";
-
-const initialClient =
-  initialUrl.searchParams.get("client") || "";
-
-const initialState = {
-  gcbPage: initialPage,
-  gcbClient: initialClient,
-};
-
-window.history.replaceState(
-  initialState,
-  "",
-  initialUrl,
-);
-
-loadGasPage(initialPage, initialClient);
-
-    /*
-    * ------------------------------------------------
-    * GAS → GitHub navigation
-    * ------------------------------------------------
-    */
-
-    window.addEventListener("message", (event) => {
-      if (event.data?.type !== "GCB_NAVIGATION") {
-        return;
-      }
-
-      const page = event.data.page;
-      const client = event.data.client || "";
-
-      if (!page) {
-        return;
-      }
-
-      /*
-      * When the browser is going Back/Forward, the GitHub
-      * history entry already exists.
-      *
-      * The GAS iframe is only being reloaded to display
-      * that existing history state.
-      *
-      * Do NOT push another GitHub history entry.
-      */
-      if (restoringHistory) {
-
-        return;
-      }
-
-      updateGitHubUrl(page, client);
+  window.addEventListener("popstate", (event) => {
+    console.log("[GitHub] POP STATE:", {
+      eventState: event.state,
+      historyState: window.history.state,
+      historyLength: window.history.length,
+      url: window.location.href,
     });
 
-    /*
-    * ------------------------------------------------
-    * Browser Back / Forward
-    * ------------------------------------------------
-    */
+    const page =
+      event.state?.gcbPage ||
+      getPageFromUrl() ||
+      "home";
 
-    window.addEventListener("popstate", (event) => {
+    const client =
+      event.state?.gcbClient ||
+      new URL(window.location.href).searchParams.get("client") ||
+      "";
 
-      console.log("[GitHub] POP STATE:", {
-  eventState: event.state,
-  historyState: window.history.state,
-  historyLength: window.history.length,
-  url: window.location.href,
-});
-
-  const page =
-    event.state?.gcbPage ||
-    getPageFromUrl() ||
-    "home";
-
-  const client =
-    event.state?.gcbClient ||
-    new URL(window.location.href).searchParams.get("client") ||
-    "";
-
-  navigateGasPage(page, client);
-});
-
-window.addEventListener("beforeunload", () => {
-  console.log("[GitHub] BEFOREUNLOAD");
-});
-
-window.addEventListener("pagehide", (event) => {
-  console.log("[GitHub] PAGEHIDE:", {
-    persisted: event.persisted,
-    url: window.location.href,
+    navigateGasPage(page, client);
   });
-});
-
-  </script>
+</script>
 
 </body>
 </html>
