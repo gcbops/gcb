@@ -101,17 +101,25 @@
       `${Date.now()}_${requestId}`,
     );
 
+    console.log("[GitHub] Loading GAS page:", {
+      page,
+      client,
+      url,
+      requestId,
+    });
+
     iframe.src = url;
   }, 100);
 }
 
     iframe.addEventListener("load", () => {
-      if (!restoringHistory) {
-        return;
-      }
-
-      restoringHistory = false;
-    });
+  console.log("[GitHub] iframe LOAD:", {
+    src: iframe.src,
+    parentUrl: window.location.href,
+    historyLength: window.history.length,
+    historyState: window.history.state,
+  });
+});
 
     function updateGitHubUrl(page, client = "", replace = false) {
       const url = new URL(window.location.href);
