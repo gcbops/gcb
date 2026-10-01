@@ -96,13 +96,15 @@
 
       iframe.dataset.gcbRequestedUrl = url;
 
-      console.log("[GitHub] GAS REQUEST:", {
+      console.log("[GitHub] NAVIGATE:", {
         page,
         client,
         url,
+        parentUrl: window.location.href,
+        historyState: window.history.state,
       });
 
-      iframe.contentWindow.location.replace(url);
+      iframe.src = url;
     }, 100);
   }
 
@@ -115,6 +117,7 @@
   iframe.addEventListener("load", () => {
     console.log("[GitHub] iframe LOAD:", {
       requestedUrl: iframe.dataset.gcbRequestedUrl || "",
+      actualSrc: iframe.src,
       parentUrl: window.location.href,
       historyLength: window.history.length,
       historyState: window.history.state,
