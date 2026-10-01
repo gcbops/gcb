@@ -43,9 +43,11 @@
 
     const iframe = document.getElementById("gcb-app");
 
-
-iframe.addEventListener("error", (error) => {
-  console.error("[GitHub] iframe error:", error);
+    console.log("[GitHub] STARTUP:", {
+  href: window.location.href,
+  historyLength: window.history.length,
+  historyState: window.history.state,
+  referrer: document.referrer,
 });
 
     let navigationTimer = null;
@@ -99,13 +101,6 @@ iframe.addEventListener("error", (error) => {
       `${Date.now()}_${requestId}`,
     );
 
-    console.log("[GitHub] Loading GAS page:", {
-      page,
-      client,
-      url,
-      requestId,
-    });
-
     iframe.src = url;
   }, 100);
 }
@@ -115,10 +110,6 @@ iframe.addEventListener("error", (error) => {
         return;
       }
 
-      console.log(
-        "[GitHub] History restoration completed.",
-      );
-
       restoringHistory = false;
     });
 
@@ -126,6 +117,12 @@ iframe.addEventListener("error", (error) => {
       const url = new URL(window.location.href);
 
       const normalizedPage = page || "home";
+
+      console.log("[GitHub] NAV STATE:", {
+  page: normalizedPage,
+  historyLength: window.history.length,
+  historyState: window.history.state,
+});
 
       const normalizedClient =
         typeof client === "string"
@@ -152,29 +149,11 @@ iframe.addEventListener("error", (error) => {
         gcbClient: normalizedClient,
       };
 
-      console.log(
-        replace
-          ? "[GitHub] replaceState:"
-          : "[GitHub] pushState:",
-        {
-          page: normalizedPage,
-          client: normalizedClient,
-          url: url.href,
-          historyLength: window.history.length,
-        },
-      );
-
       if (replace) {
         window.history.replaceState(state, "", url);
       } else {
         window.history.pushState(state, "", url);
       }
-
-      console.log("[GitHub] History after update:", {
-        historyLength: window.history.length,
-        currentUrl: window.location.href,
-        state: window.history.state,
-      });
     }
 
 
@@ -203,21 +182,7 @@ window.history.replaceState(
   initialUrl,
 );
 
-console.log("[GitHub] Initial history:", {
-  page: initialPage,
-  client: initialClient,
-  historyLength: window.history.length,
-  state: window.history.state,
-  url: window.location.href,
-});
-
 loadGasPage(initialPage, initialClient);
-
-    console.log("[GitHub] Initial history:", {
-      historyLength: window.history.length,
-      url: window.location.href,
-      state: window.history.state,
-    });
 
     /*
     * ------------------------------------------------
@@ -237,12 +202,6 @@ loadGasPage(initialPage, initialClient);
         return;
       }
 
-      console.log("[GitHub] Navigation received:", {
-        page,
-        client,
-        restoringHistory,
-      });
-
       /*
       * When the browser is going Back/Forward, the GitHub
       * history entry already exists.
@@ -253,9 +212,6 @@ loadGasPage(initialPage, initialClient);
       * Do NOT push another GitHub history entry.
       */
       if (restoringHistory) {
-        console.log(
-          "[GitHub] Ignoring navigation during history restoration.",
-        );
 
         return;
       }
@@ -270,14 +226,13 @@ loadGasPage(initialPage, initialClient);
     */
 
     window.addEventListener("popstate", (event) => {
-  console.log("[GitHub] ================= POPSTATE =================");
 
-  console.log("[GitHub] popstate:", {
-    eventState: event.state,
-    historyState: window.history.state,
-    historyLength: window.history.length,
-    url: window.location.href,
-  });
+      console.log("[GitHub] POP STATE:", {
+  eventState: event.state,
+  historyState: window.history.state,
+  historyLength: window.history.length,
+  url: window.location.href,
+});
 
   const page =
     event.state?.gcbPage ||
@@ -288,11 +243,6 @@ loadGasPage(initialPage, initialClient);
     event.state?.gcbClient ||
     new URL(window.location.href).searchParams.get("client") ||
     "";
-
-  console.log("[GitHub] Restoring:", {
-    page,
-    client,
-  });
 
   navigateGasPage(page, client);
 });
