@@ -106,7 +106,7 @@ iframe.addEventListener("error", (error) => {
       requestId,
     });
 
-    iframe.contentWindow.location.replace(url);
+    iframe.src = url;
   }, 100);
 }
 
