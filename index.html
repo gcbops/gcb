@@ -94,7 +94,7 @@
         `${Date.now()}_${requestId}`,
       );
 
-      iframe.src = url;
+      iframe.contentWindow.location.replace(url);
     }, 100);
   }
 
