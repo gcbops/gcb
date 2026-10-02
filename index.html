@@ -41,31 +41,6 @@
   const GCB_GAS_URL =
     "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
-  async function testGasPost() {
-    try {
-      const response = await fetch(GCB_GAS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: "GCB_AUTH_TEST",
-          message: "Hello from GitHub",
-        }),
-      });
-
-      const text = await response.text();
-
-      console.log("[GitHub] GAS POST response:", {
-        status: response.status,
-        text,
-      });
-    } catch (error) {
-      console.error("[GitHub] GAS POST failed:", error);
-    }
-  }
-
-  testGasPost();
   let iframe = document.getElementById("gcb-app");
 
   let navigationTimer = null;
