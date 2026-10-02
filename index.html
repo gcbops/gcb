@@ -41,6 +41,31 @@
   const GCB_GAS_URL =
     "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
+  async function testGasPost() {
+    try {
+      const response = await fetch(GCB_GAS_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "GCB_AUTH_TEST",
+          message: "Hello from GitHub",
+        }),
+      });
+
+      const text = await response.text();
+
+      console.log("[GitHub] GAS POST response:", {
+        status: response.status,
+        text,
+      });
+    } catch (error) {
+      console.error("[GitHub] GAS POST failed:", error);
+    }
+  }
+
+  testGasPost();
   let iframe = document.getElementById("gcb-app");
 
   let navigationTimer = null;
@@ -74,19 +99,6 @@
     return url.href;
   }
 
-  function attachIframeLoadListener(targetIframe) {
-    targetIframe.addEventListener("load", () => {
-      console.log("[GitHub] iframe LOAD:", {
-        requestedUrl:
-          targetIframe.dataset.gcbRequestedUrl || "",
-        actualSrc: targetIframe.src,
-        parentUrl: window.location.href,
-        historyLength: window.history.length,
-        historyState: window.history.state,
-      });
-    });
-  }
-
   function loadGasPage(page, client = "") {
     const url = getGasUrl(page, client);
 
@@ -102,8 +114,6 @@
     newIframe.id = "gcb-app";
     newIframe.src = url;
     newIframe.dataset.gcbRequestedUrl = url;
-
-    attachIframeLoadListener(newIframe);
 
     oldIframe.replaceWith(newIframe);
 
@@ -127,14 +137,6 @@
         client,
         `${Date.now()}_${requestId}`,
       );
-
-      console.log("[GitHub] NAVIGATE:", {
-        page,
-        client,
-        url,
-        parentUrl: window.location.href,
-        historyState: window.history.state,
-      });
 
       replaceGasIframe(url);
     }, 100);
@@ -208,8 +210,6 @@
     initialUrl,
   );
 
-  attachIframeLoadListener(iframe);
-
   loadGasPage(initialPage, initialClient);
 
   /*
@@ -244,12 +244,6 @@
    */
 
   window.addEventListener("popstate", (event) => {
-    console.log("[GitHub] POP STATE:", {
-      eventState: event.state,
-      historyState: window.history.state,
-      historyLength: window.history.length,
-      url: window.location.href,
-    });
 
     const page =
       event.state?.gcbPage ||
