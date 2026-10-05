@@ -51,7 +51,12 @@
     return new URLSearchParams(window.location.search).get("page");
   }
 
-  function getGasUrl(page, client = "", navigationId = "") {
+  function getGasUrl(
+    page,
+    client = "",
+    navigationId = "",
+    authTicket = "",
+  ) {
     const url = new URL(GCB_GAS_URL);
 
     url.searchParams.set("wrapper", "github");
@@ -71,11 +76,27 @@
       url.searchParams.set("nav", navigationId);
     }
 
+    if (authTicket) {
+      url.searchParams.set(
+        "auth_ticket",
+        authTicket,
+      );
+    }
+
     return url.href;
   }
 
-  function loadGasPage(page, client = "") {
-    const url = getGasUrl(page, client);
+  function loadGasPage(
+    page,
+    client = "",
+    authTicket = "",
+  ) {
+    const url = getGasUrl(
+      page,
+      client,
+      "",
+      authTicket,
+    );
 
     iframe.dataset.gcbRequestedUrl = url;
     iframe.src = url;
@@ -174,6 +195,11 @@
   const initialClient =
     initialUrl.searchParams.get("client") || "";
 
+  const initialAuthTicket =
+    initialUrl.searchParams.get(
+      "gcb_auth_ticket",
+    ) || "";
+
   const initialState = {
     gcbPage: initialPage,
     gcbClient: initialClient,
@@ -185,7 +211,11 @@
     initialUrl,
   );
 
-  loadGasPage(initialPage, initialClient);
+  loadGasPage(
+    initialPage,
+    initialClient,
+    initialAuthTicket,
+  );
 
   /*
    * ------------------------------------------------
