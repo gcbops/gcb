@@ -10,24 +10,28 @@ const integrationsConfigurationPage = (() => {
       title: "Gmail",
       description:
         "Configure the email address used by the application for notifications.",
-      field: {
-        name: "notifEmail",
-        label: "Notification Email",
-        type: "email",
-        placeholder: "Enter notification email",
-      },
+      fields: [
+        {
+          name: "notifEmail",
+          label: "Notification Email",
+          type: "email",
+          placeholder: "Enter notification email",
+        },
+      ],
       logo: "https://s13.gifyu.com/images/bnmHx.png",
     },
     discord: {
       title: "Discord",
       description:
         "Send application notifications and updates to a Discord channel.",
-      field: {
-        name: "notifDiscord",
-        label: "Discord Webhook",
-        type: "url",
-        placeholder: "Enter Discord webhook URL",
-      },
+      fields: [
+        {
+          name: "notifDiscord",
+          label: "Discord Webhook",
+          type: "url",
+          placeholder: "Enter Discord webhook URL",
+        },
+      ],
       logo: "https://s13.gifyu.com/images/bnmHv.png",
     },
     sheets: {
@@ -153,28 +157,44 @@ const integrationsConfigurationPage = (() => {
   }
 
   function updateIntegrationStatus(data) {
-
     if (!data || typeof data !== "object") {
       console.warn("Invalid integration status:", data);
       return;
     }
 
-    Object.entries(data).forEach(([integration, config]) => {
-      const statusId = `${integration}IntegrationStatus`;
-      const statusEl = document.getElementById(statusId);
+    Object.entries(INTEGRATIONS).forEach(([integration, config]) => {
+      const statusEl = document.getElementById(
+        `${integration}IntegrationStatus`,
+      );
 
       if (!statusEl) {
-        console.warn(`Status element not found: #${statusId}`);
         return;
       }
 
-      const configured = Boolean(config?.configured);
+      const fields = config.fields || [];
 
-      statusEl.classList.toggle("is-inactive", !configured);
+      const configuredCount = fields.reduce((count, field) => {
+        return count + (data[field.name]?.configured ? 1 : 0);
+      }, 0);
 
-      statusEl.textContent = configured
-        ? "Configured"
-        : "Not configured";
+      const totalFields = fields.length;
+
+      let statusText = "Not configured";
+
+      if (configuredCount === totalFields) {
+        statusText = "Configured";
+      } else if (configuredCount > 0) {
+        statusText = `${configuredCount} of ${totalFields} configured`;
+      }
+
+      statusEl.classList.toggle("is-inactive", configuredCount === 0);
+
+      statusEl.classList.toggle(
+        "is-partial",
+        configuredCount > 0 && configuredCount < totalFields,
+      );
+
+      statusEl.textContent = statusText;
     });
 
     const selected = AppUtils.cacheGet("selectedIntegration");
@@ -348,44 +368,19 @@ const integrationsConfigurationPage = (() => {
   }
 
   function loadIntegrationConfigStatus(integration, $modal) {
+    const config = getIntegrationConfig(integration);
+
+    if (!config) {
+      return;
+    }
+
+    const fields = config.fields || [];
+
     AppUtils.gScriptRun({
       gscriptFunc: "getIntegrationConfigStatus",
       args: [integration],
 
       onSuccess: (data) => {
-        if (integration !== "drive") {
-          const $input = $modal.find("#integrationConfigValue");
-
-          const $help = $modal.find("#integrationConfigHelp");
-
-          if (!data?.configured) {
-            $input.attr("placeholder", "Not configured");
-
-            $help
-              .removeClass("is-configured")
-              .text(
-                "No configuration has been saved yet. Enter a value to configure this integration.",
-              );
-
-            return;
-          }
-
-          $input.attr("placeholder", `Current: ${data.masked}`);
-
-          $help
-            .addClass("is-configured")
-            .text(
-              "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration.",
-            );
-
-          return;
-        }
-
-        /*
-         * Google Drive has multiple configuration values.
-         */
-        const fields = INTEGRATIONS.drive.fields;
-
         fields.forEach((field) => {
           const fieldData = data?.fields?.[field.name];
 
@@ -393,7 +388,7 @@ const integrationsConfigurationPage = (() => {
 
           const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
 
-          if (!$input.length) {
+          if (!$input.length || !$help.length) {
             return;
           }
 
@@ -402,7 +397,10 @@ const integrationsConfigurationPage = (() => {
 
             $help
               .removeClass("is-configured")
-              .text(field.help || "No configuration has been saved yet.");
+              .text(
+                field.help ||
+                  "No configuration has been saved yet. Enter a value to configure this integration.",
+              );
 
             return;
           }
@@ -420,26 +418,18 @@ const integrationsConfigurationPage = (() => {
       onError: (err) => {
         console.error("getIntegrationConfigStatus failed:", err);
 
-        if (integration !== "drive") {
-          $modal
-            .find("#integrationConfigValue")
-            .attr("placeholder", "Unable to check current configuration");
+        fields.forEach((field) => {
+          const $input = $modal.find(`#integrationConfigValue-${field.name}`);
 
-          $modal
-            .find("#integrationConfigHelp")
-            .removeClass("is-configured")
-            .text("Unable to check the current configuration.");
+          const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
 
-          return;
-        }
+          if (!$input.length || !$help.length) {
+            return;
+          }
 
-        INTEGRATIONS.drive.fields.forEach((field) => {
-          $modal
-            .find(`#integrationConfigValue-${field.name}`)
-            .attr("placeholder", "Unable to check current configuration");
+          $input.attr("placeholder", "Unable to check current configuration");
 
-          $modal
-            .find(`#integrationConfigHelp-${field.name}`)
+          $help
             .removeClass("is-configured")
             .text("Unable to check the current configuration.");
         });
@@ -452,44 +442,48 @@ const integrationsConfigurationPage = (() => {
 
     const title = config?.title || "Integration";
 
-    let value;
-
-    if (integration === "drive") {
-      value = {};
-
-      config.fields.forEach((field) => {
-        value[field.name] = String(
-          $modal.find(`#integrationConfigValue-${field.name}`).val() || "",
-        ).trim();
-      });
-
-      const hasValue = Object.values(value).some(Boolean);
-
-      if (!hasValue) {
-        AppUtils.showDashboardToast(
-          "Please enter at least one value.",
-          "error",
-        );
-
-        return;
-      }
-    } else {
-      const $input = $modal.find("#integrationConfigValue");
-
-      value = String($input.val() || "").trim();
-
-      if (!value) {
-        AppUtils.showDashboardToast("Please enter a value.", "error");
-
-        return;
-      }
+    if (!config) {
+      return;
     }
+
+    const value = {};
+
+    config.fields.forEach((field) => {
+      value[field.name] = String(
+        $modal.find(`#integrationConfigValue-${field.name}`).val() || "",
+      ).trim();
+    });
+
+    const hasValue = Object.values(value).some(
+      (item) => String(item || "").trim() !== "",
+    );
+
+    if (!hasValue) {
+      AppUtils.showDashboardToast("Please enter at least one value.", "error");
+
+      return;
+    }
+
+    /*
+     * Single-field integrations still send a scalar value
+     * because the existing backend expects:
+     *
+     *   gmail   -> string
+     *   discord -> string
+     *
+     * Multi-field integrations send the full object:
+     *
+     *   sheets -> { spreadsheetId, externalSheetTemplateId }
+     *   drive  -> { reportFolderId, backupFolderId, mainSheetsFolderId }
+     */
+    const payload =
+      config.fields.length === 1 ? value[config.fields[0].name] : value;
 
     const loading = AppUtils.setButtonLoading($btn[0], "Saving");
 
     AppUtils.gScriptRun({
       gscriptFunc: "saveIntegration",
-      args: [integration, value],
+      args: [integration, payload],
 
       onSuccess: () => {
         loading.setSuccess("Configuration Saved");
@@ -500,6 +494,18 @@ const integrationsConfigurationPage = (() => {
           `${title} configuration saved successfully!`,
           "success",
         );
+
+        AppUtils.gScriptRun({
+          gscriptFunc: "getIntegrationStatus",
+
+          onSuccess: (status) => {
+            updateIntegrationStatus(status);
+          },
+
+          onError: (err) => {
+            console.error("Failed to refresh integration status:", err);
+          },
+        });
 
         loadData();
       },

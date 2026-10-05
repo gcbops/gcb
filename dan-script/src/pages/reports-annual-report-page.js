@@ -134,6 +134,10 @@ const reportsAnnualReportPage = (() => {
     ReportHistory.loadCustomYearlyReportsPageData(handleHistoryLoaded, false);
   };
 
+  const refresh = () => {
+    ReportHistory.loadCustomYearlyReportsPageData(handleHistoryLoaded, true);
+  };
+
   const populateYearSelector = () => {
     const currentYear = new Date().getFullYear();
 
@@ -225,6 +229,7 @@ const reportsAnnualReportPage = (() => {
   return {
     init,
     destroy,
+    refresh
   };
 })();
 

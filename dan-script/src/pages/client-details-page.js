@@ -224,8 +224,6 @@ const clientDetailsPage = (() => {
       "Billing History",
       "#client-paid-owed-history",
       false,
-      null,
-      true,
     );
   }
 

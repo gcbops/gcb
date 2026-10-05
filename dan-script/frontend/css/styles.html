@@ -289,7 +289,8 @@ textarea:disabled {
 .hamburger.is-active .hamburger-inner:after, 
 .hamburger.is-active .hamburger-inner:before,
 .dropdown-item.active, 
-.dropdown-item:active {
+.dropdown-item:active,
+.tabs-animated .nav-link:before {
     background-color: var(--gc-primary-color, #008B8B);
 }
 
@@ -307,6 +308,13 @@ textarea:disabled {
     background: var(--gc-primary-color, #008B8B);
 }
 
+.body-tabs-shadow .body-tabs-animated .nav-link:before {
+  box-shadow:
+    0 16px 26px -10px rgba(0, 139, 139, 0.56),
+    0 4px 25px 0 rgba(0, 0, 0, 0.12),
+    0 8px 10px -5px rgba(0, 139, 139, 0.2) !important;
+}
+
 .dropdown-item:focus, 
 .dropdown-item:hover {
     background-color: #fff;
@@ -317,7 +325,8 @@ textarea:disabled {
 .vertical-nav-menu ul>li>a.mm-active,
 .vertical-nav-menu ul>li>a:hover,
 .input-group-text,
-.btn-transition.btn-outline-link:hover {
+.btn-transition.btn-outline-link:hover,
+.vertical-nav-menu li a:hover {
     background-color: #e9fbfa;
     color: #008B8B;
 }
@@ -445,6 +454,38 @@ textarea:disabled {
     var(--gc-primary-color) 0%,
     var(--gc-grad-45) 50%,
     var(--gc-grad-15) 100%) !important;
+}
+
+/* GC-style box shadow (replaces blue with your --gc-primary-color) */
+.gc-shadow {
+  box-shadow:
+    0 16px 26px -10px rgba(0, 139, 139, 0.56),
+    0 4px 25px 0 rgba(0, 0, 0, 0.12),
+    0 8px 10px -5px rgba(0, 139, 139, 0.2) !important;
+}
+
+/* Softer / lighter variant */
+.gc-shadow-soft {
+  box-shadow:
+    0 12px 20px -8px rgba(0, 139, 139, 0.35),
+    0 4px 18px 0 rgba(0, 0, 0, 0.08),
+    0 6px 8px -4px rgba(0, 139, 139, 0.15) !important;
+}
+
+/* Stronger / deeper variant */
+.gc-shadow-deep {
+  box-shadow:
+    0 20px 32px -12px rgba(0, 139, 139, 0.65),
+    0 6px 28px 0 rgba(0, 0, 0, 0.14),
+    0 10px 12px -6px rgba(0, 139, 139, 0.25) !important;
+}
+
+/* If you prefer to use --gc-primary-color directly with opacity via separate layers */
+.gc-shadow-var {
+  box-shadow:
+    0 16px 26px -10px var(--gc-primary-color, rgba(0, 139, 139, 0.56)),
+    0 4px 25px 0 rgba(0, 0, 0, 0.12),
+    0 8px 10px -5px var(--gc-primary-color, rgba(0, 139, 139, 0.2)) !important;
 }
 
 
@@ -1963,7 +2004,13 @@ td .bar-loader span {
   }
 }
 
+.toast-header {
+  background-color: #fff;
+}
 
+.toast-body:not(.bg-warning) {
+  color: #fff;
+}
 
 .modal-top .modal-dialog {
   margin-top: 1rem;

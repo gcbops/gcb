@@ -1,6 +1,8 @@
 import { AppUtils } from "../utils";
 import { ReportHistory } from "./history";
 import { TableModule } from "../tables/tables";
+import { reportsMonthlyReportPage } from "../pages/reports-monthly-report-page";
+import { reportsAnnualReportPage } from "../pages/reports-annual-report-page";
 
 const ReportGenerator = (() => {
 
@@ -188,6 +190,14 @@ const ReportGenerator = (() => {
         loading.setSuccess("Generated successfully");
 
         setGenerateState(type, false);
+
+        if (type === "monthly") {
+          reportsMonthlyReportPage.refresh();
+        }
+
+        if (type === "yearly") {
+          reportsAnnualReportPage.refresh();
+        }
 
         cfg.reloadHistory(() => {
           TableModule.highlightLatestRow(cfg.historyTableId, 0);

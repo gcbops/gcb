@@ -81,10 +81,11 @@ function saveReportPDF(config) {
 
   Validation.requireObject(config, "Report configuration");
 
-  const reportType = Validation.enumValue(config.reportType, "report type", [
-    "monthly",
-    "yearly",
-  ]);
+  const reportType = String(config.reportType || "")
+    .trim()
+    .toLowerCase();
+
+  Validation.enumValue(reportType, "report type", ["monthly", "yearly"]);
 
   const reportSheet = Validation.requiredString(
     config.reportSheet,
@@ -298,13 +299,13 @@ function saveCustomReportPDF(type) {
 
   const configs = {
     monthly: {
-      reportType: "Monthly",
+      reportType: "monthly",
       reportSheet: "Monthly Report PDF Generator",
       logSheet: "MonthlyReport_Log",
       latestLinkCell: "AZ27",
     },
     yearly: {
-      reportType: "Yearly",
+      reportType: "yearly",
       reportSheet: "Yearly Report PDF Generator",
       logSheet: "YearlyReport_Log",
       latestLinkCell: "BA27",

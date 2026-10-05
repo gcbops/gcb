@@ -138,6 +138,10 @@ const reportsMonthlyReportPage = (() => {
     ReportHistory.loadCustomMonthlyReportsPageData(handleHistoryLoaded, false);
   };
 
+  const refresh = () => {
+    ReportHistory.loadCustomMonthlyReportsPageData(handleHistoryLoaded, true);
+  };
+
   const populateYearSelector = () => {
     const currentYear = new Date().getFullYear();
 
@@ -230,6 +234,7 @@ const reportsMonthlyReportPage = (() => {
   return {
     init,
     destroy,
+    refresh
   };
 })();
 

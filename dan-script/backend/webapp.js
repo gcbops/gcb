@@ -1,33 +1,20 @@
 function doGet(e) {
+  if (e?.parameter?.code) {
+    return handleGcbOAuthCallback(e);
+  }
+
   const requestedPage = e?.parameter?.page || "home";
   const requestedClient = e?.parameter?.client || "";
   const isGitHubEmbedded = e?.parameter?.wrapper === "github";
 
-  Logger.log(
-    "[doGet] Request: %s",
-    JSON.stringify({
-      parameter: e?.parameter,
-      queryString: e?.queryString || "",
-      requestedPage,
-      requestedClient,
-      isGitHubEmbedded,
-    }),
-  );
-
   const template = HtmlService.createTemplateFromFile("index");
+
+  const authTicket = String(e?.parameter?.auth_ticket || "").trim();
 
   template.initialPage = requestedPage;
   template.initialClient = requestedClient;
   template.isGitHubEmbedded = isGitHubEmbedded;
-
-  Logger.log(
-    "[doGet] Template: %s",
-    JSON.stringify({
-      initialPage: template.initialPage,
-      initialClient: template.initialClient,
-      isGitHubEmbedded: template.isGitHubEmbedded,
-    }),
-  );
+  template.authTicket = authTicket;
 
   return template
     .evaluate()

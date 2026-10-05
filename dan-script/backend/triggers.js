@@ -84,7 +84,8 @@ const SCHEDULED_TRIGGERS = {
     create: () => {
       ScriptApp.newTrigger("scheduledBackup")
         .timeBased()
-        .everyMonths(3)
+        .everyDays(1)
+        .atHour(11)
         .create();
     },
   },

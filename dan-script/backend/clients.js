@@ -1,8 +1,13 @@
 function getClientSheetsList() {
   return getSpreadsheet()
     .getSheets()
+    .filter((sheet) => {
+      const sheetName = sheet.getName();
+      const marker = String(sheet.getRange("K1").getValue()).trim();
+
+      return marker === sheetName;
+    })
     .map((sheet) => sheet.getName())
-    .filter((name) => !CONFIG.SHEETS.EXCLUDED.has(name))
     .sort();
 }
 

@@ -4,7 +4,14 @@
   // src/utils.js
   var AppUtils = (() => {
     const APP_CACHE_PREFIX = "gcb_";
-    const CACHE_TTL = 24 * 60 * 60 * 1e3;
+    const CACHE_EXPIRY = {
+      MINUTE: 60 * 1e3,
+      FIVE_MINUTES: 5 * 60 * 1e3,
+      THIRTY_MINUTES: 30 * 60 * 1e3,
+      HOUR: 60 * 60 * 1e3,
+      DAY: 24 * 60 * 60 * 1e3,
+      WEEK: 7 * 24 * 60 * 60 * 1e3
+    };
     let notificationAudio = null;
     const APP_CONFIG = {
       HTML_VERSIONING: true
@@ -30,7 +37,7 @@
     function getCacheTimeKey(key) {
       return `${getStorageKey(key)}_time`;
     }
-    function cacheSet(key, data) {
+    function cacheSet(key, data, expiry = CACHE_EXPIRY.DAY) {
       if (!key) {
         return;
       }
@@ -43,7 +50,7 @@
         console.error("Cache set failed:", key, e);
       }
     }
-    function cacheGet(key) {
+    function cacheGet(key, expiry = CACHE_EXPIRY.DAY) {
       if (!key) {
         return null;
       }
@@ -54,7 +61,7 @@
       if (!cached || !time) {
         return null;
       }
-      if (Date.now() - time > CACHE_TTL) {
+      if (Date.now() - time > expiry) {
         return null;
       }
       try {
@@ -64,7 +71,7 @@
         return null;
       }
     }
-    function cacheExpired(key) {
+    function cacheExpired(key, expiry = CACHE_EXPIRY.DAY) {
       if (!key) {
         return true;
       }
@@ -72,7 +79,7 @@
       if (!time) {
         return true;
       }
-      return Date.now() - time > CACHE_TTL;
+      return Date.now() - time > expiry;
     }
     function cacheClear(key) {
       if (!key) {
@@ -187,8 +194,8 @@
         }
       }
     }
-    function cachedGScriptCall(cacheKey, gFuncName, args = [], callback, log = false, reset = false) {
-      const cached = cacheGet(cacheKey);
+    function cachedGScriptCall(cacheKey, gFuncName, args = [], callback, log = false, reset = false, expiry = CACHE_EXPIRY.DAY) {
+      const cached = cacheGet(cacheKey, expiry);
       if (cached !== null) {
         if (log) {
           console.log(`[Cache] Found data for key "${cacheKey}":`, cached);
@@ -197,7 +204,7 @@
           callback(cached);
         }
       }
-      let shouldFetch = cached === null || cacheExpired(cacheKey);
+      let shouldFetch = cached === null || cacheExpired(cacheKey, expiry);
       if (reset) {
         shouldFetch = true;
       }
@@ -219,7 +226,7 @@
         staleCheck: true,
         log: false,
         onSuccess: (data) => {
-          cacheSet(cacheKey, data);
+          cacheSet(cacheKey, data, expiry);
           if (typeof callback === "function") {
             callback(data);
           }
@@ -346,19 +353,101 @@
         hasHover
       };
     }
-    function showDashboardToast(msg, type = "success") {
-      if (typeof toastr === "undefined") {
-        console.warn("Toastr not found:", msg);
+    function showDashboardToast(msg, type = "success", duration = 4e3, position = "bottom-right") {
+      const message = String(msg || "").trim();
+      if (!message) {
         return;
       }
-      const toastType = typeof toastr[type] === "function" ? type : "info";
-      toastr.options = {
-        closeButton: true,
-        progressBar: true,
-        positionClass: "toast-bottom-right",
-        timeOut: 4e3
+      const toastId = `dashboard-toast-${Date.now()}`;
+      const typeConfig = {
+        success: {
+          title: "Success",
+          icon: "fa-check-circle",
+          backgroundColor: "bg-gc",
+          textColor: "text-gc"
+        },
+        error: {
+          title: "Error",
+          icon: "fa-times-circle",
+          backgroundColor: "bg-danger",
+          textColor: "text-danger"
+        },
+        warning: {
+          title: "Warning",
+          icon: "fa-exclamation-triangle",
+          backgroundColor: "bg-warning",
+          textColor: "text-warning"
+        },
+        info: {
+          title: "Info",
+          icon: "fa-info-circle",
+          backgroundColor: "bg-info",
+          textColor: "text-info"
+        }
       };
-      toastr[toastType](msg);
+      const config = typeConfig[type] || typeConfig.info;
+      const positionMap = {
+        "top-left": "top-0 start-0",
+        "top-center": "top-0 start-50 translate-middle-x",
+        "top-right": "top-0 end-0",
+        "bottom-left": "bottom-0 start-0",
+        "bottom-center": "bottom-0 start-50 translate-middle-x",
+        "bottom-right": "bottom-0 end-0"
+      };
+      const positionClass = positionMap[position] || positionMap["bottom-right"];
+      let container = document.getElementById("dashboard-toast-container");
+      if (!container) {
+        container = document.createElement("div");
+        container.id = "dashboard-toast-container";
+        container.setAttribute("aria-live", "polite");
+        container.setAttribute("aria-atomic", "true");
+        document.body.appendChild(container);
+      }
+      container.className = `position-fixed ${positionClass} p-3`;
+      container.style.zIndex = "1090";
+      const toast = document.createElement("div");
+      toast.id = toastId;
+      toast.className = "toast";
+      toast.setAttribute("role", "alert");
+      toast.setAttribute("aria-live", "assertive");
+      toast.setAttribute("aria-atomic", "true");
+      toast.innerHTML = `
+    <div class="toast-header">
+      <i class="fa ${config.icon} me-2 ${config.textColor}"></i>
+
+      <strong class="me-auto ${config.textColor}">
+        ${AppUtils.escapeHtml(config.title)}
+      </strong>
+
+      <button
+        type="button"
+        class="btn-close"
+        aria-label="Close"
+      ></button>
+    </div>
+
+    <div class="toast-body  ${config.backgroundColor}">
+      ${AppUtils.escapeHtml(message)}
+    </div>
+  `;
+      container.appendChild(toast);
+      const removeToast = () => {
+        toast.classList.remove("show");
+        window.setTimeout(() => {
+          toast.remove();
+          if (!container.children.length) {
+            container.remove();
+          }
+        }, 150);
+      };
+      const closeButton = toast.querySelector(".btn-close");
+      if (closeButton) {
+        closeButton.addEventListener("click", removeToast);
+      }
+      toast.classList.add("show");
+      if (duration > 0) {
+        window.setTimeout(removeToast, duration);
+      }
     }
     function initSelect2(parent, options = {}) {
       const $parent = parent ? $(parent) : $(document.body);
@@ -991,6 +1080,7 @@
       });
     };
     return {
+      CACHE_EXPIRY,
       // cache
       cacheSet,
       cacheGet,
@@ -4916,6 +5006,319 @@
     };
   })();
 
+  // src/pages/reports-monthly-report-page.js
+  var reportsMonthlyReportPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off(".reportsMonthly");
+      DataTableModule.destroy("#monthly-report-history");
+    };
+    const bindActions = () => {
+      $(document).off(".reportsMonthly").on("click.reportsMonthly", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
+        if (url) {
+          window.open(url, "_blank");
+        }
+      }).on("click.reportsMonthly", ".btn-email-report", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to send this report via email?",
+          () => ReportActions.handleEmailReport($btn)
+        );
+      }).on("click.reportsMonthly", ".btn-discord-report", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "Are you sure you want to send this report to Discord?",
+          () => ReportActions.handleDiscordReport($btn)
+        );
+      }).on("click.reportsMonthly", "#btn-generate-monthly-report", function(e) {
+        e.preventDefault();
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "generateMonthlyReport",
+          "Generate Monthly Report?",
+          "This will generate a PDF report for the selected month and year. Proceed?",
+          () => ReportActions.handleBtnGenerateMonthlyReport($btn)
+        );
+      }).on("click.reportsMonthly", "#download-latest-pdf", function() {
+        const $btn = $(this);
+        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
+        ReportActions.downloadLatestPDF($btn, loading, "Monthly");
+      }).on("click.reportsMonthly", "#email-latest-report", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "emailLatestReport",
+          "Email Latest Monthly Report?",
+          "This will send the latest monthly report to your registered email.",
+          () => {
+            ReportActions.handleEmailLatestReport($btn, "Monthly");
+          }
+        );
+      }).on("click.reportsMonthly", "#send-discord-notification", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Monthly Report to Discord?",
+          "This will send the latest monthly report to the configured Discord channel.",
+          () => {
+            ReportActions.handleSendDiscordNotification($btn, "Monthly");
+          }
+        );
+      }).on(
+        "change.reportsMonthly",
+        "#monthly-report-month, #monthly-report-year",
+        updatePeriodLabel
+      );
+    };
+    const loadData = () => {
+      populateYearSelector();
+      updatePeriodLabel();
+      loadReportsOverview();
+      ReportHistory.loadCustomMonthlyReportsPageData(handleHistoryLoaded, false);
+    };
+    const refresh = () => {
+      ReportHistory.loadCustomMonthlyReportsPageData(handleHistoryLoaded, true);
+    };
+    const populateYearSelector = () => {
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      const $year = $("#monthly-report-year");
+      if (!$year.length) {
+        return;
+      }
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(`<option value="${year}">${year}</option>`);
+      }
+      $year.val(currentYear);
+      AppUtils.initSelect2(".generator-filters");
+    };
+    const loadReportsOverview = () => {
+      AppUtils.cachedGScriptCall(
+        "reportsOverview",
+        "getReportsOverview",
+        [],
+        (data) => {
+          updateAutomationStatus(data);
+        },
+        false,
+        false
+      );
+    };
+    const updateAutomationStatus = (data) => {
+      const automation = data?.counts?.automation;
+      $("#monthly-automation-status").text(automation ? "Active" : "Not Active");
+    };
+    const updatePeriodLabel = () => {
+      const month = $("#monthly-report-month").val();
+      const year = $("#monthly-report-year").val();
+      if (!month || !year) {
+        $("#monthly-report-period-label").text("-");
+        return;
+      }
+      $("#monthly-report-period-label").text(`${month} ${year}`);
+    };
+    const handleHistoryLoaded = (logs = []) => {
+      const reports = Array.isArray(logs) ? logs : [];
+      updateSummary(reports);
+      updateLatestReport(reports);
+    };
+    const updateSummary = (reports) => {
+      const count = reports.length;
+      $("#monthly-reports-count").text(count);
+      if (!count) {
+        $("#monthly-last-report").text("-");
+        return;
+      }
+      const latest = reports[0];
+      $("#monthly-last-report").text(latest?.name || latest?.date || "-");
+    };
+    const updateLatestReport = (reports) => {
+      if (!Array.isArray(reports) || !reports.length) {
+        $("#monthly-latest-report-name").text("No report available");
+        $("#monthly-latest-report-date").text("-");
+        return;
+      }
+      const latest = reports[0];
+      $("#monthly-latest-report-name").text(latest?.name || "Monthly Report");
+      $("#monthly-latest-report-date").text(latest?.date || "-");
+    };
+    return {
+      init,
+      destroy,
+      refresh
+    };
+  })();
+
+  // src/pages/reports-annual-report-page.js
+  var reportsAnnualReportPage = /* @__PURE__ */ (() => {
+    let bound = false;
+    const init = () => {
+      if (bound) {
+        return;
+      }
+      bound = true;
+      bindActions();
+      loadData();
+    };
+    const destroy = () => {
+      if (!bound) {
+        return;
+      }
+      bound = false;
+      $(document).off(".reportsAnnual");
+      DataTableModule.destroy("#annual-report-history");
+    };
+    const bindActions = () => {
+      $(document).off(".reportsAnnual").on("click.reportsAnnual", ".btn-view-report", (e) => {
+        const url = $(e.currentTarget).data("url");
+        if (url) {
+          window.open(url, "_blank");
+        }
+      }).on("click.reportsAnnual", ".btn-email-report", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "emailReport",
+          "Send Email Report?",
+          "Are you sure you want to send this report via email?",
+          () => ReportActions.handleEmailReport($btn)
+        );
+      }).on("click.reportsAnnual", ".btn-discord-report", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "discordReport",
+          "Send Discord Notification?",
+          "Are you sure you want to send this report to Discord?",
+          () => ReportActions.handleDiscordReport($btn)
+        );
+      }).on("click.reportsAnnual", "#btn-generate-yearly-report", function(e) {
+        e.preventDefault();
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "generateYearlyReport",
+          "Generate Annual Report?",
+          "This will generate a PDF report for the selected year. Proceed?",
+          () => ReportActions.handleBtnGenerateYearlyReport($btn)
+        );
+      }).on("click.reportsAnnual", "#download-latest-pdf", function() {
+        const $btn = $(this);
+        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
+        ReportActions.downloadLatestPDF($btn, loading, "Yearly");
+      }).on("click.reportsAnnual", "#email-latest-report", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "emailLatestReport",
+          "Email Latest Annual Report?",
+          "This will send the latest annual report to your registered email.",
+          () => {
+            ReportActions.handleEmailLatestReport($btn, "Yearly");
+          }
+        );
+      }).on("click.reportsAnnual", "#send-discord-notification", function() {
+        const $btn = $(this);
+        AppUtils.confirmAction(
+          "sendDiscordNotification",
+          "Send Latest Annual Report to Discord?",
+          "This will send the latest annual report to the configured Discord channel.",
+          () => {
+            ReportActions.handleSendDiscordNotification($btn, "Yearly");
+          }
+        );
+      }).on("change.reportsAnnual", "#yearly-report-year", updatePeriodLabel);
+    };
+    const loadData = () => {
+      populateYearSelector();
+      updatePeriodLabel();
+      loadReportsOverview();
+      ReportHistory.loadCustomYearlyReportsPageData(handleHistoryLoaded, false);
+    };
+    const refresh = () => {
+      ReportHistory.loadCustomYearlyReportsPageData(handleHistoryLoaded, true);
+    };
+    const populateYearSelector = () => {
+      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      const $year = $("#yearly-report-year");
+      if (!$year.length) {
+        return;
+      }
+      $year.empty();
+      for (let year = 2024; year <= currentYear; year++) {
+        $year.append(`<option value="${year}">${year}</option>`);
+      }
+      $year.val(currentYear);
+      AppUtils.initSelect2(".generator-filters");
+    };
+    const loadReportsOverview = () => {
+      AppUtils.cachedGScriptCall(
+        "reportsOverview",
+        "getReportsOverview",
+        [],
+        (data) => {
+          updateAutomationStatus(data);
+        },
+        false,
+        false
+      );
+    };
+    const updateAutomationStatus = (data) => {
+      const automation = data?.counts?.automation;
+      $("#annual-automation-status").text(automation ? "Active" : "Not Active");
+    };
+    const updatePeriodLabel = () => {
+      const year = $("#yearly-report-year").val();
+      if (!year) {
+        $("#yearly-report-period-label").text("-");
+        return;
+      }
+      $("#yearly-report-period-label").text(`Year ${year}`);
+    };
+    const handleHistoryLoaded = (logs = []) => {
+      const reports = Array.isArray(logs) ? logs : [];
+      updateSummary(reports);
+      updateLatestReport(reports);
+    };
+    const updateSummary = (reports) => {
+      const count = reports.length;
+      $("#annual-reports-count").text(count);
+      if (!count) {
+        $("#annual-last-report").text("-");
+        return;
+      }
+      const latest = reports[0];
+      $("#annual-last-report").text(latest?.name || latest?.date || "-");
+    };
+    const updateLatestReport = (reports) => {
+      if (!Array.isArray(reports) || !reports.length) {
+        $("#annual-latest-report-name").text("No report available");
+        $("#annual-latest-report-date").text("-");
+        return;
+      }
+      const latest = reports[0];
+      $("#annual-latest-report-name").text(latest?.name || "Annual Report");
+      $("#annual-latest-report-date").text(latest?.date || "-");
+    };
+    return {
+      init,
+      destroy,
+      refresh
+    };
+  })();
+
   // src/reports/generator.js
   var ReportGenerator = /* @__PURE__ */ (() => {
     const REPORT_MAX_ATTEMPTS = 30;
@@ -5062,6 +5465,12 @@
         onSuccess: () => {
           loading.setSuccess("Generated successfully");
           setGenerateState(type, false);
+          if (type === "monthly") {
+            reportsMonthlyReportPage.refresh();
+          }
+          if (type === "yearly") {
+            reportsAnnualReportPage.refresh();
+          }
           cfg.reloadHistory(() => {
             TableModule.highlightLatestRow(cfg.historyTableId, 0);
           });
@@ -5633,311 +6042,6 @@
         day: "numeric",
         year: "numeric"
       });
-    };
-    return {
-      init,
-      destroy
-    };
-  })();
-
-  // src/pages/reports-monthly-report-page.js
-  var reportsMonthlyReportPage = /* @__PURE__ */ (() => {
-    let bound = false;
-    const init = () => {
-      if (bound) {
-        return;
-      }
-      bound = true;
-      bindActions();
-      loadData();
-    };
-    const destroy = () => {
-      if (!bound) {
-        return;
-      }
-      bound = false;
-      $(document).off(".reportsMonthly");
-      DataTableModule.destroy("#monthly-report-history");
-    };
-    const bindActions = () => {
-      $(document).off(".reportsMonthly").on("click.reportsMonthly", ".btn-view-report", (e) => {
-        const url = $(e.currentTarget).data("url");
-        if (url) {
-          window.open(url, "_blank");
-        }
-      }).on("click.reportsMonthly", ".btn-email-report", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "emailReport",
-          "Send Email Report?",
-          "Are you sure you want to send this report via email?",
-          () => ReportActions.handleEmailReport($btn)
-        );
-      }).on("click.reportsMonthly", ".btn-discord-report", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "discordReport",
-          "Send Discord Notification?",
-          "Are you sure you want to send this report to Discord?",
-          () => ReportActions.handleDiscordReport($btn)
-        );
-      }).on("click.reportsMonthly", "#btn-generate-monthly-report", function(e) {
-        e.preventDefault();
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "generateMonthlyReport",
-          "Generate Monthly Report?",
-          "This will generate a PDF report for the selected month and year. Proceed?",
-          () => ReportActions.handleBtnGenerateMonthlyReport($btn)
-        );
-      }).on("click.reportsMonthly", "#download-latest-pdf", function() {
-        const $btn = $(this);
-        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
-        ReportActions.downloadLatestPDF($btn, loading, "Monthly");
-      }).on("click.reportsMonthly", "#email-latest-report", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "emailLatestReport",
-          "Email Latest Monthly Report?",
-          "This will send the latest monthly report to your registered email.",
-          () => {
-            ReportActions.handleEmailLatestReport($btn, "Monthly");
-          }
-        );
-      }).on("click.reportsMonthly", "#send-discord-notification", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "sendDiscordNotification",
-          "Send Latest Monthly Report to Discord?",
-          "This will send the latest monthly report to the configured Discord channel.",
-          () => {
-            ReportActions.handleSendDiscordNotification($btn, "Monthly");
-          }
-        );
-      }).on(
-        "change.reportsMonthly",
-        "#monthly-report-month, #monthly-report-year",
-        updatePeriodLabel
-      );
-    };
-    const loadData = () => {
-      populateYearSelector();
-      updatePeriodLabel();
-      loadReportsOverview();
-      ReportHistory.loadCustomMonthlyReportsPageData(handleHistoryLoaded, false);
-    };
-    const populateYearSelector = () => {
-      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-      const $year = $("#monthly-report-year");
-      if (!$year.length) {
-        return;
-      }
-      $year.empty();
-      for (let year = 2024; year <= currentYear; year++) {
-        $year.append(`<option value="${year}">${year}</option>`);
-      }
-      $year.val(currentYear);
-      AppUtils.initSelect2(".generator-filters");
-    };
-    const loadReportsOverview = () => {
-      AppUtils.cachedGScriptCall(
-        "reportsOverview",
-        "getReportsOverview",
-        [],
-        (data) => {
-          updateAutomationStatus(data);
-        },
-        false,
-        false
-      );
-    };
-    const updateAutomationStatus = (data) => {
-      const automation = data?.counts?.automation;
-      $("#monthly-automation-status").text(automation ? "Active" : "Not Active");
-    };
-    const updatePeriodLabel = () => {
-      const month = $("#monthly-report-month").val();
-      const year = $("#monthly-report-year").val();
-      if (!month || !year) {
-        $("#monthly-report-period-label").text("-");
-        return;
-      }
-      $("#monthly-report-period-label").text(`${month} ${year}`);
-    };
-    const handleHistoryLoaded = (logs = []) => {
-      const reports = Array.isArray(logs) ? logs : [];
-      updateSummary(reports);
-      updateLatestReport(reports);
-    };
-    const updateSummary = (reports) => {
-      const count = reports.length;
-      $("#monthly-reports-count").text(count);
-      if (!count) {
-        $("#monthly-last-report").text("-");
-        return;
-      }
-      const latest = reports[0];
-      $("#monthly-last-report").text(latest?.name || latest?.date || "-");
-    };
-    const updateLatestReport = (reports) => {
-      if (!Array.isArray(reports) || !reports.length) {
-        $("#monthly-latest-report-name").text("No report available");
-        $("#monthly-latest-report-date").text("-");
-        return;
-      }
-      const latest = reports[0];
-      $("#monthly-latest-report-name").text(latest?.name || "Monthly Report");
-      $("#monthly-latest-report-date").text(latest?.date || "-");
-    };
-    return {
-      init,
-      destroy
-    };
-  })();
-
-  // src/pages/reports-annual-report-page.js
-  var reportsAnnualReportPage = /* @__PURE__ */ (() => {
-    let bound = false;
-    const init = () => {
-      if (bound) {
-        return;
-      }
-      bound = true;
-      bindActions();
-      loadData();
-    };
-    const destroy = () => {
-      if (!bound) {
-        return;
-      }
-      bound = false;
-      $(document).off(".reportsAnnual");
-      DataTableModule.destroy("#annual-report-history");
-    };
-    const bindActions = () => {
-      $(document).off(".reportsAnnual").on("click.reportsAnnual", ".btn-view-report", (e) => {
-        const url = $(e.currentTarget).data("url");
-        if (url) {
-          window.open(url, "_blank");
-        }
-      }).on("click.reportsAnnual", ".btn-email-report", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "emailReport",
-          "Send Email Report?",
-          "Are you sure you want to send this report via email?",
-          () => ReportActions.handleEmailReport($btn)
-        );
-      }).on("click.reportsAnnual", ".btn-discord-report", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "discordReport",
-          "Send Discord Notification?",
-          "Are you sure you want to send this report to Discord?",
-          () => ReportActions.handleDiscordReport($btn)
-        );
-      }).on("click.reportsAnnual", "#btn-generate-yearly-report", function(e) {
-        e.preventDefault();
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "generateYearlyReport",
-          "Generate Annual Report?",
-          "This will generate a PDF report for the selected year. Proceed?",
-          () => ReportActions.handleBtnGenerateYearlyReport($btn)
-        );
-      }).on("click.reportsAnnual", "#download-latest-pdf", function() {
-        const $btn = $(this);
-        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
-        ReportActions.downloadLatestPDF($btn, loading, "Yearly");
-      }).on("click.reportsAnnual", "#email-latest-report", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "emailLatestReport",
-          "Email Latest Annual Report?",
-          "This will send the latest annual report to your registered email.",
-          () => {
-            ReportActions.handleEmailLatestReport($btn, "Yearly");
-          }
-        );
-      }).on("click.reportsAnnual", "#send-discord-notification", function() {
-        const $btn = $(this);
-        AppUtils.confirmAction(
-          "sendDiscordNotification",
-          "Send Latest Annual Report to Discord?",
-          "This will send the latest annual report to the configured Discord channel.",
-          () => {
-            ReportActions.handleSendDiscordNotification($btn, "Yearly");
-          }
-        );
-      }).on("change.reportsAnnual", "#yearly-report-year", updatePeriodLabel);
-    };
-    const loadData = () => {
-      populateYearSelector();
-      updatePeriodLabel();
-      loadReportsOverview();
-      ReportHistory.loadCustomYearlyReportsPageData(handleHistoryLoaded, false);
-    };
-    const populateYearSelector = () => {
-      const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-      const $year = $("#yearly-report-year");
-      if (!$year.length) {
-        return;
-      }
-      $year.empty();
-      for (let year = 2024; year <= currentYear; year++) {
-        $year.append(`<option value="${year}">${year}</option>`);
-      }
-      $year.val(currentYear);
-      AppUtils.initSelect2(".generator-filters");
-    };
-    const loadReportsOverview = () => {
-      AppUtils.cachedGScriptCall(
-        "reportsOverview",
-        "getReportsOverview",
-        [],
-        (data) => {
-          updateAutomationStatus(data);
-        },
-        false,
-        false
-      );
-    };
-    const updateAutomationStatus = (data) => {
-      const automation = data?.counts?.automation;
-      $("#annual-automation-status").text(automation ? "Active" : "Not Active");
-    };
-    const updatePeriodLabel = () => {
-      const year = $("#yearly-report-year").val();
-      if (!year) {
-        $("#yearly-report-period-label").text("-");
-        return;
-      }
-      $("#yearly-report-period-label").text(`Year ${year}`);
-    };
-    const handleHistoryLoaded = (logs = []) => {
-      const reports = Array.isArray(logs) ? logs : [];
-      updateSummary(reports);
-      updateLatestReport(reports);
-    };
-    const updateSummary = (reports) => {
-      const count = reports.length;
-      $("#annual-reports-count").text(count);
-      if (!count) {
-        $("#annual-last-report").text("-");
-        return;
-      }
-      const latest = reports[0];
-      $("#annual-last-report").text(latest?.name || latest?.date || "-");
-    };
-    const updateLatestReport = (reports) => {
-      if (!Array.isArray(reports) || !reports.length) {
-        $("#annual-latest-report-name").text("No report available");
-        $("#annual-latest-report-date").text("-");
-        return;
-      }
-      const latest = reports[0];
-      $("#annual-latest-report-name").text(latest?.name || "Annual Report");
-      $("#annual-latest-report-date").text(latest?.date || "-");
     };
     return {
       init,
@@ -11543,14 +11647,6 @@
         try {
           const appContainer = await waitForElement("#app-container");
           try {
-            const loaderHtml = await loadComponent("app-loader", "loader");
-            if (loaderHtml) {
-              document.body.insertAdjacentHTML("afterbegin", loaderHtml);
-            }
-          } catch (error) {
-            console.warn("[AppShell] Loader failed:", error);
-          }
-          try {
             const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
             if (dialogsHtml) {
               appContainer.insertAdjacentHTML("afterend", dialogsHtml);
@@ -11618,23 +11714,27 @@
       gmail: {
         title: "Gmail",
         description: "Configure the email address used by the application for notifications.",
-        field: {
-          name: "notifEmail",
-          label: "Notification Email",
-          type: "email",
-          placeholder: "Enter notification email"
-        },
+        fields: [
+          {
+            name: "notifEmail",
+            label: "Notification Email",
+            type: "email",
+            placeholder: "Enter notification email"
+          }
+        ],
         logo: "https://s13.gifyu.com/images/bnmHx.png"
       },
       discord: {
         title: "Discord",
         description: "Send application notifications and updates to a Discord channel.",
-        field: {
-          name: "notifDiscord",
-          label: "Discord Webhook",
-          type: "url",
-          placeholder: "Enter Discord webhook URL"
-        },
+        fields: [
+          {
+            name: "notifDiscord",
+            label: "Discord Webhook",
+            type: "url",
+            placeholder: "Enter Discord webhook URL"
+          }
+        ],
         logo: "https://s13.gifyu.com/images/bnmHv.png"
       },
       sheets: {
@@ -11742,16 +11842,30 @@
         console.warn("Invalid integration status:", data);
         return;
       }
-      Object.entries(data).forEach(([integration, config]) => {
-        const statusId = `${integration}IntegrationStatus`;
-        const statusEl = document.getElementById(statusId);
+      Object.entries(INTEGRATIONS).forEach(([integration, config]) => {
+        const statusEl = document.getElementById(
+          `${integration}IntegrationStatus`
+        );
         if (!statusEl) {
-          console.warn(`Status element not found: #${statusId}`);
           return;
         }
-        const configured = Boolean(config?.configured);
-        statusEl.classList.toggle("is-inactive", !configured);
-        statusEl.textContent = configured ? "Configured" : "Not configured";
+        const fields = config.fields || [];
+        const configuredCount = fields.reduce((count, field) => {
+          return count + (data[field.name]?.configured ? 1 : 0);
+        }, 0);
+        const totalFields = fields.length;
+        let statusText = "Not configured";
+        if (configuredCount === totalFields) {
+          statusText = "Configured";
+        } else if (configuredCount > 0) {
+          statusText = `${configuredCount} of ${totalFields} configured`;
+        }
+        statusEl.classList.toggle("is-inactive", configuredCount === 0);
+        statusEl.classList.toggle(
+          "is-partial",
+          configuredCount > 0 && configuredCount < totalFields
+        );
+        statusEl.textContent = statusText;
       });
       const selected = AppUtils.cacheGet("selectedIntegration");
       if (selected) {
@@ -11868,6 +11982,11 @@
               >
                 ${help}
               </small>
+
+              <div
+                id="${fieldName}IntegrationStatus"
+                class="integration-config-status mt-1"
+              ></div>
             </div>
           `;
       }).join("")}
@@ -11881,37 +12000,27 @@
     `;
     }
     function loadIntegrationConfigStatus(integration, $modal) {
+      const config = getIntegrationConfig(integration);
+      if (!config) {
+        return;
+      }
+      const fields = config.fields || [];
       AppUtils.gScriptRun({
         gscriptFunc: "getIntegrationConfigStatus",
         args: [integration],
         onSuccess: (data) => {
-          if (integration !== "drive") {
-            const $input = $modal.find("#integrationConfigValue");
-            const $help = $modal.find("#integrationConfigHelp");
-            if (!data?.configured) {
-              $input.attr("placeholder", "Not configured");
-              $help.removeClass("is-configured").text(
-                "No configuration has been saved yet. Enter a value to configure this integration."
-              );
-              return;
-            }
-            $input.attr("placeholder", `Current: ${data.masked}`);
-            $help.addClass("is-configured").text(
-              "Currently configured. Enter a new value to replace it, or leave blank to keep the current configuration."
-            );
-            return;
-          }
-          const fields = INTEGRATIONS.drive.fields;
           fields.forEach((field) => {
             const fieldData = data?.fields?.[field.name];
             const $input = $modal.find(`#integrationConfigValue-${field.name}`);
             const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
-            if (!$input.length) {
+            if (!$input.length || !$help.length) {
               return;
             }
             if (!fieldData?.configured) {
               $input.attr("placeholder", "Not configured");
-              $help.removeClass("is-configured").text(field.help || "No configuration has been saved yet.");
+              $help.removeClass("is-configured").text(
+                field.help || "No configuration has been saved yet. Enter a value to configure this integration."
+              );
               return;
             }
             $input.attr("placeholder", `Current: ${fieldData.masked}`);
@@ -11922,14 +12031,14 @@
         },
         onError: (err) => {
           console.error("getIntegrationConfigStatus failed:", err);
-          if (integration !== "drive") {
-            $modal.find("#integrationConfigValue").attr("placeholder", "Unable to check current configuration");
-            $modal.find("#integrationConfigHelp").removeClass("is-configured").text("Unable to check the current configuration.");
-            return;
-          }
-          INTEGRATIONS.drive.fields.forEach((field) => {
-            $modal.find(`#integrationConfigValue-${field.name}`).attr("placeholder", "Unable to check current configuration");
-            $modal.find(`#integrationConfigHelp-${field.name}`).removeClass("is-configured").text("Unable to check the current configuration.");
+          fields.forEach((field) => {
+            const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+            const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+            if (!$input.length || !$help.length) {
+              return;
+            }
+            $input.attr("placeholder", "Unable to check current configuration");
+            $help.removeClass("is-configured").text("Unable to check the current configuration.");
           });
         }
       });
@@ -11937,34 +12046,27 @@
     function saveIntegration(integration, $modal, $btn) {
       const config = getIntegrationConfig(integration);
       const title = config?.title || "Integration";
-      let value;
-      if (integration === "drive") {
-        value = {};
-        config.fields.forEach((field) => {
-          value[field.name] = String(
-            $modal.find(`#integrationConfigValue-${field.name}`).val() || ""
-          ).trim();
-        });
-        const hasValue = Object.values(value).some(Boolean);
-        if (!hasValue) {
-          AppUtils.showDashboardToast(
-            "Please enter at least one value.",
-            "error"
-          );
-          return;
-        }
-      } else {
-        const $input = $modal.find("#integrationConfigValue");
-        value = String($input.val() || "").trim();
-        if (!value) {
-          AppUtils.showDashboardToast("Please enter a value.", "error");
-          return;
-        }
+      if (!config) {
+        return;
       }
+      const value = {};
+      config.fields.forEach((field) => {
+        value[field.name] = String(
+          $modal.find(`#integrationConfigValue-${field.name}`).val() || ""
+        ).trim();
+      });
+      const hasValue = Object.values(value).some(
+        (item) => String(item || "").trim() !== ""
+      );
+      if (!hasValue) {
+        AppUtils.showDashboardToast("Please enter at least one value.", "error");
+        return;
+      }
+      const payload = config.fields.length === 1 ? value[config.fields[0].name] : value;
       const loading = AppUtils.setButtonLoading($btn[0], "Saving");
       AppUtils.gScriptRun({
         gscriptFunc: "saveIntegration",
-        args: [integration, value],
+        args: [integration, payload],
         onSuccess: () => {
           loading.setSuccess("Configuration Saved");
           AppUtils.closeModal(MODAL_ID);
@@ -11972,6 +12074,15 @@
             `${title} configuration saved successfully!`,
             "success"
           );
+          AppUtils.gScriptRun({
+            gscriptFunc: "getIntegrationStatus",
+            onSuccess: (status) => {
+              updateIntegrationStatus(status);
+            },
+            onError: (err) => {
+              console.error("Failed to refresh integration status:", err);
+            }
+          });
           loadData();
         },
         onError: (err) => {
@@ -14027,9 +14138,7 @@
       DataTableModule.init(
         "Billing History",
         "#client-paid-owed-history",
-        false,
-        null,
-        true
+        false
       );
     }
     function renderActivity(data) {
@@ -14337,6 +14446,11 @@
     let pageToken = 0;
     let initialized = false;
     let initializing = null;
+    let lastNavigation = {
+      page: null,
+      time: 0
+    };
+    const PAGE_NAVIGATION_DEBOUNCE = 1e3;
     let pendingPage = null;
     const GITHUB_ORIGIN = "https://gcbops.github.io";
     const isGitHubEmbedded = window.GCB_IS_GITHUB_EMBEDDED === true;
@@ -14374,12 +14488,6 @@
     function getInitialPage() {
       const templatePage = window.GCB_INITIAL_PAGE;
       const savedPage = localStorage.getItem("gcb_currentPageGC");
-      console.log("[Router] getInitialPage:", {
-        templatePage,
-        savedPage,
-        isGitHubEmbedded,
-        isDirectGas
-      });
       if (isDirectGas) {
         if (isValidRoute(savedPage)) {
           return savedPage;
@@ -14443,11 +14551,6 @@
           window.addEventListener("popstate", handlePopState);
           const restoredPage = getInitialPage();
           const initialPage = isValidRoute(pendingPage) ? pendingPage : restoredPage;
-          console.log("[Router] Initial page selected:", {
-            initialPage,
-            pendingPage,
-            restoredPage
-          });
           pendingPage = null;
           initialized = true;
           go(initialPage, false);
@@ -14487,6 +14590,14 @@
       if (resolvedPageName === currentPage && currentModule) {
         return;
       }
+      const now = Date.now();
+      if (lastNavigation.page === page && now - lastNavigation.time < PAGE_NAVIGATION_DEBOUNCE) {
+        return;
+      }
+      lastNavigation = {
+        page,
+        time: now
+      };
       pageToken++;
       const token = pageToken;
       AppUtils.closeAllDrawers();
@@ -14495,6 +14606,10 @@
       currentModule?.destroy?.();
       currentModule = null;
       setCurrentPage(resolvedPageName);
+      window.scrollTo({
+        top: 0,
+        behavior: "instant"
+      });
       PageLoaderModule.loadPage(resolvedPageName, () => {
         if (token !== pageToken) {
           return;
@@ -14557,12 +14672,17 @@
         if (appContainer) {
           appContainer.classList.remove("sidebar-mobile-open");
         }
-        const hamburger = document.querySelector(".app-header__mobile-menu .hamburger");
+        const hamburger = document.querySelector(
+          ".app-header__mobile-menu .hamburger"
+        );
         if (hamburger) {
           hamburger.classList.remove("is-active");
         }
       }
-      document.getElementById("app-main-inner-container").classList.add("opacity-0");
+      const mainContainer = document.getElementById("app-main-inner-container");
+      if (mainContainer) {
+        mainContainer.classList.add("opacity-0");
+      }
       RouterModule.go(page);
     }
     function shouldIgnore($btn) {
@@ -14574,12 +14694,113 @@
     };
   })();
 
+  // src/auth/auth.js
+  var GcbAuthModule = /* @__PURE__ */ (() => {
+    const SESSION_ID_KEY = "gcb_session_id";
+    const SESSION_SIGNATURE_KEY = "gcb_session_signature";
+    let initialized = false;
+    let initializing = null;
+    function getSessionId() {
+      return sessionStorage.getItem(SESSION_ID_KEY) || "";
+    }
+    function getSessionSignature() {
+      return sessionStorage.getItem(SESSION_SIGNATURE_KEY) || "";
+    }
+    function hasSession() {
+      return Boolean(getSessionId() && getSessionSignature());
+    }
+    function saveSession(result) {
+      if (!result?.sessionId || !result?.signature) {
+        throw new Error("Invalid GCB session response.");
+      }
+      sessionStorage.setItem(SESSION_ID_KEY, result.sessionId);
+      sessionStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+    }
+    function clearSession() {
+      sessionStorage.removeItem(SESSION_ID_KEY);
+      sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+    }
+    function exchangeTicket(ticket) {
+      return new Promise((resolve, reject) => {
+        AppUtils.gScriptRun({
+          gscriptFunc: "exchangeGcbSessionHandoff",
+          args: [ticket],
+          onSuccess: (result) => {
+            try {
+              saveSession(result);
+              window.GCB_AUTH_TICKET = "";
+              if (window.GCB_IS_GITHUB_EMBEDDED === true && window.parent !== window) {
+                window.parent.postMessage(
+                  {
+                    type: "GCB_AUTH_HANDOFF_COMPLETE"
+                  },
+                  "https://gcbops.github.io"
+                );
+              }
+              console.log("[GCB Auth] Session handoff completed.");
+              resolve(true);
+            } catch (error) {
+              reject(error);
+            }
+          },
+          onError: (error) => {
+            reject(error);
+          }
+        });
+      });
+    }
+    async function init() {
+      if (initialized) {
+        return true;
+      }
+      if (initializing) {
+        return initializing;
+      }
+      initializing = (async () => {
+        try {
+          if (hasSession()) {
+            initialized = true;
+            return true;
+          }
+          const ticket = String(window.GCB_AUTH_TICKET || "").trim();
+          if (ticket) {
+            await exchangeTicket(ticket);
+          }
+          if (!hasSession()) {
+            console.warn("[GCB Auth] No authenticated session.");
+            return false;
+          }
+          initialized = true;
+          return true;
+        } catch (error) {
+          console.error("[GCB Auth] Initialization failed:", error);
+          clearSession();
+          initialized = false;
+          return false;
+        } finally {
+          initializing = null;
+        }
+      })();
+      return initializing;
+    }
+    return {
+      init,
+      getSessionId,
+      getSessionSignature,
+      hasSession,
+      clearSession
+    };
+  })();
+
   // src/app.js
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
+    const authenticated = await GcbAuthModule.init();
+    if (!authenticated) {
+      console.warn("[GCB Auth] Authentication required.");
+      return;
+    }
     RouterModule.init();
     ActionRouterModule.init();
-    AppUI.init();
-    RouterModule.go(RouterModule.getCurrentPage());
   });
 })();
 

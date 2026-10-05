@@ -224,12 +224,43 @@
    */
 
   window.addEventListener("message", (event) => {
-    if (event.data?.type !== "GCB_NAVIGATION") {
+    if (
+      event.origin !==
+      "https://script.google.com"
+    ) {
+      return;
+    }
+
+    if (
+      event.data?.type ===
+      "GCB_AUTH_HANDOFF_COMPLETE"
+    ) {
+      const url =
+        new URL(window.location.href);
+
+      url.searchParams.delete(
+        "gcb_auth_ticket",
+      );
+
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url,
+      );
+
+      return;
+    }
+
+    if (
+      event.data?.type !==
+      "GCB_NAVIGATION"
+    ) {
       return;
     }
 
     const page = event.data.page;
-    const client = event.data.client || "";
+    const client =
+      event.data.client || "";
 
     if (!page) {
       return;
@@ -239,7 +270,10 @@
       return;
     }
 
-    updateGitHubUrl(page, client);
+    updateGitHubUrl(
+      page,
+      client,
+    );
   });
 
   /*

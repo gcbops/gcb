@@ -71,20 +71,28 @@ function getIntegrationConfigStatus(integration) {
 
   switch (integrationType) {
     case "gmail": {
-      const value = getNotificationEmail();
+      const value = properties.getProperty("NOTIFICATION_EMAIL");
 
       return {
-        configured: Boolean(value),
-        masked: maskSecret(value),
+        fields: {
+          notifEmail: {
+            configured: Boolean(value),
+            masked: maskSecret(value),
+          },
+        },
       };
     }
 
     case "discord": {
-      const value = getDiscordWebhook();
+      const value = properties.getProperty("DISCORD_WEBHOOK_URL");
 
       return {
-        configured: Boolean(value),
-        masked: maskSecret(value),
+        fields: {
+          notifDiscord: {
+            configured: Boolean(value),
+            masked: maskSecret(value),
+          },
+        },
       };
     }
 

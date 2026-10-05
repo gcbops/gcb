@@ -48,20 +48,42 @@ function applyFormulaToMainSheets(cellRef, formula) {
   try {
     const ss = getSpreadsheet();
 
+    const clientNamesSheet = ss.getSheetByName("Client Names");
+
+    if (!clientNamesSheet) {
+      throw new Error('Sheet "Client Names" was not found.');
+    }
+
+    const lastRow = clientNamesSheet.getLastRow();
+
+    const clientNames =
+      lastRow >= 2
+        ? clientNamesSheet
+            .getRange(`A2:A${lastRow}`)
+            .getValues()
+            .flat()
+            .map((name) => String(name || "").trim())
+            .filter(Boolean)
+        : [];
+
+    const clientNameSet = new Set(clientNames);
+
     let updated = 0;
 
     ss.getSheets().forEach((sheet) => {
       const name = sheet.getName();
 
-      if (!CONFIG.SHEETS.EXCLUDED.has(name) || name === "BLANK") {
-        sheet.getRange(validatedCellRef).setFormula(validatedFormula);
-
-        updated++;
+      if (!clientNameSet.has(name) && name !== "BLANK") {
+        return;
       }
+
+      sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+      updated++;
     });
 
     logResponse(
-      `Main formula update complete. Cell: ${cellRef}, Sheets updated: ${updated}`,
+      `Main formula update complete. Cell: ${validatedCellRef}, Sheets updated: ${updated}`,
     );
 
     return {

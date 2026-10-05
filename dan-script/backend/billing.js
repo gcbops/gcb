@@ -53,7 +53,7 @@ function syncBillingRecords() {
 
     if (clientLastRow < 2) {
       billingSheet
-        .getRange(2, billingSheet.getMaxRows() - 1, 1, 8)
+        .getRange(2, 1, billingSheet.getMaxRows() - 1, 8)
         .clearContent();
 
       return {
@@ -82,27 +82,12 @@ function syncBillingRecords() {
       sheetMap.set(sheet.getName(), sheet);
     });
 
-    /*
-     * Existing system sheets that should never be treated
-     * as client sheets.
-     */
-    const excludedSheets =
-      CONFIG?.SHEETS?.EXCLUDED instanceof Set
-        ? CONFIG.SHEETS.EXCLUDED
-        : new Set([
-            "Client Names",
-            "Projects",
-            "Billing Analytics",
-            "Billing Records",
-            "BLANK",
-          ]);
-
     const records = [];
     let clientsProcessed = 0;
     let clientsSkipped = 0;
 
     clientNames.forEach((clientName) => {
-      if (excludedSheets.has(clientName) || clientName === "BLANK") {
+      if (clientName === "BLANK") {
         clientsSkipped++;
         return;
       }

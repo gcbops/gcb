@@ -15,275 +15,262 @@
 <div class="tab-content">
     <div class="tab-pane tabs-animation fade active show" id="main-tab-content" role="tabpanel" aria-labelledby="tab-1">
 
-        <div class="card card-shadow-sm border-0 bg-white mb-4 loaded">
-            <div class="card-body p-0">
-                <div class="d-flex flex-column split-rows-container">
+<div class="card no-shadow border-0 bg-white mb-4 loaded">
+    <div class="card-body p-0">
+        <div class="d-flex flex-column split-rows-container">
 
-                    <!-- Application Local Storage Cache -->
-                    <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
-                        <div class="d-flex align-items-center me-3">
-                        <div
-                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-focus-light text-focus rounded p-2 me-3"
-                            style="width: 42px; height: 42px; min-width: 42px"
-                        >
-                            <i class="fa fa-refresh font-size-md" id="icon-btnClearCache"></i>
-                        </div>
+            <!-- Application Local Storage Cache -->
+            <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
+                <div class="d-flex align-items-center me-3">
 
-                        <div>
-                            <div class="font-weight-bold text-dark font-size-sm mb-0">
-                            Application Local Storage Cache
-                            </div>
-
-                            <div class="text-muted font-size-xs">
-                            Removes saved application data and cached resources from your browser's local storage, then re-syncs your current configuration and preferences.
-                            </div>
-                        </div>
-                        </div>
-
-                        <div class="action-control-zone">
-                        <button
-                            class="btn btn-outline-focus btn-sm font-weight-bold px-3 btn-action-trigger"
-                            id="btnClearCache"
-                        >
-                            Run Clean
-                        </button>
-                        </div>
+                    <div
+                        class="icon-square-wrapper d-flex align-items-center justify-content-center bg-light text-muted rounded p-2 me-3"
+                        style="width: 42px; height: 42px; min-width: 42px"
+                    >
+                        <i
+                            class="fa fa-refresh font-size-md"
+                            id="icon-btnClearCache"
+                        ></i>
                     </div>
 
-                    <!-- Custom -->
-                    <!-- <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
-                        <div class="d-flex align-items-center me-3">
+                    <div>
+                        <div class="font-weight-bold text-dark font-size-sm mb-0">
+                            Application Local Storage Cache
+                        </div>
+
+                        <div class="text-muted font-size-xs">
+                            Removes saved application data and cached resources from your browser's local storage, then re-syncs your current configuration and preferences.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-control-zone">
+                    <button
+                        class="btn btn-outline-secondary btn-sm font-weight-bold px-3 btn-action-trigger"
+                        id="btnClearCache"
+                    >
+                        Run Clean
+                    </button>
+                </div>
+            </div>
+
+
+            <!-- Custom -->
+            <!--
+            <div class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all">
+                ...
+            </div>
+            -->
+
+
+            <!-- Client Registry Synchronization -->
+            <div class="pipeline-group border-bottom">
+
+                <div
+                    class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all"
+                >
+                    <div class="d-flex align-items-center me-3">
+
                         <div
-                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-focus-light text-focus rounded p-2 me-3"
+                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-light text-muted rounded p-2 me-3"
                             style="width: 42px; height: 42px; min-width: 42px"
                         >
-                            <i class="fa fa-refresh font-size-md" id="icon-btnClearCache"></i>
-                        </div>
-
-                        <div>
-                            <div class="font-weight-bold text-dark font-size-sm mb-0">
-                            Apply Monthly Billing Formulas
-                            </div>
-
-                            <div class="text-muted font-size-xs">
-                            This will add or update the monthly billing summary formulas on the Projects sheet of all external client spreadsheets. This could take a few moments.
-                            </div>
-                        </div>
-                        </div>
-
-                        <div class="action-control-zone">
-                        <button
-                        type="button"
-                        class="btn btn-primary"
-                        data-action="btnApplyMonthlyBillingFormulas"
-                        id="btnApplyMonthlyBillingFormulas"
-                        >
-                        <i class="fa-solid fa-chart-column me-2"></i>
-                        Apply Monthly Billing Formulas
-                        </button>
-                        </div>
-                    </div> -->
-
-                    <!-- Client Registry Synchronization -->
-                    <div class="pipeline-group border-bottom">
-
-                        <div
-                        class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all"
-                        >
-                        <div class="d-flex align-items-center me-3">
-                            <div
-                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-primary-light text-primary rounded p-2 me-3"
-                            style="width: 42px; height: 42px; min-width: 42px"
-                            >
                             <i
                                 class="fa fa-users font-size-md"
                                 id="icon-btnSyncClient"
                             ></i>
-                            </div>
-
-                            <div>
-                                <div class="font-weight-bold text-dark font-size-sm mb-0">
-                                    Client Registry Synchronization
-                                </div>
-
-                                <div class="text-muted font-size-xs">
-                                    Syncs all client registry data with the server, including the main client list, external client sheets, and project lists, ensuring everything stays up to date.
-                                </div>
-                            </div>
                         </div>
 
-                        <div class="action-control-zone">
-                            <button
+                        <div>
+                            <div class="font-weight-bold text-dark font-size-sm mb-0">
+                                Client Registry Synchronization
+                            </div>
+
+                            <div class="text-muted font-size-xs">
+                                Syncs all client registry data with the server, including the main client list, external client sheets, and project lists, ensuring everything stays up to date.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-control-zone">
+                        <button
                             type="button"
-                            class="btn btn-sm btn-outline-primary font-weight-bold px-3"
+                            class="btn btn-sm btn-link text-secondary font-weight-bold px-3"
                             data-bs-toggle="collapse"
                             data-bs-target="#RegistryOptions"
                             aria-expanded="false"
                             aria-controls="RegistryOptions"
-                            >
+                        >
                             <i class="fa fa-chevron-down me-1"></i>
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- Client Registry Sub Options -->
+                <div
+                    class="collapse"
+                    id="RegistryOptions"
+                >
+                    <div class="px-3 pb-3">
+
+                        <!-- Clients Sheet -->
+                        <div
+                            class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
+                        >
+                            <div class="d-flex align-items-center me-3">
+
+                                <div class="text-muted me-3">
+                                    <i class="fa fa-external-link"></i>
+                                </div>
+
+                                <div>
+                                    <div class="font-weight-bold text-dark font-size-sm">
+                                        Client List Synchronization
+                                    </div>
+
+                                    <div class="text-muted font-size-xs">
+                                        Syncs the main client list with the latest data, ensuring all client entries are accurate and up to date.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
+                                id="btnSyncClient"
+                            >
+                                Sync
                             </button>
                         </div>
+
+
+                        <!-- External Clients Sheet -->
+                        <div
+                            class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
+                        >
+                            <div class="d-flex align-items-center me-3">
+
+                                <div class="text-muted me-3">
+                                    <i class="fa fa-external-link"></i>
+                                </div>
+
+                                <div>
+                                    <div class="font-weight-bold text-dark font-size-sm">
+                                        External Clients Synchronization
+                                    </div>
+
+                                    <div class="text-muted font-size-xs">
+                                        Syncs all registered external client sheets with the server, ensuring each sheet reflects the latest data and structure from the source system.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
+                                id="btnSyncExternalClients"
+                            >
+                                Sync
+                            </button>
                         </div>
 
 
-                        <!-- Client Registry Sub Options -->
+                        <!-- Projects Sheet -->
                         <div
-                        class="collapse"
-                        id="RegistryOptions"
+                            class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light"
                         >
-                            <div class="px-3 pb-3">
+                            <div class="d-flex align-items-center me-3">
 
-                                <!-- Clients Sheet -->
-                                <div
-                                class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
-                                >
-                                <div class="d-flex align-items-center me-3">
-                                    <div class="text-primary me-3">
-                                    <i class="fa fa-external-link"></i>
-                                    </div>
-
-                                    <div>
-                                        <div class="font-weight-bold text-dark font-size-sm">
-                                            Client List Synchronization
-                                        </div>
-
-                                        <div class="text-muted font-size-xs">
-                                            Syncs the main client list with the latest data, ensuring all client entries are accurate and up to date.
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    class="btn btn-outline-primary btn-sm font-weight-bold px-3"
-                                    id="btnSyncClient"
-                                >
-                                    Sync
-                                </button>
-                                </div>
-
-                                <!-- External Clients Sheet -->
-                                <div
-                                class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
-                                >
-                                <div class="d-flex align-items-center me-3">
-                                    <div class="text-primary me-3">
-                                    <i class="fa fa-external-link"></i>
-                                    </div>
-
-                                    <div>
-                                        <div class="font-weight-bold text-dark font-size-sm">
-                                            External Clients Synchronization
-                                        </div>
-
-                                        <div class="text-muted font-size-xs">
-                                            Syncs all registered external client sheets with the server, ensuring each sheet reflects the latest data and structure from the source system.
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    class="btn btn-outline-primary btn-sm font-weight-bold px-3"
-                                    id="btnSyncExternalClients"
-                                >
-                                    Sync
-                                </button>
-                                </div>
-
-                                <!-- Projects Sheet -->
-                                <div
-                                class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light"
-                                >
-                                <div class="d-flex align-items-center me-3">
-                                    <div class="text-primary me-3">
+                                <div class="text-muted me-3">
                                     <i class="fa fa-folder-open"></i>
-                                    </div>
-
-                                    <div>
-                                        <div class="font-weight-bold text-dark font-size-sm">
-                                            Client Projects Synchronization
-                                        </div>
-
-                                        <div class="text-muted font-size-xs">
-                                           Syncs the centralized project list with the latest data, ensuring all entries are up to date.
-                                        </div>
-                                    </div>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    class="btn btn-outline-primary btn-sm font-weight-bold px-3"
-                                    id="btnSyncProjectLists"
-                                >
-                                    Sync
-                                </button>
-                                </div>
+                                <div>
+                                    <div class="font-weight-bold text-dark font-size-sm">
+                                        Client Projects Synchronization
+                                    </div>
 
+                                    <div class="text-muted font-size-xs">
+                                        Syncs the centralized project list with the latest data, ensuring all entries are up to date.
+                                    </div>
+                                </div>
                             </div>
+
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
+                                id="btnSyncProjectLists"
+                            >
+                                Sync
+                            </button>
                         </div>
 
                     </div>
+                </div>
+
+            </div>
 
 
-                    <!-- Master Spreadsheet Formula Deployment -->
-                    <div class="pipeline-group border-bottom">
+            <!-- Master Spreadsheet Formula Deployment -->
+            <div class="pipeline-group border-bottom">
+
+                <div
+                    class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all"
+                >
+                    <div class="d-flex align-items-center me-3">
 
                         <div
-                        class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all"
-                        >
-                        <div class="d-flex align-items-center me-3">
-                            <div
-                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-success-light text-success rounded p-2 me-3"
+                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-light text-muted rounded p-2 me-3"
                             style="width: 42px; height: 42px; min-width: 42px"
-                            >
+                        >
                             <i
                                 class="fa fa-calculator font-size-md"
                                 id="icon-btnAddMasterFormula"
                             ></i>
-                            </div>
-
-                            <div>
-                                <div class="font-weight-bold text-dark font-size-sm mb-0">
-                                    Master Spreadsheet Formula Deployment
-                                </div>
-
-                                <div class="text-muted font-size-xs">
-                                    Injects the latest Google Sheets formula into the main spreadsheet and all registered client sheets, replacing outdated versions to keep calculations consistent across the workbook.
-                                </div>
-                            </div>
                         </div>
 
-                        <div class="action-control-zone">
-                            <button
+                        <div>
+                            <div class="font-weight-bold text-dark font-size-sm mb-0">
+                                Master Spreadsheet Formula Deployment
+                            </div>
+
+                            <div class="text-muted font-size-xs">
+                                Injects the latest Google Sheets formula into the main spreadsheet and all registered client sheets, replacing outdated versions to keep calculations consistent across the workbook.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-control-zone">
+                        <button
                             type="button"
-                            class="btn btn-sm btn-outline-success font-weight-bold px-3"
+                            class="btn btn-sm btn-link text-secondary font-weight-bold px-3"
                             data-bs-toggle="collapse"
                             data-bs-target="#formulaDeploymentOptions"
                             aria-expanded="false"
                             aria-controls="formulaDeploymentOptions"
-                            >
-                            <i class="fa fa-chevron-down me-1"></i>
-                            </button>
-                        </div>
-                        </div>
-
-
-                        <!-- Formula Deployment Sub Options -->
-                        <div
-                        class="collapse"
-                        id="formulaDeploymentOptions"
                         >
-                        <div class="px-3 pb-3">
+                            <i class="fa fa-chevron-down me-1"></i>
+                        </button>
+                    </div>
+                </div>
 
-                            <!-- Main Sheet -->
-                            <div
+
+                <!-- Formula Deployment Sub Options -->
+                <div
+                    class="collapse"
+                    id="formulaDeploymentOptions"
+                >
+                    <div class="px-3 pb-3">
+
+                        <!-- Main Sheet -->
+                        <div
                             class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
-                            >
+                        >
                             <div class="d-flex align-items-center me-3">
-                                <div class="text-success me-3">
-                                <i class="fa fa-folder-open"></i>
+
+                                <div class="text-muted me-3">
+                                    <i class="fa fa-folder-open"></i>
                                 </div>
 
                                 <div>
@@ -299,20 +286,22 @@
 
                             <button
                                 type="button"
-                                class="btn btn-outline-success btn-sm font-weight-bold px-3"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
                                 id="btnAddMasterFormula"
                             >
                                 Deploy
                             </button>
-                            </div>
+                        </div>
 
-                            <!-- External Main Sheet -->
-                            <div
+
+                        <!-- External Main Sheet -->
+                        <div
                             class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
-                            >
+                        >
                             <div class="d-flex align-items-center me-3">
-                                <div class="text-success me-3">
-                                <i class="fa fa-folder-open"></i>
+
+                                <div class="text-muted me-3">
+                                    <i class="fa fa-folder-open"></i>
                                 </div>
 
                                 <div>
@@ -328,21 +317,22 @@
 
                             <button
                                 type="button"
-                                class="btn btn-outline-success btn-sm font-weight-bold px-3"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
                                 id="btnDeployExternalProjectsMainSheetFormula"
                             >
                                 Deploy
                             </button>
-                            </div>
+                        </div>
 
 
-                            <!-- External Sub Sheets -->
-                            <div
+                        <!-- External Sub Sheets -->
+                        <div
                             class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light"
-                            >
+                        >
                             <div class="d-flex align-items-center me-3">
-                                <div class="text-success me-3">
-                                <i class="fa fa-copy"></i>
+
+                                <div class="text-muted me-3">
+                                    <i class="fa fa-copy"></i>
                                 </div>
 
                                 <div>
@@ -358,56 +348,57 @@
 
                             <button
                                 type="button"
-                                class="btn btn-outline-success btn-sm font-weight-bold px-3"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
                                 id="btnDeployExternalProjectsInternalSheetFormula"
                             >
                                 Deploy
                             </button>
-                            </div>
-
-                        </div>
                         </div>
 
                     </div>
+                </div>
+
+            </div>
 
 
-                    <!-- Global Cloud Spreadsheet Snapshots -->
-                    <div class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all">
-                        <div class="d-flex align-items-center me-3">
-                        <div
-                            class="icon-square-wrapper d-flex align-items-center justify-content-center bg-warning-light text-warning rounded p-2 me-3"
-                            style="width: 42px; height: 42px; min-width: 42px"
-                        >
-                            <i
+            <!-- Global Cloud Spreadsheet Snapshots -->
+            <div class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all">
+                <div class="d-flex align-items-center me-3">
+
+                    <div
+                        class="icon-square-wrapper d-flex align-items-center justify-content-center bg-light text-muted rounded p-2 me-3"
+                        style="width: 42px; height: 42px; min-width: 42px"
+                    >
+                        <i
                             class="fa fa-cloud-upload font-size-md"
                             id="icon-btnBackupAllSheets"
-                            ></i>
-                        </div>
-
-                        <div>
-                            <div class="font-weight-bold text-dark font-size-sm mb-0">
-                            Main Drive Spreadsheet Backup
-                            </div>
-
-                            <div class="text-muted font-size-xs">
-                            Triggers a full snapshot of all registered Google Sheets on the main Drive, preserving the current state of each file as a restorable backup.
-                            </div>
-                        </div>
-                        </div>
-
-                        <div class="action-control-zone">
-                        <button
-                            class="btn btn-outline-warning btn-sm font-weight-bold px-3 btn-action-trigger"
-                            id="btnBackupAllSheets"
-                        >
-                            Run Backup
-                        </button>
-                        </div>
+                        ></i>
                     </div>
 
+                    <div>
+                        <div class="font-weight-bold text-dark font-size-sm mb-0">
+                            Main Drive Spreadsheet Backup
+                        </div>
+
+                        <div class="text-muted font-size-xs">
+                            Triggers a full snapshot of all registered Google Sheets on the main Drive, preserving the current state of each file as a restorable backup.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-control-zone">
+                    <button
+                        class="btn btn-outline-secondary btn-sm font-weight-bold px-3 btn-action-trigger"
+                        id="btnBackupAllSheets"
+                    >
+                        Run Backup
+                    </button>
                 </div>
             </div>
+
         </div>
+    </div>
+</div>
 
     </div>
     <div class="tab-pane tabs-animation fade" id="integration-tab-content" role="tabpanel" aria-labelledby="tab-2">

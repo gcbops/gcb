@@ -155,6 +155,23 @@ function cleanupOldBackups() {
 
 function scheduledBackup() {
   try {
+    const today = new Date();
+
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+
+    /*
+     * Run backups on the 1st day of:
+     * January, April, July, and October.
+     */
+    if (day !== 1 || ![1, 4, 7, 10].includes(month)) {
+      return {
+        success: true,
+        skipped: true,
+        reason: "Not a scheduled backup date.",
+      };
+    }
+
     const backup = backupAllSheets();
 
     cleanupOldBackups();

@@ -37,6 +37,13 @@ const RouterModule = (() => {
   let initialized = false;
   let initializing = null;
 
+  let lastNavigation = {
+    page: null,
+    time: 0,
+  };
+
+  const PAGE_NAVIGATION_DEBOUNCE = 1000;
+
   /*
    * Navigation requested before the router finished
    * initializing.
@@ -93,13 +100,6 @@ const RouterModule = (() => {
     const templatePage = window.GCB_INITIAL_PAGE;
     const savedPage = localStorage.getItem("gcb_currentPageGC");
 
-    console.log("[Router] getInitialPage:", {
-      templatePage,
-      savedPage,
-      isGitHubEmbedded,
-      isDirectGas,
-    });
-
     /*
      * ------------------------------------------------
      * Direct Apps Script deployment
@@ -110,25 +110,12 @@ const RouterModule = (() => {
      */
     if (isDirectGas) {
       if (isValidRoute(savedPage)) {
-        // console.log(
-        //   "[Router] Direct GAS: restoring page from localStorage:",
-        //   savedPage,
-        // );
-
         return savedPage;
       }
 
       if (isValidRoute(templatePage)) {
-        // console.log(
-        //   "[Router] Direct GAS: using GCB_INITIAL_PAGE:",
-        //   templatePage,
-        // );
-
         return templatePage;
       }
-
-      // console.log("[Router] Direct GAS: falling back to home.");
-
       return "home";
     }
 
@@ -140,17 +127,10 @@ const RouterModule = (() => {
      * Keep the existing GitHub behavior.
      */
     if (isValidRoute(templatePage)) {
-      // console.log("[Router] GitHub: using GCB_INITIAL_PAGE:", templatePage);
-
       return templatePage;
     }
 
     if (isValidRoute(savedPage)) {
-      // console.log(
-      //   "[Router] GitHub: restoring page from localStorage:",
-      //   savedPage,
-      // );
-
       return savedPage;
     }
 
@@ -250,12 +230,6 @@ const RouterModule = (() => {
           ? pendingPage
           : restoredPage;
 
-          console.log("[Router] Initial page selected:", {
-  initialPage,
-  pendingPage,
-  restoredPage,
-});
-
         pendingPage = null;
 
         /*
@@ -339,6 +313,29 @@ const RouterModule = (() => {
       return;
     }
 
+    const now = Date.now();
+
+    /*
+     * Same page clicked again.
+     *
+     * If RouterModule.go() was triggered recently,
+     * ignore the repeated click for 1 second.
+     */
+    if (
+      lastNavigation.page === page &&
+      now - lastNavigation.time < PAGE_NAVIGATION_DEBOUNCE
+    ) {
+      return;
+    }
+
+    /*
+     * Record navigation before calling RouterModule.go().
+     */
+    lastNavigation = {
+      page,
+      time: now,
+    };
+
     /*
      * ------------------------------------------------
      * Invalidate previous async callbacks
@@ -372,6 +369,11 @@ const RouterModule = (() => {
      * Load page
      * ------------------------------------------------
      */
+    window.scrollTo({
+      top: 0,
+      behavior: "instant",
+    });
+    
     PageLoaderModule.loadPage(resolvedPageName, () => {
       if (token !== pageToken) {
         return;
@@ -386,6 +388,7 @@ const RouterModule = (() => {
       requestAnimationFrame(() => {
         AppUI.playStaggerReveal();
       });
+
     });
   }
 

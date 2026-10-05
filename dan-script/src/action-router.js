@@ -24,7 +24,6 @@ const ActionRouterModule = (() => {
   }
 
   function handleNavigationClick(e) {
-    
     const pageBtn = e.target.closest("[data-page]");
 
     if (!pageBtn) {
@@ -50,7 +49,7 @@ const ActionRouterModule = (() => {
 
     if (window.matchMedia("(min-width: 992px)").matches) {
       // Desktop / larger devices
-      if(appContainer) {
+      if (appContainer) {
         appContainer.classList.add("closed-sidebar");
       }
     } else {
@@ -59,16 +58,20 @@ const ActionRouterModule = (() => {
         appContainer.classList.remove("sidebar-mobile-open");
       }
 
-      const hamburger = document.querySelector(".app-header__mobile-menu .hamburger");
+      const hamburger = document.querySelector(
+        ".app-header__mobile-menu .hamburger",
+      );
 
-      if(hamburger) {
+      if (hamburger) {
         hamburger.classList.remove("is-active");
       }
     }
 
-    document
-      .getElementById("app-main-inner-container")
-      .classList.add("opacity-0");
+    const mainContainer = document.getElementById("app-main-inner-container");
+
+    if (mainContainer) {
+      mainContainer.classList.add("opacity-0");
+    }
 
     RouterModule.go(page);
   }

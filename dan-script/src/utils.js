@@ -4,7 +4,14 @@ const AppUtils = (() => {
   // ---- CACHE ----
 
   const APP_CACHE_PREFIX = "gcb_";
-  const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day
+  const CACHE_EXPIRY = {
+    MINUTE: 60 * 1000,
+    FIVE_MINUTES: 5 * 60 * 1000,
+    THIRTY_MINUTES: 30 * 60 * 1000,
+    HOUR: 60 * 60 * 1000,
+    DAY: 24 * 60 * 60 * 1000,
+    WEEK: 7 * 24 * 60 * 60 * 1000,
+  };
   let notificationAudio = null;
 
   const APP_CONFIG = {
@@ -58,7 +65,7 @@ const AppUtils = (() => {
   /**
    * Save data to app cache.
    */
-  function cacheSet(key, data) {
+  function cacheSet(key, data, expiry = CACHE_EXPIRY.DAY) {
     if (!key) {
       return;
     }
@@ -68,6 +75,7 @@ const AppUtils = (() => {
 
     try {
       localStorage.setItem(storageKey, JSON.stringify(data));
+
       localStorage.setItem(timeKey, String(Date.now()));
     } catch (e) {
       console.error("Cache set failed:", key, e);
@@ -81,7 +89,7 @@ const AppUtils = (() => {
    *   data -> valid cached data
    *   null -> missing, expired, or invalid cache
    */
-  function cacheGet(key) {
+  function cacheGet(key, expiry = CACHE_EXPIRY.DAY) {
     if (!key) {
       return null;
     }
@@ -96,7 +104,7 @@ const AppUtils = (() => {
       return null;
     }
 
-    if (Date.now() - time > CACHE_TTL) {
+    if (Date.now() - time > expiry) {
       return null;
     }
 
@@ -104,6 +112,7 @@ const AppUtils = (() => {
       return JSON.parse(cached);
     } catch (e) {
       console.warn(`Invalid cache data for "${key}"`, e);
+
       return null;
     }
   }
@@ -111,7 +120,7 @@ const AppUtils = (() => {
   /**
    * Check whether a cache item is expired.
    */
-  function cacheExpired(key) {
+  function cacheExpired(key, expiry = CACHE_EXPIRY.DAY) {
     if (!key) {
       return true;
     }
@@ -122,7 +131,7 @@ const AppUtils = (() => {
       return true;
     }
 
-    return Date.now() - time > CACHE_TTL;
+    return Date.now() - time > expiry;
   }
 
   /**
@@ -292,8 +301,9 @@ const AppUtils = (() => {
     callback,
     log = false,
     reset = false,
+    expiry = CACHE_EXPIRY.DAY,
   ) {
-    const cached = cacheGet(cacheKey);
+    const cached = cacheGet(cacheKey, expiry);
 
     if (cached !== null) {
       if (log) {
@@ -311,7 +321,7 @@ const AppUtils = (() => {
      * - cache has expired
      * - reset was requested
      */
-    let shouldFetch = cached === null || cacheExpired(cacheKey);
+    let shouldFetch = cached === null || cacheExpired(cacheKey, expiry);
 
     if (reset) {
       shouldFetch = true;
@@ -340,7 +350,7 @@ const AppUtils = (() => {
       log: false,
 
       onSuccess: (data) => {
-        cacheSet(cacheKey, data);
+        cacheSet(cacheKey, data, expiry);
 
         if (typeof callback === "function") {
           callback(data);
@@ -530,22 +540,158 @@ const AppUtils = (() => {
 
   // ---- OTHER UTILS ----
 
-  function showDashboardToast(msg, type = "success") {
-    if (typeof toastr === "undefined") {
-      console.warn("Toastr not found:", msg);
+  // function showDashboardToast(msg, type = "success") {
+  //   if (typeof toastr === "undefined") {
+  //     console.warn("Toastr not found:", msg);
+  //     return;
+  //   }
+
+  //   const toastType = typeof toastr[type] === "function" ? type : "info";
+
+  //   toastr.options = {
+  //     closeButton: true,
+  //     progressBar: true,
+  //     positionClass: "toast-bottom-right",
+  //     timeOut: 4000,
+  //   };
+
+  //   toastr[toastType](msg);
+  // }
+
+  function showDashboardToast(
+    msg,
+    type = "success",
+    duration = 4000,
+    position = "bottom-right",
+  ) {
+    const message = String(msg || "").trim();
+
+    if (!message) {
       return;
     }
 
-    const toastType = typeof toastr[type] === "function" ? type : "info";
+    const toastId = `dashboard-toast-${Date.now()}`;
 
-    toastr.options = {
-      closeButton: true,
-      progressBar: true,
-      positionClass: "toast-bottom-right",
-      timeOut: 4000,
+    const typeConfig = {
+      success: {
+        title: "Success",
+        icon: "fa-check-circle",
+        backgroundColor: "bg-gc",
+        textColor: "text-gc",
+      },
+      error: {
+        title: "Error",
+        icon: "fa-times-circle",
+        backgroundColor: "bg-danger",
+        textColor: "text-danger",
+      },
+      warning: {
+        title: "Warning",
+        icon: "fa-exclamation-triangle",
+        backgroundColor: "bg-warning",
+        textColor: "text-warning",
+      },
+      info: {
+        title: "Info",
+        icon: "fa-info-circle",
+        backgroundColor: "bg-info",
+        textColor: "text-info",
+      },
     };
 
-    toastr[toastType](msg);
+    const config = typeConfig[type] || typeConfig.info;
+
+    const positionMap = {
+      "top-left": "top-0 start-0",
+      "top-center": "top-0 start-50 translate-middle-x",
+      "top-right": "top-0 end-0",
+      "bottom-left": "bottom-0 start-0",
+      "bottom-center": "bottom-0 start-50 translate-middle-x",
+      "bottom-right": "bottom-0 end-0",
+    };
+
+    const positionClass = positionMap[position] || positionMap["bottom-right"];
+
+    let container = document.getElementById("dashboard-toast-container");
+
+    if (!container) {
+      container = document.createElement("div");
+
+      container.id = "dashboard-toast-container";
+
+      container.setAttribute("aria-live", "polite");
+      container.setAttribute("aria-atomic", "true");
+
+      document.body.appendChild(container);
+    }
+
+    container.className = `position-fixed ${positionClass} p-3`;
+
+    container.style.zIndex = "1090";
+
+    const toast = document.createElement("div");
+
+    toast.id = toastId;
+
+    toast.className = "toast";
+
+    toast.setAttribute("role", "alert");
+    toast.setAttribute("aria-live", "assertive");
+    toast.setAttribute("aria-atomic", "true");
+
+    toast.innerHTML = `
+    <div class="toast-header">
+      <i class="fa ${config.icon} me-2 ${config.textColor}"></i>
+
+      <strong class="me-auto ${config.textColor}">
+        ${AppUtils.escapeHtml(config.title)}
+      </strong>
+
+      <button
+        type="button"
+        class="btn-close"
+        aria-label="Close"
+      ></button>
+    </div>
+
+    <div class="toast-body  ${config.backgroundColor}">
+      ${AppUtils.escapeHtml(message)}
+    </div>
+  `;
+
+    container.appendChild(toast);
+
+    const removeToast = () => {
+      toast.classList.remove("show");
+
+      window.setTimeout(() => {
+        toast.remove();
+
+        if (!container.children.length) {
+          container.remove();
+        }
+      }, 150);
+    };
+
+    const closeButton = toast.querySelector(".btn-close");
+
+    if (closeButton) {
+      closeButton.addEventListener("click", removeToast);
+    }
+
+    /*
+     * Show the toast directly.
+     */
+    toast.classList.add("show");
+
+    /*
+     * duration:
+     *   > 0  = automatically remove
+     *   <= 0 = remain until manually closed
+     */
+    if (duration > 0) {
+      window.setTimeout(removeToast, duration);
+    }
   }
 
   function initSelect2(parent, options = {}) {
@@ -1639,6 +1785,8 @@ const AppUtils = (() => {
   // });
 
   return {
+    CACHE_EXPIRY,
+
     // cache
     cacheSet,
     cacheGet,
