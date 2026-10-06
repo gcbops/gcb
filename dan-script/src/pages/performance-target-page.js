@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { HourTargetProgress } from "../hours/hour-target-progress.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
@@ -38,26 +39,34 @@ const performanceTargetPage = (() => {
   // DATA
   // --------------------------------------------------
 
-  function loadTargetProgress(reset = false) {
-    AppUtils.cachedGScriptCall(
-      "targetProgress",
-      "getCurrentTargetProgress",
-      [],
-      (data) => {
-        if (!data || typeof data !== "object") {
-          AppUtils.showError("Unable to load target data.");
-          return;
-        }
+  async function loadTargetProgress(reset = false) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        targetData = data;
+      AppUtils.cachedGScriptCall(
+        "targetProgress",
+        "getCurrentTargetProgress",
+        [sessionId, signature],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            AppUtils.showError("Unable to load target data.");
+            return;
+          }
 
-        renderTargetSummary(data);
-        renderTargetGuidance(data);
-        initializePlanner(data);
-      },
-      false,
-      reset,
-    );
+          targetData = data;
+
+          renderTargetSummary(data);
+          renderTargetGuidance(data);
+          initializePlanner(data);
+        },
+        false,
+        reset,
+      );
+    } catch (error) {
+      console.error("getCurrentTargetProgress failed:", error);
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function loadTargetChart() {
@@ -302,48 +311,56 @@ const performanceTargetPage = (() => {
       .removeClass("d-none");
   }
 
-  function savePerformanceTarget(type, value, proceedButton) {
+  async function savePerformanceTarget(type, value, proceedButton) {
     const loading = proceedButton
       ? AppUtils.setButtonLoading(proceedButton, "Saving")
       : null;
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "updatePerformanceTarget",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [type, value],
+      AppUtils.gScriptRun({
+        gscriptFunc: "updatePerformanceTarget",
 
-      onSuccess: (result) => {
-        if (!result?.success) {
+        args: [sessionId, signature, type, value],
+
+        onSuccess: (result) => {
+          if (!result?.success) {
+            loading?.restore();
+
+            AppUtils.showError("Unable to update performance target.");
+
+            return;
+          }
+
+          loading?.setSuccess("Saved");
+
+          AppUtils.showDashboardToast(
+            `${
+              type === "daily" ? "Daily" : "Monthly"
+            } target updated successfully.`,
+          );
+
+          setTimeout(() => {
+            AppUtils.closeModal(TARGET_MODAL_ID);
+
+            refreshTargetData();
+          }, 1000);
+        },
+
+        onError: (error) => {
           loading?.restore();
 
-          AppUtils.showError("Unable to update performance target.");
+          AppUtils.showError(
+            error?.message || "Unable to update performance target.",
+          );
+        },
+      });
+    } catch (error) {
+      loading?.restore();
 
-          return;
-        }
-
-        loading?.setSuccess("Saved");
-
-        AppUtils.showDashboardToast(
-          `${
-            type === "daily" ? "Daily" : "Monthly"
-          } target updated successfully.`,
-        );
-
-        setTimeout(() => {
-          AppUtils.closeModal(TARGET_MODAL_ID);
-
-          refreshTargetData();
-        }, 1000);
-      },
-
-      onError: (error) => {
-        loading?.restore();
-
-        AppUtils.showError(
-          error?.message || "Unable to update performance target.",
-        );
-      },
-    });
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function refreshTargetData() {

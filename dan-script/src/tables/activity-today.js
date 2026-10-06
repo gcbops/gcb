@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
@@ -331,7 +332,6 @@ const ActivityToday = (() => {
 
     if (!validation.valid) {
       AppUtils.showDashboardToast(validation.message, "error");
-
       return;
     }
 
@@ -341,31 +341,48 @@ const ActivityToday = (() => {
 
     $("#taskForm").find("select, input.form-control").prop("disabled", true);
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "isExternalClient",
-      args: [validatedData.client],
+    (async () => {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-      onSuccess: (isExternal) => {
-        const external = isExternal === true;
+        AppUtils.gScriptRun({
+          gscriptFunc: "isExternalClient",
+          args: [sessionId, signature, validatedData.client],
 
-        submitHours(external);
-      },
+          onSuccess: (isExternal) => {
+            submitHours(isExternal === true);
+          },
 
-      onError: (err) => {
-        console.error("isExternalClient failed:", err);
+          onError: (err) => {
+            console.error("isExternalClient failed:", err);
 
-        AppUtils.showDashboardToast(
-          "Unable to determine client type.",
-          "error",
-        );
+            $("#taskForm")
+              .find("select, input.form-control")
+              .prop("disabled", false);
+
+            loading.restore();
+
+            AppUtils.showDashboardToast(
+              "Unable to determine client type.",
+              "error",
+            );
+          },
+        });
+      } catch (error) {
+        console.error("[ActivityToday] Authentication failed:", error);
 
         $("#taskForm")
           .find("select, input.form-control")
           .prop("disabled", false);
 
         loading.restore();
-      },
-    });
+
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error",
+        );
+      }
+    })();
 
     function submitHours(isExternal) {
       const gscriptFunc = isExternal
@@ -375,7 +392,7 @@ const ActivityToday = (() => {
       AppUtils.submitForm({
         gscriptFunc,
         data: validatedData,
-        $btn: $submitBtn,
+        $btn: null,
         loadingText: "Saving",
 
         onSuccess: () => {
@@ -383,13 +400,19 @@ const ActivityToday = (() => {
             .find("select, input.form-control")
             .prop("disabled", false);
 
+          loading.restore();
+
           handleTaskSaveSuccess(formData);
         },
 
-        onError: () => {
+        onError: (error) => {
           $("#taskForm")
             .find("select, input.form-control")
             .prop("disabled", false);
+
+          loading.restore();
+
+          console.error("[ActivityToday] Failed to record hours:", error);
         },
       });
     }
@@ -468,13 +491,29 @@ const ActivityToday = (() => {
     const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
 
     if (!cachedTasks.includes(task)) {
-      AppUtils.gScriptRun({
-        gscriptFunc: "syncClientProjects",
+      (async () => {
+        try {
+          const [sessionId, signature] =
+            await GcbAuthModule.getAuthArgs();
 
-        onError: (error) => {
-          console.warn("[TaskSubmit] Failed to sync client projects:", error);
-        },
-      });
+          AppUtils.gScriptRun({
+            gscriptFunc: "syncClientProjects",
+            args: [sessionId, signature],
+
+            onError: (error) => {
+              console.warn(
+                "[TaskSubmit] Failed to sync client projects:",
+                error,
+              );
+            },
+          });
+        } catch (error) {
+          console.warn(
+            "[TaskSubmit] Unable to authenticate project sync:",
+            error,
+          );
+        }
+      })();
     }
 
     clearClientCaches(client);
@@ -527,7 +566,7 @@ const ActivityToday = (() => {
       .on("click.activityToday", handleSheetView);
   }
 
-  function handleSheetView(e) {
+  async function handleSheetView(e) {
     const clientName = String($("#client-view-hours").val() || "").trim();
 
     const btn = e.currentTarget;
@@ -540,24 +579,32 @@ const ActivityToday = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "getClientSheetUrl",
-      args: [clientName],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (url) => {
-        if (url) {
-          window.open(url, "_blank");
-        }
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
+        args: [sessionId, signature, clientName],
 
-        loading.restore();
-      },
+        onSuccess: (url) => {
+          if (url) {
+            window.open(url, "_blank");
+          }
 
-      onError: () => {
-        AppUtils.showError("Sheet doesn't exist!");
+          loading.restore();
+        },
 
-        loading.restore();
-      },
-    });
+        onError: () => {
+          AppUtils.showError("Sheet doesn't exist!");
+
+          loading.restore();
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   /* ---------------------------------------------------------
@@ -662,7 +709,7 @@ const ActivityToday = (() => {
     isRefreshing = false;
   }
 
-  function loadActivity(dataTable, callback, force = false) {
+  async function loadActivity(dataTable, callback, force = false) {
     if (!dataTable || (isRefreshing && !force)) {
       callback?.();
       return;
@@ -670,30 +717,43 @@ const ActivityToday = (() => {
 
     isRefreshing = true;
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "getDailyActivityData",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (data) => {
-        isRefreshing = false;
+      AppUtils.gScriptRun({
+        gscriptFunc: "getDailyActivityData",
+        args: [sessionId, signature],
 
-        updateActivityTable(data, dataTable);
+        onSuccess: (data) => {
+          isRefreshing = false;
 
-        updateFilterCounts(dataTable);
-        HourSummary.loadTodayChargedHours();
+          updateActivityTable(data, dataTable);
 
-        callback?.();
-      },
+          updateFilterCounts(dataTable);
+          HourSummary.loadTodayChargedHours();
 
-      onError: (error) => {
-        isRefreshing = false;
+          callback?.();
+        },
 
-        console.error("Activity Today refresh failed:", error);
+        onError: (error) => {
+          isRefreshing = false;
 
-        AppUtils.showError(error);
+          console.error("Activity Today refresh failed:", error);
 
-        callback?.();
-      },
-    });
+          AppUtils.showError(error);
+
+          callback?.();
+        },
+      });
+    } catch (error) {
+      isRefreshing = false;
+
+      console.error("Activity Today authentication failed:", error);
+
+      AppUtils.showError(error);
+
+      callback?.();
+    }
   }
 
   /* ---------------------------------------------------------

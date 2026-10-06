@@ -17,7 +17,9 @@ function getSheetSafe(name) {
   return getSheet(name) || null;
 }
 
-function sheetExists(name) {
+function sheetExists(sessionId, signature, name) {
+  requireCapability(sessionId, signature, "clients.view");
+
   return !!getSheet(name);
 }
 
@@ -37,7 +39,7 @@ function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
   return index >= 0 ? index + startRow : lastRow + 1;
 }
 
-function applyFormulaToMainSheets(cellRef, formula) {
+function applyFormulaToMainSheets(sessionId, signature, cellRef, formula) {
   requireCapability(sessionId, signature, "settings.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
@@ -97,7 +99,12 @@ function applyFormulaToMainSheets(cellRef, formula) {
   }
 }
 
-function applyFormulaToExternalProjects(cellRef, formula) {
+function applyFormulaToExternalProjects(
+  sessionId,
+  signature,
+  cellRef,
+  formula,
+) {
   requireCapability(sessionId, signature, "settings.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
@@ -174,7 +181,12 @@ function applyFormulaToExternalProjects(cellRef, formula) {
   }
 }
 
-function applyFormulaToExternalProjectSheets(cellRef, formula) {
+function applyFormulaToExternalProjectSheets(
+  sessionId,
+  signature,
+  cellRef,
+  formula,
+) {
   requireCapability(sessionId, signature, "settings.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");

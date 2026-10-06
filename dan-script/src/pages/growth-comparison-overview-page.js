@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { ChartModule } from "../charts.js";
 import { AppUtils } from "../utils.js";
 
@@ -111,7 +112,7 @@ const growthComparisonOverviewPage = (() => {
     $("#chart-monthly_hours_by_year-loading").addClass("d-none");
   }
 
-  function loadGrowthComparison(
+  async function loadGrowthComparison(
     containerSelector,
     currentYear = new Date().getFullYear(),
     comparisonYear = new Date().getFullYear() - 1,
@@ -129,28 +130,38 @@ const growthComparisonOverviewPage = (() => {
       );
     }
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getGrowthComparisonSummary",
-      [currentYear, comparisonYear],
-      (data) => {
-        if (!data) {
-          AppUtils.showError(
-            `No growth comparison data found for ${currentYear} vs ${comparisonYear}.`,
-          );
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getGrowthComparisonSummary",
+        [sessionId, signature, currentYear, comparisonYear],
+        (data) => {
+          if (!data) {
+            AppUtils.showError(
+              `No growth comparison data found for ${currentYear} vs ${comparisonYear}.`,
+            );
 
-        if (log) {
-          console.log("[GrowthComparison] Data:", data);
-        }
+            return;
+          }
 
-        renderGrowthComparison(containerSelector, data);
-      },
-      log,
-      refresh,
-    );
+          if (log) {
+            console.log("[GrowthComparison] Data:", data);
+          }
+
+          renderGrowthComparison(containerSelector, data);
+        },
+        log,
+        refresh,
+      );
+    } catch (error) {
+      console.error("[GrowthComparison] Failed to load comparison:", error);
+
+      AppUtils.showError(
+        error?.message || "Unable to load growth comparison data.",
+      );
+    }
   }
 
   function renderGrowthComparison(containerSelector, data) {

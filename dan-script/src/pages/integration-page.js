@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { AppUtils } from "../utils";
 
 const integrationsConfigurationPage = (() => {
@@ -130,21 +131,32 @@ const integrationsConfigurationPage = (() => {
     openIntegrationModal(integration);
   };
 
-  const loadData = () => {
-    AppUtils.gScriptRun({
-      gscriptFunc: "getIntegrationStatus",
+  const loadData = async () => {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      AppUtils.gScriptRun({
+        gscriptFunc: "getIntegrationStatus",
+        args: [sessionId, signature],
 
-      onSuccess: updateIntegrationStatus,
+        onSuccess: updateIntegrationStatus,
 
-      onError: (err) => {
-        console.error("getIntegrationStatus failed:", err);
+        onError: (err) => {
+          console.error("getIntegrationStatus failed:", err);
 
-        AppUtils.showDashboardToast(
-          "Failed to load integration status.",
-          "error",
-        );
-      },
-    });
+          AppUtils.showDashboardToast(
+            "Failed to load integration status.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      console.error("Authentication required for integration status:", error);
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   };
 
   function getIntegrationConfig(integration) {
@@ -367,7 +379,7 @@ const integrationsConfigurationPage = (() => {
     `;
   }
 
-  function loadIntegrationConfigStatus(integration, $modal) {
+  async function loadIntegrationConfigStatus(integration, $modal) {
     const config = getIntegrationConfig(integration);
 
     if (!config) {
@@ -376,68 +388,82 @@ const integrationsConfigurationPage = (() => {
 
     const fields = config.fields || [];
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "getIntegrationConfigStatus",
-      args: [integration],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (data) => {
-        fields.forEach((field) => {
-          const fieldData = data?.fields?.[field.name];
+      AppUtils.gScriptRun({
+        gscriptFunc: "getIntegrationConfigStatus",
+        args: [sessionId, signature, integration],
 
-          const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+        onSuccess: (data) => {
+          fields.forEach((field) => {
+            const fieldData = data?.fields?.[field.name];
 
-          const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+            const $input = $modal.find(`#integrationConfigValue-${field.name}`);
 
-          if (!$input.length || !$help.length) {
-            return;
-          }
+            const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
 
-          if (!fieldData?.configured) {
-            $input.attr("placeholder", "Not configured");
+            if (!$input.length || !$help.length) {
+              return;
+            }
+
+            if (!fieldData?.configured) {
+              $input.attr("placeholder", "Not configured");
+
+              $help
+                .removeClass("is-configured")
+                .text(
+                  field.help ||
+                    "No configuration has been saved yet. Enter a value to configure this integration.",
+                );
+
+              return;
+            }
+
+            $input.attr("placeholder", `Current: ${fieldData.masked}`);
+
+            $help
+              .addClass("is-configured")
+              .text(
+                "Currently configured. Leave blank to keep the current value.",
+              );
+          });
+        },
+
+        onError: (err) => {
+          console.error("getIntegrationConfigStatus failed:", err);
+
+          fields.forEach((field) => {
+            const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+
+            const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+
+            if (!$input.length || !$help.length) {
+              return;
+            }
+
+            $input.attr("placeholder", "Unable to check current configuration");
 
             $help
               .removeClass("is-configured")
-              .text(
-                field.help ||
-                  "No configuration has been saved yet. Enter a value to configure this integration.",
-              );
+              .text("Unable to check the current configuration.");
+          });
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Authentication required for integration config status:",
+        error,
+      );
 
-            return;
-          }
-
-          $input.attr("placeholder", `Current: ${fieldData.masked}`);
-
-          $help
-            .addClass("is-configured")
-            .text(
-              "Currently configured. Leave blank to keep the current value.",
-            );
-        });
-      },
-
-      onError: (err) => {
-        console.error("getIntegrationConfigStatus failed:", err);
-
-        fields.forEach((field) => {
-          const $input = $modal.find(`#integrationConfigValue-${field.name}`);
-
-          const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
-
-          if (!$input.length || !$help.length) {
-            return;
-          }
-
-          $input.attr("placeholder", "Unable to check current configuration");
-
-          $help
-            .removeClass("is-configured")
-            .text("Unable to check the current configuration.");
-        });
-      },
-    });
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
-  function saveIntegration(integration, $modal, $btn) {
+  async function saveIntegration(integration, $modal, $btn) {
     const config = getIntegrationConfig(integration);
 
     const title = config?.title || "Integration";
@@ -481,46 +507,60 @@ const integrationsConfigurationPage = (() => {
 
     const loading = AppUtils.setButtonLoading($btn[0], "Saving");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "saveIntegration",
-      args: [integration, payload],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: () => {
-        loading.setSuccess("Configuration Saved");
+      AppUtils.gScriptRun({
+        gscriptFunc: "saveIntegration",
+        args: [sessionId, signature, integration, payload],
 
-        AppUtils.closeModal(MODAL_ID);
+        onSuccess: () => {
+          loading.setSuccess("Configuration Saved");
 
-        AppUtils.showDashboardToast(
-          `${title} configuration saved successfully!`,
-          "success",
-        );
+          AppUtils.closeModal(MODAL_ID);
 
-        AppUtils.gScriptRun({
-          gscriptFunc: "getIntegrationStatus",
+          AppUtils.showDashboardToast(
+            `${title} configuration saved successfully!`,
+            "success",
+          );
 
-          onSuccess: (status) => {
-            updateIntegrationStatus(status);
-          },
+          AppUtils.gScriptRun({
+            gscriptFunc: "getIntegrationStatus",
+            args: [sessionId, signature],
 
-          onError: (err) => {
-            console.error("Failed to refresh integration status:", err);
-          },
-        });
+            onSuccess: (status) => {
+              updateIntegrationStatus(status);
+            },
 
-        loadData();
-      },
+            onError: (err) => {
+              console.error("Failed to refresh integration status:", err);
+            },
+          });
 
-      onError: (err) => {
-        console.error("saveIntegration failed:", err);
+          loadData();
+        },
 
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to save integration configuration.",
-          "error",
-        );
+        onError: (err) => {
+          console.error("saveIntegration failed:", err);
 
-        loading.restore();
-      },
-    });
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to save integration configuration.",
+            "error",
+          );
+
+          loading.restore();
+        },
+      });
+    } catch (error) {
+      console.error("Authentication required for saveIntegration:", error);
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+
+      loading.restore();
+    }
   }
 
   return {

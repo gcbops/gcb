@@ -272,7 +272,7 @@ function saveYearlyReportPDF() {
   });
 }
 
-function saveCustomReportPDF(type) {
+function saveCustomReportPDF(sessionId, signature, type) {
   requireCapability(sessionId, signature, "reports.generate");
 
   SpreadsheetApp.flush();
@@ -303,7 +303,7 @@ function saveCustomReportPDF(type) {
   return saveReportPDF(config);
 }
 
-function updateCustomReportPDF(type, month, year) {
+function updateCustomReportPDF(sessionId, signature, type, month, year) {
   requireCapability(sessionId, signature, "reports.generate");
 
   const reportType = Validation.enumValue(type, "report type", [
@@ -585,6 +585,10 @@ function sendYearlyReport() {
 function getReportById(reportId) {
   requireCapability(sessionId, signature, "reports.view");
 
+  return getReportByIdInternal(reportId);
+}
+
+function getReportByIdInternal(reportId) {
   const report = getReportLogs().find((r) => r.id === reportId);
 
   if (!report) {
@@ -594,7 +598,7 @@ function getReportById(reportId) {
   return report;
 }
 
-function checkExistingReport(type, reportName) {
+function checkExistingReport(sessionId, signature, type, reportName) {
   requireCapability(sessionId, signature, "reports.view");
 
   const report = getReportLogs().find((log) => {
@@ -647,7 +651,9 @@ function getFirstAvailableReportMonth() {
   return firstDate;
 }
 
-function validateCustomMonthlyReport(month, year) {
+function validateCustomMonthlyReport(sessionId, signature, month, year) {
+  requireCapability(sessionId, signature, "reports.generate");
+
   const firstDate = getFirstAvailableReportMonth();
 
   const selectedDate = new Date(`1 ${month} ${year}`);
@@ -685,7 +691,9 @@ function validateCustomMonthlyReport(month, year) {
   };
 }
 
-function validateCustomYearlyReport(year) {
+function validateCustomYearlyReport(sessionId, signature, year) {
+  requireCapability(sessionId, signature, "reports.generate");
+
   const firstDate = getFirstAvailableReportMonth();
 
   const firstYear = firstDate.getFullYear();
@@ -807,7 +815,7 @@ function getReportLogs() {
   return logs;
 }
 
-function getMonthlyReportHistory() {
+function getMonthlyReportHistory(sessionId, signature) {
   requireCapability(sessionId, signature, "reports.view");
 
   return {
@@ -815,7 +823,7 @@ function getMonthlyReportHistory() {
   };
 }
 
-function getYearlyReportHistory() {
+function getYearlyReportHistory(sessionId, signature) {
   requireCapability(sessionId, signature, "reports.view");
 
   return {
@@ -823,7 +831,7 @@ function getYearlyReportHistory() {
   };
 }
 
-function getReportsOverview() {
+function getReportsOverview(sessionId, signature) {
   requireCapability(sessionId, signature, "reports.view");
 
   const recentLogs = getReportLogs();

@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -62,7 +63,7 @@ const billingOverviewPage = (() => {
 
   }
 
-  function loadBillingAnalytics(log = false, refresh = false, loading) {
+  async function loadBillingAnalytics(log = false, refresh = false, loading) {
     const logMessage = (...args) => {
       if (log) {
         console.log(...args);
@@ -71,26 +72,39 @@ const billingOverviewPage = (() => {
 
     DataTableModule.showLoader(TABLE_ID);
 
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getBillingAnalytics",
-      [],
-      (data) => {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        if (!Array.isArray(data)) {
-          DataTableModule.showError(
-            TABLE_ID,
-            "Unable to load billing analytics.",
-          );
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getBillingAnalytics",
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            DataTableModule.showError(
+              TABLE_ID,
+              "Unable to load billing analytics.",
+            );
 
-          return;
-        }
+            return;
+          }
 
-        renderBillingAnalytics(data, logMessage, refresh, loading);
-      },
-      false,
-      refresh,
-    );
+          renderBillingAnalytics(data, logMessage, refresh, loading);
+        },
+        false,
+        refresh,
+      );
+    } catch (error) {
+      console.error(
+        "[BillingOverview] Failed to load billing analytics:",
+        error,
+      );
+
+      DataTableModule.showError(
+        TABLE_ID,
+        error?.message || "Unable to load billing analytics.",
+      );
+    }
   }
 
   function renderBillingAnalytics(data, log, refresh = false, loading) {

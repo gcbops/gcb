@@ -1,5 +1,6 @@
 import { TableModule } from "./tables.js";
 import { AppUtils } from "../utils.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const TableClientSelector = (() => {
   const CLIENTS_CACHE_KEY = "clientDirectoryData";
@@ -36,28 +37,39 @@ const TableClientSelector = (() => {
     currentSelectId = "#client";
   }
 
-  function initClientSelector(selectId = "#client", isForProject = false) {
+  async function initClientSelector(
+    selectId = "#client",
+    isForProject = false,
+  ) {
     const $select = $(selectId);
 
     if (!$select.length) {
       return;
     }
 
-    AppUtils.cachedGScriptCall(
-      CLIENTS_CACHE_KEY,
-      CLIENTS_SERVER_FUNCTION,
-      [],
-      (data) => {
-        if (!Array.isArray(data)) {
-          AppUtils.showError("Client data missing or invalid");
-          return;
-        }
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        renderClientOptions($select, data);
+      AppUtils.cachedGScriptCall(
+        CLIENTS_CACHE_KEY,
+        CLIENTS_SERVER_FUNCTION,
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showError("Client data missing or invalid");
+            return;
+          }
 
-        bindClientChange($select, isForProject);
-      },
-    );
+          renderClientOptions($select, data);
+
+          bindClientChange($select, isForProject);
+        },
+      );
+    } catch (error) {
+      console.error("[TableClientSelector] Failed to load clients:", error);
+
+      AppUtils.showError(error?.message || "Unable to load client data.");
+    }
   }
 
   function renderClientOptions($select, clients) {

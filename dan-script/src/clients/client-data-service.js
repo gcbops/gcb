@@ -3,13 +3,14 @@ import { TableModule } from "../tables/tables";
 import { DataTableModule } from "../tables/data-table";
 import { ChartModule } from "../charts";
 import { TableFilterService } from "../tables/table-filter-service";
+import { GcbAuthModule } from "../auth/auth";
 
 const ClientDataService = (() => {
   const ACTIVE_CLIENTS_TABLE_ID = "#active-clients";
   const ACTIVE_CLIENTS_TITLE = "Active Clients";
   const CLIENT_DATA_TABLE_ID = "#table";
 
-  function renderClientDataByStatus(
+  async function renderClientDataByStatus(
     sourceSheet,
     title,
     category,
@@ -28,15 +29,21 @@ const ClientDataService = (() => {
 
     DataTableModule.showLoader(CLIENT_DATA_TABLE_ID);
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getClientDataByStatus",
-      [category, sourceSheet],
-      (data) => {
-        handleClientDataResponse(data, title, log);
-      },
-      debug,
-    );
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getClientDataByStatus",
+        [sessionId, signature, category, sourceSheet],
+        (data) => {
+          handleClientDataResponse(data, title, log);
+        },
+        debug,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function handleClientDataResponse(data, title, log) {
@@ -63,7 +70,11 @@ const ClientDataService = (() => {
    * Source:
    * Paid & Owed Log!O:S
    */
-  function renderActivePaidOwedClients(isSimple = false, debug = false, reset = false) {
+  async function renderActivePaidOwedClients(
+    isSimple = false,
+    debug = false,
+    reset = false,
+  ) {
     const log = (...args) => debug && console.log(...args);
 
     const cacheKey = "paidOwedClients";
@@ -73,23 +84,29 @@ const ClientDataService = (() => {
 
     DataTableModule.showLoader(tableId);
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getActiveClientsPaidOwed",
-      [],
-      (data) => {
-        log("[renderActivePaidOwedClients] callback:", data);
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        if (!Array.isArray(data)) {
-          AppUtils.showError("⚠️ Invalid paid & owed data.");
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getActiveClientsPaidOwed",
+        [sessionId, signature],
+        (data) => {
+          log("[renderActivePaidOwedClients] callback:", data);
 
-        renderPaidOwedTable(data, isSimple);
-      },
-      debug,
-      reset,
-    );
+          if (!Array.isArray(data)) {
+            AppUtils.showError("⚠️ Invalid paid & owed data.");
+            return;
+          }
+
+          renderPaidOwedTable(data, isSimple);
+        },
+        debug,
+        reset,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function renderPaidOwedTable(data, isSimple) {
@@ -144,28 +161,34 @@ const ClientDataService = (() => {
     }
   }
 
-  function renderActiveClients(debug = false, reset = false) {
+  async function renderActiveClients(debug = false, reset = false) {
     const log = (...args) => debug && console.log(...args);
 
     const cacheKey = "paidOwedClients";
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getActiveClientsPaidOwed",
-      [],
-      (data) => {
-        log("[renderActiveClients] callback:", data);
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        if (!Array.isArray(data)) {
-          AppUtils.showError("⚠️ Invalid active client data.");
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getActiveClientsPaidOwed",
+        [sessionId, signature],
+        (data) => {
+          log("[renderActiveClients] callback:", data);
 
-        renderActiveClientList(data);
-      },
-      debug,
-      reset,
-    );
+          if (!Array.isArray(data)) {
+            AppUtils.showError("⚠️ Invalid active client data.");
+            return;
+          }
+
+          renderActiveClientList(data);
+        },
+        debug,
+        reset,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function renderActiveClientList(data) {

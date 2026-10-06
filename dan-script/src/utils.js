@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "./auth/auth.js";
 import { RouterModule } from "./routers.js";
 
 const AppUtils = (() => {
@@ -822,7 +823,7 @@ const AppUtils = (() => {
     });
   }
 
-  function submitForm({
+  async function submitForm({
     gscriptFunc,
     data = {},
     onSuccess,
@@ -832,6 +833,15 @@ const AppUtils = (() => {
   }) {
     if (!gscriptFunc) {
       showError("No Google Apps Script function provided");
+      return;
+    }
+
+    let authArgs;
+
+    try {
+      authArgs = await GcbAuthModule.getAuthArgs();
+    } catch (error) {
+      showError(error?.message || "Authentication required.");
       return;
     }
 
@@ -851,7 +861,7 @@ const AppUtils = (() => {
 
     gScriptRun({
       gscriptFunc,
-      args: [data],
+      args: [...authArgs, data],
 
       onSuccess: (result) => {
         if (loading) {

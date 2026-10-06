@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { AppUtils } from "../utils.js";
 
 const performanceProductivityPage = (() => {
@@ -44,25 +45,37 @@ const performanceProductivityPage = (() => {
     renderValueReference();
   }
 
-  function loadProductivityData(reset = false) {
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getProductivityOverview",
-      [],
-      (data) => {
-        if (!data) {
-          renderEmpty();
-          return;
-        }
+  async function loadProductivityData(reset = false) {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        productivityData = data;
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getProductivityOverview",
+        [sessionId, signature],
+        (data) => {
+          if (!data) {
+            renderEmpty();
+            return;
+          }
 
-        renderOverview();
-        renderValueReference();
-      },
-      false,
-      reset,
-    );
+          productivityData = data;
+
+          renderOverview();
+          renderValueReference();
+        },
+        false,
+        reset,
+      );
+    } catch (error) {
+      console.error(
+        "[PerformanceProductivity] Failed to load productivity data:",
+        error,
+      );
+
+      renderEmpty();
+      AppUtils.showError(error?.message || "Unable to load productivity data.");
+    }
   }
 
   function renderOverview() {

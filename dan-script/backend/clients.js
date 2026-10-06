@@ -32,7 +32,7 @@ function getClientSheetsListAndActive() {
   };
 }
 
-function syncClientSheetList() {
+function syncClientSheetList(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.manage");
 
   const sheet = getSheetSafe("Client Names");
@@ -89,7 +89,7 @@ function getDirectCellValueSafe(sheetName, cellRange) {
   return sheet.getRange(cellRange).getValue();
 }
 
-function goToPresentClient(sheetName) {
+function goToPresentClient(sessionId, signature, sheetName) {
   requireCapability(sessionId, signature, "clients.view");
 
   const ss = getSpreadsheet();
@@ -116,7 +116,7 @@ function goToPresentClient(sheetName) {
   return `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
 }
 
-function getClientDataByStatus(status, customSheet) {
+function getClientDataByStatus(sessionId, signature, status, customSheet) {
   requireCapability(sessionId, signature, "clients.view");
 
   const config = CONFIG.DIALOGS.STATUS[status];
@@ -137,7 +137,7 @@ function getClientDataByStatus(status, customSheet) {
     .filter((row) => row.some(Boolean));
 }
 
-function getActiveClientsPaidOwed() {
+function getActiveClientsPaidOwed(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   try {
@@ -167,7 +167,7 @@ function getActiveClientsPaidOwed() {
           currentMonthOwed: Number(row[2]) || 0,
           totalPaid: Number(row[3]) || 0,
           today: row[4] ?? "",
-          paidOwedHistory: getClientPaidOwedDataHistory(client),
+          paidOwedHistory: getClientPaidOwedDataHistoryInternal(client),
         };
       });
   } catch (err) {
@@ -207,7 +207,7 @@ function getRoleFromSheet(name) {
   }
 }
 
-function getClientHourLogData(clientName) {
+function getClientHourLogData(sessionId, signature, clientName) {
   requireCapability(sessionId, signature, "clients.view");
 
   const sheet = getSheetSafe(clientName);
@@ -235,7 +235,7 @@ function getClientHourLogData(clientName) {
   });
 }
 
-function getClientSheetUrl(name) {
+function getClientSheetUrl(sessionId, signature, name) {
   requireCapability(sessionId, signature, "clients.view");
 
   if (!isNonEmptyString(name)) {
@@ -256,7 +256,7 @@ function getClientSheetUrl(name) {
   return `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
 }
 
-function createClientSheet(input) {
+function createClientSheet(sessionId, signature, input) {
   requireCapability(sessionId, signature, "clients.create");
 
   Validation.requireObject(input, "Client data");
@@ -274,6 +274,7 @@ function createClientSheet(input) {
   }
 
   const ss = getSpreadsheet();
+
   const newSheet = template.copyTo(ss);
 
   newSheet.setName(sheetName);
@@ -287,7 +288,7 @@ function createClientSheet(input) {
   ss.moveActiveSheet(1);
 }
 
-function getClientDirectoryData() {
+function getClientDirectoryData(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   const analyticsSheet = getSheetSafe("Client Analytics");
@@ -405,7 +406,13 @@ function getClientDirectoryAnalytics() {
   };
 }
 
-function getClientPaidOwedDataHistory(clientName) {
+function getClientPaidOwedDataHistory(sessionId, signature, clientName) {
+  requireCapability(sessionId, signature, "clients.view");
+
+  return getClientPaidOwedDataHistoryInternal(client);
+}
+
+function getClientPaidOwedDataHistoryInternal(clientName) {
   try {
     const sheet = getSheetSafe(clientName);
     if (!sheet) return [];
@@ -446,7 +453,7 @@ function getClientPaidOwedDataHistory(clientName) {
   }
 }
 
-function getClientActivityTrends() {
+function getClientActivityTrends(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   try {
@@ -480,7 +487,7 @@ function getClientActivityTrends() {
   }
 }
 
-function getClientRankings() {
+function getClientRankings(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   const sheet = getSheetSafe("Client Analytics");
@@ -582,7 +589,7 @@ function getClientRankings() {
   };
 }
 
-function getLegacyClients() {
+function getLegacyClients(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   try {
@@ -819,7 +826,13 @@ function getClientActivity(sheet, timezone) {
     }));
 }
 
-function updateClientInformation(clientName, field, value) {
+function updateClientInformation(
+  sessionId,
+  signature,
+  clientName,
+  field,
+  value,
+) {
   requireCapability(sessionId, signature, "clients.edit");
 
   const name = String(clientName || "").trim();

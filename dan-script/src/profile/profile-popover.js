@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { RouterModule } from "../routers";
 import { TableModule } from "../tables/tables";
 import { AppUtils } from "../utils";
@@ -99,7 +100,7 @@ const ProfilePopoverModule = (() => {
     TableModule.addClientHours(clientName);
   }
 
-  function openClientSheet(clientName) {
+  async function openClientSheet(clientName) {
     const client = getClientData(clientName);
 
     const externalUrl = String(client?.externalUrl || "").trim();
@@ -117,27 +118,35 @@ const ProfilePopoverModule = (() => {
 
     AppUtils.showDashboardToast("Redirecting to sheet!", "info");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "goToPresentClient",
-      args: [clientName],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (url) => {
-        const clientUrl = String(url || "").trim();
+      AppUtils.gScriptRun({
+        gscriptFunc: "goToPresentClient",
+        args: [sessionId, signature, clientName],
 
-        if (clientUrl.startsWith("http")) {
-          window.open(clientUrl, "_blank");
-          return;
-        }
+        onSuccess: (url) => {
+          const clientUrl = String(url || "").trim();
 
-        AppUtils.showError(url);
-      },
+          if (clientUrl.startsWith("http")) {
+            window.open(clientUrl, "_blank");
+            return;
+          }
 
-      onError: (error) => {
-        console.error("[ProfilePopover] Failed to open client sheet:", error);
+          AppUtils.showError(url);
+        },
 
-        AppUtils.showError(error?.message || error);
-      },
-    });
+        onError: (error) => {
+          console.error("[ProfilePopover] Failed to open client sheet:", error);
+
+          AppUtils.showError(error?.message || error);
+        },
+      });
+    } catch (error) {
+      console.error("[ProfilePopover] Authentication required:", error);
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function setClientData(data = []) {

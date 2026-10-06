@@ -94,7 +94,7 @@ const billingPaidHoursPage = (() => {
           if (!data || typeof data !== "object") {
             renderPaidHoursSummary({});
 
-            DataTableModule.showError(TABLE_ID, "Unable to load owed hours.");
+            DataTableModule.showError(TABLE_ID, "Unable to load paid hours.");
 
             return;
           }

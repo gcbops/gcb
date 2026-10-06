@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { AppUtils } from "../utils";
 
 const PerformanceMetrics = (() => {
@@ -21,7 +22,7 @@ const PerformanceMetrics = (() => {
     ],
   };
 
-  function loadPerformanceSummary(containerId, growthId, yearType) {
+  async function loadPerformanceSummary(containerId, growthId, yearType) {
     const container = document.getElementById(containerId);
     const growthEl = document.getElementById(growthId);
 
@@ -41,28 +42,39 @@ const PerformanceMetrics = (() => {
 
     resetPerformanceSummary(container, growthEl);
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getPerformanceSummary",
-      [yearType],
-      (data) => {
-        if (!data || !Array.isArray(data.percentages)) {
-          console.warn("[PerformanceMetrics] Invalid data:", data);
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-          setPerformanceError(container, growthEl);
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getPerformanceSummary",
+        [sessionId, signature, yearType],
+        (data) => {
+          if (!data || !Array.isArray(data.percentages)) {
+            console.warn("[PerformanceMetrics] Invalid data:", data);
 
-          return;
-        }
+            setPerformanceError(container, growthEl);
 
-        renderPerformanceSummary(
-          container,
-          growthEl,
-          suffix,
-          data,
-          COLORS[yearType],
-        );
-      },
-    );
+            return;
+          }
+
+          renderPerformanceSummary(
+            container,
+            growthEl,
+            suffix,
+            data,
+            COLORS[yearType],
+          );
+        },
+      );
+    } catch (error) {
+      console.error(
+        "[PerformanceMetrics] Failed to load performance summary:",
+        error,
+      );
+
+      setPerformanceError(container, growthEl);
+    }
   }
 
   function resetPerformanceSummary(container, growthEl) {

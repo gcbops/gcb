@@ -2,6 +2,7 @@ import { AppUtils } from "../utils.js";
 import { ChartModule } from "../charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
 import { ValidationModule } from "../validations.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const dailyOverviewPage = (() => {
   const DATE_RANGE_CACHE_KEY = "dailyOverviewSelectedRange";
@@ -161,25 +162,43 @@ const dailyOverviewPage = (() => {
     loadDailyOverviewChart(startDate, endDate, false);
   }
 
-  function loadDailyOverviewChart(startDate, endDate, showLoading = true) {
+  async function loadDailyOverviewChart(
+    startDate,
+    endDate,
+    showLoading = true,
+  ) {
     if (showLoading) {
       showChartLoading();
     }
 
-    AppUtils.cachedGScriptCall(
-      `dailyOverviewChart_${startDate}_${endDate}`,
-      "updateDailyOverviewChartRange",
-      [startDate, endDate],
-      (data) => {
-        if (showLoading) {
-          hideChartLoading();
-        }
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        ChartModule.drawChart("daily_overview", data, false, true);
-      },
-      false,
-      true,
-    );
+      AppUtils.cachedGScriptCall(
+        `dailyOverviewChart_${startDate}_${endDate}`,
+        "updateDailyOverviewChartRange",
+        [sessionId, signature, startDate, endDate],
+        (data) => {
+          if (showLoading) {
+            hideChartLoading();
+          }
+
+          ChartModule.drawChart("daily_overview", data, false, true);
+        },
+        false,
+        true,
+      );
+    } catch (error) {
+      if (showLoading) {
+        hideChartLoading();
+      }
+
+      console.error("[DailyOverview] Failed to load chart:", error);
+
+      AppUtils.showError(
+        error?.message || "Unable to load daily overview chart.",
+      );
+    }
   }
 
   function saveDateRange(startDate, endDate) {

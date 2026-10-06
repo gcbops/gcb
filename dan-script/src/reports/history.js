@@ -1,10 +1,11 @@
+import { GcbAuthModule } from "../auth/auth";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
 const ReportHistory = (() => {
   const TABLE_TITLE = "Report History";
 
-  function loadReportHistory({
+  async function loadReportHistory({
     cacheKey,
     serverFunction,
     tableId,
@@ -18,28 +19,36 @@ const ReportHistory = (() => {
       }
     }
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      serverFunction,
-      [],
-      (data) => {
-        const reportLogs = Array.isArray(data?.reportLogs)
-          ? data.reportLogs
-          : [];
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        renderReportHistory({
-          reportLogs,
-          tableId,
-          tbodyId,
-        });
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        serverFunction,
+        [sessionId, signature],
+        (data) => {
+          const reportLogs = Array.isArray(data?.reportLogs)
+            ? data.reportLogs
+            : [];
 
-        if (typeof callback === "function") {
-          callback(reportLogs, data);
-        }
-      },
-      false,
-      refresh,
-    );
+          renderReportHistory({
+            reportLogs,
+            tableId,
+            tbodyId,
+          });
+
+          if (typeof callback === "function") {
+            callback(reportLogs, data);
+          }
+        },
+        false,
+        refresh,
+      );
+    } catch (error) {
+      console.error(`[ReportHistory] Failed to load ${serverFunction}:`, error);
+
+      AppUtils.showError(error?.message || "Unable to load report history.");
+    }
   }
 
   function renderReportHistory({ reportLogs, tableId, tbodyId }) {

@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "./auth/auth.js";
 import { AppUtils } from "./utils.js";
 
 const ChartModule = (() => {
@@ -29,10 +30,10 @@ const ChartModule = (() => {
       cacheKey: "chartData_monthly_prev",
     },
 
-    client_paid_owed_history: {
-      serverFunction: "getClientPaidOwedHistoryChart",
-      cacheKey: "chartData_client_paid_owed_history",
-    },
+    // client_paid_owed_history: {
+    //   serverFunction: "getClientPaidOwedHistoryChart",
+    //   cacheKey: "chartData_client_paid_owed_history",
+    // },
 
     current_month_log: {
       serverFunction: "getCurrentMonthLogChartData",
@@ -105,7 +106,7 @@ const ChartModule = (() => {
   // DATA LOADING
   // --------------------------------------------------
 
-  function loadChart(
+  async function loadChart(
     chartType,
     animated = false,
     year = "all",
@@ -163,52 +164,60 @@ const ChartModule = (() => {
       animated,
     });
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      config.serverFunction,
-      args,
-      (data) => {
-        logMessage("Chart data received:", data);
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        if (!document.body.contains(chartDiv)) {
-          logMessage("Chart container no longer exists.");
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        config.serverFunction,
+        [sessionId, signature, ...args],
+        (data) => {
+          logMessage("Chart data received:", data);
 
-        const hasChartData =
-          chartType === "monthly_hours_by_year"
-            ? data && typeof data === "object" && Object.keys(data).length > 0
-            : Array.isArray(data) && data.length > 0;
+          if (!document.body.contains(chartDiv)) {
+            logMessage("Chart container no longer exists.");
+            return;
+          }
 
-        if (!hasChartData) {
-          logMessage("No chart data found.");
+          const hasChartData =
+            chartType === "monthly_hours_by_year"
+              ? data && typeof data === "object" && Object.keys(data).length > 0
+              : Array.isArray(data) && data.length > 0;
 
-          chartDiv.innerText = "No data found.";
+          if (!hasChartData) {
+            logMessage("No chart data found.");
+
+            chartDiv.innerText = "No data found.";
+
+            if (typeof onComplete === "function") {
+              onComplete();
+            }
+
+            return;
+          }
+
+          logMessage("Drawing chart:", {
+            chartType,
+            rows: data.length,
+          });
+
+          drawChart(chartType, data, false, animated, chartOpts);
 
           if (typeof onComplete === "function") {
             onComplete();
           }
+        },
+        log,
+        refresh,
+      );
+    } catch (error) {
+      logMessage("Chart authentication failed:", error);
 
-          return;
-        }
-
-        logMessage("Drawing chart:", {
-          chartType,
-          rows: data.length,
-        });
-
-        drawChart(chartType, data, false, animated, chartOpts);
-
-        if (typeof onComplete === "function") {
-          onComplete();
-        }
-      },
-      log,
-      refresh,
-    );
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
-  function loadChartData(chartType, callback) {
+  async function loadChartData(chartType, callback) {
     const config = CHART_CONFIG[chartType];
 
     if (!config) {
@@ -232,7 +241,18 @@ const ChartModule = (() => {
 
     const args = chartType === "yearly" ? ["all"] : [];
 
-    AppUtils.cachedGScriptCall(cacheKey, config.serverFunction, args, callback);
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        config.serverFunction,
+        [sessionId, signature, ...args],
+        callback,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function loadPrevYearCombinedChart(refresh = false, log = false) {
@@ -333,14 +353,14 @@ const ChartModule = (() => {
       case "daily_overview":
         return drawDailyOverviewChart(ctx, type, data, animated);
 
-      case "client_paid_owed_history":
-        return drawClientPaidOwedHistoryChart(
-          ctx,
-          type,
-          data,
-          animated,
-          chartOpts,
-        );
+      // case "client_paid_owed_history":
+      //   return drawClientPaidOwedHistoryChart(
+      //     ctx,
+      //     type,
+      //     data,
+      //     animated,
+      //     chartOpts,
+      //   );
 
       case "client_hours_month":
         return drawClientMonthlyHoursChart(ctx, type, data, animated);

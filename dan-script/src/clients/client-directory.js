@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { ProfilePopoverModule } from "../profile/profile-popover";
 import { TableClientSelector } from "../tables/client-selector";
 import { DataTableModule } from "../tables/data-table";
@@ -60,19 +61,30 @@ const ClientDirectory = (() => {
     fetchClientDirectory(source);
   }
 
-  function fetchClientDirectory(source, callback = null) {
-    AppUtils.cachedGScriptCall(source, SERVER_FUNCTION, [], (data) => {
-      if (!Array.isArray(data)) {
-        AppUtils.showDashboardToast(
-          "Something went wrong loading clients!",
-          "error",
-        );
+  async function fetchClientDirectory(source, callback = null) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        return;
-      }
+      AppUtils.cachedGScriptCall(
+        source,
+        SERVER_FUNCTION,
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showDashboardToast(
+              "Something went wrong loading clients!",
+              "error",
+            );
 
-      renderClientDirectory(data, callback);
-    });
+            return;
+          }
+
+          renderClientDirectory(data, callback);
+        },
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   /*
@@ -80,7 +92,7 @@ const ClientDirectory = (() => {
    *
    * This is used by the manual Sync/Refresh action.
    */
-  function refreshClientDirectory(source = CACHE_KEY, callback = null) {
+  async function refreshClientDirectory(source = CACHE_KEY, callback = null) {
     DataTableModule.showLoader(TABLE_ID);
 
     $("#sync-clients-list i").addClass("fa-spin");
@@ -91,31 +103,39 @@ const ClientDirectory = (() => {
      */
     AppUtils.cacheClear(source);
 
-    AppUtils.cachedGScriptCall(
-      source,
-      SERVER_FUNCTION,
-      [],
-      (data) => {
-        $("#sync-clients-list i").removeClass("fa-spin");
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        if (!Array.isArray(data)) {
-          AppUtils.showDashboardToast(
-            "Something went wrong refreshing clients!",
-            "error",
-          );
+      AppUtils.cachedGScriptCall(
+        source,
+        SERVER_FUNCTION,
+        [sessionId, signature],
+        (data) => {
+          $("#sync-clients-list i").removeClass("fa-spin");
 
-          return;
-        }
+          if (!Array.isArray(data)) {
+            AppUtils.showDashboardToast(
+              "Something went wrong refreshing clients!",
+              "error",
+            );
 
-        renderClientDirectory(data, () => {
-          if (typeof callback === "function") {
-            callback();
+            return;
           }
-        });
-      },
-      false,
-      true,
-    );
+
+          renderClientDirectory(data, () => {
+            if (typeof callback === "function") {
+              callback();
+            }
+          });
+        },
+        false,
+        true,
+      );
+    } catch (error) {
+      $("#sync-clients-list i").removeClass("fa-spin");
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   /*
@@ -124,29 +144,38 @@ const ClientDirectory = (() => {
    * Used after cached data has already been rendered.
    * Does not show a loader or toast.
    */
-  function refreshClientDirectoryInBackground(source, cached) {
-    AppUtils.cachedGScriptCall(
-      source,
-      SERVER_FUNCTION,
-      [],
-      (fresh) => {
-        if (!Array.isArray(fresh)) {
-          return;
-        }
+  async function refreshClientDirectoryInBackground(source, cached) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        /*
-         * Avoid rebuilding the DataTable when
-         * the server data has not changed.
-         */
-        if (JSON.stringify(fresh) === JSON.stringify(cached)) {
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        source,
+        SERVER_FUNCTION,
+        [sessionId, signature],
+        (fresh) => {
+          if (!Array.isArray(fresh)) {
+            return;
+          }
 
-        renderClientDirectory(fresh);
-      },
-      false,
-      true,
-    );
+          /*
+           * Avoid rebuilding the DataTable when
+           * the server data has not changed.
+           */
+          if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+            return;
+          }
+
+          renderClientDirectory(fresh);
+        },
+        false,
+        true,
+      );
+    } catch (error) {
+      console.error(
+        "[ClientDirectory] Background refresh authentication failed:",
+        error,
+      );
+    }
   }
 
   function renderClientDirectory(data, callback = null) {

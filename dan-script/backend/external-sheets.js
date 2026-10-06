@@ -474,7 +474,7 @@ function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
   };
 }
 
-function reconcileExternalSheets() {
+function reconcileExternalSheets(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.manage");
 
   const registry = getSheetSafe("External Sheets");
@@ -553,7 +553,6 @@ function reconcileExternalSheets() {
     }
 
     try {
-
       const ss = SpreadsheetApp.openById(spreadsheetId);
 
       const projectsSheet = ss.getSheetByName("Projects");
@@ -583,7 +582,6 @@ function reconcileExternalSheets() {
       let clientNameAdded = false;
 
       if (!clientNameSet.has(normalizedClientName)) {
-
         clientNamesToAdd.push([clientName]);
 
         clientNameSet.add(normalizedClientName);
@@ -616,7 +614,6 @@ function reconcileExternalSheets() {
 
         action: "registered",
       });
-
     } catch (err) {
       console.error(`Failed to read external sheet "${spreadsheetName}".`, err);
     }
@@ -732,12 +729,12 @@ function createExternalClientSheet(clientName, externalSpreadsheetId) {
   };
 }
 
-function isExternalClient(clientName) {
+function isExternalClient(sessionId, signature, clientName) {
+  requireCapability(sessionId, signature, "hours.add");
+  
   if (!clientName) {
     return false;
   }
-
-  const ss = getSpreadsheet();
 
   const registrySheet = getSheetSafe("External Sheets");
 

@@ -1,4 +1,4 @@
-function addUpsellEntry(data) {
+function addUpsellEntry(sessionId, signature, data) {
   requireCapability(sessionId, signature, "clients.edit");
 
   Validation.requireObject(data, "Upsell data");
@@ -65,7 +65,7 @@ function addUpsellEntry(data) {
   return `Added upsell entry for ${clientName}`;
 }
 
-function getUpsellSummary() {
+function getUpsellSummary(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   try {
@@ -93,7 +93,7 @@ function getUpsellSummary() {
   }
 }
 
-function getUpsellRecords() {
+function getUpsellRecords(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   try {

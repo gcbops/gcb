@@ -1,4 +1,4 @@
-function getProjects() {
+function getProjects(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   const sheet = getSheetSafe("Projects");
@@ -47,7 +47,7 @@ function getTopProjects() {
   return data.filter((row) => row[0] && row[1]);
 }
 
-function getProjectRankings() {
+function getProjectRankings(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 
   try {
@@ -251,7 +251,7 @@ function getProjectRankings() {
   }
 }
 
-function syncClientProjects() {
+function syncClientProjects(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.manage");
 
   const clientsSheet = getSheetSafe("Client Names");

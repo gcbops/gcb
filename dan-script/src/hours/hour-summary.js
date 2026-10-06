@@ -1,20 +1,27 @@
+import { GcbAuthModule } from "../auth/auth";
 import { AppUtils } from "../utils";
 
 const HourSummary = (() => {
-    function loadHoursSummary(containerSelector) {
-      AppUtils.cachedGScriptCall(
-        "hoursSummary",
-        "getHoursSummary",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No metrics found");
-            return;
-          }
+    async function loadHoursSummary(containerSelector) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          renderHoursSummary(containerSelector, data);
-        },
-      );
+        AppUtils.cachedGScriptCall(
+          "hoursSummary",
+          "getHoursSummary",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No metrics found");
+              return;
+            }
+
+            renderHoursSummary(containerSelector, data);
+          },
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
 
     function renderHoursSummary(containerSelector, data) {
@@ -83,20 +90,26 @@ const HourSummary = (() => {
       );
     }
 
-    function loadDailyOverviewSummary() {
-      AppUtils.cachedGScriptCall(
-        "dailyOverviewSummary",
-        "getDailyOverviewSummary",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No daily analytics found.");
-            return;
-          }
+    async function loadDailyOverviewSummary() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          renderDailyOverviewSummary(data);
-        },
-      );
+        AppUtils.cachedGScriptCall(
+          "dailyOverviewSummary",
+          "getDailyOverviewSummary",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No daily analytics found.");
+              return;
+            }
+
+            renderDailyOverviewSummary(data);
+          },
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
 
     function renderDailyOverviewSummary(data) {
@@ -219,20 +232,26 @@ const HourSummary = (() => {
     `);
     }
 
-    function loadMonthlyHoursSummary(containerSelector) {
-      AppUtils.cachedGScriptCall(
-        "monthlyHoursSummary",
-        "getMonthlyHoursSummary",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No monthly analytics found.");
-            return;
-          }
+    async function loadMonthlyHoursSummary(containerSelector) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          renderMonthlyHoursSummary(containerSelector, data);
-        },
-      );
+        AppUtils.cachedGScriptCall(
+          "monthlyHoursSummary",
+          "getMonthlyHoursSummary",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No monthly analytics found.");
+              return;
+            }
+
+            renderMonthlyHoursSummary(containerSelector, data);
+          },
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
 
     function renderMonthlyHoursSummary(containerSelector, data) {
@@ -341,7 +360,7 @@ const HourSummary = (() => {
       );
     }
 
-    function loadYearHoursSummary(containerSelector) {
+    async function loadYearHoursSummary(containerSelector) {
       const currentYear = new Date().getFullYear();
 
       // console.log("[HoursSummary] Loading yearly summary:", {
@@ -349,21 +368,27 @@ const HourSummary = (() => {
       //   containerSelector,
       // });
 
-      AppUtils.cachedGScriptCall(
-        "yearHoursSummary",
-        "getYearHoursSummary",
-        [currentYear],
-        (data) => {
-          // console.log("[HoursSummary] Yearly summary response:", data);
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          if (!data) {
-            AppUtils.showError("No yearly analytics found.");
-            return;
-          }
+        AppUtils.cachedGScriptCall(
+          "yearHoursSummary",
+          "getYearHoursSummary",
+          [sessionId, signature, currentYear],
+          (data) => {
+            // console.log("[HoursSummary] Yearly summary response:", data);
 
-          renderYearHoursSummary(containerSelector, data);
-        },
-      );
+            if (!data) {
+              AppUtils.showError("No yearly analytics found.");
+              return;
+            }
+
+            renderYearHoursSummary(containerSelector, data);
+          },
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
 
     function renderYearHoursSummary(containerSelector, data) {
@@ -554,22 +579,28 @@ const HourSummary = (() => {
     `);
     }
 
-    function loadTodayChargedHours() {
-      AppUtils.cachedGScriptCall(
-        "todayChargedHours",
-        "getTodayChargedHours",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("Unable to load today's hours.");
-            return;
-          }
+    async function loadTodayChargedHours() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          renderTodayChargedHours(data);
-        },
-        false,
-        true
-      );
+        AppUtils.cachedGScriptCall(
+          "todayChargedHours",
+          "getTodayChargedHours",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("Unable to load today's hours.");
+              return;
+            }
+
+            renderTodayChargedHours(data);
+          },
+          false,
+          true,
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
 
     function renderTodayChargedHours(data) {

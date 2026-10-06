@@ -2,6 +2,7 @@ import { AppUtils } from "../utils.js";
 import { ReportHistory } from "../reports/history.js";
 import { ReportActions } from "../reports/actions.js";
 import { DataTableModule } from "../tables/data-table.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const reportsAnnualReportPage = (() => {
   let bound = false;
@@ -158,17 +159,25 @@ const reportsAnnualReportPage = (() => {
     AppUtils.initSelect2(".generator-filters");
   };
 
-  const loadReportsOverview = () => {
-    AppUtils.cachedGScriptCall(
-      "reportsOverview",
-      "getReportsOverview",
-      [],
-      (data) => {
-        updateAutomationStatus(data);
-      },
-      false,
-      false,
-    );
+  const loadReportsOverview = async () => {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        "reportsOverview",
+        "getReportsOverview",
+        [sessionId, signature],
+        (data) => {
+          updateAutomationStatus(data);
+        },
+        false,
+        false,
+      );
+    } catch (error) {
+      console.error("[ReportsAnnual] Failed to load reports overview:", error);
+
+      AppUtils.showError(error?.message || "Unable to load reports overview.");
+    }
   };
 
   const updateAutomationStatus = (data) => {

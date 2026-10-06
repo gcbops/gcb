@@ -41,7 +41,11 @@ function handleGcbOAuthCallback(e) {
 
     const gcbSession = createGcbSession(authorizedUser);
 
+    console.log("[GCB Auth] GCB session created.");
+
     const handoffTicket = createGcbSessionHandoff(gcbSession);
+
+    console.log("[GCB Auth] Handoff ticket created.");
 
     const githubUrl = "https://gcbops.github.io/gcb/";
 
@@ -49,14 +53,177 @@ function handleGcbOAuthCallback(e) {
       handoffTicket,
     )}`;
 
-    return HtmlService.createHtmlOutput(`
-      <script>
-        window.top.location.href =
-          ${JSON.stringify(redirectUrl)};
-      </script>
+    console.log("[GCB Auth] Redirect URL:", redirectUrl);
 
-      <p>Authentication successful.</p>
-      <p>Returning to GCB...</p>
+    return HtmlService.createHtmlOutput(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <base target="_blank">
+        <meta charset="UTF-8">
+
+        <title>Go Crayons GS</title>
+
+        <style>
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+          }
+
+          body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 24px;
+            box-sizing: border-box;
+
+            font-family:
+              -apple-system,
+              BlinkMacSystemFont,
+              "Segoe UI",
+              Roboto,
+              Arial,
+              sans-serif;
+
+            background: #f8f9fa;
+            color: #212529;
+          }
+
+          .gcb-auth-result {
+            width: min(420px, 100%);
+
+            padding: 32px;
+
+            text-align: center;
+
+            background: #fff;
+
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 16px;
+
+            box-shadow:
+              0 16px 40px rgba(0, 0, 0, 0.08);
+          }
+
+          .gcb-auth-icon {
+            width: 48px;
+            height: 48px;
+
+            margin: 0 auto 18px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 50%;
+
+            background: #ecfdf3;
+            color: #12b76a;
+
+            font-size: 24px;
+            font-weight: 700;
+          }
+
+          .gcb-auth-result h1 {
+            margin: 0 0 8px;
+
+            font-size: 22px;
+            font-weight: 700;
+          }
+
+          .gcb-auth-result p {
+            margin: 0 0 24px;
+
+            color: #667085;
+
+            font-size: 14px;
+            line-height: 1.6;
+          }
+
+          .gcb-auth-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+
+            width: 100%;
+            min-height: 48px;
+
+            padding: 0 20px;
+
+            box-sizing: border-box;
+
+            border: 0;
+            border-radius: 10px;
+
+            background: #0d6efd;
+            color: #fff;
+
+            font-size: 14px;
+            font-weight: 600;
+
+            text-decoration: none;
+
+            cursor: pointer;
+
+            transition:
+              background-color 0.15s ease,
+              box-shadow 0.15s ease;
+          }
+
+          .gcb-auth-button:hover {
+            background: #0b5ed7;
+
+            box-shadow:
+              0 4px 12px rgba(13, 110, 253, 0.2);
+          }
+
+          .gcb-auth-note {
+            margin-top: 14px;
+
+            font-size: 11px;
+            color: #98a2b3;
+          }
+        </style>
+      </head>
+
+      <body>
+        <div class="gcb-auth-result">
+
+          <div class="gcb-auth-icon">
+            ✓
+          </div>
+
+          <h1>
+            Authentication successful
+          </h1>
+
+          <p>
+            Your Google account has been verified.
+            Continue to Go Crayons GS to open the dashboard.
+          </p>
+
+          <a
+            id="gcb-continue-button"
+            class="gcb-auth-button"
+            href="${redirectUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+            onclick="setTimeout(() => window.close(), 10000);"
+          >
+            Continue to Go Crayons GS
+          </a>
+
+          <div class="gcb-auth-note">
+            This tab will close 10 seconds after continuing.
+          </div>
+
+        </div>
+      </body>
+      </html>
     `);
   } catch (error) {
     console.error("[GCB Auth] OAuth callback failed:", error);

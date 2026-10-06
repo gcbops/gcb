@@ -3,6 +3,7 @@ import { ReportHistory } from "./history";
 import { TableModule } from "../tables/tables";
 import { reportsMonthlyReportPage } from "../pages/reports-monthly-report-page";
 import { reportsAnnualReportPage } from "../pages/reports-annual-report-page";
+import { GcbAuthModule } from "../auth/auth";
 
 const ReportGenerator = (() => {
 
@@ -52,29 +53,35 @@ const ReportGenerator = (() => {
     AppUtils.showError(message);
   }
 
-  function prepareReportGeneration(type, btn, params, loading) {
+  async function prepareReportGeneration(type, btn, params, loading) {
     const cfg = CONFIG[type];
     const reportName = cfg.reportName(params);
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "checkExistingReport",
-      args: [type, reportName],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      AppUtils.gScriptRun({
+        gscriptFunc: "checkExistingReport",
+        args: [sessionId, signature, type, reportName],
 
-      onError: (err) => {
-        setGenerateState(type, false, loading);
-        AppUtils.showError(err);
-      },
+        onError: (err) => {
+          setGenerateState(type, false, loading);
+          AppUtils.showError(err);
+        },
 
-      onSuccess: (result) => {
-        if (!result.exists) {
-          loading.setText("Generating Report");
-          requestReportGeneration(cfg, type, btn, params, loading);
-          return;
-        }
+        onSuccess: (result) => {
+          if (!result.exists) {
+            loading.setText("Generating Report");
+            requestReportGeneration(cfg, type, btn, params, loading);
+            return;
+          }
 
-        showExistsModal(cfg, type, btn, params, result.report, loading);
-      },
-    });
+          showExistsModal(cfg, type, btn, params, result.report, loading);
+        },
+      });
+    } catch (error) {
+      setGenerateState(type, false, loading);
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function showExistsModal(cfg, type, btn, params, report, loading) {
@@ -138,15 +145,25 @@ const ReportGenerator = (() => {
     });
   }
 
-  function requestReportGeneration(cfg, type, btn, params, loading) {
-    AppUtils.gScriptRun({
-      gscriptFunc: "updateCustomReportPDF",
-      args: [type, ...cfg.updateArgs(params)],
+  async function requestReportGeneration(cfg, type, btn, params, loading) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      AppUtils.gScriptRun({
+        gscriptFunc: "updateCustomReportPDF",
+        args: [sessionId, signature, type, ...cfg.updateArgs(params)],
 
-      onError: (err) => handleGenerateError(type, btn, err, loading),
+        onError: (err) => handleGenerateError(type, btn, err, loading),
 
-      onSuccess: () => checkReportReady(cfg, type, btn, "", loading),
-    });
+        onSuccess: () => checkReportReady(cfg, type, btn, "", loading),
+      });
+    } catch (error) {
+      handleGenerateError(
+        type,
+        btn,
+        error?.message || "Authentication required.",
+        loading,
+      );
+    }
   }
 
   function checkReportReady(cfg, type, btn, attempts = 0, loading) {
@@ -177,35 +194,45 @@ const ReportGenerator = (() => {
     });
   }
 
-  function saveReport(type, btn, cfg, loading) {
-    AppUtils.gScriptRun({
-      gscriptFunc: "saveCustomReportPDF",
-      args: [type],
+  async function saveReport(type, btn, cfg, loading) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      AppUtils.gScriptRun({
+        gscriptFunc: "saveCustomReportPDF",
+        args: [sessionId, signature, type],
 
-      onError: (err) => {
-        handleGenerateError(type, btn, err, loading);
-      },
+        onError: (err) => {
+          handleGenerateError(type, btn, err, loading);
+        },
 
-      onSuccess: () => {
-        loading.setSuccess("Generated successfully");
+        onSuccess: () => {
+          loading.setSuccess("Generated successfully");
 
-        setGenerateState(type, false);
+          setGenerateState(type, false);
 
-        if (type === "monthly") {
-          reportsMonthlyReportPage.refresh();
-        }
+          if (type === "monthly") {
+            reportsMonthlyReportPage.refresh();
+          }
 
-        if (type === "yearly") {
-          reportsAnnualReportPage.refresh();
-        }
+          if (type === "yearly") {
+            reportsAnnualReportPage.refresh();
+          }
 
-        cfg.reloadHistory(() => {
-          TableModule.highlightLatestRow(cfg.historyTableId, 0);
-        });
+          cfg.reloadHistory(() => {
+            TableModule.highlightLatestRow(cfg.historyTableId, 0);
+          });
 
-        AppUtils.showDashboardToast(cfg.successMessage, "success");
-      },
-    });
+          AppUtils.showDashboardToast(cfg.successMessage, "success");
+        },
+      });
+    } catch (error) {
+      handleGenerateError(
+        type,
+        btn,
+        error?.message || "Authentication required.",
+        loading,
+      );
+    }
   }
 
   function generateMonthlyReport(month, year, btn, loading) {

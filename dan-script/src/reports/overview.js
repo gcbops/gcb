@@ -1,24 +1,36 @@
 import { AppUtils } from "../utils";
 import { DataTableModule } from "../tables/data-table";
 import { TableFilterService } from "../tables/table-filter-service";
+import { GcbAuthModule } from "../auth/auth";
 
 const ReportsOverview = (() => {
   const TABLE_ID = "#reports-export-table";
   const TABLE_TITLE = "Reports Overview";
 
-  function loadReportsOverview() {
+  async function loadReportsOverview() {
     DataTableModule.showLoader(TABLE_ID);
 
-    AppUtils.cachedGScriptCall(
-      "reportsOverview",
-      "getReportsOverview",
-      [],
-      (data) => {
-        renderReportsOverview(data);
-      },
-      false,
-      true,
-    );
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        "reportsOverview",
+        "getReportsOverview",
+        [sessionId, signature],
+        (data) => {
+          renderReportsOverview(data);
+        },
+        false,
+        true,
+      );
+    } catch (error) {
+      console.error(
+        "[ReportsOverview] Failed to load reports overview:",
+        error,
+      );
+
+      AppUtils.showError(error?.message || "Unable to load reports overview.");
+    }
   }
 
   function renderReportsOverview(data) {

@@ -9,11 +9,11 @@ const GcbAuthModule = (() => {
   let initializing = null;
 
   function getSessionId() {
-    return sessionStorage.getItem(SESSION_ID_KEY) || "";
+    return localStorage.getItem(SESSION_ID_KEY) || "";
   }
 
   function getSessionSignature() {
-    return sessionStorage.getItem(SESSION_SIGNATURE_KEY) || "";
+    return localStorage.getItem(SESSION_SIGNATURE_KEY) || "";
   }
 
   function hasSession() {
@@ -25,12 +25,17 @@ const GcbAuthModule = (() => {
       throw new Error("Invalid GCB session response.");
     }
 
-    sessionStorage.setItem(SESSION_ID_KEY, result.sessionId);
+    localStorage.setItem(SESSION_ID_KEY, result.sessionId);
 
-    sessionStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+    localStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
   }
 
   function clearSession() {
+    localStorage.removeItem(SESSION_ID_KEY);
+
+    localStorage.removeItem(SESSION_SIGNATURE_KEY);
+
+    // Clean up sessions created before the localStorage migration.
     sessionStorage.removeItem(SESSION_ID_KEY);
 
     sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
@@ -50,10 +55,7 @@ const GcbAuthModule = (() => {
 
             window.GCB_AUTH_TICKET = "";
 
-            if (
-              window.GCB_IS_GITHUB_EMBEDDED === true &&
-              window.parent !== window
-            ) {
+            if (window.GCB_IS_GITHUB_EMBEDDED === true) {
               console.log(
                 "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper.",
               );

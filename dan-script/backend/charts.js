@@ -1,4 +1,4 @@
-function getDailyChartData() {
+function getDailyChartData(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   const sheet = getLabSheet();
@@ -14,7 +14,7 @@ function getDailyChartData() {
     .map(([label, value]) => [String(label), Number(value)]);
 }
 
-function getMonthlyChartData() {
+function getMonthlyChartData(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   const sheet = getLabSheet();
@@ -30,7 +30,19 @@ function getMonthlyChartData() {
     .map(([label, value]) => [String(label), Number(value)]);
 }
 
-function getYearlyChartData(year = "all") {
+function getHourlyChartData(sessionId, signature) {
+  requireCapability(sessionId, signature, "hours.view");
+
+  const sheet = getSheetSafe("Hourly History");
+  if (!sheet) return [];
+
+  const values = sheet.getRange("J4:K").getValues();
+  return values
+    .filter((r) => r[0] !== "" && r[0] !== null)
+    .map((r) => [String(r[0]), Number(r[1]) || 0]);
+}
+
+function getYearlyChartData(sessionId, signature, year = "all") {
   requireCapability(sessionId, signature, "hours.view");
 
   const sheet = getLabSheet();
@@ -77,7 +89,7 @@ function getYearlyChartData(year = "all") {
   return values.filter((row) => Number(row[0]) === Number(year)).map(mapRow);
 }
 
-function getPrevYearMonthlyChartData() {
+function getPrevYearMonthlyChartData(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   const sheet = getLabSheet();
@@ -93,7 +105,7 @@ function getPrevYearMonthlyChartData() {
     .map(([label, value]) => [String(label), Number(value)]);
 }
 
-function getCurrentYearTargetChartData() {
+function getCurrentYearTargetChartData(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -179,7 +191,7 @@ function getCurrentYearTargetChartData() {
   }
 }
 
-function getCurrentMonthLogChartData(month, year) {
+function getCurrentMonthLogChartData(sessionId, signature, month, year) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -216,7 +228,7 @@ function getCurrentMonthLogChartData(month, year) {
   }
 }
 
-function getYearlyMonthlyHoursChartData(year) {
+function getYearlyMonthlyHoursChartData(sessionId, signature, year) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -254,7 +266,7 @@ function getYearlyMonthlyHoursChartData(year) {
   }
 }
 
-function getMonthlyHoursByYears(years) {
+function getMonthlyHoursByYears(sessionId, signature, years) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -358,7 +370,7 @@ function getMonthlyHoursByYears(years) {
   }
 }
 
-function updateDailyOverviewChartRange(startDate, endDate) {
+function updateDailyOverviewChartRange(sessionId, signature, startDate, endDate) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {

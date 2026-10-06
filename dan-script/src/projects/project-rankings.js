@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { AppUtils } from "../utils";
 
 const ProjectRankings = (() => {
@@ -23,39 +24,57 @@ const ProjectRankings = (() => {
     initialized = false;
   }
 
-  function loadProjectRankings(forceRefresh = false) {
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getProjectRankings",
-      [],
-      (data) => {
-        if (!data) {
-          renderError();
-          return;
-        }
+  async function loadProjectRankings(forceRefresh = false) {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        renderSummary(data.summary);
-        renderTopProjects(data.topProjects);
-        renderRecentProjects(data.recentProjects);
-        renderActivity(data.activity);
-        renderClientSummary(data.clientSummary);
-      },
-      false,
-      forceRefresh,
-    );
-  }
-
-  function renderSummary(summary) {
-    if (summary === undefined) {
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
         "getProjectRankings",
-        [],
+        [sessionId, signature],
         (data) => {
-          renderSummary(data?.summary);
+          if (!data) {
+            renderError();
+            return;
+          }
+
+          renderSummary(data.summary);
+          renderTopProjects(data.topProjects);
+          renderRecentProjects(data.recentProjects);
+          renderActivity(data.activity);
+          renderClientSummary(data.clientSummary);
         },
         false,
+        forceRefresh,
       );
+    } catch (error) {
+      console.error(
+        "[ProjectRankings] Failed to load project rankings:",
+        error,
+      );
+
+      renderError();
+    }
+  }
+
+  async function renderSummary(summary) {
+    if (summary === undefined) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getProjectRankings",
+          [sessionId, signature],
+          (data) => {
+            renderSummary(data?.summary);
+          },
+          false,
+        );
+      } catch (error) {
+        console.error("[ProjectRankings] Failed to load summary:", error);
+      }
+
       return;
     }
 
@@ -70,18 +89,24 @@ const ProjectRankings = (() => {
     $("#project-new-year-count").text(summary.newYear ?? 0);
   }
 
-  function renderTopProjects(projects) {
-    // If no data was supplied, load the project rankings data first.
+  async function renderTopProjects(projects) {
     if (projects === undefined) {
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getProjectRankings",
-        [],
-        (data) => {
-          renderTopProjects(data?.topProjects);
-        },
-        false,
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getProjectRankings",
+          [sessionId, signature],
+          (data) => {
+            renderTopProjects(data?.topProjects);
+          },
+          false,
+        );
+      } catch (error) {
+        console.error("[ProjectRankings] Failed to load top projects:", error);
+      }
+
       return;
     }
 
@@ -126,30 +151,6 @@ const ProjectRankings = (() => {
           ${AppUtils.escapeHtml(String(hours))} hrs
         </div>
       `;
-
-      // item.innerHTML = `
-      //   <div class="project-position">
-      //     ${index + 1}
-      //   </div>
-
-      //   <div class="project-avatar project-icon-primary">
-      //     <i class="fa fa-folder"></i>
-      //   </div>
-
-      //   <div class="project-project">
-      //     <div class="project-project-name">
-      //       ${AppUtils.escapeHtml(name)}
-      //     </div>
-
-      //     <div class="project-project-meta">
-      //       ${AppUtils.escapeHtml(client)}
-      //     </div>
-      //   </div>
-
-      //   <div class="project-value">
-      //     ${AppUtils.escapeHtml(String(hours))} hrs
-      //   </div>
-      // `;
 
       $container[0].appendChild(item);
     });

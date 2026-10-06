@@ -274,29 +274,29 @@ function sendDiscordReport(report) {
   return true;
 }
 
-function emailLatestReport(report) {
+function emailLatestReport(sessionId, signature, report) {
   requireCapability(sessionId, signature, "reports.send");
 
   return sendEmailReport(report);
 }
 
-function sendRequestedEmailReport(reportId) {
+function sendRequestedEmailReport(sessionId, signature, reportId) {
   requireCapability(sessionId, signature, "reports.send");
 
-  const report = getReportById(reportId);
+  const report = getReportByIdInternal(reportId);
   return sendEmailReport(report);
 }
 
-function sendLatestReportToDiscord(report) {
+function sendLatestReportToDiscord(sessionId, signature, report) {
   requireCapability(sessionId, signature, "reports.send");
 
   return sendDiscordReport(report);
 }
 
-function sendRequestedDiscordReport(reportId) {
+function sendRequestedDiscordReport(sessionId, signature, reportId) {
   requireCapability(sessionId, signature, "reports.send");
 
-  const report = getReportById(reportId);
+  const report = getReportByIdInternal(reportId);
   return sendDiscordReport(report);
 }
 

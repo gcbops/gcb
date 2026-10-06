@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { AppUtils } from "../utils.js";
 
 const ClientActivityTrends = (() => {
@@ -55,20 +56,30 @@ const ClientActivityTrends = (() => {
     load();
   }
 
-  function load() {
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getClientActivityTrends",
-      [],
-      (data) => {
-        if (!data || typeof data !== "object") {
-          renderEmpty();
-          return;
-        }
+  async function load() {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        render(data);
-      },
-    );
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getClientActivityTrends",
+        [sessionId, signature],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            renderEmpty();
+            return;
+          }
+
+          render(data);
+        },
+      );
+    } catch (error) {
+      console.error("[ClientActivityTrends] Authentication failed:", error);
+
+      renderEmpty();
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function render(data) {

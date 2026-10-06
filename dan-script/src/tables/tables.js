@@ -2,6 +2,7 @@ import { DataTableModule } from "./data-table.js";
 import { TableRenderer } from "./table-renderer.js";
 import { AppUtils } from "../utils.js";
 import { TodayHoursEditor } from "./today-hours-editor.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const TableModule = (() => {
   /* ============================================================
@@ -71,7 +72,11 @@ const TableModule = (() => {
    * CLIENT ACTIONS
    * ========================================================== */
 
-  function addClientHours(clientName, manual = false, isForProject = false) {
+  async function addClientHours(
+    clientName,
+    manual = false,
+    isForProject = false,
+  ) {
     if (!clientName) {
       return;
     }
@@ -80,29 +85,37 @@ const TableModule = (() => {
       $("#client").val(clientName).trigger("change");
     }
 
-    AppUtils.cachedGScriptCall(
-      `sheetExists_${clientName}`,
-      "sheetExists",
-      [clientName],
-      (exists) => {
-        if (!exists) {
-          AppUtils.showDashboardToast(
-            `Sheet ${clientName} not found!`,
-            "error",
-          );
-          return;
-        }
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        AppUtils.openDrawer("#drawerManualAdd");
+      AppUtils.cachedGScriptCall(
+        `sheetExists_${clientName}`,
+        "sheetExists",
+        [sessionId, signature, clientName],
+        (exists) => {
+          if (!exists) {
+            AppUtils.showDashboardToast(
+              `Sheet ${clientName} not found!`,
+              "error",
+            );
+            return;
+          }
 
-        if (!isForProject) {
-          loadClientTasks(clientName);
-        }
-      },
-    );
+          AppUtils.openDrawer("#drawerManualAdd");
+
+          if (!isForProject) {
+            loadClientTasks(clientName);
+          }
+        },
+      );
+    } catch (error) {
+      console.error("[TableModule] Failed to check client sheet:", error);
+
+      AppUtils.showError(error?.message || "Unable to check client sheet.");
+    }
   }
 
-  function viewClientHoursHistory(clientName) {
+  async function viewClientHoursHistory(clientName) {
     if (!clientName) {
       return;
     }
@@ -111,55 +124,69 @@ const TableModule = (() => {
 
     AppUtils.showDashboardToast("Loading records ...", "info");
 
-    AppUtils.cachedGScriptCall(
-      `sheetExists_${clientName}`,
-      "sheetExists",
-      [clientName],
-      (exists) => {
-        if (!exists) {
-          AppUtils.showDashboardToast(
-            `Sheet ${clientName} not found!`,
-            "error",
-          );
-          return;
-        }
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        loadClientHours(clientName);
-        loadClientHoursOverview(clientName);
-      },
-    );
+      AppUtils.cachedGScriptCall(
+        `sheetExists_${clientName}`,
+        "sheetExists",
+        [sessionId, signature, clientName],
+        (exists) => {
+          if (!exists) {
+            AppUtils.showDashboardToast(
+              `Sheet ${clientName} not found!`,
+              "error",
+            );
+            return;
+          }
+
+          loadClientHours(clientName);
+          loadClientHoursOverview(clientName);
+        },
+      );
+    } catch (error) {
+      console.error("[TableModule] Failed to check client sheet:", error);
+
+      AppUtils.showError(error?.message || "Unable to check client sheet.");
+    }
   }
 
-  function editClientSheet(clientName) {
+  async function editClientSheet(clientName) {
     if (!clientName) {
       return;
     }
 
     AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "getClientSheetUrl",
-      args: [clientName],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (url) => {
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-        } else {
-          AppUtils.showError("Invalid sheet URL.");
-        }
-      },
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
+        args: [sessionId, signature, clientName],
 
-      onError: () => {
-        AppUtils.showError("Sheet doesn't exist!");
-      },
-    });
+        onSuccess: (url) => {
+          if (url && String(url).startsWith("http")) {
+            window.open(url, "_blank");
+          } else {
+            AppUtils.showError("Invalid sheet URL.");
+          }
+        },
+
+        onError: (error) => {
+          AppUtils.showError(error?.message || "Sheet doesn't exist!");
+        },
+      });
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   /* ============================================================
    * CLIENT TASKS
    * ========================================================== */
 
-  function loadClientTasks(clientName) {
+  async function loadClientTasks(clientName) {
     if (!clientName) {
       return;
     }
@@ -182,50 +209,68 @@ const TableModule = (() => {
 
     $submitBtn.prop("disabled", true);
 
-    AppUtils.cachedGScriptCall(
-      `getTaskOptions_${clientName}`,
-      "getTaskOptions",
-      [clientName],
-      (returned) => {
-        const tasks = parseTaskOptions(returned);
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        $taskSelect.empty();
+      AppUtils.cachedGScriptCall(
+        `getTaskOptions_${clientName}`,
+        "getTaskOptions",
+        [sessionId, signature, clientName],
+        (returned) => {
+          const tasks = parseTaskOptions(returned);
 
-        if (!tasks.length) {
-          $taskSelect
-            .append(new Option("No tasks found", ""))
-            .val("")
-            .trigger("change");
+          $taskSelect.empty();
 
-          return;
-        }
+          if (!tasks.length) {
+            $taskSelect
+              .append(new Option("No tasks found", ""))
+              .val("")
+              .trigger("change");
 
-        tasks.forEach((task) => {
-          const value =
-            typeof task === "object" ? task.value || task.id || "" : task;
-
-          const text =
-            typeof task === "object" ? task.label || task.name || value : task;
-
-          if (!value && !text) {
             return;
           }
 
-          $taskSelect.append(new Option(text, value));
-        });
+          tasks.forEach((task) => {
+            const value =
+              typeof task === "object" ? task.value || task.id || "" : task;
 
-        /*
-         * Select the first actual task option.
-         *
-         * The first option is now the first real task because
-         * the select was emptied before adding the tasks.
-         */
-        const firstValue = $taskSelect.find("option:first").val();
+            const text =
+              typeof task === "object"
+                ? task.label || task.name || value
+                : task;
 
-        $taskSelect.val(firstValue || "").trigger("change");
-        $submitBtn.prop("disabled", false);
-      },
-    );
+            if (!value && !text) {
+              return;
+            }
+
+            $taskSelect.append(new Option(text, value));
+          });
+
+          /*
+           * Select the first actual task option.
+           *
+           * The first option is now the first real task because
+           * the select was emptied before adding the tasks.
+           */
+          const firstValue = $taskSelect.find("option:first").val();
+
+          $taskSelect.val(firstValue || "").trigger("change");
+          $submitBtn.prop("disabled", false);
+        },
+      );
+    } catch (error) {
+      console.error("[TableModule] Failed to load client tasks:", error);
+
+      $taskSelect
+        .empty()
+        .append(new Option("Unable to load tasks", ""))
+        .val("")
+        .trigger("change");
+
+      $submitBtn.prop("disabled", true);
+
+      AppUtils.showError(error?.message || "Unable to load client tasks.");
+    }
   }
 
   function parseTaskOptions(returned) {
@@ -249,7 +294,7 @@ const TableModule = (() => {
    * CLIENT HOURS
    * ========================================================== */
 
-  function loadClientHours(clientName) {
+  async function loadClientHours(clientName) {
     const $table = $("#client-hours-table");
     const $tbody = $table.find("tbody");
 
@@ -270,13 +315,16 @@ const TableModule = (() => {
       </tr>
     `);
 
-    AppUtils.cachedGScriptCall(
-      `getClientHourLogData_${clientName}`,
-      "getClientHourLogData",
-      [clientName],
-      (data) => {
-        if (!Array.isArray(data) || !data.length) {
-          $tbody.html(`
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        `getClientHourLogData_${clientName}`,
+        "getClientHourLogData",
+        [sessionId, signature, clientName],
+        (data) => {
+          if (!Array.isArray(data) || !data.length) {
+            $tbody.html(`
             <tr>
               <td colspan="${colspan}" class="text-center">
                 No records found
@@ -284,16 +332,16 @@ const TableModule = (() => {
             </tr>
           `);
 
-          return;
-        }
+            return;
+          }
 
-        $tbody.empty();
+          $tbody.empty();
 
-        data
-          .sort((a, b) => new Date(b[3]) - new Date(a[3]))
-          .slice(0, 5)
-          .forEach((row) => {
-            $tbody.append(`
+          data
+            .sort((a, b) => new Date(b[3]) - new Date(a[3]))
+            .slice(0, 5)
+            .forEach((row) => {
+              $tbody.append(`
               <tr>
                 <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
                 <td>${AppUtils.escapeHtml(row[1] ?? "")}</td>
@@ -301,30 +349,54 @@ const TableModule = (() => {
                 <td>${AppUtils.escapeHtml(row[3] ?? "")}</td>
               </tr>
             `);
-          });
-      },
-    );
+            });
+        },
+      );
+    } catch (error) {
+      console.error("[TableModule] Failed to load client hour history:", error);
+
+      $tbody.html(`
+      <tr>
+        <td colspan="${colspan}" class="text-center">
+          Unable to load records
+        </td>
+      </tr>
+    `);
+    }
   }
 
-  function loadClientHoursOverview(clientName) {
-    AppUtils.cachedGScriptCall(
-      `getClientHours_${clientName}`,
-      "getClientHoursForOverview",
-      [clientName],
-      (data) => {
-        if (!data || data.error === "NOT_FOUND") {
-          AppUtils.showError("Sheet not found!");
-          return;
-        }
+  async function loadClientHoursOverview(clientName) {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        AppUtils.openDrawer("#drawerManualInfo");
+      AppUtils.cachedGScriptCall(
+        `getClientHours_${clientName}`,
+        "getClientHoursForOverview",
+        [sessionId, signature, clientName],
+        (data) => {
+          if (!data || data.error === "NOT_FOUND") {
+            AppUtils.showError("Sheet not found!");
+            return;
+          }
 
-        $("#total-hours").text(data.totalHrs || 0);
-        $("#weekly-hours").text(data.weekHrs || 0);
-        $("#monthly-hours").text(data.monthHrs || 0);
-        $("#yearly-hours").text(data.yearHrs || 0);
-      },
-    );
+          AppUtils.openDrawer("#drawerManualInfo");
+
+          $("#total-hours").text(data.totalHrs || 0);
+          $("#weekly-hours").text(data.weekHrs || 0);
+          $("#monthly-hours").text(data.monthHrs || 0);
+          $("#yearly-hours").text(data.yearHrs || 0);
+        },
+      );
+    } catch (error) {
+      console.error(
+        "[TableModule] Failed to load client hours overview:",
+        error,
+      );
+
+      AppUtils.showError(
+        error?.message || "Unable to load client hours overview.",
+      );
+    }
   }
 
   /* ============================================================

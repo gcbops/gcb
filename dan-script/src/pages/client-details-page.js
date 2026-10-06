@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { ChartModule } from "../charts.js";
 import { RouterModule } from "../routers.js";
 import { DataTableModule } from "../tables/data-table.js";
@@ -71,17 +72,23 @@ const clientDetailsPage = (() => {
     clientName = "";
   }
 
-  function load(reset = false) {
+  async function load(reset = false) {
     const cacheKey = `${CACHE_KEY_PREFIX}${clientName}`;
 
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      "getClientDetails",
-      [clientName],
-      render,
-      false,
-      reset,
-    );
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        "getClientDetails",
+        [sessionId, signature, clientName],
+        render,
+        false,
+        reset,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function render(data) {
@@ -343,22 +350,28 @@ const clientDetailsPage = (() => {
     }
   }
 
-  function openClientSheet() {
-    AppUtils.gScriptRun({
-      gscriptFunc: "getClientSheetUrl",
+  async function openClientSheet() {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [clientName],
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
 
-      onSuccess: (url) => {
-        if (url) {
-          window.open(url, "_blank");
-        }
-      },
+        args: [sessionId, signature, clientName],
 
-      onError: (error) => {
-        AppUtils.showError(error?.message || "Unable to open client sheet.");
-      },
-    });
+        onSuccess: (url) => {
+          if (url) {
+            window.open(url, "_blank");
+          }
+        },
+
+        onError: (error) => {
+          AppUtils.showError(error?.message || "Unable to open client sheet.");
+        },
+      });
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function getEditableField(buttonId) {
@@ -525,7 +538,7 @@ const clientDetailsPage = (() => {
     );
   }
 
-  function submitEditableInfo(
+  async function submitEditableInfo(
     clientName,
     field,
     value,
@@ -545,33 +558,47 @@ const clientDetailsPage = (() => {
       input.disabled = true;
     }
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "updateClientInformation",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [clientName, field, value],
+      AppUtils.gScriptRun({
+        gscriptFunc: "updateClientInformation",
 
-      onSuccess: () => {
-        restoreEditButton(containerId, value);
+        args: [sessionId, signature, clientName, field, value],
 
-        AppUtils.showDashboardToast("Client information updated.", "success");
+        onSuccess: () => {
+          restoreEditButton(containerId, value);
 
-        AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName}`);
-      },
+          AppUtils.showDashboardToast("Client information updated.", "success");
 
-      onError: (error) => {
-        saveButton.disabled = false;
+          AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName}`);
+        },
 
-        if (input) {
-          input.disabled = false;
-        }
+        onError: (error) => {
+          saveButton.disabled = false;
 
-        saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
+          if (input) {
+            input.disabled = false;
+          }
 
-        AppUtils.showError(
-          error?.message || "Unable to update client information.",
-        );
-      },
-    });
+          saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
+
+          AppUtils.showError(
+            error?.message || "Unable to update client information.",
+          );
+        },
+      });
+    } catch (error) {
+      saveButton.disabled = false;
+
+      if (input) {
+        input.disabled = false;
+      }
+
+      saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function setText(selector, value) {

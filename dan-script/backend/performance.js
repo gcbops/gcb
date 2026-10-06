@@ -1,4 +1,4 @@
-function getPerformanceOverview() {
+function getPerformanceOverview(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -123,7 +123,7 @@ function getPerformanceOverview() {
   }
 }
 
-function getCurrentTargetProgress() {
+function getCurrentTargetProgress(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -239,7 +239,7 @@ function getCurrentTargetProgress() {
   }
 }
 
-function updatePerformanceTarget(type, value) {
+function updatePerformanceTarget(sessionId, signature, type, value) {
   requireCapability(sessionId, signature, "hours.edit");
 
   try {
@@ -278,7 +278,7 @@ function updatePerformanceTarget(type, value) {
   }
 }
 
-function getProductivityOverview() {
+function getProductivityOverview(sessionId, signature) {
   requireCapability(sessionId, signature, "hours.view");
 
   try {
@@ -339,7 +339,7 @@ function getProductivityOverview() {
   }
 }
 
-function getPerformanceSummary(yearType) {
+function getPerformanceSummary(sessionId, signature, yearType) {
   requireCapability(sessionId, signature, "hours.view");
 
   const sheet = getSheetSafe("Other Analytics");

@@ -1,6 +1,7 @@
 import { DataTableModule } from "../tables/data-table";
 import { ChartModule } from "../charts";
 import { AppUtils } from "../utils";
+import { GcbAuthModule } from "../auth/auth";
 
 const performanceOverviewPage = (() => {
   let initialized = false;
@@ -40,53 +41,78 @@ const performanceOverviewPage = (() => {
     eventsBound = true;
   }
 
-  function loadPerformanceOverview(log = false, refresh = false) {
+  async function loadPerformanceOverview(log = false, refresh = false) {
     DataTableModule.showLoader(TABLE_ID);
 
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getPerformanceOverview",
-      [],
-      (data) => {
-        if (
-          !data ||
-          typeof data !== "object" ||
-          !Array.isArray(data.yearlyData)
-        ) {
-          DataTableModule.showError(
-            TABLE_ID,
-            "Unable to load performance data.",
-          );
-          return;
-        }
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        renderPerformanceOverview(data, log, refresh);
-      },
-      log,
-      refresh,
-    );
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getPerformanceOverview",
+        [sessionId, signature],
+        (data) => {
+          if (
+            !data ||
+            typeof data !== "object" ||
+            !Array.isArray(data.yearlyData)
+          ) {
+            DataTableModule.showError(
+              TABLE_ID,
+              "Unable to load performance data.",
+            );
+            return;
+          }
+
+          renderPerformanceOverview(data, log, refresh);
+        },
+        log,
+        refresh,
+      );
+    } catch (error) {
+      console.error(
+        "[PerformanceOverview] Failed to load performance data:",
+        error,
+      );
+
+      DataTableModule.showError(
+        TABLE_ID,
+        error?.message || "Unable to load performance data.",
+      );
+    }
   }
 
-  function loadMonthlyPerformanceChart(log = false, refresh = false) {
-    AppUtils.cachedGScriptCall(
-      "performanceMonthlyChart",
-      "getCurrentYearTargetChartData",
-      [],
-      (data) => {
-        if (!Array.isArray(data)) {
-          renderMonthlyPerformanceChart([]);
-          return;
-        }
+  async function loadMonthlyPerformanceChart(log = false, refresh = false) {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        if (log) {
-          console.log("[PerformanceOverview] Monthly chart data:", data);
-        }
+      AppUtils.cachedGScriptCall(
+        "performanceMonthlyChart",
+        "getCurrentYearTargetChartData",
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            renderMonthlyPerformanceChart([]);
+            return;
+          }
 
-        renderMonthlyPerformanceChart(data);
-      },
-      log,
-      refresh,
-    );
+          if (log) {
+            console.log("[PerformanceOverview] Monthly chart data:", data);
+          }
+
+          renderMonthlyPerformanceChart(data);
+        },
+        log,
+        refresh,
+      );
+    } catch (error) {
+      console.error(
+        "[PerformanceOverview] Failed to load monthly chart:",
+        error,
+      );
+
+      renderMonthlyPerformanceChart([]);
+    }
   }
 
   function renderMonthlyPerformanceChart(data) {

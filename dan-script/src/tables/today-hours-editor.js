@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth.js";
 import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
@@ -82,14 +83,17 @@ const TodayHoursEditor = (() => {
     });
   }
 
-  function load(clientName, $modal) {
-    AppUtils.cachedGScriptCall(
-      `${CACHE_PREFIX}${clientName}`,
-      "getTodayClientHours",
-      [clientName],
-      (response) => {
-        if (!response?.success) {
-          $modal.find(RECORDS_ID).html(`
+  async function load(clientName, $modal) {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        `${CACHE_PREFIX}${clientName}`,
+        "getTodayClientHours",
+        [sessionId, signature, clientName],
+        (response) => {
+          if (!response?.success) {
+            $modal.find(RECORDS_ID).html(`
             <div class="text-center text-danger py-3">
               ${AppUtils.escapeHtml(
                 response?.message || "Unable to load today's records.",
@@ -97,35 +101,44 @@ const TodayHoursEditor = (() => {
             </div>
           `);
 
-          return;
-        }
+            return;
+          }
 
-        loadTaskOptions(clientName, $modal, response.records || []);
-      },
-      false,
-      false,
-    );
+          loadTaskOptions(clientName, $modal, response.records || []);
+        },
+        false,
+        false,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Unable to load today's records.");
+    }
   }
 
-  function loadTaskOptions(clientName, $modal, records) {
-    AppUtils.cachedGScriptCall(
-      `getTaskOptions_${clientName}`,
-      "getTaskOptions",
-      [clientName],
-      (returned) => {
-        const tasks = Array.isArray(returned)
-          ? returned
-          : (() => {
-              try {
-                return JSON.parse(returned);
-              } catch {
-                return [];
-              }
-            })();
+  async function loadTaskOptions(clientName, $modal, records) {
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-        render(records, tasks, $modal);
-      },
-    );
+      AppUtils.cachedGScriptCall(
+        `getTaskOptions_${clientName}`,
+        "getTaskOptions",
+        [sessionId, signature, clientName],
+        (returned) => {
+          const tasks = Array.isArray(returned)
+            ? returned
+            : (() => {
+                try {
+                  return JSON.parse(returned);
+                } catch {
+                  return [];
+                }
+              })();
+
+          render(records, tasks, $modal);
+        },
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Unable to load task options.");
+    }
   }
 
   function render(records, tasks, $modal) {

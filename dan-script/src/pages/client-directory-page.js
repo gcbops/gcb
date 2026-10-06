@@ -2,6 +2,7 @@ import { AppUtils } from "../utils.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { TableClientSelector } from "../tables/client-selector.js";
 import { ValidationModule } from "../validations.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const clientDirectoryPage = (() => {
   let bound = false;
@@ -217,7 +218,7 @@ const clientDirectoryPage = (() => {
     });
   }
 
-  function submitAddClient($modal, $button) {
+  async function submitAddClient($modal, $button) {
     const form = $modal.find("#addClientForm")[0];
 
     if (!form) {
@@ -242,64 +243,57 @@ const clientDirectoryPage = (() => {
 
     const clientName = clientNameResult.value;
 
-    AppUtils.submitForm({
-      gscriptFunc: "createClientSheet",
+    const loading = AppUtils.setButtonLoading(
+      $button[0],
+      "Creating new client",
+    );
 
-      data: {
-        name: clientName,
-      },
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      $btn: $button,
+      AppUtils.gScriptRun({
+        gscriptFunc: "createClientSheet",
 
-      loadingText: "Creating new client",
-
-      onSuccess: () => {
-        AppUtils.closeModal(MODAL_ID);
-
-        AppUtils.showDashboardToast(
-          "Client sheet created successfully!",
-          "success",
-        );
-
-        /*
-         * Refresh the client list on the server.
-         *
-         * Failure here should not invalidate
-         * the successfully-created sheet.
-         */
-        AppUtils.gScriptRun({
-          gscriptFunc: "syncClientSheetList",
-
-          onSuccess: () => {
-            AppUtils.confirmAction(
-              "syncClientsList",
-              "Synchronize Client Directory?",
-              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
-              () => {
-                AppUtils.cacheClear("clientDirectoryData");
-
-                ClientDirectory.refreshClientDirectory(
-                  "clientDirectoryData",
-                  () => {
-                    AppUtils.showDashboardToast(
-                      "Clients refreshed successfully.",
-                      "success",
-                    );
-                  },
-                );
-              },
-            );
+        args: [
+          sessionId,
+          signature,
+          {
+            name: clientName,
           },
+        ],
 
-          onError: (error) => {
-            console.error(
-              "[clientDirectory] syncClientSheetList failed:",
-              error,
-            );
-          },
-        });
-      },
-    });
+        onSuccess: () => {
+          loading.setSuccess("Saved");
+
+          AppUtils.closeModal(MODAL_ID);
+
+          AppUtils.showDashboardToast(
+            "Client sheet created successfully!",
+            "success",
+          );
+
+          /*
+           * Refresh the client list on the server.
+           *
+           * Failure here should not invalidate
+           * the successfully-created sheet.
+           */
+          syncClientSheetList();
+        },
+
+        onError: (error) => {
+          loading.restore();
+
+          AppUtils.showError(
+            error?.message || "Unable to create client sheet.",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   /*
@@ -462,7 +456,7 @@ const clientDirectoryPage = (() => {
     });
   }
 
-  function createExternalSheet($modal, $btn) {
+  async function createExternalSheet($modal, $btn) {
     const form = $modal.find("#externalSheetForm")[0];
 
     if (!form) {
@@ -512,79 +506,104 @@ const clientDirectoryPage = (() => {
       "Creating External Sheet",
     );
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "createExternalSheet",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [
-        {
-          clientName,
-          projects,
+      AppUtils.gScriptRun({
+        gscriptFunc: "createExternalSheet",
+
+        args: [
+          sessionId,
+          signature,
+          {
+            clientName,
+            projects,
+          },
+        ],
+
+        onSuccess: (result) => {
+          loading.setSuccess("Sheet Created");
+
+          AppUtils.closeModal(MODAL_ID);
+
+          AppUtils.showDashboardToast(
+            `External sheet created for ${result.clientName}.`,
+            "success",
+          );
+
+          /*
+           * External clients are included in the
+           * Client Directory, so invalidate it.
+           */
+          AppUtils.cacheClear("clientDirectoryData");
+
+          /*
+           * Keep the client sheet list synchronized.
+           */
+          syncClientSheetList();
         },
-      ],
 
-      onSuccess: (result) => {
-        loading.setSuccess("Sheet Created");
+        onError: (error) => {
+          console.error("[clientDirectory] createExternalSheet failed:", error);
 
-        AppUtils.closeModal(MODAL_ID);
+          loading.restore();
 
-        AppUtils.showDashboardToast(
-          `External sheet created for ${result.clientName}.`,
-          "success",
-        );
+          AppUtils.showDashboardToast(
+            error?.message || "Failed to create external sheet.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
 
-        /*
-         * External clients are included in the
-         * Client Directory, so invalidate it.
-         */
-        AppUtils.cacheClear("clientDirectoryData");
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
+  }
 
-        /*
-         * Keep the client sheet list synchronized.
-         */
-        AppUtils.gScriptRun({
-          gscriptFunc: "syncClientSheetList",
+  async function syncClientSheetList() {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          onSuccess: () => {
-            AppUtils.confirmAction(
-              "syncClientsList",
-              "Synchronize Client Directory?",
-              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
-              () => {
-                AppUtils.cacheClear("clientDirectoryData");
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncClientSheetList",
 
-                ClientDirectory.refreshClientDirectory(
-                  "clientDirectoryData",
-                  () => {
-                    AppUtils.showDashboardToast(
-                      "Clients refreshed successfully.",
-                      "success",
-                    );
-                  },
-                );
-              },
-            );
-          },
+        args: [sessionId, signature],
 
-          onError: (error) => {
-            console.error(
-              "[clientDirectory] syncClientSheetList failed:",
-              error,
-            );
-          },
-        });
-      },
+        onSuccess: () => {
+          AppUtils.confirmAction(
+            "syncClientsList",
+            "Synchronize Client Directory?",
+            "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+            () => {
+              AppUtils.cacheClear("clientDirectoryData");
 
-      onError: (error) => {
-        console.error("[clientDirectory] createExternalSheet failed:", error);
+              ClientDirectory.refreshClientDirectory(
+                "clientDirectoryData",
+                () => {
+                  AppUtils.showDashboardToast(
+                    "Clients refreshed successfully.",
+                    "success",
+                  );
+                },
+              );
+            },
+          );
+        },
 
-        loading.restore();
-
-        AppUtils.showDashboardToast(
-          error?.message || "Failed to create external sheet.",
-          "error",
-        );
-      },
-    });
+        onError: (error) => {
+          console.error("[clientDirectory] syncClientSheetList failed:", error);
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[clientDirectory] Authentication required for syncClientSheetList:",
+        error,
+      );
+    }
   }
 
   /*

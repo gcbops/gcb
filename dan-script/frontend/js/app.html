@@ -1,6 +1,170 @@
 <script>
 
 (() => {
+  // src/auth/auth.js
+  var GcbAuthModule = /* @__PURE__ */ (() => {
+    const SESSION_ID_KEY = "gcb_session_id";
+    const SESSION_SIGNATURE_KEY = "gcb_session_signature";
+    const APP_CACHE_PREFIX = "gcb_";
+    let initialized = false;
+    let initializing = null;
+    function getSessionId() {
+      return localStorage.getItem(SESSION_ID_KEY) || "";
+    }
+    function getSessionSignature() {
+      return localStorage.getItem(SESSION_SIGNATURE_KEY) || "";
+    }
+    function hasSession() {
+      return Boolean(getSessionId() && getSessionSignature());
+    }
+    function saveSession(result) {
+      if (!result?.sessionId || !result?.signature) {
+        throw new Error("Invalid GCB session response.");
+      }
+      localStorage.setItem(SESSION_ID_KEY, result.sessionId);
+      localStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+    }
+    function clearSession() {
+      localStorage.removeItem(SESSION_ID_KEY);
+      localStorage.removeItem(SESSION_SIGNATURE_KEY);
+      sessionStorage.removeItem(SESSION_ID_KEY);
+      sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+    }
+    function exchangeTicket(ticket) {
+      return new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler((result) => {
+          try {
+            console.log(
+              "[GCB Auth] Authentication handoff exchange succeeded:",
+              result
+            );
+            saveSession(result);
+            window.GCB_AUTH_TICKET = "";
+            if (window.GCB_IS_GITHUB_EMBEDDED === true) {
+              console.log(
+                "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper."
+              );
+              window.top.postMessage(
+                {
+                  type: "GCB_AUTH_HANDOFF_COMPLETE"
+                },
+                "https://gcbops.github.io"
+              );
+              console.log(
+                "[GCB Auth] Authentication handoff completion message sent."
+              );
+            }
+            console.log("[GCB Auth] Session handoff completed.");
+            resolve(true);
+          } catch (error) {
+            reject(error);
+          }
+        }).withFailureHandler((error) => {
+          console.error(
+            "[GCB Auth] Authentication handoff exchange failed:",
+            error
+          );
+          reject(error);
+        }).exchangeGcbSessionHandoff(ticket);
+      });
+    }
+    function clearAppCache() {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(APP_CACHE_PREFIX)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+      });
+    }
+    async function init() {
+      if (initialized) {
+        return true;
+      }
+      if (initializing) {
+        return initializing;
+      }
+      initializing = (async () => {
+        try {
+          if (hasSession()) {
+            initialized = true;
+            return true;
+          }
+          if (!window.GCB_AUTH_TICKET) {
+            console.error(
+              "[GCB Auth] Authentication ticket not detected"
+            );
+            return;
+          }
+          console.log(
+            "[GCB Auth] Authentication ticket detected:",
+            window.GCB_AUTH_TICKET
+          );
+          const ticket = String(window.GCB_AUTH_TICKET || "").trim();
+          if (ticket) {
+            console.log("[GCB Auth] Exchanging authentication handoff ticket.");
+            await exchangeTicket(ticket);
+          }
+          if (!hasSession()) {
+            console.warn("[GCB Auth] No authenticated session.");
+            return false;
+          }
+          initialized = true;
+          return true;
+        } catch (error) {
+          console.error("[GCB Auth] Initialization failed:", error);
+          clearSession();
+          initialized = false;
+          return false;
+        } finally {
+          initializing = null;
+        }
+      })();
+      return initializing;
+    }
+    async function getAuthArgs() {
+      const authenticated = await init();
+      if (!authenticated) {
+        throw new Error("Authentication required.");
+      }
+      return [getSessionId(), getSessionSignature()];
+    }
+    async function logout() {
+      if (!hasSession()) {
+        clearSession();
+        return true;
+      }
+      const sessionId = getSessionId();
+      const signature = getSessionSignature();
+      try {
+        await new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => {
+            resolve();
+          }).withFailureHandler((error) => {
+            reject(error);
+          }).logoutGcbSession(sessionId, signature);
+        });
+      } finally {
+        clearSession();
+        window.GCB_AUTH_TICKET = "";
+        clearAppCache();
+      }
+      return true;
+    }
+    return {
+      init,
+      getSessionId,
+      getSessionSignature,
+      hasSession,
+      clearSession,
+      getAuthArgs,
+      logout
+    };
+  })();
+
   // src/utils.js
   var AppUtils = (() => {
     const APP_CACHE_PREFIX = "gcb_";
@@ -533,7 +697,7 @@
         closeDrawer($(this));
       });
     }
-    function submitForm({
+    async function submitForm({
       gscriptFunc,
       data = {},
       onSuccess,
@@ -543,6 +707,13 @@
     }) {
       if (!gscriptFunc) {
         showError("No Google Apps Script function provided");
+        return;
+      }
+      let authArgs;
+      try {
+        authArgs = await GcbAuthModule.getAuthArgs();
+      } catch (error) {
+        showError(error?.message || "Authentication required.");
         return;
       }
       const $button = $btn?.length ? $btn : null;
@@ -557,7 +728,7 @@
       };
       gScriptRun({
         gscriptFunc,
-        args: [data],
+        args: [...authArgs, data],
         onSuccess: (result) => {
           if (loading) {
             loading.setSuccess("Saved");
@@ -1121,19 +1292,24 @@
 
   // src/hours/hour-summary.js
   var HourSummary = /* @__PURE__ */ (() => {
-    function loadHoursSummary(containerSelector) {
-      AppUtils.cachedGScriptCall(
-        "hoursSummary",
-        "getHoursSummary",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No metrics found");
-            return;
+    async function loadHoursSummary(containerSelector) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "hoursSummary",
+          "getHoursSummary",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No metrics found");
+              return;
+            }
+            renderHoursSummary(containerSelector, data);
           }
-          renderHoursSummary(containerSelector, data);
-        }
-      );
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderHoursSummary(containerSelector, data) {
       const $container = $(containerSelector);
@@ -1168,19 +1344,24 @@
         data.netHours
       );
     }
-    function loadDailyOverviewSummary() {
-      AppUtils.cachedGScriptCall(
-        "dailyOverviewSummary",
-        "getDailyOverviewSummary",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No daily analytics found.");
-            return;
+    async function loadDailyOverviewSummary() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "dailyOverviewSummary",
+          "getDailyOverviewSummary",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No daily analytics found.");
+              return;
+            }
+            renderDailyOverviewSummary(data);
           }
-          renderDailyOverviewSummary(data);
-        }
-      );
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderDailyOverviewSummary(data) {
       const $container = $("#daily-overview-summary");
@@ -1251,19 +1432,24 @@
       ${text}
     `);
     }
-    function loadMonthlyHoursSummary(containerSelector) {
-      AppUtils.cachedGScriptCall(
-        "monthlyHoursSummary",
-        "getMonthlyHoursSummary",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No monthly analytics found.");
-            return;
+    async function loadMonthlyHoursSummary(containerSelector) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "monthlyHoursSummary",
+          "getMonthlyHoursSummary",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No monthly analytics found.");
+              return;
+            }
+            renderMonthlyHoursSummary(containerSelector, data);
           }
-          renderMonthlyHoursSummary(containerSelector, data);
-        }
-      );
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderMonthlyHoursSummary(containerSelector, data) {
       const $container = $(containerSelector);
@@ -1299,20 +1485,25 @@
         lastYearChange
       );
     }
-    function loadYearHoursSummary(containerSelector) {
+    async function loadYearHoursSummary(containerSelector) {
       const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-      AppUtils.cachedGScriptCall(
-        "yearHoursSummary",
-        "getYearHoursSummary",
-        [currentYear],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("No yearly analytics found.");
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "yearHoursSummary",
+          "getYearHoursSummary",
+          [sessionId, signature, currentYear],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("No yearly analytics found.");
+              return;
+            }
+            renderYearHoursSummary(containerSelector, data);
           }
-          renderYearHoursSummary(containerSelector, data);
-        }
-      );
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderYearHoursSummary(containerSelector, data) {
       const $container = $(containerSelector);
@@ -1418,21 +1609,26 @@
       ${text}
     `);
     }
-    function loadTodayChargedHours() {
-      AppUtils.cachedGScriptCall(
-        "todayChargedHours",
-        "getTodayChargedHours",
-        [],
-        (data) => {
-          if (!data) {
-            AppUtils.showError("Unable to load today's hours.");
-            return;
-          }
-          renderTodayChargedHours(data);
-        },
-        false,
-        true
-      );
+    async function loadTodayChargedHours() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "todayChargedHours",
+          "getTodayChargedHours",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              AppUtils.showError("Unable to load today's hours.");
+              return;
+            }
+            renderTodayChargedHours(data);
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderTodayChargedHours(data) {
       const $container = $("#today-hours-summary");
@@ -2034,36 +2230,51 @@
       const validatedData = validation.value;
       const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
       $("#taskForm").find("select, input.form-control").prop("disabled", true);
-      AppUtils.gScriptRun({
-        gscriptFunc: "isExternalClient",
-        args: [validatedData.client],
-        onSuccess: (isExternal) => {
-          const external = isExternal === true;
-          submitHours(external);
-        },
-        onError: (err) => {
-          console.error("isExternalClient failed:", err);
-          AppUtils.showDashboardToast(
-            "Unable to determine client type.",
-            "error"
-          );
+      (async () => {
+        try {
+          const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+          AppUtils.gScriptRun({
+            gscriptFunc: "isExternalClient",
+            args: [sessionId, signature, validatedData.client],
+            onSuccess: (isExternal) => {
+              submitHours(isExternal === true);
+            },
+            onError: (err) => {
+              console.error("isExternalClient failed:", err);
+              $("#taskForm").find("select, input.form-control").prop("disabled", false);
+              loading.restore();
+              AppUtils.showDashboardToast(
+                "Unable to determine client type.",
+                "error"
+              );
+            }
+          });
+        } catch (error) {
+          console.error("[ActivityToday] Authentication failed:", error);
           $("#taskForm").find("select, input.form-control").prop("disabled", false);
           loading.restore();
+          AppUtils.showDashboardToast(
+            error?.message || "Authentication required.",
+            "error"
+          );
         }
-      });
+      })();
       function submitHours(isExternal) {
         const gscriptFunc = isExternal ? "recordExternalClientHoursFromForm" : "recordManualClientHoursFromForm";
         AppUtils.submitForm({
           gscriptFunc,
           data: validatedData,
-          $btn: $submitBtn,
+          $btn: null,
           loadingText: "Saving",
           onSuccess: () => {
             $("#taskForm").find("select, input.form-control").prop("disabled", false);
+            loading.restore();
             handleTaskSaveSuccess(formData);
           },
-          onError: () => {
+          onError: (error) => {
             $("#taskForm").find("select, input.form-control").prop("disabled", false);
+            loading.restore();
+            console.error("[ActivityToday] Failed to record hours:", error);
           }
         });
       }
@@ -2125,12 +2336,26 @@
       const cacheKey = `gcb_getTaskOptions_${client}`;
       const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
       if (!cachedTasks.includes(task)) {
-        AppUtils.gScriptRun({
-          gscriptFunc: "syncClientProjects",
-          onError: (error) => {
-            console.warn("[TaskSubmit] Failed to sync client projects:", error);
+        (async () => {
+          try {
+            const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+            AppUtils.gScriptRun({
+              gscriptFunc: "syncClientProjects",
+              args: [sessionId, signature],
+              onError: (error) => {
+                console.warn(
+                  "[TaskSubmit] Failed to sync client projects:",
+                  error
+                );
+              }
+            });
+          } catch (error) {
+            console.warn(
+              "[TaskSubmit] Unable to authenticate project sync:",
+              error
+            );
           }
-        });
+        })();
       }
       clearClientCaches(client);
       AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
@@ -2164,7 +2389,7 @@
     function setupSheetViewButton() {
       $("#viewMySheet-v-h").off("click.activityToday").on("click.activityToday", handleSheetView);
     }
-    function handleSheetView(e) {
+    async function handleSheetView(e) {
       const clientName = String($("#client-view-hours").val() || "").trim();
       const btn = e.currentTarget;
       if (!clientName) {
@@ -2172,20 +2397,26 @@
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Redirecting");
-      AppUtils.gScriptRun({
-        gscriptFunc: "getClientSheetUrl",
-        args: [clientName],
-        onSuccess: (url) => {
-          if (url) {
-            window.open(url, "_blank");
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getClientSheetUrl",
+          args: [sessionId, signature, clientName],
+          onSuccess: (url) => {
+            if (url) {
+              window.open(url, "_blank");
+            }
+            loading.restore();
+          },
+          onError: () => {
+            AppUtils.showError("Sheet doesn't exist!");
+            loading.restore();
           }
-          loading.restore();
-        },
-        onError: () => {
-          AppUtils.showError("Sheet doesn't exist!");
-          loading.restore();
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function buildActionButtons(row = []) {
       const hours = parseHoursValue(row[4]);
@@ -2269,28 +2500,37 @@
       }
       isRefreshing = false;
     }
-    function loadActivity(dataTable, callback, force = false) {
+    async function loadActivity(dataTable, callback, force = false) {
       if (!dataTable || isRefreshing && !force) {
         callback?.();
         return;
       }
       isRefreshing = true;
-      AppUtils.gScriptRun({
-        gscriptFunc: "getDailyActivityData",
-        onSuccess: (data) => {
-          isRefreshing = false;
-          updateActivityTable(data, dataTable);
-          updateFilterCounts(dataTable);
-          HourSummary.loadTodayChargedHours();
-          callback?.();
-        },
-        onError: (error) => {
-          isRefreshing = false;
-          console.error("Activity Today refresh failed:", error);
-          AppUtils.showError(error);
-          callback?.();
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getDailyActivityData",
+          args: [sessionId, signature],
+          onSuccess: (data) => {
+            isRefreshing = false;
+            updateActivityTable(data, dataTable);
+            updateFilterCounts(dataTable);
+            HourSummary.loadTodayChargedHours();
+            callback?.();
+          },
+          onError: (error) => {
+            isRefreshing = false;
+            console.error("Activity Today refresh failed:", error);
+            AppUtils.showError(error);
+            callback?.();
+          }
+        });
+      } catch (error) {
+        isRefreshing = false;
+        console.error("Activity Today authentication failed:", error);
+        AppUtils.showError(error);
+        callback?.();
+      }
     }
     function updateActivityTable(data, dataTable) {
       if (!dataTable || !Array.isArray(data)) {
@@ -2830,44 +3070,54 @@
         }
       });
     }
-    function load(clientName, $modal) {
-      AppUtils.cachedGScriptCall(
-        `${CACHE_PREFIX}${clientName}`,
-        "getTodayClientHours",
-        [clientName],
-        (response) => {
-          if (!response?.success) {
-            $modal.find(RECORDS_ID).html(`
+    async function load(clientName, $modal) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `${CACHE_PREFIX}${clientName}`,
+          "getTodayClientHours",
+          [sessionId, signature, clientName],
+          (response) => {
+            if (!response?.success) {
+              $modal.find(RECORDS_ID).html(`
             <div class="text-center text-danger py-3">
               ${AppUtils.escapeHtml(
-              response?.message || "Unable to load today's records."
-            )}
+                response?.message || "Unable to load today's records."
+              )}
             </div>
           `);
-            return;
-          }
-          loadTaskOptions(clientName, $modal, response.records || []);
-        },
-        false,
-        false
-      );
-    }
-    function loadTaskOptions(clientName, $modal, records) {
-      AppUtils.cachedGScriptCall(
-        `getTaskOptions_${clientName}`,
-        "getTaskOptions",
-        [clientName],
-        (returned) => {
-          const tasks = Array.isArray(returned) ? returned : (() => {
-            try {
-              return JSON.parse(returned);
-            } catch {
-              return [];
+              return;
             }
-          })();
-          render(records, tasks, $modal);
-        }
-      );
+            loadTaskOptions(clientName, $modal, response.records || []);
+          },
+          false,
+          false
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Unable to load today's records.");
+      }
+    }
+    async function loadTaskOptions(clientName, $modal, records) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `getTaskOptions_${clientName}`,
+          "getTaskOptions",
+          [sessionId, signature, clientName],
+          (returned) => {
+            const tasks = Array.isArray(returned) ? returned : (() => {
+              try {
+                return JSON.parse(returned);
+              } catch {
+                return [];
+              }
+            })();
+            render(records, tasks, $modal);
+          }
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Unable to load task options.");
+      }
     }
     function render(records, tasks, $modal) {
       const $container = $modal.find(RECORDS_ID);
@@ -3169,76 +3419,93 @@
         }
       );
     }
-    function addClientHours(clientName, manual = false, isForProject = false) {
+    async function addClientHours(clientName, manual = false, isForProject = false) {
       if (!clientName) {
         return;
       }
       if ($("#client").length && !manual) {
         $("#client").val(clientName).trigger("change");
       }
-      AppUtils.cachedGScriptCall(
-        `sheetExists_${clientName}`,
-        "sheetExists",
-        [clientName],
-        (exists) => {
-          if (!exists) {
-            AppUtils.showDashboardToast(
-              `Sheet ${clientName} not found!`,
-              "error"
-            );
-            return;
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `sheetExists_${clientName}`,
+          "sheetExists",
+          [sessionId, signature, clientName],
+          (exists) => {
+            if (!exists) {
+              AppUtils.showDashboardToast(
+                `Sheet ${clientName} not found!`,
+                "error"
+              );
+              return;
+            }
+            AppUtils.openDrawer("#drawerManualAdd");
+            if (!isForProject) {
+              loadClientTasks(clientName);
+            }
           }
-          AppUtils.openDrawer("#drawerManualAdd");
-          if (!isForProject) {
-            loadClientTasks(clientName);
-          }
-        }
-      );
+        );
+      } catch (error) {
+        console.error("[TableModule] Failed to check client sheet:", error);
+        AppUtils.showError(error?.message || "Unable to check client sheet.");
+      }
     }
-    function viewClientHoursHistory(clientName) {
+    async function viewClientHoursHistory(clientName) {
       if (!clientName) {
         return;
       }
       $("#client-view-hours").val(clientName);
       AppUtils.showDashboardToast("Loading records ...", "info");
-      AppUtils.cachedGScriptCall(
-        `sheetExists_${clientName}`,
-        "sheetExists",
-        [clientName],
-        (exists) => {
-          if (!exists) {
-            AppUtils.showDashboardToast(
-              `Sheet ${clientName} not found!`,
-              "error"
-            );
-            return;
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `sheetExists_${clientName}`,
+          "sheetExists",
+          [sessionId, signature, clientName],
+          (exists) => {
+            if (!exists) {
+              AppUtils.showDashboardToast(
+                `Sheet ${clientName} not found!`,
+                "error"
+              );
+              return;
+            }
+            loadClientHours(clientName);
+            loadClientHoursOverview(clientName);
           }
-          loadClientHours(clientName);
-          loadClientHoursOverview(clientName);
-        }
-      );
+        );
+      } catch (error) {
+        console.error("[TableModule] Failed to check client sheet:", error);
+        AppUtils.showError(error?.message || "Unable to check client sheet.");
+      }
     }
-    function editClientSheet(clientName) {
+    async function editClientSheet(clientName) {
       if (!clientName) {
         return;
       }
       AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
-      AppUtils.gScriptRun({
-        gscriptFunc: "getClientSheetUrl",
-        args: [clientName],
-        onSuccess: (url) => {
-          if (url && String(url).startsWith("http")) {
-            window.open(url, "_blank");
-          } else {
-            AppUtils.showError("Invalid sheet URL.");
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getClientSheetUrl",
+          args: [sessionId, signature, clientName],
+          onSuccess: (url) => {
+            if (url && String(url).startsWith("http")) {
+              window.open(url, "_blank");
+            } else {
+              AppUtils.showError("Invalid sheet URL.");
+            }
+          },
+          onError: (error) => {
+            AppUtils.showError(error?.message || "Sheet doesn't exist!");
           }
-        },
-        onError: () => {
-          AppUtils.showError("Sheet doesn't exist!");
-        }
-      });
+        });
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
-    function loadClientTasks(clientName) {
+    async function loadClientTasks(clientName) {
       if (!clientName) {
         return;
       }
@@ -3249,30 +3516,38 @@
       }
       $taskSelect.html('<option value="">Loading...</option>').val("").trigger("change");
       $submitBtn.prop("disabled", true);
-      AppUtils.cachedGScriptCall(
-        `getTaskOptions_${clientName}`,
-        "getTaskOptions",
-        [clientName],
-        (returned) => {
-          const tasks = parseTaskOptions(returned);
-          $taskSelect.empty();
-          if (!tasks.length) {
-            $taskSelect.append(new Option("No tasks found", "")).val("").trigger("change");
-            return;
-          }
-          tasks.forEach((task) => {
-            const value = typeof task === "object" ? task.value || task.id || "" : task;
-            const text = typeof task === "object" ? task.label || task.name || value : task;
-            if (!value && !text) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `getTaskOptions_${clientName}`,
+          "getTaskOptions",
+          [sessionId, signature, clientName],
+          (returned) => {
+            const tasks = parseTaskOptions(returned);
+            $taskSelect.empty();
+            if (!tasks.length) {
+              $taskSelect.append(new Option("No tasks found", "")).val("").trigger("change");
               return;
             }
-            $taskSelect.append(new Option(text, value));
-          });
-          const firstValue = $taskSelect.find("option:first").val();
-          $taskSelect.val(firstValue || "").trigger("change");
-          $submitBtn.prop("disabled", false);
-        }
-      );
+            tasks.forEach((task) => {
+              const value = typeof task === "object" ? task.value || task.id || "" : task;
+              const text = typeof task === "object" ? task.label || task.name || value : task;
+              if (!value && !text) {
+                return;
+              }
+              $taskSelect.append(new Option(text, value));
+            });
+            const firstValue = $taskSelect.find("option:first").val();
+            $taskSelect.val(firstValue || "").trigger("change");
+            $submitBtn.prop("disabled", false);
+          }
+        );
+      } catch (error) {
+        console.error("[TableModule] Failed to load client tasks:", error);
+        $taskSelect.empty().append(new Option("Unable to load tasks", "")).val("").trigger("change");
+        $submitBtn.prop("disabled", true);
+        AppUtils.showError(error?.message || "Unable to load client tasks.");
+      }
     }
     function parseTaskOptions(returned) {
       if (Array.isArray(returned)) {
@@ -3288,7 +3563,7 @@
         return [];
       }
     }
-    function loadClientHours(clientName) {
+    async function loadClientHours(clientName) {
       const $table = $("#client-hours-table");
       const $tbody = $table.find("tbody");
       if (!$table.length || !$tbody.length) {
@@ -3302,24 +3577,26 @@
         </td>
       </tr>
     `);
-      AppUtils.cachedGScriptCall(
-        `getClientHourLogData_${clientName}`,
-        "getClientHourLogData",
-        [clientName],
-        (data) => {
-          if (!Array.isArray(data) || !data.length) {
-            $tbody.html(`
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `getClientHourLogData_${clientName}`,
+          "getClientHourLogData",
+          [sessionId, signature, clientName],
+          (data) => {
+            if (!Array.isArray(data) || !data.length) {
+              $tbody.html(`
             <tr>
               <td colspan="${colspan}" class="text-center">
                 No records found
               </td>
             </tr>
           `);
-            return;
-          }
-          $tbody.empty();
-          data.sort((a, b) => new Date(b[3]) - new Date(a[3])).slice(0, 5).forEach((row) => {
-            $tbody.append(`
+              return;
+            }
+            $tbody.empty();
+            data.sort((a, b) => new Date(b[3]) - new Date(a[3])).slice(0, 5).forEach((row) => {
+              $tbody.append(`
               <tr>
                 <td>${AppUtils.escapeHtml(row[0] ?? "")}</td>
                 <td>${AppUtils.escapeHtml(row[1] ?? "")}</td>
@@ -3327,27 +3604,48 @@
                 <td>${AppUtils.escapeHtml(row[3] ?? "")}</td>
               </tr>
             `);
-          });
-        }
-      );
-    }
-    function loadClientHoursOverview(clientName) {
-      AppUtils.cachedGScriptCall(
-        `getClientHours_${clientName}`,
-        "getClientHoursForOverview",
-        [clientName],
-        (data) => {
-          if (!data || data.error === "NOT_FOUND") {
-            AppUtils.showError("Sheet not found!");
-            return;
+            });
           }
-          AppUtils.openDrawer("#drawerManualInfo");
-          $("#total-hours").text(data.totalHrs || 0);
-          $("#weekly-hours").text(data.weekHrs || 0);
-          $("#monthly-hours").text(data.monthHrs || 0);
-          $("#yearly-hours").text(data.yearHrs || 0);
-        }
-      );
+        );
+      } catch (error) {
+        console.error("[TableModule] Failed to load client hour history:", error);
+        $tbody.html(`
+      <tr>
+        <td colspan="${colspan}" class="text-center">
+          Unable to load records
+        </td>
+      </tr>
+    `);
+      }
+    }
+    async function loadClientHoursOverview(clientName) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `getClientHours_${clientName}`,
+          "getClientHoursForOverview",
+          [sessionId, signature, clientName],
+          (data) => {
+            if (!data || data.error === "NOT_FOUND") {
+              AppUtils.showError("Sheet not found!");
+              return;
+            }
+            AppUtils.openDrawer("#drawerManualInfo");
+            $("#total-hours").text(data.totalHrs || 0);
+            $("#weekly-hours").text(data.weekHrs || 0);
+            $("#monthly-hours").text(data.monthHrs || 0);
+            $("#yearly-hours").text(data.yearHrs || 0);
+          }
+        );
+      } catch (error) {
+        console.error(
+          "[TableModule] Failed to load client hours overview:",
+          error
+        );
+        AppUtils.showError(
+          error?.message || "Unable to load client hours overview."
+        );
+      }
     }
     function renderClientData(data, title) {
       const $tbody = $("#data-table-body");
@@ -3508,7 +3806,7 @@
       }
       TableModule.addClientHours(clientName);
     }
-    function openClientSheet(clientName) {
+    async function openClientSheet(clientName) {
       const client = getClientData(clientName);
       const externalUrl = String(client?.externalUrl || "").trim();
       if (externalUrl) {
@@ -3520,22 +3818,28 @@
         return;
       }
       AppUtils.showDashboardToast("Redirecting to sheet!", "info");
-      AppUtils.gScriptRun({
-        gscriptFunc: "goToPresentClient",
-        args: [clientName],
-        onSuccess: (url) => {
-          const clientUrl = String(url || "").trim();
-          if (clientUrl.startsWith("http")) {
-            window.open(clientUrl, "_blank");
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "goToPresentClient",
+          args: [sessionId, signature, clientName],
+          onSuccess: (url) => {
+            const clientUrl = String(url || "").trim();
+            if (clientUrl.startsWith("http")) {
+              window.open(clientUrl, "_blank");
+              return;
+            }
+            AppUtils.showError(url);
+          },
+          onError: (error) => {
+            console.error("[ProfilePopover] Failed to open client sheet:", error);
+            AppUtils.showError(error?.message || error);
           }
-          AppUtils.showError(url);
-        },
-        onError: (error) => {
-          console.error("[ProfilePopover] Failed to open client sheet:", error);
-          AppUtils.showError(error?.message || error);
-        }
-      });
+        });
+      } catch (error) {
+        console.error("[ProfilePopover] Authentication required:", error);
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function setClientData(data = []) {
       clientData = /* @__PURE__ */ new Map();
@@ -3805,24 +4109,30 @@
       }
       currentSelectId = "#client";
     }
-    function initClientSelector(selectId = "#client", isForProject = false) {
+    async function initClientSelector(selectId = "#client", isForProject = false) {
       const $select = $(selectId);
       if (!$select.length) {
         return;
       }
-      AppUtils.cachedGScriptCall(
-        CLIENTS_CACHE_KEY,
-        CLIENTS_SERVER_FUNCTION,
-        [],
-        (data) => {
-          if (!Array.isArray(data)) {
-            AppUtils.showError("Client data missing or invalid");
-            return;
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CLIENTS_CACHE_KEY,
+          CLIENTS_SERVER_FUNCTION,
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              AppUtils.showError("Client data missing or invalid");
+              return;
+            }
+            renderClientOptions($select, data);
+            bindClientChange($select, isForProject);
           }
-          renderClientOptions($select, data);
-          bindClientChange($select, isForProject);
-        }
-      );
+        );
+      } catch (error) {
+        console.error("[TableClientSelector] Failed to load clients:", error);
+        AppUtils.showError(error?.message || "Unable to load client data.");
+      }
     }
     function renderClientOptions($select, clients) {
       const options = clients.filter((client) => client?.name).map((client) => ({
@@ -3892,62 +4202,86 @@
       DataTableModule.showLoader(TABLE_ID);
       fetchClientDirectory(source);
     }
-    function fetchClientDirectory(source, callback = null) {
-      AppUtils.cachedGScriptCall(source, SERVER_FUNCTION, [], (data) => {
-        if (!Array.isArray(data)) {
-          AppUtils.showDashboardToast(
-            "Something went wrong loading clients!",
-            "error"
-          );
-          return;
-        }
-        renderClientDirectory(data, callback);
-      });
+    async function fetchClientDirectory(source, callback = null) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          source,
+          SERVER_FUNCTION,
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              AppUtils.showDashboardToast(
+                "Something went wrong loading clients!",
+                "error"
+              );
+              return;
+            }
+            renderClientDirectory(data, callback);
+          }
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
-    function refreshClientDirectory(source = CACHE_KEY, callback = null) {
+    async function refreshClientDirectory(source = CACHE_KEY, callback = null) {
       DataTableModule.showLoader(TABLE_ID);
       $("#sync-clients-list i").addClass("fa-spin");
       AppUtils.cacheClear(source);
-      AppUtils.cachedGScriptCall(
-        source,
-        SERVER_FUNCTION,
-        [],
-        (data) => {
-          $("#sync-clients-list i").removeClass("fa-spin");
-          if (!Array.isArray(data)) {
-            AppUtils.showDashboardToast(
-              "Something went wrong refreshing clients!",
-              "error"
-            );
-            return;
-          }
-          renderClientDirectory(data, () => {
-            if (typeof callback === "function") {
-              callback();
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          source,
+          SERVER_FUNCTION,
+          [sessionId, signature],
+          (data) => {
+            $("#sync-clients-list i").removeClass("fa-spin");
+            if (!Array.isArray(data)) {
+              AppUtils.showDashboardToast(
+                "Something went wrong refreshing clients!",
+                "error"
+              );
+              return;
             }
-          });
-        },
-        false,
-        true
-      );
+            renderClientDirectory(data, () => {
+              if (typeof callback === "function") {
+                callback();
+              }
+            });
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        $("#sync-clients-list i").removeClass("fa-spin");
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
-    function refreshClientDirectoryInBackground(source, cached) {
-      AppUtils.cachedGScriptCall(
-        source,
-        SERVER_FUNCTION,
-        [],
-        (fresh) => {
-          if (!Array.isArray(fresh)) {
-            return;
-          }
-          if (JSON.stringify(fresh) === JSON.stringify(cached)) {
-            return;
-          }
-          renderClientDirectory(fresh);
-        },
-        false,
-        true
-      );
+    async function refreshClientDirectoryInBackground(source, cached) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          source,
+          SERVER_FUNCTION,
+          [sessionId, signature],
+          (fresh) => {
+            if (!Array.isArray(fresh)) {
+              return;
+            }
+            if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+              return;
+            }
+            renderClientDirectory(fresh);
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        console.error(
+          "[ClientDirectory] Background refresh authentication failed:",
+          error
+        );
+      }
     }
     function renderClientDirectory(data, callback = null) {
       ProfilePopoverModule.setClientData(data);
@@ -4254,7 +4588,7 @@
         }
       });
     }
-    function submitAddClient($modal, $button) {
+    async function submitAddClient($modal, $button) {
       const form = $modal.find("#addClientForm")[0];
       if (!form) {
         return;
@@ -4272,49 +4606,41 @@
         return;
       }
       const clientName = clientNameResult.value;
-      AppUtils.submitForm({
-        gscriptFunc: "createClientSheet",
-        data: {
-          name: clientName
-        },
-        $btn: $button,
-        loadingText: "Creating new client",
-        onSuccess: () => {
-          AppUtils.closeModal(MODAL_ID);
-          AppUtils.showDashboardToast(
-            "Client sheet created successfully!",
-            "success"
-          );
-          AppUtils.gScriptRun({
-            gscriptFunc: "syncClientSheetList",
-            onSuccess: () => {
-              AppUtils.confirmAction(
-                "syncClientsList",
-                "Synchronize Client Directory?",
-                "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
-                () => {
-                  AppUtils.cacheClear("clientDirectoryData");
-                  ClientDirectory.refreshClientDirectory(
-                    "clientDirectoryData",
-                    () => {
-                      AppUtils.showDashboardToast(
-                        "Clients refreshed successfully.",
-                        "success"
-                      );
-                    }
-                  );
-                }
-              );
-            },
-            onError: (error) => {
-              console.error(
-                "[clientDirectory] syncClientSheetList failed:",
-                error
-              );
+      const loading = AppUtils.setButtonLoading(
+        $button[0],
+        "Creating new client"
+      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "createClientSheet",
+          args: [
+            sessionId,
+            signature,
+            {
+              name: clientName
             }
-          });
-        }
-      });
+          ],
+          onSuccess: () => {
+            loading.setSuccess("Saved");
+            AppUtils.closeModal(MODAL_ID);
+            AppUtils.showDashboardToast(
+              "Client sheet created successfully!",
+              "success"
+            );
+            syncClientSheetList();
+          },
+          onError: (error) => {
+            loading.restore();
+            AppUtils.showError(
+              error?.message || "Unable to create client sheet."
+            );
+          }
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function openAddExternalClientModal() {
       AppUtils.openModal(MODAL_ID, {
@@ -4440,7 +4766,7 @@
         }
       });
     }
-    function createExternalSheet($modal, $btn) {
+    async function createExternalSheet($modal, $btn) {
       const form = $modal.find("#externalSheetForm")[0];
       if (!form) {
         return;
@@ -4477,60 +4803,80 @@
         $btn[0],
         "Creating External Sheet"
       );
-      AppUtils.gScriptRun({
-        gscriptFunc: "createExternalSheet",
-        args: [
-          {
-            clientName,
-            projects
-          }
-        ],
-        onSuccess: (result) => {
-          loading.setSuccess("Sheet Created");
-          AppUtils.closeModal(MODAL_ID);
-          AppUtils.showDashboardToast(
-            `External sheet created for ${result.clientName}.`,
-            "success"
-          );
-          AppUtils.cacheClear("clientDirectoryData");
-          AppUtils.gScriptRun({
-            gscriptFunc: "syncClientSheetList",
-            onSuccess: () => {
-              AppUtils.confirmAction(
-                "syncClientsList",
-                "Synchronize Client Directory?",
-                "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
-                () => {
-                  AppUtils.cacheClear("clientDirectoryData");
-                  ClientDirectory.refreshClientDirectory(
-                    "clientDirectoryData",
-                    () => {
-                      AppUtils.showDashboardToast(
-                        "Clients refreshed successfully.",
-                        "success"
-                      );
-                    }
-                  );
-                }
-              );
-            },
-            onError: (error) => {
-              console.error(
-                "[clientDirectory] syncClientSheetList failed:",
-                error
-              );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "createExternalSheet",
+          args: [
+            sessionId,
+            signature,
+            {
+              clientName,
+              projects
             }
-          });
-        },
-        onError: (error) => {
-          console.error("[clientDirectory] createExternalSheet failed:", error);
-          loading.restore();
-          AppUtils.showDashboardToast(
-            error?.message || "Failed to create external sheet.",
-            "error"
-          );
-        }
-      });
+          ],
+          onSuccess: (result) => {
+            loading.setSuccess("Sheet Created");
+            AppUtils.closeModal(MODAL_ID);
+            AppUtils.showDashboardToast(
+              `External sheet created for ${result.clientName}.`,
+              "success"
+            );
+            AppUtils.cacheClear("clientDirectoryData");
+            syncClientSheetList();
+          },
+          onError: (error) => {
+            console.error("[clientDirectory] createExternalSheet failed:", error);
+            loading.restore();
+            AppUtils.showDashboardToast(
+              error?.message || "Failed to create external sheet.",
+              "error"
+            );
+          }
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
+    }
+    async function syncClientSheetList() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncClientSheetList",
+          args: [sessionId, signature],
+          onSuccess: () => {
+            AppUtils.confirmAction(
+              "syncClientsList",
+              "Synchronize Client Directory?",
+              "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+              () => {
+                AppUtils.cacheClear("clientDirectoryData");
+                ClientDirectory.refreshClientDirectory(
+                  "clientDirectoryData",
+                  () => {
+                    AppUtils.showDashboardToast(
+                      "Clients refreshed successfully.",
+                      "success"
+                    );
+                  }
+                );
+              }
+            );
+          },
+          onError: (error) => {
+            console.error("[clientDirectory] syncClientSheetList failed:", error);
+          }
+        });
+      } catch (error) {
+        console.error(
+          "[clientDirectory] Authentication required for syncClientSheetList:",
+          error
+        );
+      }
     }
     function validateAndShowReview($modal, formSelector) {
       const form = $modal.find(formSelector)[0];
@@ -4649,18 +4995,27 @@
   var ReportsOverview = /* @__PURE__ */ (() => {
     const TABLE_ID = "#reports-export-table";
     const TABLE_TITLE = "Reports Overview";
-    function loadReportsOverview() {
+    async function loadReportsOverview() {
       DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        "reportsOverview",
-        "getReportsOverview",
-        [],
-        (data) => {
-          renderReportsOverview(data);
-        },
-        false,
-        true
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "reportsOverview",
+          "getReportsOverview",
+          [sessionId, signature],
+          (data) => {
+            renderReportsOverview(data);
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        console.error(
+          "[ReportsOverview] Failed to load reports overview:",
+          error
+        );
+        AppUtils.showError(error?.message || "Unable to load reports overview.");
+      }
     }
     function renderReportsOverview(data) {
       if (!data) {
@@ -4839,7 +5194,7 @@
   // src/reports/history.js
   var ReportHistory = /* @__PURE__ */ (() => {
     const TABLE_TITLE = "Report History";
-    function loadReportHistory({
+    async function loadReportHistory({
       cacheKey,
       serverFunction,
       tableId,
@@ -4852,24 +5207,30 @@
           DataTableModule.showLoader(tableId);
         }
       }
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        serverFunction,
-        [],
-        (data) => {
-          const reportLogs = Array.isArray(data?.reportLogs) ? data.reportLogs : [];
-          renderReportHistory({
-            reportLogs,
-            tableId,
-            tbodyId
-          });
-          if (typeof callback === "function") {
-            callback(reportLogs, data);
-          }
-        },
-        false,
-        refresh
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          serverFunction,
+          [sessionId, signature],
+          (data) => {
+            const reportLogs = Array.isArray(data?.reportLogs) ? data.reportLogs : [];
+            renderReportHistory({
+              reportLogs,
+              tableId,
+              tbodyId
+            });
+            if (typeof callback === "function") {
+              callback(reportLogs, data);
+            }
+          },
+          false,
+          refresh
+        );
+      } catch (error) {
+        console.error(`[ReportHistory] Failed to load ${serverFunction}:`, error);
+        AppUtils.showError(error?.message || "Unable to load report history.");
+      }
     }
     function renderReportHistory({ reportLogs, tableId, tbodyId }) {
       const tbody = document.getElementById(tbodyId);
@@ -5108,17 +5469,23 @@
       $year.val(currentYear);
       AppUtils.initSelect2(".generator-filters");
     };
-    const loadReportsOverview = () => {
-      AppUtils.cachedGScriptCall(
-        "reportsOverview",
-        "getReportsOverview",
-        [],
-        (data) => {
-          updateAutomationStatus(data);
-        },
-        false,
-        false
-      );
+    const loadReportsOverview = async () => {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "reportsOverview",
+          "getReportsOverview",
+          [sessionId, signature],
+          (data) => {
+            updateAutomationStatus(data);
+          },
+          false,
+          false
+        );
+      } catch (error) {
+        console.error("[ReportsAnnual] Failed to load reports overview:", error);
+        AppUtils.showError(error?.message || "Unable to load reports overview.");
+      }
     };
     const updateAutomationStatus = (data) => {
       const automation = data?.counts?.automation;
@@ -5263,17 +5630,23 @@
       $year.val(currentYear);
       AppUtils.initSelect2(".generator-filters");
     };
-    const loadReportsOverview = () => {
-      AppUtils.cachedGScriptCall(
-        "reportsOverview",
-        "getReportsOverview",
-        [],
-        (data) => {
-          updateAutomationStatus(data);
-        },
-        false,
-        false
-      );
+    const loadReportsOverview = async () => {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "reportsOverview",
+          "getReportsOverview",
+          [sessionId, signature],
+          (data) => {
+            updateAutomationStatus(data);
+          },
+          false,
+          false
+        );
+      } catch (error) {
+        console.error("[ReportsAnnual] Failed to load reports overview:", error);
+        AppUtils.showError(error?.message || "Unable to load reports overview.");
+      }
     };
     const updateAutomationStatus = (data) => {
       const automation = data?.counts?.automation;
@@ -5357,25 +5730,31 @@
       }
       AppUtils.showError(message);
     }
-    function prepareReportGeneration(type, btn, params, loading) {
+    async function prepareReportGeneration(type, btn, params, loading) {
       const cfg = CONFIG[type];
       const reportName = cfg.reportName(params);
-      AppUtils.gScriptRun({
-        gscriptFunc: "checkExistingReport",
-        args: [type, reportName],
-        onError: (err) => {
-          setGenerateState(type, false, loading);
-          AppUtils.showError(err);
-        },
-        onSuccess: (result) => {
-          if (!result.exists) {
-            loading.setText("Generating Report");
-            requestReportGeneration(cfg, type, btn, params, loading);
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "checkExistingReport",
+          args: [sessionId, signature, type, reportName],
+          onError: (err) => {
+            setGenerateState(type, false, loading);
+            AppUtils.showError(err);
+          },
+          onSuccess: (result) => {
+            if (!result.exists) {
+              loading.setText("Generating Report");
+              requestReportGeneration(cfg, type, btn, params, loading);
+              return;
+            }
+            showExistsModal(cfg, type, btn, params, result.report, loading);
           }
-          showExistsModal(cfg, type, btn, params, result.report, loading);
-        }
-      });
+        });
+      } catch (error) {
+        setGenerateState(type, false, loading);
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function showExistsModal(cfg, type, btn, params, report, loading) {
       const ns = `.${type}ReportModal`;
@@ -5426,13 +5805,23 @@
         }
       });
     }
-    function requestReportGeneration(cfg, type, btn, params, loading) {
-      AppUtils.gScriptRun({
-        gscriptFunc: "updateCustomReportPDF",
-        args: [type, ...cfg.updateArgs(params)],
-        onError: (err) => handleGenerateError(type, btn, err, loading),
-        onSuccess: () => checkReportReady(cfg, type, btn, "", loading)
-      });
+    async function requestReportGeneration(cfg, type, btn, params, loading) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "updateCustomReportPDF",
+          args: [sessionId, signature, type, ...cfg.updateArgs(params)],
+          onError: (err) => handleGenerateError(type, btn, err, loading),
+          onSuccess: () => checkReportReady(cfg, type, btn, "", loading)
+        });
+      } catch (error) {
+        handleGenerateError(
+          type,
+          btn,
+          error?.message || "Authentication required.",
+          loading
+        );
+      }
     }
     function checkReportReady(cfg, type, btn, attempts = 0, loading) {
       if (attempts >= REPORT_MAX_ATTEMPTS) {
@@ -5455,28 +5844,38 @@
         }
       });
     }
-    function saveReport(type, btn, cfg, loading) {
-      AppUtils.gScriptRun({
-        gscriptFunc: "saveCustomReportPDF",
-        args: [type],
-        onError: (err) => {
-          handleGenerateError(type, btn, err, loading);
-        },
-        onSuccess: () => {
-          loading.setSuccess("Generated successfully");
-          setGenerateState(type, false);
-          if (type === "monthly") {
-            reportsMonthlyReportPage.refresh();
+    async function saveReport(type, btn, cfg, loading) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "saveCustomReportPDF",
+          args: [sessionId, signature, type],
+          onError: (err) => {
+            handleGenerateError(type, btn, err, loading);
+          },
+          onSuccess: () => {
+            loading.setSuccess("Generated successfully");
+            setGenerateState(type, false);
+            if (type === "monthly") {
+              reportsMonthlyReportPage.refresh();
+            }
+            if (type === "yearly") {
+              reportsAnnualReportPage.refresh();
+            }
+            cfg.reloadHistory(() => {
+              TableModule.highlightLatestRow(cfg.historyTableId, 0);
+            });
+            AppUtils.showDashboardToast(cfg.successMessage, "success");
           }
-          if (type === "yearly") {
-            reportsAnnualReportPage.refresh();
-          }
-          cfg.reloadHistory(() => {
-            TableModule.highlightLatestRow(cfg.historyTableId, 0);
-          });
-          AppUtils.showDashboardToast(cfg.successMessage, "success");
-        }
-      });
+        });
+      } catch (error) {
+        handleGenerateError(
+          type,
+          btn,
+          error?.message || "Authentication required.",
+          loading
+        );
+      }
     }
     function generateMonthlyReport(month, year, btn, loading) {
       prepareReportGeneration("monthly", btn, { month, year }, loading);
@@ -5535,7 +5934,7 @@
         errorMessage: "Failed to send Discord notification."
       });
     }
-    function sendLatestReport(config) {
+    async function sendLatestReport(config) {
       const report = getLatestReport(config.reportType);
       if (!report) {
         if (config.loading) {
@@ -5543,21 +5942,35 @@
         }
         return;
       }
-      AppUtils.gScriptRun({
-        gscriptFunc: config.reportMethod,
-        args: [report],
-        onSuccess: () => {
-          handleReportSuccess(config.btn, config.successMessage, config.loading);
-        },
-        onError: (err) => {
-          handleReportFailure(
-            config.btn,
-            err,
-            config.errorMessage,
-            config.loading
-          );
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: config.reportMethod,
+          args: [sessionId, signature, report],
+          onSuccess: () => {
+            handleReportSuccess(
+              config.btn,
+              config.successMessage,
+              config.loading
+            );
+          },
+          onError: (err) => {
+            handleReportFailure(
+              config.btn,
+              err,
+              config.errorMessage,
+              config.loading
+            );
+          }
+        });
+      } catch (error) {
+        handleReportFailure(
+          config.btn,
+          error,
+          config.errorMessage,
+          config.loading
+        );
+      }
     }
     function getLatestReport(reportType) {
       const report = ReportService.getLatestReport(reportType);
@@ -5578,31 +5991,41 @@
       }
       AppUtils.showError(err);
     }
-    const handleEmailReport = ($btn) => {
+    const handleEmailReport = async ($btn) => {
       const reportId = $btn.data("id");
       const reportType = $btn.data("type");
       const successMessage = reportType === "Data Export" ? "CSV emailed successfully!" : "Email sent successfully!";
       const serverFunction = reportType === "Data Export" ? "sendBillingRecordsCSVEmail" : "sendRequestedEmailReport";
-      AppUtils.gScriptRun({
-        gscriptFunc: serverFunction,
-        args: [reportId],
-        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
-        onError: (err) => AppUtils.showError(err)
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: serverFunction,
+          args: [sessionId, signature, reportId],
+          onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+          onError: (err) => AppUtils.showError(err)
+        });
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     };
-    const handleDiscordReport = ($btn) => {
+    const handleDiscordReport = async ($btn) => {
       const reportId = $btn.data("id");
       const reportType = $btn.data("type");
       const successMessage = reportType === "Data Export" ? "CSV sent to Discord successfully!" : "Discord notification sent!";
       const serverFunction = reportType === "Data Export" ? "sendBillingRecordsCSVDiscord" : "sendRequestedDiscordReport";
-      AppUtils.gScriptRun({
-        gscriptFunc: serverFunction,
-        args: [reportId],
-        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
-        onError: (err) => AppUtils.showError(err)
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: serverFunction,
+          args: [sessionId, signature, reportId],
+          onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+          onError: (err) => AppUtils.showError(err)
+        });
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     };
-    const handleBtnGenerateYearlyReport = ($btn) => {
+    const handleBtnGenerateYearlyReport = async ($btn) => {
       const selectYear = $("#yearly-report-year");
       const type = "yearly";
       const yearResult = ValidationModule.number(
@@ -5623,28 +6046,38 @@
         $btn[0],
         "Analyzing Report Request..."
       );
-      AppUtils.gScriptRun({
-        gscriptFunc: "validateCustomYearlyReport",
-        args: [year],
-        onSuccess: (result) => {
-          if (!result.valid) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "validateCustomYearlyReport",
+          args: [sessionId, signature, year],
+          onSuccess: (result) => {
+            if (!result.valid) {
+              ReportGenerator.setGenerateState(type, false, loading);
+              AppUtils.showDashboardToast(result.message, "warning");
+              return;
+            }
+            ReportGenerator.generateYearlyReport(year, $btn, loading);
+          },
+          onError: (err) => {
             ReportGenerator.setGenerateState(type, false, loading);
-            AppUtils.showDashboardToast(result.message, "warning");
-            return;
+            console.error(err);
+            AppUtils.showDashboardToast(
+              err.message || "Something went wrong.",
+              "error"
+            );
           }
-          ReportGenerator.generateYearlyReport(year, $btn, loading);
-        },
-        onError: (err) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-          console.error(err);
-          AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error"
-          );
-        }
-      });
+        });
+      } catch (error) {
+        ReportGenerator.setGenerateState(type, false, loading);
+        console.error(error);
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     };
-    const handleBtnGenerateMonthlyReport = ($btn) => {
+    const handleBtnGenerateMonthlyReport = async ($btn) => {
       const selectMonth = $("#monthly-report-month");
       const selectYear = $("#monthly-report-year");
       const monthResult = ValidationModule.requiredString(
@@ -5677,26 +6110,36 @@
         $btn[0],
         "Analyzing Report Request..."
       );
-      AppUtils.gScriptRun({
-        gscriptFunc: "validateCustomMonthlyReport",
-        args: [month, year],
-        onSuccess: (result) => {
-          if (!result.valid) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "validateCustomMonthlyReport",
+          args: [sessionId, signature, month, year],
+          onSuccess: (result) => {
+            if (!result.valid) {
+              ReportGenerator.setGenerateState(type, false, loading);
+              AppUtils.showDashboardToast(result.message, "warning");
+              return;
+            }
+            ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
+          },
+          onError: (err) => {
             ReportGenerator.setGenerateState(type, false, loading);
-            AppUtils.showDashboardToast(result.message, "warning");
-            return;
+            console.error(err);
+            AppUtils.showDashboardToast(
+              err.message || "Something went wrong.",
+              "error"
+            );
           }
-          ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
-        },
-        onError: (err) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-          console.error(err);
-          AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error"
-          );
-        }
-      });
+        });
+      } catch (error) {
+        ReportGenerator.setGenerateState(type, false, loading);
+        console.error(error);
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     };
     const handleEmailLatestReport = ($btn, reportType) => {
       const loading = AppUtils.setButtonLoading($btn[0], "Sending email...");
@@ -5842,21 +6285,29 @@
       $("#btn-generate-billing-records-csv").prop("disabled", false);
       loadBillingRecords(startDate, endDate);
     };
-    const loadBillingRecords = (startDate, endDate) => {
+    const loadBillingRecords = async (startDate, endDate) => {
       DataTableModule.showLoader(BILLING_TABLE_ID);
-      AppUtils.gScriptRun({
-        gscriptFunc: "getBillingRecordsForExport",
-        args: [startDate, endDate],
-        onSuccess: (data) => {
-          renderBillingRecords(data);
-        },
-        onError: (error) => {
-          DataTableModule.showError(
-            BILLING_TABLE_ID,
-            error?.message || "Failed to load Billing Records."
-          );
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getBillingRecordsForExport",
+          args: [sessionId, signature, startDate, endDate],
+          onSuccess: (data) => {
+            renderBillingRecords(data);
+          },
+          onError: (error) => {
+            DataTableModule.showError(
+              BILLING_TABLE_ID,
+              error?.message || "Failed to load Billing Records."
+            );
+          }
+        });
+      } catch (error) {
+        DataTableModule.showError(
+          BILLING_TABLE_ID,
+          error?.message || "Authentication required."
+        );
+      }
     };
     function normalizeBillingStatus(value) {
       const status = String(value || "").toUpperCase();
@@ -5936,7 +6387,7 @@
       });
       DataTableModule.init(BILLING_TABLE_TITLE, BILLING_TABLE_ID, false);
     };
-    const handleGenerateBillingRecordsCSV = () => {
+    const handleGenerateBillingRecordsCSV = async () => {
       const dates = datePicker?.selectedDates || [];
       if (!dates.length) {
         AppUtils.showError("Please select a date range.");
@@ -5950,48 +6401,62 @@
       }
       const button = document.getElementById("btn-generate-billing-records-csv");
       const loading = AppUtils.setButtonLoading(button, "Generating");
-      AppUtils.gScriptRun({
-        gscriptFunc: "saveBillingRecordsCSV",
-        args: [startDate, endDate],
-        onSuccess: (result) => {
-          if (loading) {
-            loading.restore();
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "saveBillingRecordsCSV",
+          args: [sessionId, signature, startDate, endDate],
+          onSuccess: (result) => {
+            if (loading) {
+              loading.restore();
+            }
+            if (!result?.success || !result?.url) {
+              AppUtils.showError(
+                "The Billing Records CSV could not be generated."
+              );
+              return;
+            }
+            AppUtils.showDashboardToast(
+              `CSV generated successfully (${result.recordCount} records).`
+            );
+            loadBillingRecords(startDate, endDate);
+            ReportsOverview.loadReportsOverview();
+            window.open(result.url, "_blank");
+            loadBillingCSVExportCount();
+          },
+          onError: (error) => {
+            if (loading) {
+              loading.restore();
+            }
+            AppUtils.showError(
+              error?.message || "Failed to generate the Billing Records CSV."
+            );
           }
-          if (!result?.success || !result?.url) {
-            AppUtils.showError("The Billing Records CSV could not be generated.");
-            return;
-          }
-          AppUtils.showDashboardToast(
-            `CSV generated successfully (${result.recordCount} records).`
-          );
-          loadBillingRecords(startDate, endDate);
-          ReportsOverview.loadReportsOverview();
-          window.open(result.url, "_blank");
-          loadBillingCSVExportCount();
-        },
-        onError: (error) => {
-          if (loading) {
-            loading.restore();
-          }
-          AppUtils.showError(
-            error?.message || "Failed to generate the Billing Records CSV."
-          );
-        }
-      });
+        });
+      } catch (error) {
+        loading?.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     };
-    const loadBillingCSVExportCount = () => {
-      AppUtils.gScriptRun({
-        gscriptFunc: "getBillingRecordsCSVExportCount",
-        onSuccess: (count) => {
-          $("#csv-generated-count").text(Number(count || 0));
-        },
-        onError: (error) => {
-          console.warn(
-            "[ReportsDataExport] Failed to load CSV export count:",
-            error
-          );
-        }
-      });
+    const loadBillingCSVExportCount = async () => {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getBillingRecordsCSVExportCount",
+          args: [sessionId, signature],
+          onSuccess: (count) => {
+            $("#csv-generated-count").text(Number(count || 0));
+          },
+          onError: (error) => {
+            console.warn(
+              "[ReportsDataExport] Failed to load CSV export count:",
+              error
+            );
+          }
+        });
+      } catch (error) {
+        console.warn("[ReportsDataExport] Authentication required:", error);
+      }
     };
     const updateSelectedRange = (startDate, endDate) => {
       const start = parseLocalDate(startDate);
@@ -6150,89 +6615,129 @@
       AppUtils.closeModal(MODAL_ID);
       loading.setSuccess("Cleared Cache");
     }
-    function syncExternalClientSheets(btn) {
+    async function syncExternalClientSheets(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Syncing sheets");
-      AppUtils.gScriptRun({
-        gscriptFunc: "reconcileExternalSheets",
-        onSuccess: (result) => {
-          const count = Array.isArray(result) ? result.length : 0;
-          AppUtils.showDashboardToast(
-            count ? `${count} external sheet(s) synchronized successfully.` : "External sheets are already synchronized.",
-            "success"
-          );
-          loading.setSuccess("Clients Synced");
-          AppUtils.closeModal(MODAL_ID);
-        },
-        onError: (err) => {
-          console.error("reconcileExternalSheets failed:", err);
-          AppUtils.showDashboardToast(
-            "Failed to synchronize external client sheets. Please try again.",
-            "error"
-          );
-          loading.restore();
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "reconcileExternalSheets",
+          args: [sessionId, signature],
+          onSuccess: (result) => {
+            const count = Array.isArray(result) ? result.length : 0;
+            AppUtils.showDashboardToast(
+              count ? `${count} external sheet(s) synchronized successfully.` : "External sheets are already synchronized.",
+              "success"
+            );
+            loading.setSuccess("Clients Synced");
+            AppUtils.closeModal(MODAL_ID);
+          },
+          onError: (err) => {
+            console.error("reconcileExternalSheets failed:", err);
+            AppUtils.showDashboardToast(
+              "Failed to synchronize external client sheets. Please try again.",
+              "error"
+            );
+            loading.restore();
+          }
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
-    function syncClientSheets(btn) {
+    async function syncClientSheets(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Syncing clients");
-      AppUtils.gScriptRun({
-        gscriptFunc: "syncClientSheetList",
-        onSuccess: () => {
-          AppUtils.showDashboardToast(
-            "Client list synced successfully!",
-            "success"
-          );
-          loading.setSuccess("Clients Synced");
-          AppUtils.closeModal(MODAL_ID);
-        },
-        onError: (err) => {
-          console.error("syncClientSheetList failed:", err);
-          AppUtils.showDashboardToast(
-            "Client list sync failed. Please try again.",
-            "error"
-          );
-          loading.restore();
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncClientSheetList",
+          args: [sessionId, signature],
+          onSuccess: () => {
+            AppUtils.showDashboardToast(
+              "Client list synced successfully!",
+              "success"
+            );
+            loading.setSuccess("Clients Synced");
+            AppUtils.closeModal(MODAL_ID);
+          },
+          onError: (err) => {
+            console.error("syncClientSheetList failed:", err);
+            AppUtils.showDashboardToast(
+              "Client list sync failed. Please try again.",
+              "error"
+            );
+            loading.restore();
+          }
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
-    function syncClientProjectsFromMain(btn) {
+    async function syncClientProjectsFromMain(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Updating projects");
-      AppUtils.gScriptRun({
-        gscriptFunc: "syncClientProjects",
-        onSuccess: () => {
-          AppUtils.showDashboardToast(
-            "Project data updated successfully.",
-            "success"
-          );
-          loading.setSuccess("Projects Updated");
-          AppUtils.closeModal(MODAL_ID);
-        },
-        onError: (err) => {
-          console.error("syncClientProjects failed:", err);
-          AppUtils.showDashboardToast(
-            "Failed to update project data. Please try again.",
-            "error"
-          );
-          loading.restore();
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncClientProjects",
+          args: [sessionId, signature],
+          onSuccess: () => {
+            AppUtils.showDashboardToast(
+              "Project data updated successfully.",
+              "success"
+            );
+            loading.setSuccess("Projects Updated");
+            AppUtils.closeModal(MODAL_ID);
+          },
+          onError: (err) => {
+            console.error("syncClientProjects failed:", err);
+            AppUtils.showDashboardToast(
+              "Failed to update project data. Please try again.",
+              "error"
+            );
+            loading.restore();
+          }
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
-    function BackupAllSheets(btn) {
+    async function BackupAllSheets(btn) {
       const loading = AppUtils.setButtonLoading(btn, "Creating Backup");
-      AppUtils.gScriptRun({
-        gscriptFunc: "backupAllSheets",
-        onSuccess: (result) => {
-          AppUtils.showDashboardToast("Backup completed", "info");
-          console.log("Backup completed:", result);
-          loading.setSuccess("Backup Completed");
-          AppUtils.closeModal(MODAL_ID);
-        },
-        onError: (err) => {
-          console.error("Backup failed:", err);
-          AppUtils.showDashboardToast("Something went wrong", "error");
-          loading.restore();
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "backupAllSheets",
+          args: [sessionId, signature],
+          onSuccess: (result) => {
+            AppUtils.showDashboardToast("Backup completed", "info");
+            console.log("Backup completed:", result);
+            loading.setSuccess("Backup Completed");
+            AppUtils.closeModal(MODAL_ID);
+          },
+          onError: (err) => {
+            console.error("Backup failed:", err);
+            AppUtils.showDashboardToast("Something went wrong", "error");
+            loading.restore();
+          }
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
     function handleIntegrationListClick(e) {
       const item = e.target.closest(".integration-list-item");
@@ -6471,7 +6976,7 @@
         }
       });
     }
-    function applyMasterFormula($modal, $btn) {
+    async function applyMasterFormula($modal, $btn) {
       const data = getMasterFormulaFormData($modal);
       if (!data) {
         return;
@@ -6479,40 +6984,49 @@
       const { cellRef, formula } = data;
       const operationId = startMasterFormulaOperation();
       const loading = AppUtils.setButtonLoading($btn[0], "Applying Formula");
-      AppUtils.gScriptRun({
-        gscriptFunc: "applyFormulaToMainSheets",
-        args: [cellRef, formula],
-        onSuccess: (result) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-          console.log("applyFormulaToMainSheets:", result);
-          loading.setSuccess("Formula Applied");
-          AppUtils.showDashboardToast(
-            "Formula applied to the main spreadsheet.",
-            "success"
-          );
-          AppUtils.closeModal(MODAL_ID);
-          masterFormulaTimer = setTimeout(() => {
-            masterFormulaTimer = null;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "applyFormulaToMainSheets",
+          args: [sessionId, signature, cellRef, formula],
+          onSuccess: (result) => {
             if (!isMasterFormulaOperationActive(operationId)) {
               return;
             }
-            openExternalProjectsConfirmation(cellRef, formula, operationId);
-          }, 1e3);
-        },
-        onError: (err) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
+            console.log("applyFormulaToMainSheets:", result);
+            loading.setSuccess("Formula Applied");
+            AppUtils.showDashboardToast(
+              "Formula applied to the main spreadsheet.",
+              "success"
+            );
+            AppUtils.closeModal(MODAL_ID);
+            masterFormulaTimer = setTimeout(() => {
+              masterFormulaTimer = null;
+              if (!isMasterFormulaOperationActive(operationId)) {
+                return;
+              }
+              openExternalProjectsConfirmation(cellRef, formula, operationId);
+            }, 1e3);
+          },
+          onError: (err) => {
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+            console.error("applyFormulaToMainSheets failed:", err);
+            loading.restore();
+            AppUtils.showDashboardToast(
+              err?.message || "Failed to apply formula to the main spreadsheet.",
+              "error"
+            );
           }
-          console.error("applyFormulaToMainSheets failed:", err);
-          loading.restore();
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to apply formula to the main spreadsheet.",
-            "error"
-          );
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
     function openExternalProjectsConfirmation(cellRef, formula, operationId) {
       if (!isMasterFormulaOperationActive(operationId)) {
@@ -6540,44 +7054,57 @@
       const operationId = startMasterFormulaOperation();
       applyFormulaToExternalProjects(cellRef, formula, $btn[0], operationId);
     }
-    function applyFormulaToExternalProjects(cellRef, formula, btn, operationId) {
+    async function applyFormulaToExternalProjects(cellRef, formula, btn, operationId) {
       if (!isMasterFormulaOperationActive(operationId)) {
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Updating Projects");
-      AppUtils.gScriptRun({
-        gscriptFunc: "applyFormulaToExternalProjects",
-        args: [cellRef, formula],
-        onSuccess: (result) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-          console.log("applyFormulaToExternalProjects:", result);
-          loading.setSuccess("Formula Applied");
-          AppUtils.showDashboardToast(
-            `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
-            "success"
-          );
-          masterFormulaTimer = setTimeout(() => {
-            masterFormulaTimer = null;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "applyFormulaToExternalProjects",
+          args: [sessionId, signature, cellRef, formula],
+          onSuccess: (result) => {
             if (!isMasterFormulaOperationActive(operationId)) {
               return;
             }
-            openExternalProjectSheetsConfirmation(cellRef, formula, operationId);
-          }, 1e3);
-        },
-        onError: (err) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
+            console.log("applyFormulaToExternalProjects:", result);
+            loading.setSuccess("Formula Applied");
+            AppUtils.showDashboardToast(
+              `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
+              "success"
+            );
+            masterFormulaTimer = setTimeout(() => {
+              masterFormulaTimer = null;
+              if (!isMasterFormulaOperationActive(operationId)) {
+                return;
+              }
+              openExternalProjectSheetsConfirmation(
+                cellRef,
+                formula,
+                operationId
+              );
+            }, 1e3);
+          },
+          onError: (err) => {
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+            console.error("applyFormulaToExternalProjects failed:", err);
+            loading.restore();
+            AppUtils.showDashboardToast(
+              err?.message || "Failed to update External Projects.",
+              "error"
+            );
           }
-          console.error("applyFormulaToExternalProjects failed:", err);
-          loading.restore();
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to update External Projects.",
-            "error"
-          );
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
     function openExternalProjectSheetsConfirmation(cellRef, formula, operationId) {
       if (!isMasterFormulaOperationActive(operationId)) {
@@ -6610,38 +7137,47 @@
       const operationId = startMasterFormulaOperation();
       applyFormulaToExternalProjectSheets(cellRef, formula, $btn[0], operationId);
     }
-    function applyFormulaToExternalProjectSheets(cellRef, formula, btn, operationId) {
+    async function applyFormulaToExternalProjectSheets(cellRef, formula, btn, operationId) {
       if (!isMasterFormulaOperationActive(operationId)) {
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Updating Sheets");
-      AppUtils.gScriptRun({
-        gscriptFunc: "applyFormulaToExternalProjectSheets",
-        args: [cellRef, formula],
-        onSuccess: (result) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "applyFormulaToExternalProjectSheets",
+          args: [sessionId, signature, cellRef, formula],
+          onSuccess: (result) => {
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+            console.log("applyFormulaToExternalProjectSheets:", result);
+            loading.setSuccess("Sheets Updated");
+            AppUtils.showDashboardToast(
+              `External project sheets updated successfully: ${result.updated} sheet(s).`,
+              "success"
+            );
+            cancelMasterFormulaOperation();
+          },
+          onError: (err) => {
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+            console.error("applyFormulaToExternalProjectSheets failed:", err);
+            loading.restore();
+            AppUtils.showDashboardToast(
+              err?.message || "Failed to update external project sheets.",
+              "error"
+            );
           }
-          console.log("applyFormulaToExternalProjectSheets:", result);
-          loading.setSuccess("Sheets Updated");
-          AppUtils.showDashboardToast(
-            `External project sheets updated successfully: ${result.updated} sheet(s).`,
-            "success"
-          );
-          cancelMasterFormulaOperation();
-        },
-        onError: (err) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-          console.error("applyFormulaToExternalProjectSheets failed:", err);
-          loading.restore();
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to update external project sheets.",
-            "error"
-          );
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
     function handleTabShown(e) {
       const tab = e.target;
@@ -6703,10 +7239,10 @@
         serverFunction: "getPrevYearMonthlyChartData",
         cacheKey: "chartData_monthly_prev"
       },
-      client_paid_owed_history: {
-        serverFunction: "getClientPaidOwedHistoryChart",
-        cacheKey: "chartData_client_paid_owed_history"
-      },
+      // client_paid_owed_history: {
+      //   serverFunction: "getClientPaidOwedHistoryChart",
+      //   cacheKey: "chartData_client_paid_owed_history",
+      // },
       current_month_log: {
         serverFunction: "getCurrentMonthLogChartData",
         cacheKey: (month, year) => `chartData_current_month_log_${year}_${month}`
@@ -6762,7 +7298,7 @@
         });
       });
     }
-    function loadChart(chartType, animated = false, year = "all", refresh = false, log = false, chartOpts = {}, month = (/* @__PURE__ */ new Date()).getMonth() + 1, onComplete = null) {
+    async function loadChart(chartType, animated = false, year = "all", refresh = false, log = false, chartOpts = {}, month = (/* @__PURE__ */ new Date()).getMonth() + 1, onComplete = null) {
       const logMessage = (...args2) => {
         if (log) {
           console.log("[Charts]", ...args2);
@@ -6790,39 +7326,45 @@
         refresh,
         animated
       });
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        config.serverFunction,
-        args,
-        (data) => {
-          logMessage("Chart data received:", data);
-          if (!document.body.contains(chartDiv)) {
-            logMessage("Chart container no longer exists.");
-            return;
-          }
-          const hasChartData = chartType === "monthly_hours_by_year" ? data && typeof data === "object" && Object.keys(data).length > 0 : Array.isArray(data) && data.length > 0;
-          if (!hasChartData) {
-            logMessage("No chart data found.");
-            chartDiv.innerText = "No data found.";
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          config.serverFunction,
+          [sessionId, signature, ...args],
+          (data) => {
+            logMessage("Chart data received:", data);
+            if (!document.body.contains(chartDiv)) {
+              logMessage("Chart container no longer exists.");
+              return;
+            }
+            const hasChartData = chartType === "monthly_hours_by_year" ? data && typeof data === "object" && Object.keys(data).length > 0 : Array.isArray(data) && data.length > 0;
+            if (!hasChartData) {
+              logMessage("No chart data found.");
+              chartDiv.innerText = "No data found.";
+              if (typeof onComplete === "function") {
+                onComplete();
+              }
+              return;
+            }
+            logMessage("Drawing chart:", {
+              chartType,
+              rows: data.length
+            });
+            drawChart(chartType, data, false, animated, chartOpts);
             if (typeof onComplete === "function") {
               onComplete();
             }
-            return;
-          }
-          logMessage("Drawing chart:", {
-            chartType,
-            rows: data.length
-          });
-          drawChart(chartType, data, false, animated, chartOpts);
-          if (typeof onComplete === "function") {
-            onComplete();
-          }
-        },
-        log,
-        refresh
-      );
+          },
+          log,
+          refresh
+        );
+      } catch (error) {
+        logMessage("Chart authentication failed:", error);
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
-    function loadChartData(chartType, callback) {
+    async function loadChartData(chartType, callback) {
       const config = CHART_CONFIG[chartType];
       if (!config) {
         AppUtils.showError(`Unknown chart type: ${chartType}`);
@@ -6837,7 +7379,17 @@
       bindTabEvents();
       const cacheKey = typeof config.cacheKey === "function" ? config.cacheKey("all") : config.cacheKey;
       const args = chartType === "yearly" ? ["all"] : [];
-      AppUtils.cachedGScriptCall(cacheKey, config.serverFunction, args, callback);
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          config.serverFunction,
+          [sessionId, signature, ...args],
+          callback
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function loadPrevYearCombinedChart(refresh = false, log = false) {
       const chartId = "monthly-prev-merged";
@@ -6909,14 +7461,14 @@
           return drawMonthlyHoursByYearChart(ctx, type, data, animated);
         case "daily_overview":
           return drawDailyOverviewChart(ctx, type, data, animated);
-        case "client_paid_owed_history":
-          return drawClientPaidOwedHistoryChart(
-            ctx,
-            type,
-            data,
-            animated,
-            chartOpts
-          );
+        // case "client_paid_owed_history":
+        //   return drawClientPaidOwedHistoryChart(
+        //     ctx,
+        //     type,
+        //     data,
+        //     animated,
+        //     chartOpts,
+        //   );
         case "client_hours_month":
           return drawClientMonthlyHoursChart(ctx, type, data, animated);
         case "client_daily_hours":
@@ -8226,19 +8778,26 @@
     function init() {
       load();
     }
-    function load() {
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getClientActivityTrends",
-        [],
-        (data) => {
-          if (!data || typeof data !== "object") {
-            renderEmpty();
-            return;
+    async function load() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getClientActivityTrends",
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object") {
+              renderEmpty();
+              return;
+            }
+            render(data);
           }
-          render(data);
-        }
-      );
+        );
+      } catch (error) {
+        console.error("[ClientActivityTrends] Authentication failed:", error);
+        renderEmpty();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function render(data) {
       const container = document.getElementById(CONTAINER_ID);
@@ -8357,7 +8916,7 @@
     const ACTIVE_CLIENTS_TABLE_ID = "#active-clients";
     const ACTIVE_CLIENTS_TITLE = "Active Clients";
     const CLIENT_DATA_TABLE_ID = "#table";
-    function renderClientDataByStatus(sourceSheet, title, category, debug = false) {
+    async function renderClientDataByStatus(sourceSheet, title, category, debug = false) {
       const log = (...args) => debug && console.log(...args);
       const cacheKey = getCacheKey(category);
       log("[renderClientDataByStatus] start", {
@@ -8367,15 +8926,20 @@
         cacheKey
       });
       DataTableModule.showLoader(CLIENT_DATA_TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        "getClientDataByStatus",
-        [category, sourceSheet],
-        (data) => {
-          handleClientDataResponse(data, title, log);
-        },
-        debug
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "getClientDataByStatus",
+          [sessionId, signature, category, sourceSheet],
+          (data) => {
+            handleClientDataResponse(data, title, log);
+          },
+          debug
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function handleClientDataResponse(data, title, log) {
       log("[renderClientDataByStatus] callback data:", data);
@@ -8389,27 +8953,32 @@
     function getCacheKey(category) {
       return `cache_${category.replace(/\s+/g, "")}`;
     }
-    function renderActivePaidOwedClients(isSimple = false, debug = false, reset = false) {
+    async function renderActivePaidOwedClients(isSimple = false, debug = false, reset = false) {
       const log = (...args) => debug && console.log(...args);
       const cacheKey = "paidOwedClients";
       const tableId = "#active-clients";
       log("[renderActivePaidOwedClients] loading");
       DataTableModule.showLoader(tableId);
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        "getActiveClientsPaidOwed",
-        [],
-        (data) => {
-          log("[renderActivePaidOwedClients] callback:", data);
-          if (!Array.isArray(data)) {
-            AppUtils.showError("\u26A0\uFE0F Invalid paid & owed data.");
-            return;
-          }
-          renderPaidOwedTable(data, isSimple);
-        },
-        debug,
-        reset
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "getActiveClientsPaidOwed",
+          [sessionId, signature],
+          (data) => {
+            log("[renderActivePaidOwedClients] callback:", data);
+            if (!Array.isArray(data)) {
+              AppUtils.showError("\u26A0\uFE0F Invalid paid & owed data.");
+              return;
+            }
+            renderPaidOwedTable(data, isSimple);
+          },
+          debug,
+          reset
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderPaidOwedTable(data, isSimple) {
       const tbody = document.querySelector(`${ACTIVE_CLIENTS_TABLE_ID} tbody`);
@@ -8445,24 +9014,29 @@
         );
       }
     }
-    function renderActiveClients(debug = false, reset = false) {
+    async function renderActiveClients(debug = false, reset = false) {
       const log = (...args) => debug && console.log(...args);
       const cacheKey = "paidOwedClients";
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        "getActiveClientsPaidOwed",
-        [],
-        (data) => {
-          log("[renderActiveClients] callback:", data);
-          if (!Array.isArray(data)) {
-            AppUtils.showError("\u26A0\uFE0F Invalid active client data.");
-            return;
-          }
-          renderActiveClientList(data);
-        },
-        debug,
-        reset
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "getActiveClientsPaidOwed",
+          [sessionId, signature],
+          (data) => {
+            log("[renderActiveClients] callback:", data);
+            if (!Array.isArray(data)) {
+              AppUtils.showError("\u26A0\uFE0F Invalid active client data.");
+              return;
+            }
+            renderActiveClientList(data);
+          },
+          debug,
+          reset
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderActiveClientList(data) {
       const container = document.getElementById("active-clients-list");
@@ -8725,168 +9299,6 @@
     return {
       init,
       destroy
-    };
-  })();
-
-  // src/auth/auth.js
-  var GcbAuthModule = /* @__PURE__ */ (() => {
-    const SESSION_ID_KEY = "gcb_session_id";
-    const SESSION_SIGNATURE_KEY = "gcb_session_signature";
-    const APP_CACHE_PREFIX = "gcb_";
-    let initialized = false;
-    let initializing = null;
-    function getSessionId() {
-      return sessionStorage.getItem(SESSION_ID_KEY) || "";
-    }
-    function getSessionSignature() {
-      return sessionStorage.getItem(SESSION_SIGNATURE_KEY) || "";
-    }
-    function hasSession() {
-      return Boolean(getSessionId() && getSessionSignature());
-    }
-    function saveSession(result) {
-      if (!result?.sessionId || !result?.signature) {
-        throw new Error("Invalid GCB session response.");
-      }
-      sessionStorage.setItem(SESSION_ID_KEY, result.sessionId);
-      sessionStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
-    }
-    function clearSession() {
-      sessionStorage.removeItem(SESSION_ID_KEY);
-      sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
-    }
-    function exchangeTicket(ticket) {
-      return new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler((result) => {
-          try {
-            console.log(
-              "[GCB Auth] Authentication handoff exchange succeeded:",
-              result
-            );
-            saveSession(result);
-            window.GCB_AUTH_TICKET = "";
-            if (window.GCB_IS_GITHUB_EMBEDDED === true && window.parent !== window) {
-              console.log(
-                "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper."
-              );
-              window.top.postMessage(
-                {
-                  type: "GCB_AUTH_HANDOFF_COMPLETE"
-                },
-                "https://gcbops.github.io"
-              );
-              console.log(
-                "[GCB Auth] Authentication handoff completion message sent."
-              );
-            }
-            console.log("[GCB Auth] Session handoff completed.");
-            resolve(true);
-          } catch (error) {
-            reject(error);
-          }
-        }).withFailureHandler((error) => {
-          console.error(
-            "[GCB Auth] Authentication handoff exchange failed:",
-            error
-          );
-          reject(error);
-        }).exchangeGcbSessionHandoff(ticket);
-      });
-    }
-    function clearAppCache() {
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(APP_CACHE_PREFIX)) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((key) => {
-        localStorage.removeItem(key);
-      });
-    }
-    async function init() {
-      if (initialized) {
-        return true;
-      }
-      if (initializing) {
-        return initializing;
-      }
-      initializing = (async () => {
-        try {
-          if (hasSession()) {
-            initialized = true;
-            return true;
-          }
-          if (!window.GCB_AUTH_TICKET) {
-            console.error(
-              "[GCB Auth] Authentication ticket not detected"
-            );
-            return;
-          }
-          console.log(
-            "[GCB Auth] Authentication ticket detected:",
-            window.GCB_AUTH_TICKET
-          );
-          const ticket = String(window.GCB_AUTH_TICKET || "").trim();
-          if (ticket) {
-            console.log("[GCB Auth] Exchanging authentication handoff ticket.");
-            await exchangeTicket(ticket);
-          }
-          if (!hasSession()) {
-            console.warn("[GCB Auth] No authenticated session.");
-            return false;
-          }
-          initialized = true;
-          return true;
-        } catch (error) {
-          console.error("[GCB Auth] Initialization failed:", error);
-          clearSession();
-          initialized = false;
-          return false;
-        } finally {
-          initializing = null;
-        }
-      })();
-      return initializing;
-    }
-    async function getAuthArgs() {
-      const authenticated = await init();
-      if (!authenticated) {
-        throw new Error("Authentication required.");
-      }
-      return [getSessionId(), getSessionSignature()];
-    }
-    async function logout() {
-      if (!hasSession()) {
-        clearSession();
-        return true;
-      }
-      const sessionId = getSessionId();
-      const signature = getSessionSignature();
-      try {
-        await new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => {
-            resolve();
-          }).withFailureHandler((error) => {
-            reject(error);
-          }).logoutGcbSession(sessionId, signature);
-        });
-      } finally {
-        clearSession();
-        window.GCB_AUTH_TICKET = "";
-        clearAppCache();
-      }
-      return true;
-    }
-    return {
-      init,
-      getSessionId,
-      getSessionSignature,
-      hasSession,
-      clearSession,
-      getAuthArgs,
-      logout
     };
   })();
 
@@ -9308,7 +9720,7 @@
           (data) => {
             if (!data || typeof data !== "object") {
               renderPaidHoursSummary({});
-              DataTableModule.showError(TABLE_ID, "Unable to load owed hours.");
+              DataTableModule.showError(TABLE_ID, "Unable to load paid hours.");
               return;
             }
             paidHoursData = {
@@ -9676,23 +10088,34 @@
       const endDate = formatDate(dates[1] || dates[0]);
       loadDailyOverviewChart(startDate, endDate, false);
     }
-    function loadDailyOverviewChart(startDate, endDate, showLoading = true) {
+    async function loadDailyOverviewChart(startDate, endDate, showLoading = true) {
       if (showLoading) {
         showChartLoading();
       }
-      AppUtils.cachedGScriptCall(
-        `dailyOverviewChart_${startDate}_${endDate}`,
-        "updateDailyOverviewChartRange",
-        [startDate, endDate],
-        (data) => {
-          if (showLoading) {
-            hideChartLoading();
-          }
-          ChartModule.drawChart("daily_overview", data, false, true);
-        },
-        false,
-        true
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          `dailyOverviewChart_${startDate}_${endDate}`,
+          "updateDailyOverviewChartRange",
+          [sessionId, signature, startDate, endDate],
+          (data) => {
+            if (showLoading) {
+              hideChartLoading();
+            }
+            ChartModule.drawChart("daily_overview", data, false, true);
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        if (showLoading) {
+          hideChartLoading();
+        }
+        console.error("[DailyOverview] Failed to load chart:", error);
+        AppUtils.showError(
+          error?.message || "Unable to load daily overview chart."
+        );
+      }
     }
     function saveDateRange(startDate, endDate) {
       AppUtils.cacheSet(DATE_RANGE_CACHE_KEY, {
@@ -9813,7 +10236,7 @@
       );
       $("#chart-monthly_hours_by_year-loading").addClass("d-none");
     }
-    function loadGrowthComparison(containerSelector, currentYear = (/* @__PURE__ */ new Date()).getFullYear(), comparisonYear = (/* @__PURE__ */ new Date()).getFullYear() - 1, refresh = false, log = false) {
+    async function loadGrowthComparison(containerSelector, currentYear = (/* @__PURE__ */ new Date()).getFullYear(), comparisonYear = (/* @__PURE__ */ new Date()).getFullYear() - 1, refresh = false, log = false) {
       const cacheKey = `${CACHE_KEY}_${currentYear}_${comparisonYear}`;
       if (log) {
         console.log(
@@ -9823,25 +10246,33 @@
           comparisonYear
         );
       }
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        "getGrowthComparisonSummary",
-        [currentYear, comparisonYear],
-        (data) => {
-          if (!data) {
-            AppUtils.showError(
-              `No growth comparison data found for ${currentYear} vs ${comparisonYear}.`
-            );
-            return;
-          }
-          if (log) {
-            console.log("[GrowthComparison] Data:", data);
-          }
-          renderGrowthComparison(containerSelector, data);
-        },
-        log,
-        refresh
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "getGrowthComparisonSummary",
+          [sessionId, signature, currentYear, comparisonYear],
+          (data) => {
+            if (!data) {
+              AppUtils.showError(
+                `No growth comparison data found for ${currentYear} vs ${comparisonYear}.`
+              );
+              return;
+            }
+            if (log) {
+              console.log("[GrowthComparison] Data:", data);
+            }
+            renderGrowthComparison(containerSelector, data);
+          },
+          log,
+          refresh
+        );
+      } catch (error) {
+        console.error("[GrowthComparison] Failed to load comparison:", error);
+        AppUtils.showError(
+          error?.message || "Unable to load growth comparison data."
+        );
+      }
     }
     function renderGrowthComparison(containerSelector, data) {
       const $container = $(containerSelector);
@@ -10029,22 +10460,27 @@
     function destroy() {
       initialized = false;
     }
-    function load(reset = false) {
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getClientRankings",
-        [],
-        (data) => {
-          if (!data || typeof data !== "object") {
-            showError();
-            return;
-          }
-          renderOverview(data.overview || {});
-          renderRankings(data.rankings || {});
-        },
-        false,
-        reset
-      );
+    async function load(reset = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getClientRankings",
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object") {
+              showError();
+              return;
+            }
+            renderOverview(data.overview || {});
+            renderRankings(data.rankings || {});
+          },
+          false,
+          reset
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function refresh() {
       load(true);
@@ -10135,26 +10571,36 @@
         icon: "fa-money-bill-wave"
       });
     }
-    function renderLegacyRanking(listSelector, rankingKey, config) {
-      AppUtils.cachedGScriptCall(CACHE_KEY, "getClientRankings", [], (data) => {
-        const list = document.querySelector(listSelector);
-        if (!list) {
-          return;
-        }
-        const clients = data?.rankings?.[rankingKey];
-        list.innerHTML = "";
-        if (!Array.isArray(clients) || !clients.length) {
-          list.innerHTML = `
-            <div class="client-loading text-muted">
-              No ranking data available.
-            </div>
-          `;
-          return;
-        }
-        clients.forEach((client, index) => {
-          list.appendChild(createLegacyRankingItem(client, index, config));
-        });
-      });
+    async function renderLegacyRanking(listSelector, rankingKey, config) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getClientRankings",
+          [sessionId, signature],
+          (data) => {
+            const list = document.querySelector(listSelector);
+            if (!list) {
+              return;
+            }
+            const clients = data?.rankings?.[rankingKey];
+            list.innerHTML = "";
+            if (!Array.isArray(clients) || !clients.length) {
+              list.innerHTML = `
+              <div class="client-loading text-muted">
+                No ranking data available.
+              </div>
+            `;
+              return;
+            }
+            clients.forEach((client, index) => {
+              list.appendChild(createLegacyRankingItem(client, index, config));
+            });
+          }
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function createRankingItem(client, index, config) {
       const item = document.createElement("div");
@@ -10269,37 +10715,51 @@
       }
       initialized = false;
     }
-    function loadProjectRankings(forceRefresh = false) {
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getProjectRankings",
-        [],
-        (data) => {
-          if (!data) {
-            renderError();
-            return;
-          }
-          renderSummary(data.summary);
-          renderTopProjects(data.topProjects);
-          renderRecentProjects(data.recentProjects);
-          renderActivity(data.activity);
-          renderClientSummary(data.clientSummary);
-        },
-        false,
-        forceRefresh
-      );
-    }
-    function renderSummary(summary) {
-      if (summary === void 0) {
+    async function loadProjectRankings(forceRefresh = false) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
         AppUtils.cachedGScriptCall(
           CACHE_KEY,
           "getProjectRankings",
-          [],
+          [sessionId, signature],
           (data) => {
-            renderSummary(data?.summary);
+            if (!data) {
+              renderError();
+              return;
+            }
+            renderSummary(data.summary);
+            renderTopProjects(data.topProjects);
+            renderRecentProjects(data.recentProjects);
+            renderActivity(data.activity);
+            renderClientSummary(data.clientSummary);
           },
-          false
+          false,
+          forceRefresh
         );
+      } catch (error) {
+        console.error(
+          "[ProjectRankings] Failed to load project rankings:",
+          error
+        );
+        renderError();
+      }
+    }
+    async function renderSummary(summary) {
+      if (summary === void 0) {
+        try {
+          const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+          AppUtils.cachedGScriptCall(
+            CACHE_KEY,
+            "getProjectRankings",
+            [sessionId, signature],
+            (data) => {
+              renderSummary(data?.summary);
+            },
+            false
+          );
+        } catch (error) {
+          console.error("[ProjectRankings] Failed to load summary:", error);
+        }
         return;
       }
       summary = summary || {};
@@ -10308,17 +10768,22 @@
       $("#project-active-month-count").text(summary.activeMonth ?? 0);
       $("#project-new-year-count").text(summary.newYear ?? 0);
     }
-    function renderTopProjects(projects) {
+    async function renderTopProjects(projects) {
       if (projects === void 0) {
-        AppUtils.cachedGScriptCall(
-          CACHE_KEY,
-          "getProjectRankings",
-          [],
-          (data) => {
-            renderTopProjects(data?.topProjects);
-          },
-          false
-        );
+        try {
+          const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+          AppUtils.cachedGScriptCall(
+            CACHE_KEY,
+            "getProjectRankings",
+            [sessionId, signature],
+            (data) => {
+              renderTopProjects(data?.topProjects);
+            },
+            false
+          );
+        } catch (error) {
+          console.error("[ProjectRankings] Failed to load top projects:", error);
+        }
         return;
       }
       const $container = $("#top-projects");
@@ -10495,7 +10960,7 @@
         "bg-night-sky"
       ]
     };
-    function loadPerformanceSummary(containerId, growthId, yearType) {
+    async function loadPerformanceSummary(containerId, growthId, yearType) {
       const container = document.getElementById(containerId);
       const growthEl = document.getElementById(growthId);
       if (!container) {
@@ -10509,25 +10974,34 @@
       }
       const cacheKey = `performanceSummary_${yearType}`;
       resetPerformanceSummary(container, growthEl);
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        "getPerformanceSummary",
-        [yearType],
-        (data) => {
-          if (!data || !Array.isArray(data.percentages)) {
-            console.warn("[PerformanceMetrics] Invalid data:", data);
-            setPerformanceError(container, growthEl);
-            return;
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "getPerformanceSummary",
+          [sessionId, signature, yearType],
+          (data) => {
+            if (!data || !Array.isArray(data.percentages)) {
+              console.warn("[PerformanceMetrics] Invalid data:", data);
+              setPerformanceError(container, growthEl);
+              return;
+            }
+            renderPerformanceSummary(
+              container,
+              growthEl,
+              suffix,
+              data,
+              COLORS[yearType]
+            );
           }
-          renderPerformanceSummary(
-            container,
-            growthEl,
-            suffix,
-            data,
-            COLORS[yearType]
-          );
-        }
-      );
+        );
+      } catch (error) {
+        console.error(
+          "[PerformanceMetrics] Failed to load performance summary:",
+          error
+        );
+        setPerformanceError(container, growthEl);
+      }
     }
     function resetPerformanceSummary(container, growthEl) {
       if (growthEl) {
@@ -10818,24 +11292,29 @@
         suffix: " hrs"
       }
     ];
-    function loadTargetProgress(cacheKey = "targetProgress", functionName = "getCurrentTargetProgress", debug = false, reset = false) {
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        functionName,
-        [],
-        (data) => {
-          if (!data || typeof data !== "object") {
-            AppUtils.showError("\u26A0\uFE0F Invalid target data.");
-            return;
-          }
-          if (debug) {
-            console.log("[HourTargetProgress] data:", data);
-          }
-          renderTargetProgress(data);
-        },
-        debug,
-        reset
-      );
+    async function loadTargetProgress(cacheKey = "targetProgress", functionName = "getCurrentTargetProgress", debug = false, reset = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          functionName,
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object") {
+              AppUtils.showError("\u26A0\uFE0F Invalid target data.");
+              return;
+            }
+            if (debug) {
+              console.log("[HourTargetProgress] data:", data);
+            }
+            renderTargetProgress(data);
+          },
+          debug,
+          reset
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderTargetProgress(data) {
       TARGET_CONFIG.forEach((config) => {
@@ -10932,24 +11411,29 @@
         progressBar.classList.add("bg-danger");
       }
     }
-    function loadTargetChart(cacheKey = "targetChart", functionName = "getCurrentYearTargetChartData", debug = false, reset = false) {
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        functionName,
-        [],
-        (data) => {
-          if (!Array.isArray(data)) {
-            AppUtils.showError("\u26A0\uFE0F Invalid target chart data.");
-            return;
-          }
-          if (debug) {
-            console.log("[HourTargetProgress] chart data:", data);
-          }
-          renderTargetChart(data);
-        },
-        debug,
-        reset
-      );
+    async function loadTargetChart(cacheKey = "targetChart", functionName = "getCurrentYearTargetChartData", debug = false, reset = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          functionName,
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              AppUtils.showError("\u26A0\uFE0F Invalid target chart data.");
+              return;
+            }
+            if (debug) {
+              console.log("[HourTargetProgress] chart data:", data);
+            }
+            renderTargetChart(data);
+          },
+          debug,
+          reset
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderTargetChart(data) {
       const container = document.getElementById("chart-monthly-targets");
@@ -11013,24 +11497,30 @@
       document.removeEventListener("input", handleInput);
       document.removeEventListener("click", handleClick);
     }
-    function loadTargetProgress(reset = false) {
-      AppUtils.cachedGScriptCall(
-        "targetProgress",
-        "getCurrentTargetProgress",
-        [],
-        (data) => {
-          if (!data || typeof data !== "object") {
-            AppUtils.showError("Unable to load target data.");
-            return;
-          }
-          targetData = data;
-          renderTargetSummary(data);
-          renderTargetGuidance(data);
-          initializePlanner(data);
-        },
-        false,
-        reset
-      );
+    async function loadTargetProgress(reset = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "targetProgress",
+          "getCurrentTargetProgress",
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object") {
+              AppUtils.showError("Unable to load target data.");
+              return;
+            }
+            targetData = data;
+            renderTargetSummary(data);
+            renderTargetGuidance(data);
+            initializePlanner(data);
+          },
+          false,
+          reset
+        );
+      } catch (error) {
+        console.error("getCurrentTargetProgress failed:", error);
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function loadTargetChart() {
       HourTargetProgress.loadTargetChart(
@@ -11129,33 +11619,39 @@
       $modal.find("#target-form-body, #target-form-footer").addClass("d-none");
       $modal.find("#target-review-body, #target-review-footer").removeClass("d-none");
     }
-    function savePerformanceTarget(type, value, proceedButton) {
+    async function savePerformanceTarget(type, value, proceedButton) {
       const loading = proceedButton ? AppUtils.setButtonLoading(proceedButton, "Saving") : null;
-      AppUtils.gScriptRun({
-        gscriptFunc: "updatePerformanceTarget",
-        args: [type, value],
-        onSuccess: (result) => {
-          if (!result?.success) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "updatePerformanceTarget",
+          args: [sessionId, signature, type, value],
+          onSuccess: (result) => {
+            if (!result?.success) {
+              loading?.restore();
+              AppUtils.showError("Unable to update performance target.");
+              return;
+            }
+            loading?.setSuccess("Saved");
+            AppUtils.showDashboardToast(
+              `${type === "daily" ? "Daily" : "Monthly"} target updated successfully.`
+            );
+            setTimeout(() => {
+              AppUtils.closeModal(TARGET_MODAL_ID);
+              refreshTargetData();
+            }, 1e3);
+          },
+          onError: (error) => {
             loading?.restore();
-            AppUtils.showError("Unable to update performance target.");
-            return;
+            AppUtils.showError(
+              error?.message || "Unable to update performance target."
+            );
           }
-          loading?.setSuccess("Saved");
-          AppUtils.showDashboardToast(
-            `${type === "daily" ? "Daily" : "Monthly"} target updated successfully.`
-          );
-          setTimeout(() => {
-            AppUtils.closeModal(TARGET_MODAL_ID);
-            refreshTargetData();
-          }, 1e3);
-        },
-        onError: (error) => {
-          loading?.restore();
-          AppUtils.showError(
-            error?.message || "Unable to update performance target."
-          );
-        }
-      });
+        });
+      } catch (error) {
+        loading?.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function refreshTargetData() {
       loadTargetProgress(true);
@@ -12020,18 +12516,28 @@
       }
       openIntegrationModal(integration);
     };
-    const loadData = () => {
-      AppUtils.gScriptRun({
-        gscriptFunc: "getIntegrationStatus",
-        onSuccess: updateIntegrationStatus,
-        onError: (err) => {
-          console.error("getIntegrationStatus failed:", err);
-          AppUtils.showDashboardToast(
-            "Failed to load integration status.",
-            "error"
-          );
-        }
-      });
+    const loadData = async () => {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getIntegrationStatus",
+          args: [sessionId, signature],
+          onSuccess: updateIntegrationStatus,
+          onError: (err) => {
+            console.error("getIntegrationStatus failed:", err);
+            AppUtils.showDashboardToast(
+              "Failed to load integration status.",
+              "error"
+            );
+          }
+        });
+      } catch (error) {
+        console.error("Authentication required for integration status:", error);
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     };
     function getIntegrationConfig(integration) {
       return INTEGRATIONS[integration] || null;
@@ -12202,51 +12708,63 @@
       <button type="button" class="btn btn-primary btn-save">Save Changes</button>
     `;
     }
-    function loadIntegrationConfigStatus(integration, $modal) {
+    async function loadIntegrationConfigStatus(integration, $modal) {
       const config = getIntegrationConfig(integration);
       if (!config) {
         return;
       }
       const fields = config.fields || [];
-      AppUtils.gScriptRun({
-        gscriptFunc: "getIntegrationConfigStatus",
-        args: [integration],
-        onSuccess: (data) => {
-          fields.forEach((field) => {
-            const fieldData = data?.fields?.[field.name];
-            const $input = $modal.find(`#integrationConfigValue-${field.name}`);
-            const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
-            if (!$input.length || !$help.length) {
-              return;
-            }
-            if (!fieldData?.configured) {
-              $input.attr("placeholder", "Not configured");
-              $help.removeClass("is-configured").text(
-                field.help || "No configuration has been saved yet. Enter a value to configure this integration."
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getIntegrationConfigStatus",
+          args: [sessionId, signature, integration],
+          onSuccess: (data) => {
+            fields.forEach((field) => {
+              const fieldData = data?.fields?.[field.name];
+              const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+              const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+              if (!$input.length || !$help.length) {
+                return;
+              }
+              if (!fieldData?.configured) {
+                $input.attr("placeholder", "Not configured");
+                $help.removeClass("is-configured").text(
+                  field.help || "No configuration has been saved yet. Enter a value to configure this integration."
+                );
+                return;
+              }
+              $input.attr("placeholder", `Current: ${fieldData.masked}`);
+              $help.addClass("is-configured").text(
+                "Currently configured. Leave blank to keep the current value."
               );
-              return;
-            }
-            $input.attr("placeholder", `Current: ${fieldData.masked}`);
-            $help.addClass("is-configured").text(
-              "Currently configured. Leave blank to keep the current value."
-            );
-          });
-        },
-        onError: (err) => {
-          console.error("getIntegrationConfigStatus failed:", err);
-          fields.forEach((field) => {
-            const $input = $modal.find(`#integrationConfigValue-${field.name}`);
-            const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
-            if (!$input.length || !$help.length) {
-              return;
-            }
-            $input.attr("placeholder", "Unable to check current configuration");
-            $help.removeClass("is-configured").text("Unable to check the current configuration.");
-          });
-        }
-      });
+            });
+          },
+          onError: (err) => {
+            console.error("getIntegrationConfigStatus failed:", err);
+            fields.forEach((field) => {
+              const $input = $modal.find(`#integrationConfigValue-${field.name}`);
+              const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
+              if (!$input.length || !$help.length) {
+                return;
+              }
+              $input.attr("placeholder", "Unable to check current configuration");
+              $help.removeClass("is-configured").text("Unable to check the current configuration.");
+            });
+          }
+        });
+      } catch (error) {
+        console.error(
+          "Authentication required for integration config status:",
+          error
+        );
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+      }
     }
-    function saveIntegration(integration, $modal, $btn) {
+    async function saveIntegration(integration, $modal, $btn) {
       const config = getIntegrationConfig(integration);
       const title = config?.title || "Integration";
       if (!config) {
@@ -12267,36 +12785,47 @@
       }
       const payload = config.fields.length === 1 ? value[config.fields[0].name] : value;
       const loading = AppUtils.setButtonLoading($btn[0], "Saving");
-      AppUtils.gScriptRun({
-        gscriptFunc: "saveIntegration",
-        args: [integration, payload],
-        onSuccess: () => {
-          loading.setSuccess("Configuration Saved");
-          AppUtils.closeModal(MODAL_ID);
-          AppUtils.showDashboardToast(
-            `${title} configuration saved successfully!`,
-            "success"
-          );
-          AppUtils.gScriptRun({
-            gscriptFunc: "getIntegrationStatus",
-            onSuccess: (status) => {
-              updateIntegrationStatus(status);
-            },
-            onError: (err) => {
-              console.error("Failed to refresh integration status:", err);
-            }
-          });
-          loadData();
-        },
-        onError: (err) => {
-          console.error("saveIntegration failed:", err);
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to save integration configuration.",
-            "error"
-          );
-          loading.restore();
-        }
-      });
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "saveIntegration",
+          args: [sessionId, signature, integration, payload],
+          onSuccess: () => {
+            loading.setSuccess("Configuration Saved");
+            AppUtils.closeModal(MODAL_ID);
+            AppUtils.showDashboardToast(
+              `${title} configuration saved successfully!`,
+              "success"
+            );
+            AppUtils.gScriptRun({
+              gscriptFunc: "getIntegrationStatus",
+              args: [sessionId, signature],
+              onSuccess: (status) => {
+                updateIntegrationStatus(status);
+              },
+              onError: (err) => {
+                console.error("Failed to refresh integration status:", err);
+              }
+            });
+            loadData();
+          },
+          onError: (err) => {
+            console.error("saveIntegration failed:", err);
+            AppUtils.showDashboardToast(
+              err?.message || "Failed to save integration configuration.",
+              "error"
+            );
+            loading.restore();
+          }
+        });
+      } catch (error) {
+        console.error("Authentication required for saveIntegration:", error);
+        AppUtils.showDashboardToast(
+          error?.message || "Authentication required.",
+          "error"
+        );
+        loading.restore();
+      }
     }
     return {
       init,
@@ -12397,29 +12926,35 @@
         openHourlyModal();
       });
     }
-    function openSheet(sheetName, errorMessage) {
+    async function openSheet(sheetName, errorMessage) {
       const buttonId = sheetName === "Upsells" ? "#viewSheet-opportunities-upsell" : sheetName === "Hourly History" ? "#viewSheet-opportunities-hourly" : sheetName === "Legacy Clients" ? "#viewSheet-opportunities-legacy" : null;
       const btn = document.querySelector(buttonId);
       if (!btn) {
         return;
       }
       const loading = AppUtils.setButtonLoading(btn, "Redirecting");
-      AppUtils.gScriptRun({
-        gscriptFunc: "getClientSheetUrl",
-        args: [sheetName],
-        onSuccess: (url) => {
-          loading.restore();
-          if (url && String(url).startsWith("http")) {
-            window.open(url, "_blank");
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getClientSheetUrl",
+          args: [sessionId, signature, sheetName],
+          onSuccess: (url) => {
+            loading.restore();
+            if (url && String(url).startsWith("http")) {
+              window.open(url, "_blank");
+              return;
+            }
+            AppUtils.showError(errorMessage);
+          },
+          onError: (err) => {
+            loading.restore();
+            AppUtils.showError(err);
           }
-          AppUtils.showError(errorMessage);
-        },
-        onError: (err) => {
-          loading.restore();
-          AppUtils.showError(err);
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function loadData() {
       loadUpsellSummary();
@@ -12428,17 +12963,22 @@
       loadTotalHourlyHours();
       loadHourlyChart();
     }
-    function loadUpsellSummary(forceRefresh = false) {
-      AppUtils.cachedGScriptCall(
-        UPSELL_SUMMARY_CACHE_KEY,
-        "getUpsellSummary",
-        [],
-        (summary) => {
-          renderUpsellSummary(summary);
-        },
-        false,
-        forceRefresh
-      );
+    async function loadUpsellSummary(forceRefresh = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          UPSELL_SUMMARY_CACHE_KEY,
+          "getUpsellSummary",
+          [sessionId, signature],
+          (summary) => {
+            renderUpsellSummary(summary);
+          },
+          false,
+          forceRefresh
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderUpsellSummary(summary) {
       const data = summary || {
@@ -12459,20 +12999,28 @@
         monthEl.textContent = AppUtils.formatHours(data.month ?? 0);
       }
     }
-    function loadUpsellRecords(forceRefresh = false) {
+    async function loadUpsellRecords(forceRefresh = false) {
       if (forceRefresh || !AppUtils.cacheGet(UPSELL_RECORDS_CACHE_KEY)) {
         DataTableModule.showLoader(UPSELL_TABLE_ID);
       }
-      AppUtils.cachedGScriptCall(
-        UPSELL_RECORDS_CACHE_KEY,
-        "getUpsellRecords",
-        [],
-        (tableData) => {
-          renderUpsellTable(tableData);
-        },
-        false,
-        forceRefresh
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          UPSELL_RECORDS_CACHE_KEY,
+          "getUpsellRecords",
+          [sessionId, signature],
+          (tableData) => {
+            renderUpsellTable(tableData);
+          },
+          false,
+          forceRefresh
+        );
+      } catch (error) {
+        DataTableModule.showError(
+          UPSELL_TABLE_ID,
+          error?.message || "Authentication required."
+        );
+      }
     }
     function renderUpsellTable(tableData) {
       const tbody = document.getElementById(UPSELL_BODY_ID);
@@ -12779,24 +13327,29 @@
       loadUpsellSummary(true);
       loadUpsellRecords(true);
     }
-    function loadLegacyClients(forceRefresh = false) {
-      AppUtils.cachedGScriptCall(
-        LEGACY_CLIENTS_CACHE_KEY,
-        "getLegacyClients",
-        [],
-        (data) => {
-          data = data || {
-            clients: [],
-            total: 0,
-            fixed: 0,
-            hourly: 0
-          };
-          renderLegacySummary(data);
-          renderLegacyClientsTable(data.clients);
-        },
-        false,
-        forceRefresh
-      );
+    async function loadLegacyClients(forceRefresh = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          LEGACY_CLIENTS_CACHE_KEY,
+          "getLegacyClients",
+          [sessionId, signature],
+          (data) => {
+            data = data || {
+              clients: [],
+              total: 0,
+              fixed: 0,
+              hourly: 0
+            };
+            renderLegacySummary(data);
+            renderLegacyClientsTable(data.clients);
+          },
+          false,
+          forceRefresh
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function renderLegacySummary(data) {
       $("#opportunities-legacy-clients").text(data.total ?? 0);
@@ -13027,27 +13580,36 @@
       $(document).off(".projectDirectory");
       DataTableModule.destroy(TABLE_ID);
     }
-    function loadProjectDirectory(log = false, refresh = false, loading = false) {
+    async function loadProjectDirectory(log = false, refresh = false, loading = false) {
       const logMessage = (...args) => {
         if (log) {
           console.log(...args);
         }
       };
       DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getProjects",
-        [],
-        (data) => {
-          if (!Array.isArray(data)) {
-            DataTableModule.showError(TABLE_ID, "Unable to load projects.");
-            return;
-          }
-          renderProjectDirectory(data, logMessage, refresh, loading);
-        },
-        log,
-        refresh
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getProjects",
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              DataTableModule.showError(TABLE_ID, "Unable to load projects.");
+              return;
+            }
+            renderProjectDirectory(data, logMessage, refresh, loading);
+          },
+          log,
+          refresh
+        );
+      } catch (error) {
+        console.error("[ProjectDirectory] Failed to load projects:", error);
+        DataTableModule.showError(
+          TABLE_ID,
+          error?.message || "Unable to load projects."
+        );
+      }
     }
     function renderProjectDirectory(data, log, refresh = false, loading = false) {
       if (!Array.isArray(data)) {
@@ -13244,30 +13806,42 @@
         }
       );
     }
-    function loadBillingAnalytics(log = false, refresh = false, loading) {
+    async function loadBillingAnalytics(log = false, refresh = false, loading) {
       const logMessage = (...args) => {
         if (log) {
           console.log(...args);
         }
       };
       DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getBillingAnalytics",
-        [],
-        (data) => {
-          if (!Array.isArray(data)) {
-            DataTableModule.showError(
-              TABLE_ID,
-              "Unable to load billing analytics."
-            );
-            return;
-          }
-          renderBillingAnalytics(data, logMessage, refresh, loading);
-        },
-        false,
-        refresh
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getBillingAnalytics",
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              DataTableModule.showError(
+                TABLE_ID,
+                "Unable to load billing analytics."
+              );
+              return;
+            }
+            renderBillingAnalytics(data, logMessage, refresh, loading);
+          },
+          false,
+          refresh
+        );
+      } catch (error) {
+        console.error(
+          "[BillingOverview] Failed to load billing analytics:",
+          error
+        );
+        DataTableModule.showError(
+          TABLE_ID,
+          error?.message || "Unable to load billing analytics."
+        );
+      }
     }
     function renderBillingAnalytics(data, log, refresh = false, loading) {
       if (!Array.isArray(data)) {
@@ -13768,44 +14342,65 @@
       }
       eventsBound = true;
     }
-    function loadPerformanceOverview(log = false, refresh = false) {
+    async function loadPerformanceOverview(log = false, refresh = false) {
       DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getPerformanceOverview",
-        [],
-        (data) => {
-          if (!data || typeof data !== "object" || !Array.isArray(data.yearlyData)) {
-            DataTableModule.showError(
-              TABLE_ID,
-              "Unable to load performance data."
-            );
-            return;
-          }
-          renderPerformanceOverview(data, log, refresh);
-        },
-        log,
-        refresh
-      );
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getPerformanceOverview",
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object" || !Array.isArray(data.yearlyData)) {
+              DataTableModule.showError(
+                TABLE_ID,
+                "Unable to load performance data."
+              );
+              return;
+            }
+            renderPerformanceOverview(data, log, refresh);
+          },
+          log,
+          refresh
+        );
+      } catch (error) {
+        console.error(
+          "[PerformanceOverview] Failed to load performance data:",
+          error
+        );
+        DataTableModule.showError(
+          TABLE_ID,
+          error?.message || "Unable to load performance data."
+        );
+      }
     }
-    function loadMonthlyPerformanceChart(log = false, refresh = false) {
-      AppUtils.cachedGScriptCall(
-        "performanceMonthlyChart",
-        "getCurrentYearTargetChartData",
-        [],
-        (data) => {
-          if (!Array.isArray(data)) {
-            renderMonthlyPerformanceChart([]);
-            return;
-          }
-          if (log) {
-            console.log("[PerformanceOverview] Monthly chart data:", data);
-          }
-          renderMonthlyPerformanceChart(data);
-        },
-        log,
-        refresh
-      );
+    async function loadMonthlyPerformanceChart(log = false, refresh = false) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          "performanceMonthlyChart",
+          "getCurrentYearTargetChartData",
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              renderMonthlyPerformanceChart([]);
+              return;
+            }
+            if (log) {
+              console.log("[PerformanceOverview] Monthly chart data:", data);
+            }
+            renderMonthlyPerformanceChart(data);
+          },
+          log,
+          refresh
+        );
+      } catch (error) {
+        console.error(
+          "[PerformanceOverview] Failed to load monthly chart:",
+          error
+        );
+        renderMonthlyPerformanceChart([]);
+      }
     }
     function renderMonthlyPerformanceChart(data) {
       const container = document.getElementById("performance-monthly-chart");
@@ -14014,23 +14609,33 @@
       }
       renderValueReference();
     }
-    function loadProductivityData(reset = false) {
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getProductivityOverview",
-        [],
-        (data) => {
-          if (!data) {
-            renderEmpty();
-            return;
-          }
-          productivityData = data;
-          renderOverview();
-          renderValueReference();
-        },
-        false,
-        reset
-      );
+    async function loadProductivityData(reset = false) {
+      try {
+        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getProductivityOverview",
+          [sessionId, signature],
+          (data) => {
+            if (!data) {
+              renderEmpty();
+              return;
+            }
+            productivityData = data;
+            renderOverview();
+            renderValueReference();
+          },
+          false,
+          reset
+        );
+      } catch (error) {
+        console.error(
+          "[PerformanceProductivity] Failed to load productivity data:",
+          error
+        );
+        renderEmpty();
+        AppUtils.showError(error?.message || "Unable to load productivity data.");
+      }
     }
     function renderOverview() {
       const data = productivityData || {};
@@ -14233,16 +14838,21 @@
       selectedHoursYear = null;
       clientName = "";
     }
-    function load(reset = false) {
+    async function load(reset = false) {
       const cacheKey = `${CACHE_KEY_PREFIX}${clientName}`;
-      AppUtils.cachedGScriptCall(
-        cacheKey,
-        "getClientDetails",
-        [clientName],
-        render,
-        false,
-        reset
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          cacheKey,
+          "getClientDetails",
+          [sessionId, signature, clientName],
+          render,
+          false,
+          reset
+        );
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function render(data) {
       if (!data) {
@@ -14444,19 +15054,24 @@
         }
       }
     }
-    function openClientSheet() {
-      AppUtils.gScriptRun({
-        gscriptFunc: "getClientSheetUrl",
-        args: [clientName],
-        onSuccess: (url) => {
-          if (url) {
-            window.open(url, "_blank");
+    async function openClientSheet() {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getClientSheetUrl",
+          args: [sessionId, signature, clientName],
+          onSuccess: (url) => {
+            if (url) {
+              window.open(url, "_blank");
+            }
+          },
+          onError: (error) => {
+            AppUtils.showError(error?.message || "Unable to open client sheet.");
           }
-        },
-        onError: (error) => {
-          AppUtils.showError(error?.message || "Unable to open client sheet.");
-        }
-      });
+        });
+      } catch (error) {
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function getEditableField(buttonId) {
       const fields = {
@@ -14585,7 +15200,7 @@
         }
       );
     }
-    function submitEditableInfo(clientName2, field, value, containerId, saveButton) {
+    async function submitEditableInfo(clientName2, field, value, containerId, saveButton) {
       if (saveButton.disabled) {
         return;
       }
@@ -14595,25 +15210,35 @@
       if (input) {
         input.disabled = true;
       }
-      AppUtils.gScriptRun({
-        gscriptFunc: "updateClientInformation",
-        args: [clientName2, field, value],
-        onSuccess: () => {
-          restoreEditButton(containerId, value);
-          AppUtils.showDashboardToast("Client information updated.", "success");
-          AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName2}`);
-        },
-        onError: (error) => {
-          saveButton.disabled = false;
-          if (input) {
-            input.disabled = false;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "updateClientInformation",
+          args: [sessionId, signature, clientName2, field, value],
+          onSuccess: () => {
+            restoreEditButton(containerId, value);
+            AppUtils.showDashboardToast("Client information updated.", "success");
+            AppUtils.cacheClear(`${CACHE_KEY_PREFIX}${clientName2}`);
+          },
+          onError: (error) => {
+            saveButton.disabled = false;
+            if (input) {
+              input.disabled = false;
+            }
+            saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
+            AppUtils.showError(
+              error?.message || "Unable to update client information."
+            );
           }
-          saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
-          AppUtils.showError(
-            error?.message || "Unable to update client information."
-          );
+        });
+      } catch (error) {
+        saveButton.disabled = false;
+        if (input) {
+          input.disabled = false;
         }
-      });
+        saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function setText(selector, value) {
       const element = document.querySelector(selector);

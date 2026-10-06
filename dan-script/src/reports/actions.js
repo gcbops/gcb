@@ -2,6 +2,7 @@ import { ReportService } from "./service";
 import { AppUtils } from "../utils";
 import { ReportGenerator } from "./generator";
 import { ValidationModule } from "../validations";
+import { GcbAuthModule } from "../auth/auth";
 
 const ReportActions = (() => {
   function downloadLatestPDF(btn, loading, reportType) {
@@ -47,7 +48,7 @@ const ReportActions = (() => {
     });
   }
 
-  function sendLatestReport(config) {
+  async function sendLatestReport(config) {
     const report = getLatestReport(config.reportType);
 
     if (!report) {
@@ -57,23 +58,38 @@ const ReportActions = (() => {
       return;
     }
 
-    AppUtils.gScriptRun({
-      gscriptFunc: config.reportMethod,
-      args: [report],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: () => {
-        handleReportSuccess(config.btn, config.successMessage, config.loading);
-      },
+      AppUtils.gScriptRun({
+        gscriptFunc: config.reportMethod,
+        args: [sessionId, signature, report],
 
-      onError: (err) => {
-        handleReportFailure(
-          config.btn,
-          err,
-          config.errorMessage,
-          config.loading,
-        );
-      },
-    });
+        onSuccess: () => {
+          handleReportSuccess(
+            config.btn,
+            config.successMessage,
+            config.loading,
+          );
+        },
+
+        onError: (err) => {
+          handleReportFailure(
+            config.btn,
+            err,
+            config.errorMessage,
+            config.loading,
+          );
+        },
+      });
+    } catch (error) {
+      handleReportFailure(
+        config.btn,
+        error,
+        config.errorMessage,
+        config.loading,
+      );
+    }
   }
 
   function getLatestReport(reportType) {
@@ -96,7 +112,7 @@ const ReportActions = (() => {
     AppUtils.showError(err);
   }
 
-  const handleEmailReport = ($btn) => {
+  const handleEmailReport = async ($btn) => {
     const reportId = $btn.data("id");
     const reportType = $btn.data("type");
 
@@ -110,17 +126,23 @@ const ReportActions = (() => {
         ? "sendBillingRecordsCSVEmail"
         : "sendRequestedEmailReport";
 
-    AppUtils.gScriptRun({
-      gscriptFunc: serverFunction,
-      args: [reportId],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+      AppUtils.gScriptRun({
+        gscriptFunc: serverFunction,
+        args: [sessionId, signature, reportId],
 
-      onError: (err) => AppUtils.showError(err),
-    });
+        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+
+        onError: (err) => AppUtils.showError(err),
+      });
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   };
 
-  const handleDiscordReport = ($btn) => {
+  const handleDiscordReport = async ($btn) => {
     const reportId = $btn.data("id");
     const reportType = $btn.data("type");
 
@@ -134,17 +156,23 @@ const ReportActions = (() => {
         ? "sendBillingRecordsCSVDiscord"
         : "sendRequestedDiscordReport";
 
-    AppUtils.gScriptRun({
-      gscriptFunc: serverFunction,
-      args: [reportId],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+      AppUtils.gScriptRun({
+        gscriptFunc: serverFunction,
+        args: [sessionId, signature, reportId],
 
-      onError: (err) => AppUtils.showError(err),
-    });
+        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
+
+        onError: (err) => AppUtils.showError(err),
+      });
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   };
 
-  const handleBtnGenerateYearlyReport = ($btn) => {
+  const handleBtnGenerateYearlyReport = async ($btn) => {
     const selectYear = $("#yearly-report-year");
     const type = "yearly";
 
@@ -171,36 +199,49 @@ const ReportActions = (() => {
       "Analyzing Report Request...",
     );
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "validateCustomYearlyReport",
-      args: [year],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (result) => {
-        if (!result.valid) {
+      AppUtils.gScriptRun({
+        gscriptFunc: "validateCustomYearlyReport",
+        args: [sessionId, signature, year],
+
+        onSuccess: (result) => {
+          if (!result.valid) {
+            ReportGenerator.setGenerateState(type, false, loading);
+
+            AppUtils.showDashboardToast(result.message, "warning");
+
+            return;
+          }
+
+          ReportGenerator.generateYearlyReport(year, $btn, loading);
+        },
+
+        onError: (err) => {
           ReportGenerator.setGenerateState(type, false, loading);
 
-          AppUtils.showDashboardToast(result.message, "warning");
+          console.error(err);
 
-          return;
-        }
+          AppUtils.showDashboardToast(
+            err.message || "Something went wrong.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      ReportGenerator.setGenerateState(type, false, loading);
 
-        ReportGenerator.generateYearlyReport(year, $btn, loading);
-      },
+      console.error(error);
 
-      onError: (err) => {
-        ReportGenerator.setGenerateState(type, false, loading);
-
-        console.error(err);
-
-        AppUtils.showDashboardToast(
-          err.message || "Something went wrong.",
-          "error",
-        );
-      },
-    });
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   };
 
-  const handleBtnGenerateMonthlyReport = ($btn) => {
+  const handleBtnGenerateMonthlyReport = async ($btn) => {
     const selectMonth = $("#monthly-report-month");
     const selectYear = $("#monthly-report-year");
 
@@ -241,33 +282,46 @@ const ReportActions = (() => {
       "Analyzing Report Request...",
     );
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "validateCustomMonthlyReport",
-      args: [month, year],
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (result) => {
-        if (!result.valid) {
+      AppUtils.gScriptRun({
+        gscriptFunc: "validateCustomMonthlyReport",
+        args: [sessionId, signature, month, year],
+
+        onSuccess: (result) => {
+          if (!result.valid) {
+            ReportGenerator.setGenerateState(type, false, loading);
+
+            AppUtils.showDashboardToast(result.message, "warning");
+
+            return;
+          }
+
+          ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
+        },
+
+        onError: (err) => {
           ReportGenerator.setGenerateState(type, false, loading);
 
-          AppUtils.showDashboardToast(result.message, "warning");
+          console.error(err);
 
-          return;
-        }
+          AppUtils.showDashboardToast(
+            err.message || "Something went wrong.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      ReportGenerator.setGenerateState(type, false, loading);
 
-        ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
-      },
+      console.error(error);
 
-      onError: (err) => {
-        ReportGenerator.setGenerateState(type, false, loading);
-
-        console.error(err);
-
-        AppUtils.showDashboardToast(
-          err.message || "Something went wrong.",
-          "error",
-        );
-      },
-    });
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   };
 
   const handleEmailLatestReport = ($btn, reportType) => {

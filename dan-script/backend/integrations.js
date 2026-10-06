@@ -1,4 +1,4 @@
-function getIntegrationStatus() {
+function getIntegrationStatus(sessionId, signature) {
   requireCapability(sessionId, signature, "settings.manage");
 
   const properties = PropertiesService.getScriptProperties();
@@ -57,9 +57,9 @@ function getIntegrationStatus() {
   };
 }
 
-function getIntegrationConfigStatus(integration) {
+function getIntegrationConfigStatus(sessionId, signature, integration) {
   requireCapability(sessionId, signature, "settings.manage");
-  
+
   const properties = PropertiesService.getScriptProperties();
 
   const integrationType = Validation.enumValue(integration, "integration", [
@@ -152,9 +152,9 @@ function getIntegrationConfigStatus(integration) {
   }
 }
 
-function saveIntegration(integration, value) {
+function saveIntegration(sessionId, signature, integration, value) {
   requireCapability(sessionId, signature, "settings.manage");
-  
+
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",
     "discord",

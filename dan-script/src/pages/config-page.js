@@ -1,6 +1,7 @@
 import { RouterModule } from "../routers.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const settingsConfigurationPage = (() => {
   let initialized = false;
@@ -135,124 +136,172 @@ const settingsConfigurationPage = (() => {
     loading.setSuccess("Cleared Cache");
   }
 
-  function syncExternalClientSheets(btn) {
+  async function syncExternalClientSheets(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Syncing sheets");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "reconcileExternalSheets",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (result) => {
-        const count = Array.isArray(result) ? result.length : 0;
+      AppUtils.gScriptRun({
+        gscriptFunc: "reconcileExternalSheets",
+        args: [sessionId, signature],
 
-        AppUtils.showDashboardToast(
-          count
-            ? `${count} external sheet(s) synchronized successfully.`
-            : "External sheets are already synchronized.",
-          "success",
-        );
+        onSuccess: (result) => {
+          const count = Array.isArray(result) ? result.length : 0;
 
-        loading.setSuccess("Clients Synced");
+          AppUtils.showDashboardToast(
+            count
+              ? `${count} external sheet(s) synchronized successfully.`
+              : "External sheets are already synchronized.",
+            "success",
+          );
 
-        AppUtils.closeModal(MODAL_ID);
-      },
+          loading.setSuccess("Clients Synced");
 
-      onError: (err) => {
-        console.error("reconcileExternalSheets failed:", err);
+          AppUtils.closeModal(MODAL_ID);
+        },
 
-        AppUtils.showDashboardToast(
-          "Failed to synchronize external client sheets. Please try again.",
-          "error",
-        );
+        onError: (err) => {
+          console.error("reconcileExternalSheets failed:", err);
 
-        loading.restore();
-      },
-    });
+          AppUtils.showDashboardToast(
+            "Failed to synchronize external client sheets. Please try again.",
+            "error",
+          );
+
+          loading.restore();
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
-  function syncClientSheets(btn) {
+  async function syncClientSheets(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Syncing clients");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "syncClientSheetList",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: () => {
-        AppUtils.showDashboardToast(
-          "Client list synced successfully!",
-          "success",
-        );
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncClientSheetList",
+        args: [sessionId, signature],
 
-        loading.setSuccess("Clients Synced");
+        onSuccess: () => {
+          AppUtils.showDashboardToast(
+            "Client list synced successfully!",
+            "success",
+          );
 
-        AppUtils.closeModal(MODAL_ID);
-      },
+          loading.setSuccess("Clients Synced");
 
-      onError: (err) => {
-        console.error("syncClientSheetList failed:", err);
+          AppUtils.closeModal(MODAL_ID);
+        },
 
-        AppUtils.showDashboardToast(
-          "Client list sync failed. Please try again.",
-          "error",
-        );
+        onError: (err) => {
+          console.error("syncClientSheetList failed:", err);
 
-        loading.restore();
-      },
-    });
+          AppUtils.showDashboardToast(
+            "Client list sync failed. Please try again.",
+            "error",
+          );
+
+          loading.restore();
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
-  function syncClientProjectsFromMain(btn) {
+  async function syncClientProjectsFromMain(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Updating projects");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "syncClientProjects",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: () => {
-        AppUtils.showDashboardToast(
-          "Project data updated successfully.",
-          "success",
-        );
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncClientProjects",
+        args: [sessionId, signature],
 
-        loading.setSuccess("Projects Updated");
+        onSuccess: () => {
+          AppUtils.showDashboardToast(
+            "Project data updated successfully.",
+            "success",
+          );
 
-        AppUtils.closeModal(MODAL_ID);
-      },
+          loading.setSuccess("Projects Updated");
 
-      onError: (err) => {
-        console.error("syncClientProjects failed:", err);
+          AppUtils.closeModal(MODAL_ID);
+        },
 
-        AppUtils.showDashboardToast(
-          "Failed to update project data. Please try again.",
-          "error",
-        );
+        onError: (err) => {
+          console.error("syncClientProjects failed:", err);
 
-        loading.restore();
-      },
-    });
+          AppUtils.showDashboardToast(
+            "Failed to update project data. Please try again.",
+            "error",
+          );
+
+          loading.restore();
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
-  function BackupAllSheets(btn) {
+  async function BackupAllSheets(btn) {
     const loading = AppUtils.setButtonLoading(btn, "Creating Backup");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "backupAllSheets",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (result) => {
-        AppUtils.showDashboardToast("Backup completed", "info");
+      AppUtils.gScriptRun({
+        gscriptFunc: "backupAllSheets",
+        args: [sessionId, signature],
 
-        console.log("Backup completed:", result);
+        onSuccess: (result) => {
+          AppUtils.showDashboardToast("Backup completed", "info");
 
-        loading.setSuccess("Backup Completed");
+          console.log("Backup completed:", result);
 
-        AppUtils.closeModal(MODAL_ID);
-      },
+          loading.setSuccess("Backup Completed");
 
-      onError: (err) => {
-        console.error("Backup failed:", err);
+          AppUtils.closeModal(MODAL_ID);
+        },
 
-        AppUtils.showDashboardToast("Something went wrong", "error");
+        onError: (err) => {
+          console.error("Backup failed:", err);
 
-        loading.restore();
-      },
-    });
+          AppUtils.showDashboardToast("Something went wrong", "error");
+
+          loading.restore();
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
   function handleIntegrationListClick(e) {
@@ -561,7 +610,7 @@ const settingsConfigurationPage = (() => {
     });
   }
 
-  function applyMasterFormula($modal, $btn) {
+  async function applyMasterFormula($modal, $btn) {
     const data = getMasterFormulaFormData($modal);
 
     if (!data) {
@@ -574,53 +623,64 @@ const settingsConfigurationPage = (() => {
 
     const loading = AppUtils.setButtonLoading($btn[0], "Applying Formula");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "applyFormulaToMainSheets",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [cellRef, formula],
+      AppUtils.gScriptRun({
+        gscriptFunc: "applyFormulaToMainSheets",
 
-      onSuccess: (result) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
+        args: [sessionId, signature, cellRef, formula],
 
-        console.log("applyFormulaToMainSheets:", result);
-
-        loading.setSuccess("Formula Applied");
-
-        AppUtils.showDashboardToast(
-          "Formula applied to the main spreadsheet.",
-          "success",
-        );
-
-        AppUtils.closeModal(MODAL_ID);
-
-        masterFormulaTimer = setTimeout(() => {
-          masterFormulaTimer = null;
-
+        onSuccess: (result) => {
           if (!isMasterFormulaOperationActive(operationId)) {
             return;
           }
 
-          openExternalProjectsConfirmation(cellRef, formula, operationId);
-        }, 1000);
-      },
+          console.log("applyFormulaToMainSheets:", result);
 
-      onError: (err) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
+          loading.setSuccess("Formula Applied");
 
-        console.error("applyFormulaToMainSheets failed:", err);
+          AppUtils.showDashboardToast(
+            "Formula applied to the main spreadsheet.",
+            "success",
+          );
 
-        loading.restore();
+          AppUtils.closeModal(MODAL_ID);
 
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to apply formula to the main spreadsheet.",
-          "error",
-        );
-      },
-    });
+          masterFormulaTimer = setTimeout(() => {
+            masterFormulaTimer = null;
+
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+
+            openExternalProjectsConfirmation(cellRef, formula, operationId);
+          }, 1000);
+        },
+
+        onError: (err) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+
+          console.error("applyFormulaToMainSheets failed:", err);
+
+          loading.restore();
+
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to apply formula to the main spreadsheet.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
   function openExternalProjectsConfirmation(cellRef, formula, operationId) {
@@ -661,58 +721,78 @@ const settingsConfigurationPage = (() => {
     applyFormulaToExternalProjects(cellRef, formula, $btn[0], operationId);
   }
 
-  function applyFormulaToExternalProjects(cellRef, formula, btn, operationId) {
+  async function applyFormulaToExternalProjects(
+    cellRef,
+    formula,
+    btn,
+    operationId,
+  ) {
     if (!isMasterFormulaOperationActive(operationId)) {
       return;
     }
 
     const loading = AppUtils.setButtonLoading(btn, "Updating Projects");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "applyFormulaToExternalProjects",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [cellRef, formula],
+      AppUtils.gScriptRun({
+        gscriptFunc: "applyFormulaToExternalProjects",
 
-      onSuccess: (result) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
+        args: [sessionId, signature, cellRef, formula],
 
-        console.log("applyFormulaToExternalProjects:", result);
-
-        loading.setSuccess("Formula Applied");
-
-        AppUtils.showDashboardToast(
-          `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
-          "success",
-        );
-
-        masterFormulaTimer = setTimeout(() => {
-          masterFormulaTimer = null;
-
+        onSuccess: (result) => {
           if (!isMasterFormulaOperationActive(operationId)) {
             return;
           }
 
-          openExternalProjectSheetsConfirmation(cellRef, formula, operationId);
-        }, 1000);
-      },
+          console.log("applyFormulaToExternalProjects:", result);
 
-      onError: (err) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
+          loading.setSuccess("Formula Applied");
 
-        console.error("applyFormulaToExternalProjects failed:", err);
+          AppUtils.showDashboardToast(
+            `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
+            "success",
+          );
 
-        loading.restore();
+          masterFormulaTimer = setTimeout(() => {
+            masterFormulaTimer = null;
 
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to update External Projects.",
-          "error",
-        );
-      },
-    });
+            if (!isMasterFormulaOperationActive(operationId)) {
+              return;
+            }
+
+            openExternalProjectSheetsConfirmation(
+              cellRef,
+              formula,
+              operationId,
+            );
+          }, 1000);
+        },
+
+        onError: (err) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
+
+          console.error("applyFormulaToExternalProjects failed:", err);
+
+          loading.restore();
+
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to update External Projects.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
   function openExternalProjectSheetsConfirmation(
@@ -762,7 +842,7 @@ const settingsConfigurationPage = (() => {
     applyFormulaToExternalProjectSheets(cellRef, formula, $btn[0], operationId);
   }
 
-  function applyFormulaToExternalProjectSheets(
+  async function applyFormulaToExternalProjectSheets(
     cellRef,
     formula,
     btn,
@@ -774,43 +854,54 @@ const settingsConfigurationPage = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Updating Sheets");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "applyFormulaToExternalProjectSheets",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [cellRef, formula],
+      AppUtils.gScriptRun({
+        gscriptFunc: "applyFormulaToExternalProjectSheets",
 
-      onSuccess: (result) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
+        args: [sessionId, signature, cellRef, formula],
 
-        console.log("applyFormulaToExternalProjectSheets:", result);
+        onSuccess: (result) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
 
-        loading.setSuccess("Sheets Updated");
+          console.log("applyFormulaToExternalProjectSheets:", result);
 
-        AppUtils.showDashboardToast(
-          `External project sheets updated successfully: ${result.updated} sheet(s).`,
-          "success",
-        );
+          loading.setSuccess("Sheets Updated");
 
-        cancelMasterFormulaOperation();
-      },
+          AppUtils.showDashboardToast(
+            `External project sheets updated successfully: ${result.updated} sheet(s).`,
+            "success",
+          );
 
-      onError: (err) => {
-        if (!isMasterFormulaOperationActive(operationId)) {
-          return;
-        }
+          cancelMasterFormulaOperation();
+        },
 
-        console.error("applyFormulaToExternalProjectSheets failed:", err);
+        onError: (err) => {
+          if (!isMasterFormulaOperationActive(operationId)) {
+            return;
+          }
 
-        loading.restore();
+          console.error("applyFormulaToExternalProjectSheets failed:", err);
 
-        AppUtils.showDashboardToast(
-          err?.message || "Failed to update external project sheets.",
-          "error",
-        );
-      },
-    });
+          loading.restore();
+
+          AppUtils.showDashboardToast(
+            err?.message || "Failed to update external project sheets.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
+    }
   }
 
   function handleTabShown(e) {

@@ -9,7 +9,7 @@
  * H = Date
  * I = Payment Status
  */
-function syncBillingRecords() {
+function syncBillingRecords(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.manage");
 
   try {
@@ -208,7 +208,7 @@ function syncBillingRecords() {
   }
 }
 
-function getBillingAnalytics() {
+function getBillingAnalytics(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.view");
 
   try {
@@ -254,7 +254,7 @@ function getBillingAnalytics() {
   }
 }
 
-function getBillingPaidHours() {
+function getBillingPaidHours(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.view");
 
   try {
@@ -397,7 +397,7 @@ function getBillingPaidHours() {
   }
 }
 
-function getBillingOwedHours() {
+function getBillingOwedHours(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.view");
 
   try {
@@ -537,7 +537,7 @@ function getBillingOwedHours() {
   }
 }
 
-function getInvoiceStatus() {
+function getInvoiceStatus(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.view");
 
   try {
@@ -697,7 +697,7 @@ function getInvoiceStatus() {
   }
 }
 
-function sendBillingRecordsCSVEmail(fileId) {
+function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
   requireCapability(sessionId, signature, "billing.export");
 
   if (!fileId) {
@@ -735,7 +735,7 @@ function sendBillingRecordsCSVEmail(fileId) {
   logResponse("✅ Billing Records CSV emailed.");
 }
 
-function sendBillingRecordsCSVDiscord(fileId) {
+function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
   requireCapability(sessionId, signature, "billing.export");
 
   if (!fileId) {
@@ -764,7 +764,13 @@ function sendBillingRecordsCSVDiscord(fileId) {
   logResponse("✅ Billing Records CSV sent to Discord.");
 }
 
-function getBillingRecordsForExport(startDate, endDate) {
+function getBillingRecordsForExport(sessionId, signature, startDate, endDate) {
+  requireCapability(sessionId, signature, "billing.export");
+
+  return getBillingRecordsForExportInternal(startDate, endDate);
+}
+
+function getBillingRecordsForExportInternal(startDate, endDate) {
   const sheet =
     SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Billing Records");
 
@@ -817,7 +823,7 @@ function getBillingRecordsForExport(startDate, endDate) {
     }));
 }
 
-function saveBillingRecordsCSV(startDate, endDate) {
+function saveBillingRecordsCSV(sessionId, signature, startDate, endDate) {
   requireCapability(sessionId, signature, "billing.export");
 
   if (!startDate || !endDate) {
@@ -835,7 +841,7 @@ function saveBillingRecordsCSV(startDate, endDate) {
     throw new Error("The start date cannot be later than the end date.");
   }
 
-  const records = getBillingRecordsForExport(startDate, endDate);
+  const records = getBillingRecordsForExportInternal(startDate, endDate);
 
   if (!records.length) {
     throw new Error(
@@ -931,7 +937,7 @@ function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
   ]);
 }
 
-function getBillingRecordsCSVExportCount() {
+function getBillingRecordsCSVExportCount(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.view");
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(

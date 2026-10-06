@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 import { ProjectRankings } from "./project-rankings";
@@ -33,7 +34,11 @@ const ProjectDirectory = (() => {
     DataTableModule.destroy(TABLE_ID);
   }
 
-  function loadProjectDirectory(log = false, refresh = false, loading = false) {
+  async function loadProjectDirectory(
+    log = false,
+    refresh = false,
+    loading = false,
+  ) {
     const logMessage = (...args) => {
       if (log) {
         console.log(...args);
@@ -42,22 +47,33 @@ const ProjectDirectory = (() => {
 
     DataTableModule.showLoader(TABLE_ID);
 
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getProjects",
-      [],
-      (data) => {
-        if (!Array.isArray(data)) {
-          DataTableModule.showError(TABLE_ID, "Unable to load projects.");
+    try {
+      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
 
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getProjects",
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            DataTableModule.showError(TABLE_ID, "Unable to load projects.");
 
-        renderProjectDirectory(data, logMessage, refresh, loading);
-      },
-      log,
-      refresh,
-    );
+            return;
+          }
+
+          renderProjectDirectory(data, logMessage, refresh, loading);
+        },
+        log,
+        refresh,
+      );
+    } catch (error) {
+      console.error("[ProjectDirectory] Failed to load projects:", error);
+
+      DataTableModule.showError(
+        TABLE_ID,
+        error?.message || "Unable to load projects.",
+      );
+    }
   }
 
   function renderProjectDirectory(data, log, refresh = false, loading = false) {

@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { ChartModule } from "../charts";
 import { AppUtils } from "../utils";
 
@@ -40,31 +41,37 @@ const HourTargetProgress = (() => {
     },
   ];
 
-  function loadTargetProgress(
+  async function loadTargetProgress(
     cacheKey = "targetProgress",
     functionName = "getCurrentTargetProgress",
     debug = false,
     reset = false,
   ) {
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      functionName,
-      [],
-      (data) => {
-        if (!data || typeof data !== "object") {
-          AppUtils.showError("⚠️ Invalid target data.");
-          return;
-        }
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        if (debug) {
-          console.log("[HourTargetProgress] data:", data);
-        }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        functionName,
+        [sessionId, signature],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            AppUtils.showError("⚠️ Invalid target data.");
+            return;
+          }
 
-        renderTargetProgress(data);
-      },
-      debug,
-      reset,
-    );
+          if (debug) {
+            console.log("[HourTargetProgress] data:", data);
+          }
+
+          renderTargetProgress(data);
+        },
+        debug,
+        reset,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function renderTargetProgress(data) {
@@ -204,31 +211,37 @@ const HourTargetProgress = (() => {
     }
   }
 
-  function loadTargetChart(
+  async function loadTargetChart(
     cacheKey = "targetChart",
     functionName = "getCurrentYearTargetChartData",
     debug = false,
     reset = false,
   ) {
-    AppUtils.cachedGScriptCall(
-      cacheKey,
-      functionName,
-      [],
-      (data) => {
-        if (!Array.isArray(data)) {
-          AppUtils.showError("⚠️ Invalid target chart data.");
-          return;
-        }
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        if (debug) {
-          console.log("[HourTargetProgress] chart data:", data);
-        }
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        functionName,
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showError("⚠️ Invalid target chart data.");
+            return;
+          }
 
-        renderTargetChart(data);
-      },
-      debug,
-      reset,
-    );
+          if (debug) {
+            console.log("[HourTargetProgress] chart data:", data);
+          }
+
+          renderTargetChart(data);
+        },
+        debug,
+        reset,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function renderTargetChart(data) {

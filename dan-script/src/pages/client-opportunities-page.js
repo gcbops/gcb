@@ -2,6 +2,7 @@ import { AppUtils } from "../utils.js";
 import { DataTableModule } from "../tables/data-table.js";
 import { ChartModule } from "../charts.js";
 import { ValidationModule } from "../validations.js";
+import { GcbAuthModule } from "../auth/auth.js";
 
 const clientOpportunitiesPage = (() => {
   let bound = false;
@@ -106,7 +107,7 @@ const clientOpportunitiesPage = (() => {
       });
   }
 
-  function openSheet(sheetName, errorMessage) {
+  async function openSheet(sheetName, errorMessage) {
     const buttonId =
       sheetName === "Upsells"
         ? "#viewSheet-opportunities-upsell"
@@ -124,28 +125,36 @@ const clientOpportunitiesPage = (() => {
 
     const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "getClientSheetUrl",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      args: [sheetName],
+      AppUtils.gScriptRun({
+        gscriptFunc: "getClientSheetUrl",
 
-      onSuccess: (url) => {
-        loading.restore();
+        args: [sessionId, signature, sheetName],
 
-        if (url && String(url).startsWith("http")) {
-          window.open(url, "_blank");
-          return;
-        }
+        onSuccess: (url) => {
+          loading.restore();
 
-        AppUtils.showError(errorMessage);
-      },
+          if (url && String(url).startsWith("http")) {
+            window.open(url, "_blank");
+            return;
+          }
 
-      onError: (err) => {
-        loading.restore();
+          AppUtils.showError(errorMessage);
+        },
 
-        AppUtils.showError(err);
-      },
-    });
+        onError: (err) => {
+          loading.restore();
+
+          AppUtils.showError(err);
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function loadData() {
@@ -160,17 +169,23 @@ const clientOpportunitiesPage = (() => {
   // Upsell summary
   // ----------------------------------------------------------
 
-  function loadUpsellSummary(forceRefresh = false) {
-    AppUtils.cachedGScriptCall(
-      UPSELL_SUMMARY_CACHE_KEY,
-      "getUpsellSummary",
-      [],
-      (summary) => {
-        renderUpsellSummary(summary);
-      },
-      false,
-      forceRefresh,
-    );
+  async function loadUpsellSummary(forceRefresh = false) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        UPSELL_SUMMARY_CACHE_KEY,
+        "getUpsellSummary",
+        [sessionId, signature],
+        (summary) => {
+          renderUpsellSummary(summary);
+        },
+        false,
+        forceRefresh,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function renderUpsellSummary(summary) {
@@ -203,21 +218,30 @@ const clientOpportunitiesPage = (() => {
   // Upsell records
   // ----------------------------------------------------------
 
-  function loadUpsellRecords(forceRefresh = false) {
+  async function loadUpsellRecords(forceRefresh = false) {
     if (forceRefresh || !AppUtils.cacheGet(UPSELL_RECORDS_CACHE_KEY)) {
       DataTableModule.showLoader(UPSELL_TABLE_ID);
     }
 
-    AppUtils.cachedGScriptCall(
-      UPSELL_RECORDS_CACHE_KEY,
-      "getUpsellRecords",
-      [],
-      (tableData) => {
-        renderUpsellTable(tableData);
-      },
-      false,
-      forceRefresh,
-    );
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        UPSELL_RECORDS_CACHE_KEY,
+        "getUpsellRecords",
+        [sessionId, signature],
+        (tableData) => {
+          renderUpsellTable(tableData);
+        },
+        false,
+        forceRefresh,
+      );
+    } catch (error) {
+      DataTableModule.showError(
+        UPSELL_TABLE_ID,
+        error?.message || "Authentication required.",
+      );
+    }
   }
 
   function renderUpsellTable(tableData) {
@@ -591,25 +615,31 @@ const clientOpportunitiesPage = (() => {
   // Legacy Clients records
   // ----------------------------------------------------------
 
-  function loadLegacyClients(forceRefresh = false) {
-    AppUtils.cachedGScriptCall(
-      LEGACY_CLIENTS_CACHE_KEY,
-      "getLegacyClients",
-      [],
-      (data) => {
-        data = data || {
-          clients: [],
-          total: 0,
-          fixed: 0,
-          hourly: 0,
-        };
+  async function loadLegacyClients(forceRefresh = false) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-        renderLegacySummary(data);
-        renderLegacyClientsTable(data.clients);
-      },
-      false,
-      forceRefresh,
-    );
+      AppUtils.cachedGScriptCall(
+        LEGACY_CLIENTS_CACHE_KEY,
+        "getLegacyClients",
+        [sessionId, signature],
+        (data) => {
+          data = data || {
+            clients: [],
+            total: 0,
+            fixed: 0,
+            hourly: 0,
+          };
+
+          renderLegacySummary(data);
+          renderLegacyClientsTable(data.clients);
+        },
+        false,
+        forceRefresh,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function renderLegacySummary(data) {

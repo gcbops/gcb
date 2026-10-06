@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { AppUtils } from "../utils";
 
 const clientRankings = (() => {
@@ -19,25 +20,29 @@ const clientRankings = (() => {
     initialized = false;
   }
 
-  function load(reset = false) {
+  async function load(reset = false) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getClientRankings",
-      [],
-      (data) => {
-        if (!data || typeof data !== "object") {
-          showError();
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getClientRankings",
+        [sessionId, signature],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            showError();
+            return;
+          }
 
-        renderOverview(data.overview || {});
-        renderRankings(data.rankings || {});
-      },
-      false,
-      reset,
-    );
-
+          renderOverview(data.overview || {});
+          renderRankings(data.rankings || {});
+        },
+        false,
+        reset,
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function refresh() {
@@ -146,31 +151,42 @@ const clientRankings = (() => {
     });
   }
 
-  function renderLegacyRanking(listSelector, rankingKey, config) {
-    AppUtils.cachedGScriptCall(CACHE_KEY, "getClientRankings", [], (data) => {
-      const list = document.querySelector(listSelector);
+  async function renderLegacyRanking(listSelector, rankingKey, config) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      if (!list) {
-        return;
-      }
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getClientRankings",
+        [sessionId, signature],
+        (data) => {
+          const list = document.querySelector(listSelector);
 
-      const clients = data?.rankings?.[rankingKey];
+          if (!list) {
+            return;
+          }
 
-      list.innerHTML = "";
+          const clients = data?.rankings?.[rankingKey];
 
-      if (!Array.isArray(clients) || !clients.length) {
-        list.innerHTML = `
-            <div class="client-loading text-muted">
-              No ranking data available.
-            </div>
-          `;
-        return;
-      }
+          list.innerHTML = "";
 
-      clients.forEach((client, index) => {
-        list.appendChild(createLegacyRankingItem(client, index, config));
-      });
-    });
+          if (!Array.isArray(clients) || !clients.length) {
+            list.innerHTML = `
+              <div class="client-loading text-muted">
+                No ranking data available.
+              </div>
+            `;
+            return;
+          }
+
+          clients.forEach((client, index) => {
+            list.appendChild(createLegacyRankingItem(client, index, config));
+          });
+        },
+      );
+    } catch (error) {
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function createRankingItem(client, index, config) {
