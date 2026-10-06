@@ -12,6 +12,8 @@ function getClientSheetsList() {
 }
 
 function getActiveClients() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe("Client Names");
 
   if (!sheet) {
@@ -22,6 +24,8 @@ function getActiveClients() {
 }
 
 function getClientSheetsListAndActive() {
+  requireCapability(sessionId, signature, "clients.view");
+
   return {
     sheets: getClientSheetsList(),
     activeClients: getActiveClients(),
@@ -29,7 +33,7 @@ function getClientSheetsListAndActive() {
 }
 
 function syncClientSheetList() {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "clients.manage");
 
   const sheet = getSheetSafe("Client Names");
 
@@ -86,6 +90,8 @@ function getDirectCellValueSafe(sheetName, cellRange) {
 }
 
 function goToPresentClient(sheetName) {
+  requireCapability(sessionId, signature, "clients.view");
+
   const ss = getSpreadsheet();
   const labSheet = getLabSheet();
 
@@ -111,6 +117,8 @@ function goToPresentClient(sheetName) {
 }
 
 function getClientDataByStatus(status, customSheet) {
+  requireCapability(sessionId, signature, "clients.view");
+
   const config = CONFIG.DIALOGS.STATUS[status];
 
   if (!config) {
@@ -130,6 +138,8 @@ function getClientDataByStatus(status, customSheet) {
 }
 
 function getActiveClientsPaidOwed() {
+  requireCapability(sessionId, signature, "clients.view");
+
   try {
     const sheet = getSheetSafe("Paid & Owed Log");
 
@@ -166,6 +176,8 @@ function getActiveClientsPaidOwed() {
 }
 
 function getTopPaidClients() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe("Paid & Owed Log");
 
   if (!sheet) {
@@ -196,6 +208,8 @@ function getRoleFromSheet(name) {
 }
 
 function getClientHourLogData(clientName) {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe(clientName);
 
   if (!sheet) {
@@ -222,6 +236,8 @@ function getClientHourLogData(clientName) {
 }
 
 function getClientSheetUrl(name) {
+  requireCapability(sessionId, signature, "clients.view");
+
   if (!isNonEmptyString(name)) {
     throw new Error("No sheet name provided");
   }
@@ -241,7 +257,8 @@ function getClientSheetUrl(name) {
 }
 
 function createClientSheet(input) {
-  //   requireAuthorizedUser();
+  requireCapability(sessionId, signature, "clients.create");
+
   Validation.requireObject(input, "Client data");
 
   const sheetName = Validation.sheetName(input.name, "Client name");
@@ -271,6 +288,8 @@ function createClientSheet(input) {
 }
 
 function getClientDirectoryData() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const analyticsSheet = getSheetSafe("Client Analytics");
 
   if (!analyticsSheet) {
@@ -318,6 +337,8 @@ function getClientDirectoryData() {
 }
 
 function getClientDirectoryAnalytics() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe("Client Analytics");
 
   if (!sheet) {
@@ -426,6 +447,8 @@ function getClientPaidOwedDataHistory(clientName) {
 }
 
 function getClientActivityTrends() {
+  requireCapability(sessionId, signature, "clients.view");
+
   try {
     const sheet = getSheetSafe("Other Analytics");
 
@@ -458,6 +481,8 @@ function getClientActivityTrends() {
 }
 
 function getClientRankings() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe("Client Analytics");
 
   if (!sheet) {
@@ -558,6 +583,8 @@ function getClientRankings() {
 }
 
 function getLegacyClients() {
+  requireCapability(sessionId, signature, "clients.view");
+
   try {
     const sheet = getSheetSafe("Legacy Clients");
 
@@ -619,6 +646,8 @@ function getLegacyClients() {
 }
 
 function getClientDetails(clientName) {
+  requireCapability(sessionId, signature, "clients.view");
+
   if (!isNonEmptyString(clientName)) {
     throw new Error("Client name cannot be empty.");
   }
@@ -791,6 +820,8 @@ function getClientActivity(sheet, timezone) {
 }
 
 function updateClientInformation(clientName, field, value) {
+  requireCapability(sessionId, signature, "clients.edit");
+
   const name = String(clientName || "").trim();
 
   if (!name) {

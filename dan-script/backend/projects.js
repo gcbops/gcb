@@ -1,4 +1,6 @@
 function getProjects() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe("Projects");
 
   if (!sheet) {
@@ -26,6 +28,8 @@ function getProjects() {
 }
 
 function getTopProjects() {
+  requireCapability(sessionId, signature, "clients.view");
+
   const sheet = getSheetSafe("Projects");
 
   if (!sheet) {
@@ -44,6 +48,8 @@ function getTopProjects() {
 }
 
 function getProjectRankings() {
+  requireCapability(sessionId, signature, "clients.view");
+
   try {
     const sheet = getSheetSafe("Projects");
 
@@ -246,8 +252,8 @@ function getProjectRankings() {
 }
 
 function syncClientProjects() {
-  //   requireAuthorizedUser();
-  
+  requireCapability(sessionId, signature, "clients.manage");
+
   const clientsSheet = getSheetSafe("Client Names");
   const projectsSheet = getSheetSafe("Projects");
 

@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -79,32 +80,42 @@ const billingPaidHoursPage = (() => {
     }
   }
 
-  function loadPaidHours(forceRefresh = false) {
+  async function loadPaidHours(forceRefresh = false) {
     DataTableModule.showLoader(TABLE_ID);
 
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getBillingPaidHours",
-      [],
-      (data) => {
-        if (!data || typeof data !== "object") {
-          renderPaidHoursSummary({});
-          DataTableModule.showError(TABLE_ID, "Unable to load paid hours.");
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-          return;
-        }
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getBillingPaidHours",
+        [sessionId, signature],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            renderPaidHoursSummary({});
 
-        paidHoursData = {
-          records: Array.isArray(data.records) ? data.records : [],
-          summary: data.summary || {},
-        };
+            DataTableModule.showError(TABLE_ID, "Unable to load owed hours.");
 
-        populateYearFilter();
-        applyFilters();
-      },
-      false,
-      forceRefresh,
-    );
+            return;
+          }
+
+          paidHoursData = {
+            records: Array.isArray(data.records) ? data.records : [],
+            summary: data.summary || {},
+          };
+
+          populateYearFilter();
+          applyFilters();
+        },
+        false,
+        forceRefresh,
+      );
+    } catch (error) {
+      DataTableModule.showError(
+        TABLE_ID,
+        error?.message || "Authentication required.",
+      );
+    }
   }
 
   function populateYearFilter() {
@@ -376,41 +387,50 @@ const billingPaidHoursPage = (() => {
     });
   }
 
-  function syncBillingRecords(button) {
+  async function syncBillingRecords(button) {
     const $button = $(button);
 
     const loading = AppUtils.setButtonLoading($button, false, true);
 
-    DataTableModule.showLoader(TABLE_ID);
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "syncBillingRecords",
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncBillingRecords",
+        args: [sessionId, signature],
 
-      onSuccess: (response) => {
-        loading.restore();
+        onSuccess: (response) => {
+          loading.restore();
 
-        if (!response?.success) {
-          AppUtils.showError("Unable to sync Billing Records.");
+          if (!response?.success) {
+            AppUtils.showError("Unable to sync Billing Records.");
 
-          return;
-        }
+            return;
+          }
 
-        AppUtils.cacheClear(CACHE_KEY);
+          AppUtils.cacheClear(CACHE_KEY);
 
-        loadPaidHours(true);
+          loadPaidHours(true);
 
-        AppUtils.showDashboardToast(
-          `Billing Records synced: ${response.records} record(s).`,
-          "success",
-        );
-      },
+          AppUtils.showDashboardToast(
+            `Billing Records synced: ${response.records} record(s).`,
+            "success",
+          );
+        },
 
-      onError: (error) => {
-        loading.restore();
+        onError: (error) => {
+          loading.restore();
 
-        AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      },
-    });
+          AppUtils.showError(
+            error?.message || "Failed to sync Billing Records.",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function refreshPaidHours() {

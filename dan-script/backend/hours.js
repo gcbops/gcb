@@ -153,7 +153,7 @@ const ActivityValidation = (() => {
 })();
 
 function recordManualClientHours(clientName, task, hours, date = new Date()) {
-  //   requireAuthorizedUser();
+  requireCapability(sessionId, signature, "hours.add");
 
   if (!isNonEmptyString(clientName)) {
     return logResponse("Invalid client name provided.");
@@ -193,8 +193,6 @@ function validateManualHoursFormData(formData) {
 }
 
 function recordClientHoursToSheet(sheet, data) {
-  //   requireAuthorizedUser();
-
   const { type, task, hours } = data;
 
   const startRow = 3;
@@ -244,7 +242,7 @@ function recordClientHoursToSheet(sheet, data) {
 }
 
 function recordManualClientHoursFromForm(formData) {
-  //   requireAuthorizedUser();
+  requireCapability(sessionId, signature, "hours.add");
 
   try {
     const data = ActivityValidation.clientActivityForm(formData);
@@ -266,7 +264,7 @@ function recordManualClientHoursFromForm(formData) {
 }
 
 function recordExternalClientHoursFromForm(formData) {
-  //   requireAuthorizedUser();
+  requireCapability(sessionId, signature, "hours.add");
 
   try {
     const data = ActivityValidation.clientActivityForm(formData);
@@ -344,6 +342,8 @@ function recordExternalClientHoursFromForm(formData) {
 }
 
 function getTaskOptions(clientName) {
+  requireCapability(sessionId, signature, "hours.view");
+
   if (!clientName) {
     return [];
   }
@@ -372,6 +372,8 @@ function getTaskOptions(clientName) {
 }
 
 function getRecentRecordsForManualForm(clientSheetName, limit = 3) {
+  requireCapability(sessionId, signature, "hours.view");
+
   if (!isNonEmptyString(clientSheetName)) {
     return [];
   }
@@ -439,6 +441,8 @@ function getRecentRecordsForManualForm(clientSheetName, limit = 3) {
 }
 
 function getDailyActivityData() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getSheetSafe("Client Tracker - Today");
 
   return sheet
@@ -450,6 +454,8 @@ function getDailyActivityData() {
 }
 
 function getHoursSummary() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getSheetSafe("Other Analytics");
 
   if (!sheet) {
@@ -472,6 +478,8 @@ function getHoursSummary() {
 }
 
 function getClientHoursForOverview(clientName) {
+  requireCapability(sessionId, signature, "hours.view");
+
   if (!isNonEmptyString(clientName)) {
     return { error: "INVALID_CLIENT" };
   }
@@ -491,6 +499,8 @@ function getClientHoursForOverview(clientName) {
 }
 
 function getTodayClientHours(clientName) {
+  requireCapability(sessionId, signature, "hours.view");
+
   try {
     if (!clientName || !String(clientName).trim()) {
       return {
@@ -730,7 +740,7 @@ function getTodayClientHours(clientName) {
 }
 
 function saveEditedTodayClientHours(formData) {
-  //   requireAuthorizedUser();
+  requireCapability(sessionId, signature, "hours.edit");
 
   try {
     Validation.requireObject(formData, "Form data");
@@ -1199,8 +1209,6 @@ function saveEditedTodayClientHours(formData) {
 }
 
 function deleteTodayRowsAndCompact(sheet, deleteRows, today, startRow) {
-  //   requireAuthorizedUser();
-
   const lastRow = sheet.getLastRow();
 
   if (lastRow < startRow) {
@@ -1303,6 +1311,8 @@ function deleteTodayRowsAndCompact(sheet, deleteRows, today, startRow) {
 }
 
 function getYearHoursSummary(year) {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getSheetSafe("Other Analytics");
 
   if (!sheet) {
@@ -1357,8 +1367,8 @@ function getYearHoursSummary(year) {
 }
 
 function addCurrMthTotalHrly(value) {
-  // requireAuthorizedUser();
-
+  requireCapability(sessionId, signature, "hours.edit");
+  
   const numVal = Validation.number(value, "Current month total", {
     min: Number.EPSILON,
   });
@@ -1398,6 +1408,8 @@ function addCurrMthTotalHrly(value) {
 }
 
 function getDailyOverviewSummary() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const metricsSheet = getSheetSafe("Daily Activities Metrics");
 
   if (!metricsSheet) {
@@ -1438,6 +1450,8 @@ function getDailyOverviewSummary() {
 }
 
 function getTodayChargedHours() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getSheetSafe("Daily Activities Metrics");
 
   if (!sheet) return null;
@@ -1455,6 +1469,8 @@ function getTodayChargedHours() {
 }
 
 function getMonthlyHoursSummary() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const monthlySheet = getSheetSafe("Monthly Hours Log");
   const currentSheet = getSheetSafe("Current Month Log");
 
@@ -1633,6 +1649,8 @@ function getMonthlyHoursSummary() {
 }
 
 function getGrowthComparisonSummary(currentYear, comparisonYear) {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getSheetSafe("Other Analytics");
 
   if (!sheet) {

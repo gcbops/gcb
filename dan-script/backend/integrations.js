@@ -1,5 +1,5 @@
 function getIntegrationStatus() {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "settings.manage");
 
   const properties = PropertiesService.getScriptProperties();
 
@@ -58,8 +58,8 @@ function getIntegrationStatus() {
 }
 
 function getIntegrationConfigStatus(integration) {
-  // requireAuthorizedUser();
-
+  requireCapability(sessionId, signature, "settings.manage");
+  
   const properties = PropertiesService.getScriptProperties();
 
   const integrationType = Validation.enumValue(integration, "integration", [
@@ -153,8 +153,8 @@ function getIntegrationConfigStatus(integration) {
 }
 
 function saveIntegration(integration, value) {
-  // requireAuthorizedUser();
-
+  requireCapability(sessionId, signature, "settings.manage");
+  
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",
     "discord",
@@ -195,7 +195,7 @@ function saveIntegration(integration, value) {
       properties.setProperty("MAIN_SHEETS_FOLDER_ID", mainSheetsFolderId);
     }
 
-    reconcileScheduledTriggers();
+    reconcileScheduledTriggersInternal();
 
     return {
       success: true,
@@ -230,7 +230,7 @@ function saveIntegration(integration, value) {
       );
     }
 
-    reconcileScheduledTriggers();
+    reconcileScheduledTriggersInternal();
 
     return {
       success: true,
@@ -256,7 +256,7 @@ function saveIntegration(integration, value) {
       break;
   }
 
-  reconcileScheduledTriggers();
+  reconcileScheduledTriggersInternal();
 
   return {
     success: true,

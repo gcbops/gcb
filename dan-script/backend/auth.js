@@ -736,6 +736,14 @@ function exchangeGcbSessionHandoff(ticket) {
   };
 }
 
+function logoutGcbSession(sessionId, signature) {
+  const session = requireAuthenticatedUser(sessionId, signature);
+
+  CacheService.getScriptCache().remove(`gcb_session_${session.sessionId}`);
+
+  return true;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")

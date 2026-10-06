@@ -102,6 +102,8 @@ function triggerExists(functionName) {
 }
 
 function createScheduledTrigger(name) {
+  requireCapability(sessionId, signature, "settings.manage");
+
   const config = SCHEDULED_TRIGGERS[name];
 
   if (!config) {
@@ -118,6 +120,8 @@ function createScheduledTrigger(name) {
 }
 
 function deleteScheduledTrigger(name) {
+  requireCapability(sessionId, signature, "settings.manage");
+
   const config = SCHEDULED_TRIGGERS[name];
 
   if (!config) {
@@ -135,7 +139,15 @@ function deleteScheduledTrigger(name) {
   return triggers.length > 0;
 }
 
-function reconcileScheduledTriggers() {
+function reconcileScheduledTriggers(sessionId, signature) {
+  requireCapability(sessionId, signature, "settings.manage");
+
+  return reconcileScheduledTriggersInternal();
+}
+
+function reconcileScheduledTriggersInternal() {
+  requireCapability(sessionId, signature, "settings.manage");
+
   const results = [];
 
   for (const [name, config] of Object.entries(SCHEDULED_TRIGGERS)) {

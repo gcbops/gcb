@@ -1,9 +1,9 @@
-import { AppUtils } from "../utils";
-
 const GcbAuthModule = (() => {
   const SESSION_ID_KEY = "gcb_session_id";
 
   const SESSION_SIGNATURE_KEY = "gcb_session_signature";
+
+  const APP_CACHE_PREFIX = "gcb_";
 
   let initialized = false;
   let initializing = null;
@@ -38,11 +38,8 @@ const GcbAuthModule = (() => {
 
   function exchangeTicket(ticket) {
     return new Promise((resolve, reject) => {
-      AppUtils.gScriptRun({
-        gscriptFunc: "exchangeGcbSessionHandoff",
-        args: [ticket],
-
-        onSuccess: (result) => {
+      google.script.run
+        .withSuccessHandler((result) => {
           try {
             saveSession(result);
 
@@ -66,12 +63,27 @@ const GcbAuthModule = (() => {
           } catch (error) {
             reject(error);
           }
-        },
-
-        onError: (error) => {
+        })
+        .withFailureHandler((error) => {
           reject(error);
-        },
-      });
+        })
+        .exchangeGcbSessionHandoff(ticket);
+    });
+  }
+
+  function clearAppCache() {
+    const keysToRemove = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+
+      if (key && key.startsWith(APP_CACHE_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => {
+      localStorage.removeItem(key);
     });
   }
 
@@ -137,12 +149,54 @@ const GcbAuthModule = (() => {
     return initializing;
   }
 
+  async function getAuthArgs() {
+    const authenticated = await init();
+
+    if (!authenticated) {
+      throw new Error("Authentication required.");
+    }
+
+    return [getSessionId(), getSessionSignature()];
+  }
+
+  async function logout() {
+    if (!hasSession()) {
+      clearSession();
+      return true;
+    }
+
+    const sessionId = getSessionId();
+    const signature = getSessionSignature();
+
+    try {
+      await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(() => {
+            resolve();
+          })
+          .withFailureHandler((error) => {
+            reject(error);
+          })
+          .logoutGcbSession(sessionId, signature);
+      });
+    } finally {
+      clearSession();
+      window.GCB_AUTH_TICKET = "";
+
+      clearAppCache();
+    }
+
+    return true;
+  }
+
   return {
     init,
     getSessionId,
     getSessionSignature,
     hasSession,
     clearSession,
+    getAuthArgs,
+    logout,
   };
 })();
 

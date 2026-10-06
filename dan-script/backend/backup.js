@@ -46,9 +46,13 @@ function getBackupFolder() {
  * Create a backup of all Google Sheets
  * directly inside the main sheets folder.
  */
-function backupAllSheets() {
-  // requireAuthorizedUser();
+function backupAllSheets(sessionId, signature) {
+  requireCapability(sessionId, signature, "settings.manage");
 
+  return backupAllSheetsInternal();
+}
+
+function backupAllSheetsInternal() {
   const sourceFolder = getBackupSourceFolder();
   const backupFolder = getBackupFolder();
 
@@ -104,8 +108,6 @@ function backupAllSheets() {
  * Delete backup folders older than the configured retention period.
  */
 function cleanupOldBackups() {
-  // requireAuthorizedUser();
-
   const backupFolder = getBackupFolder();
 
   const cutoff = new Date();
@@ -172,7 +174,7 @@ function scheduledBackup() {
       };
     }
 
-    const backup = backupAllSheets();
+    const backup = backupAllSheetsInternal();
 
     cleanupOldBackups();
 

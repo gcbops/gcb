@@ -1,5 +1,5 @@
 function addUpsellEntry(data) {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "clients.edit");
 
   Validation.requireObject(data, "Upsell data");
 
@@ -66,6 +66,8 @@ function addUpsellEntry(data) {
 }
 
 function getUpsellSummary() {
+  requireCapability(sessionId, signature, "clients.view");
+
   try {
     const sheet = getSheetSafe("Upsells");
 
@@ -92,6 +94,8 @@ function getUpsellSummary() {
 }
 
 function getUpsellRecords() {
+  requireCapability(sessionId, signature, "clients.view");
+
   try {
     const sheet = getSheetSafe("Upsells");
 

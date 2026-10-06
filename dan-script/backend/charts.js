@@ -1,4 +1,6 @@
 function getDailyChartData() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getLabSheet();
 
   if (!sheet) {
@@ -13,6 +15,8 @@ function getDailyChartData() {
 }
 
 function getMonthlyChartData() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getLabSheet();
 
   if (!sheet) {
@@ -27,6 +31,8 @@ function getMonthlyChartData() {
 }
 
 function getYearlyChartData(year = "all") {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getLabSheet();
 
   if (!sheet) {
@@ -72,6 +78,8 @@ function getYearlyChartData(year = "all") {
 }
 
 function getPrevYearMonthlyChartData() {
+  requireCapability(sessionId, signature, "hours.view");
+
   const sheet = getLabSheet();
 
   if (!sheet) {
@@ -86,6 +94,8 @@ function getPrevYearMonthlyChartData() {
 }
 
 function getCurrentYearTargetChartData() {
+  requireCapability(sessionId, signature, "hours.view");
+
   try {
     const analyticsSheet = getSheetSafe("Other Analytics");
 
@@ -170,6 +180,8 @@ function getCurrentYearTargetChartData() {
 }
 
 function getCurrentMonthLogChartData(month, year) {
+  requireCapability(sessionId, signature, "hours.view");
+
   try {
     const validatedMonth = Validation.integer(month, "Month", {
       min: 1,
@@ -205,6 +217,8 @@ function getCurrentMonthLogChartData(month, year) {
 }
 
 function getYearlyMonthlyHoursChartData(year) {
+  requireCapability(sessionId, signature, "hours.view");
+
   try {
     const sheet = getSheetSafe("Data Generator For Chart");
 
@@ -241,6 +255,8 @@ function getYearlyMonthlyHoursChartData(year) {
 }
 
 function getMonthlyHoursByYears(years) {
+  requireCapability(sessionId, signature, "hours.view");
+
   try {
     const sheet = getSheetSafe("Monthly Hours Log");
 
@@ -343,6 +359,8 @@ function getMonthlyHoursByYears(years) {
 }
 
 function updateDailyOverviewChartRange(startDate, endDate) {
+  requireCapability(sessionId, signature, "hours.view");
+
   try {
     const sheet = getSheetSafe("Data Generator For Chart");
 

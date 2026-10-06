@@ -90,8 +90,14 @@ function getExternalClientMap() {
 /**
  * Return all registered external spreadsheets.
  */
-function getExternalSheets() {
-  // requireAuthorizedUser();
+function getExternalSheets(sessionId, signature) {
+  requireCapability(sessionId, signature, "clients.view");
+
+  return getExternalSheetsInternal();
+}
+
+function getExternalSheetsInternal() {
+  requireCapability(sessionId, signature, "clients.view");
 
   const sheet = getSheetSafe("External Sheets");
 
@@ -155,8 +161,8 @@ function getExternalSheets() {
  * Create a new external spreadsheet from the template.
  */
 function createExternalSheet(data) {
-  //   requireAuthorizedUser();
-
+  requireCapability(sessionId, signature, "clients.create");
+  
   const clientName = Validation.sheetName(data.clientName, "Client name");
 
   const projects = normalizeProjectNames(data.projects);
@@ -312,8 +318,6 @@ function normalizeProjectNames(projects) {
  * in the main spreadsheet.
  */
 function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
-  //   requireAuthorizedUser();
-
   const ss = getSpreadsheet();
 
   let sheet = getSheetSafe("External Sheets");
@@ -348,6 +352,8 @@ function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
  * from an external spreadsheet.
  */
 function getExternalSheetSummary(spreadsheetId) {
+  requireCapability(sessionId, signature, "clients.view");
+
   const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
 
   const projectsSheet = spreadsheet.getSheetByName("Projects");
@@ -469,7 +475,7 @@ function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
 }
 
 function reconcileExternalSheets() {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "clients.manage");
 
   const registry = getSheetSafe("External Sheets");
   const clientNamesSheet = getSheetSafe("Client Names");
@@ -658,8 +664,6 @@ function reconcileExternalSheets() {
 }
 
 function createExternalClientSheet(clientName, externalSpreadsheetId) {
-  //   requireAuthorizedUser();
-
   if (!clientName || !externalSpreadsheetId) {
     throw new Error("Client name and external spreadsheet ID are required.");
   }
@@ -755,8 +759,6 @@ function isExternalClient(clientName) {
 }
 
 function combineExternalSheetData(spreadsheetId) {
-  //   requireAuthorizedUser();
-
   const ss = SpreadsheetApp.openById(spreadsheetId);
   const dest = ss.getSheetByName("Projects");
 

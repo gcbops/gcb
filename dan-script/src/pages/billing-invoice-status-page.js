@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "../auth/auth";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -86,15 +87,17 @@ const billingInvoiceStatusPage = (() => {
     }
   }
 
-  function loadInvoiceStatus(forceRefresh = false) {
+  async function loadInvoiceStatus(forceRefresh = false) {
     DataTableModule.showLoader(INVOICED_TABLE_ID);
 
     DataTableModule.showLoader(UNTRACKED_TABLE_ID);
 
+    const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
     AppUtils.cachedGScriptCall(
       CACHE_KEY,
       "getInvoiceStatus",
-      [],
+      [sessionId, signature],
       (data) => {
         if (!data || typeof data !== "object") {
           renderInvoiceSummary({});
@@ -447,41 +450,53 @@ const billingInvoiceStatusPage = (() => {
     return tr;
   }
 
-  function syncBillingRecords(button) {
+  async function syncBillingRecords(button) {
     const $button = $(button);
 
     const loading = AppUtils.setButtonLoading($button, false, true);
 
     DataTableModule.showLoader(UNTRACKED_TABLE_ID);
 
-    AppUtils.gScriptRun({
-      gscriptFunc: "syncBillingRecords",
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
-      onSuccess: (response) => {
-        loading.restore();
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncBillingRecords",
 
-        if (!response?.success) {
-          AppUtils.showError("Unable to sync Billing Records.");
+        args: [sessionId, signature],
 
-          return;
-        }
+        onSuccess: (response) => {
+          loading.restore();
 
-        AppUtils.cacheClear(CACHE_KEY);
+          if (!response?.success) {
+            AppUtils.showError("Unable to sync Billing Records.");
 
-        loadInvoiceStatus(true);
+            return;
+          }
 
-        AppUtils.showDashboardToast(
-          `Billing Records synced: ${response.records} record(s).`,
-          "success",
-        );
-      },
+          AppUtils.cacheClear(CACHE_KEY);
 
-      onError: (error) => {
-        loading.restore();
+          loadInvoiceStatus(true);
 
-        AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-      },
-    });
+          AppUtils.showDashboardToast(
+            `Billing Records synced: ${response.records} record(s).`,
+            "success",
+          );
+        },
+
+        onError: (error) => {
+          loading.restore();
+
+          AppUtils.showError(
+            error?.message || "Failed to sync Billing Records.",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      AppUtils.showError(error?.message || "Authentication required.");
+    }
   }
 
   function refreshInvoiceStatus() {

@@ -275,20 +275,81 @@ function sendDiscordReport(report) {
 }
 
 function emailLatestReport(report) {
+  requireCapability(sessionId, signature, "reports.send");
+
   return sendEmailReport(report);
 }
 
 function sendRequestedEmailReport(reportId) {
+  requireCapability(sessionId, signature, "reports.send");
+
   const report = getReportById(reportId);
   return sendEmailReport(report);
 }
 
 function sendLatestReportToDiscord(report) {
+  requireCapability(sessionId, signature, "reports.send");
+
   return sendDiscordReport(report);
 }
 
 function sendRequestedDiscordReport(reportId) {
+  requireCapability(sessionId, signature, "reports.send");
+
   const report = getReportById(reportId);
   return sendDiscordReport(report);
 }
 
+function sendOwedReport() {
+  const today = new Date();
+  const date = today.getDate();
+  const lastDay = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0,
+  ).getDate();
+  if (date !== 15 && date !== lastDay) return;
+
+  const sheet = getSheetSafe("Paid & Owed Log");
+  const logSheet = getSheetSafe("Reminders_Log");
+  if (!sheet || !logSheet) return;
+
+  const webhookUrl = getDiscordWebhook();
+  if (!webhookUrl) {
+    console.warn("⚠️ No Discord webhook found in BF3. Owed report not sent.");
+    return;
+  }
+
+  const data = sheet
+    .getRange("O2:Q")
+    .getValues()
+    .filter((r) => r[0]);
+  const now = new Date();
+  const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
+  const report = data
+    .map((r) => `${r[0]}\nTotal Owed: ${r[1]}\nCurrent Month Owed: ${r[2]}`)
+    .join("\n\n");
+
+  const embed = {
+    title: `💰 Owed Report - ${formatted}`,
+    description: report,
+    color: 0xffc107,
+    timestamp: now.toISOString(),
+  };
+
+  sendDiscordMessage(webhookUrl, embed);
+
+  const countCell = logSheet.getRange("B1");
+  let count = Number(countCell.getValue()) || 0;
+  if (count >= 5) {
+    logSheet.getRange("2:3").clearContent();
+    count = 0;
+  }
+
+  const col = 1 + count * 5;
+  logSheet.getRange(2, col).setValue(formatted);
+  logSheet
+    .getRange(3, col)
+    .setValue(`💰 Owed Report - ${formatted}\n${report}`);
+  countCell.setValue(count + 1);
+}

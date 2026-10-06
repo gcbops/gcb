@@ -233,6 +233,22 @@
 
     if (
       event.data?.type ===
+      "GCB_LOGIN_REQUEST"
+    ) {
+      const loginUrl =
+        event.data?.url;
+
+      if (!loginUrl) {
+        return;
+      }
+
+      window.location.href = loginUrl;
+
+      return;
+    }
+
+    if (
+      event.data?.type ===
       "GCB_AUTH_HANDOFF_COMPLETE"
     ) {
       const url =

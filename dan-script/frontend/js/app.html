@@ -8728,6 +8728,143 @@
     };
   })();
 
+  // src/auth/auth.js
+  var GcbAuthModule = /* @__PURE__ */ (() => {
+    const SESSION_ID_KEY = "gcb_session_id";
+    const SESSION_SIGNATURE_KEY = "gcb_session_signature";
+    const APP_CACHE_PREFIX = "gcb_";
+    let initialized = false;
+    let initializing = null;
+    function getSessionId() {
+      return sessionStorage.getItem(SESSION_ID_KEY) || "";
+    }
+    function getSessionSignature() {
+      return sessionStorage.getItem(SESSION_SIGNATURE_KEY) || "";
+    }
+    function hasSession() {
+      return Boolean(getSessionId() && getSessionSignature());
+    }
+    function saveSession(result) {
+      if (!result?.sessionId || !result?.signature) {
+        throw new Error("Invalid GCB session response.");
+      }
+      sessionStorage.setItem(SESSION_ID_KEY, result.sessionId);
+      sessionStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+    }
+    function clearSession() {
+      sessionStorage.removeItem(SESSION_ID_KEY);
+      sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+    }
+    function exchangeTicket(ticket) {
+      return new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler((result) => {
+          try {
+            saveSession(result);
+            window.GCB_AUTH_TICKET = "";
+            if (window.GCB_IS_GITHUB_EMBEDDED === true && window.parent !== window) {
+              window.parent.postMessage(
+                {
+                  type: "GCB_AUTH_HANDOFF_COMPLETE"
+                },
+                "https://gcbops.github.io"
+              );
+            }
+            console.log("[GCB Auth] Session handoff completed.");
+            resolve(true);
+          } catch (error) {
+            reject(error);
+          }
+        }).withFailureHandler((error) => {
+          reject(error);
+        }).exchangeGcbSessionHandoff(ticket);
+      });
+    }
+    function clearAppCache() {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(APP_CACHE_PREFIX)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+      });
+    }
+    async function init() {
+      if (initialized) {
+        return true;
+      }
+      if (initializing) {
+        return initializing;
+      }
+      initializing = (async () => {
+        try {
+          if (hasSession()) {
+            initialized = true;
+            return true;
+          }
+          const ticket = String(window.GCB_AUTH_TICKET || "").trim();
+          if (ticket) {
+            await exchangeTicket(ticket);
+          }
+          if (!hasSession()) {
+            console.warn("[GCB Auth] No authenticated session.");
+            return false;
+          }
+          initialized = true;
+          return true;
+        } catch (error) {
+          console.error("[GCB Auth] Initialization failed:", error);
+          clearSession();
+          initialized = false;
+          return false;
+        } finally {
+          initializing = null;
+        }
+      })();
+      return initializing;
+    }
+    async function getAuthArgs() {
+      const authenticated = await init();
+      if (!authenticated) {
+        throw new Error("Authentication required.");
+      }
+      return [getSessionId(), getSessionSignature()];
+    }
+    async function logout() {
+      if (!hasSession()) {
+        clearSession();
+        return true;
+      }
+      const sessionId = getSessionId();
+      const signature = getSessionSignature();
+      try {
+        await new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => {
+            resolve();
+          }).withFailureHandler((error) => {
+            reject(error);
+          }).logoutGcbSession(sessionId, signature);
+        });
+      } finally {
+        clearSession();
+        window.GCB_AUTH_TICKET = "";
+        clearAppCache();
+      }
+      return true;
+    }
+    return {
+      init,
+      getSessionId,
+      getSessionSignature,
+      hasSession,
+      clearSession,
+      getAuthArgs,
+      logout
+    };
+  })();
+
   // src/pages/billing-owed-hours-page.js
   var billingOwedHoursPage = /* @__PURE__ */ (() => {
     let initialized = false;
@@ -8786,28 +8923,36 @@
         applyFilters();
       }
     }
-    function loadOwedHours(forceRefresh = false) {
+    async function loadOwedHours(forceRefresh = false) {
       DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getBillingOwedHours",
-        [],
-        (data) => {
-          if (!data || typeof data !== "object") {
-            renderOwedHoursSummary({});
-            DataTableModule.showError(TABLE_ID, "Unable to load owed hours.");
-            return;
-          }
-          owedHoursData = {
-            records: Array.isArray(data.records) ? data.records : [],
-            summary: data.summary || {}
-          };
-          populateYearFilter();
-          applyFilters();
-        },
-        false,
-        forceRefresh
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getBillingOwedHours",
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object") {
+              renderOwedHoursSummary({});
+              DataTableModule.showError(TABLE_ID, "Unable to load owed hours.");
+              return;
+            }
+            owedHoursData = {
+              records: Array.isArray(data.records) ? data.records : [],
+              summary: data.summary || {}
+            };
+            populateYearFilter();
+            applyFilters();
+          },
+          false,
+          forceRefresh
+        );
+      } catch (error) {
+        DataTableModule.showError(
+          TABLE_ID,
+          error?.message || "Authentication required."
+        );
+      }
     }
     function populateYearFilter() {
       const select = document.querySelector("#owed-hours-year-filter");
@@ -9024,29 +9169,38 @@
         year: "numeric"
       });
     }
-    function syncBillingRecords(button) {
+    async function syncBillingRecords(button) {
       const $button = $(button);
       const loading = AppUtils.setButtonLoading($button, false, true);
-      AppUtils.gScriptRun({
-        gscriptFunc: "syncBillingRecords",
-        onSuccess: (response) => {
-          loading.restore();
-          if (!response?.success) {
-            AppUtils.showError("Unable to sync Billing Records.");
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncBillingRecords",
+          args: [sessionId, signature],
+          onSuccess: (response) => {
+            loading.restore();
+            if (!response?.success) {
+              AppUtils.showError("Unable to sync Billing Records.");
+              return;
+            }
+            AppUtils.cacheClear(CACHE_KEY);
+            loadOwedHours(true);
+            AppUtils.showDashboardToast(
+              `Billing Records synced: ${response.records} record(s).`,
+              "success"
+            );
+          },
+          onError: (error) => {
+            loading.restore();
+            AppUtils.showError(
+              error?.message || "Failed to sync Billing Records."
+            );
           }
-          AppUtils.cacheClear(CACHE_KEY);
-          loadOwedHours(true);
-          AppUtils.showDashboardToast(
-            `Billing Records synced: ${response.records} record(s).`,
-            "success"
-          );
-        },
-        onError: (error) => {
-          loading.restore();
-          AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function refreshOwedHours() {
       AppUtils.cacheClear(CACHE_KEY);
@@ -9118,28 +9272,36 @@
         applyFilters();
       }
     }
-    function loadPaidHours(forceRefresh = false) {
+    async function loadPaidHours(forceRefresh = false) {
       DataTableModule.showLoader(TABLE_ID);
-      AppUtils.cachedGScriptCall(
-        CACHE_KEY,
-        "getBillingPaidHours",
-        [],
-        (data) => {
-          if (!data || typeof data !== "object") {
-            renderPaidHoursSummary({});
-            DataTableModule.showError(TABLE_ID, "Unable to load paid hours.");
-            return;
-          }
-          paidHoursData = {
-            records: Array.isArray(data.records) ? data.records : [],
-            summary: data.summary || {}
-          };
-          populateYearFilter();
-          applyFilters();
-        },
-        false,
-        forceRefresh
-      );
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CACHE_KEY,
+          "getBillingPaidHours",
+          [sessionId, signature],
+          (data) => {
+            if (!data || typeof data !== "object") {
+              renderPaidHoursSummary({});
+              DataTableModule.showError(TABLE_ID, "Unable to load owed hours.");
+              return;
+            }
+            paidHoursData = {
+              records: Array.isArray(data.records) ? data.records : [],
+              summary: data.summary || {}
+            };
+            populateYearFilter();
+            applyFilters();
+          },
+          false,
+          forceRefresh
+        );
+      } catch (error) {
+        DataTableModule.showError(
+          TABLE_ID,
+          error?.message || "Authentication required."
+        );
+      }
     }
     function populateYearFilter() {
       const select = document.querySelector("#paid-hours-year-filter");
@@ -9330,30 +9492,38 @@
         year: "numeric"
       });
     }
-    function syncBillingRecords(button) {
+    async function syncBillingRecords(button) {
       const $button = $(button);
       const loading = AppUtils.setButtonLoading($button, false, true);
-      DataTableModule.showLoader(TABLE_ID);
-      AppUtils.gScriptRun({
-        gscriptFunc: "syncBillingRecords",
-        onSuccess: (response) => {
-          loading.restore();
-          if (!response?.success) {
-            AppUtils.showError("Unable to sync Billing Records.");
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncBillingRecords",
+          args: [sessionId, signature],
+          onSuccess: (response) => {
+            loading.restore();
+            if (!response?.success) {
+              AppUtils.showError("Unable to sync Billing Records.");
+              return;
+            }
+            AppUtils.cacheClear(CACHE_KEY);
+            loadPaidHours(true);
+            AppUtils.showDashboardToast(
+              `Billing Records synced: ${response.records} record(s).`,
+              "success"
+            );
+          },
+          onError: (error) => {
+            loading.restore();
+            AppUtils.showError(
+              error?.message || "Failed to sync Billing Records."
+            );
           }
-          AppUtils.cacheClear(CACHE_KEY);
-          loadPaidHours(true);
-          AppUtils.showDashboardToast(
-            `Billing Records synced: ${response.records} record(s).`,
-            "success"
-          );
-        },
-        onError: (error) => {
-          loading.restore();
-          AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function refreshPaidHours() {
       AppUtils.cacheClear(CACHE_KEY);
@@ -13226,13 +13396,14 @@
         applyFilters();
       }
     }
-    function loadInvoiceStatus(forceRefresh = false) {
+    async function loadInvoiceStatus(forceRefresh = false) {
       DataTableModule.showLoader(INVOICED_TABLE_ID);
       DataTableModule.showLoader(UNTRACKED_TABLE_ID);
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
         "getInvoiceStatus",
-        [],
+        [sessionId, signature],
         (data) => {
           if (!data || typeof data !== "object") {
             renderInvoiceSummary({});
@@ -13489,30 +13660,39 @@
   `;
       return tr;
     }
-    function syncBillingRecords(button) {
+    async function syncBillingRecords(button) {
       const $button = $(button);
       const loading = AppUtils.setButtonLoading($button, false, true);
       DataTableModule.showLoader(UNTRACKED_TABLE_ID);
-      AppUtils.gScriptRun({
-        gscriptFunc: "syncBillingRecords",
-        onSuccess: (response) => {
-          loading.restore();
-          if (!response?.success) {
-            AppUtils.showError("Unable to sync Billing Records.");
-            return;
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "syncBillingRecords",
+          args: [sessionId, signature],
+          onSuccess: (response) => {
+            loading.restore();
+            if (!response?.success) {
+              AppUtils.showError("Unable to sync Billing Records.");
+              return;
+            }
+            AppUtils.cacheClear(CACHE_KEY);
+            loadInvoiceStatus(true);
+            AppUtils.showDashboardToast(
+              `Billing Records synced: ${response.records} record(s).`,
+              "success"
+            );
+          },
+          onError: (error) => {
+            loading.restore();
+            AppUtils.showError(
+              error?.message || "Failed to sync Billing Records."
+            );
           }
-          AppUtils.cacheClear(CACHE_KEY);
-          loadInvoiceStatus(true);
-          AppUtils.showDashboardToast(
-            `Billing Records synced: ${response.records} record(s).`,
-            "success"
-          );
-        },
-        onError: (error) => {
-          loading.restore();
-          AppUtils.showError(error?.message || "Failed to sync Billing Records.");
-        }
-      });
+        });
+      } catch (error) {
+        loading.restore();
+        AppUtils.showError(error?.message || "Authentication required.");
+      }
     }
     function refreshInvoiceStatus() {
       AppUtils.cacheClear(CACHE_KEY);
@@ -14694,111 +14874,122 @@
     };
   })();
 
-  // src/auth/auth.js
-  var GcbAuthModule = /* @__PURE__ */ (() => {
-    const SESSION_ID_KEY = "gcb_session_id";
-    const SESSION_SIGNATURE_KEY = "gcb_session_signature";
+  // src/auth/login.js
+  var GcbLoginModule = /* @__PURE__ */ (() => {
     let initialized = false;
-    let initializing = null;
-    function getSessionId() {
-      return sessionStorage.getItem(SESSION_ID_KEY) || "";
+    function getElements() {
+      return {
+        screen: document.getElementById("gcb-login-screen"),
+        button: document.getElementById("gcb-google-login-button"),
+        buttonText: document.querySelector(".gcb-google-login-text"),
+        spinner: document.querySelector(".gcb-login-spinner"),
+        error: document.getElementById("gcb-login-error")
+      };
     }
-    function getSessionSignature() {
-      return sessionStorage.getItem(SESSION_SIGNATURE_KEY) || "";
-    }
-    function hasSession() {
-      return Boolean(getSessionId() && getSessionSignature());
-    }
-    function saveSession(result) {
-      if (!result?.sessionId || !result?.signature) {
-        throw new Error("Invalid GCB session response.");
+    function show() {
+      const { screen } = getElements();
+      if (!screen) {
+        console.error("[GCB Login] Login screen was not found.");
+        return;
       }
-      sessionStorage.setItem(SESSION_ID_KEY, result.sessionId);
-      sessionStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+      screen.classList.remove("d-none");
     }
-    function clearSession() {
-      sessionStorage.removeItem(SESSION_ID_KEY);
-      sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+    function hide() {
+      const { screen } = getElements();
+      if (!screen) {
+        return;
+      }
+      screen.classList.add("d-none");
     }
-    function exchangeTicket(ticket) {
+    function setLoading(loading) {
+      const { button, buttonText, spinner } = getElements();
+      if (!button) {
+        return;
+      }
+      button.disabled = loading;
+      if (buttonText) {
+        buttonText.textContent = loading ? "Connecting to Google..." : "Continue with Google";
+      }
+      spinner?.classList.toggle("d-none", !loading);
+    }
+    function showError(message) {
+      const { error } = getElements();
+      if (!error) {
+        return;
+      }
+      error.textContent = message || "Unable to start Google sign-in.";
+      error.classList.remove("d-none");
+    }
+    function clearError() {
+      const { error } = getElements();
+      if (!error) {
+        return;
+      }
+      error.textContent = "";
+      error.classList.add("d-none");
+    }
+    function requestLoginUrl() {
       return new Promise((resolve, reject) => {
-        AppUtils.gScriptRun({
-          gscriptFunc: "exchangeGcbSessionHandoff",
-          args: [ticket],
-          onSuccess: (result) => {
-            try {
-              saveSession(result);
-              window.GCB_AUTH_TICKET = "";
-              if (window.GCB_IS_GITHUB_EMBEDDED === true && window.parent !== window) {
-                window.parent.postMessage(
-                  {
-                    type: "GCB_AUTH_HANDOFF_COMPLETE"
-                  },
-                  "https://gcbops.github.io"
-                );
-              }
-              console.log("[GCB Auth] Session handoff completed.");
-              resolve(true);
-            } catch (error) {
-              reject(error);
-            }
-          },
-          onError: (error) => {
-            reject(error);
-          }
-        });
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).createGcbLoginUrl();
       });
     }
-    async function init() {
-      if (initialized) {
-        return true;
-      }
-      if (initializing) {
-        return initializing;
-      }
-      initializing = (async () => {
-        try {
-          if (hasSession()) {
-            initialized = true;
-            return true;
-          }
-          const ticket = String(window.GCB_AUTH_TICKET || "").trim();
-          if (ticket) {
-            await exchangeTicket(ticket);
-          }
-          if (!hasSession()) {
-            console.warn("[GCB Auth] No authenticated session.");
-            return false;
-          }
-          initialized = true;
-          return true;
-        } catch (error) {
-          console.error("[GCB Auth] Initialization failed:", error);
-          clearSession();
-          initialized = false;
-          return false;
-        } finally {
-          initializing = null;
+    async function login() {
+      clearError();
+      setLoading(true);
+      try {
+        const loginUrl = await requestLoginUrl();
+        if (!loginUrl) {
+          throw new Error("Google login URL was not returned.");
         }
-      })();
-      return initializing;
+        if (window.parent !== window && window.GCB_IS_GITHUB_EMBEDDED === true) {
+          window.parent.postMessage(
+            {
+              type: "GCB_LOGIN_REQUEST",
+              url: loginUrl
+            },
+            "https://gcbops.github.io"
+          );
+          return;
+        }
+        window.location.href = loginUrl;
+      } catch (error) {
+        console.error("[GCB Login] Failed to start login:", error);
+        showError(error?.message || "Unable to start Google sign-in.");
+        setLoading(false);
+      }
+    }
+    function bindEvents() {
+      const { button } = getElements();
+      if (!button) {
+        console.warn("[GCB Login] Login button was not found.");
+        return;
+      }
+      button.addEventListener("click", login);
+    }
+    function init() {
+      if (initialized) {
+        return;
+      }
+      initialized = true;
+      bindEvents();
     }
     return {
       init,
-      getSessionId,
-      getSessionSignature,
-      hasSession,
-      clearSession
+      show,
+      hide
     };
   })();
 
   // src/app.js
   document.addEventListener("DOMContentLoaded", async () => {
+    GcbLoginModule.init();
     const authenticated = await GcbAuthModule.init();
     if (!authenticated) {
       console.warn("[GCB Auth] Authentication required.");
+      GcbLoginModule.show();
       return;
     }
+    GcbLoginModule.hide();
     RouterModule.init();
     ActionRouterModule.init();
   });

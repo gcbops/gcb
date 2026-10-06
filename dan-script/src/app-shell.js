@@ -70,6 +70,22 @@ const AppShellModule = (() => {
 
         /*
          * ------------------------------------------------
+         * Loader
+         * ------------------------------------------------
+         */
+
+        // try {
+        //   const loaderHtml = await loadComponent("app-loader", "loader");
+
+        //   if (loaderHtml) {
+        //     document.body.insertAdjacentHTML("afterbegin", loaderHtml);
+        //   }
+        // } catch (error) {
+        //   console.warn("[AppShell] Loader failed:", error);
+        // }
+
+        /*
+         * ------------------------------------------------
          * Dialogs
          * ------------------------------------------------
          */

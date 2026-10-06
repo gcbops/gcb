@@ -6,8 +6,7 @@ function getSpreadsheet() {
     return SpreadsheetApp.openById(ssId);
   }
 
-  // Fallback: use the active spreadsheet (e.g., for bound scripts / initial setup)
-  return getSpreadsheet();
+  return SpreadsheetApp.getActiveSpreadsheet();
 }
 
 function getSheet(name) {
@@ -39,7 +38,7 @@ function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
 }
 
 function applyFormulaToMainSheets(cellRef, formula) {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "settings.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
@@ -99,14 +98,14 @@ function applyFormulaToMainSheets(cellRef, formula) {
 }
 
 function applyFormulaToExternalProjects(cellRef, formula) {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "settings.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const externalSheets = getExternalSheets();
+    const externalSheets = getExternalSheetsInternal();
 
     const spreadsheetIds = new Set();
 
@@ -176,14 +175,14 @@ function applyFormulaToExternalProjects(cellRef, formula) {
 }
 
 function applyFormulaToExternalProjectSheets(cellRef, formula) {
-  // requireAuthorizedUser();
+  requireCapability(sessionId, signature, "settings.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const externalSheets = getExternalSheets();
+    const externalSheets = getExternalSheetsInternal();
 
     const spreadsheetIds = new Set();
 
