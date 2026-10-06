@@ -8759,14 +8759,24 @@
       return new Promise((resolve, reject) => {
         google.script.run.withSuccessHandler((result) => {
           try {
+            console.log(
+              "[GCB Auth] Authentication handoff exchange succeeded:",
+              result
+            );
             saveSession(result);
             window.GCB_AUTH_TICKET = "";
             if (window.GCB_IS_GITHUB_EMBEDDED === true && window.parent !== window) {
-              window.parent.postMessage(
+              console.log(
+                "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper."
+              );
+              window.top.postMessage(
                 {
                   type: "GCB_AUTH_HANDOFF_COMPLETE"
                 },
                 "https://gcbops.github.io"
+              );
+              console.log(
+                "[GCB Auth] Authentication handoff completion message sent."
               );
             }
             console.log("[GCB Auth] Session handoff completed.");
@@ -8775,6 +8785,10 @@
             reject(error);
           }
         }).withFailureHandler((error) => {
+          console.error(
+            "[GCB Auth] Authentication handoff exchange failed:",
+            error
+          );
           reject(error);
         }).exchangeGcbSessionHandoff(ticket);
       });
@@ -8804,8 +8818,19 @@
             initialized = true;
             return true;
           }
+          if (!window.GCB_AUTH_TICKET) {
+            console.error(
+              "[GCB Auth] Authentication ticket not detected"
+            );
+            return;
+          }
+          console.log(
+            "[GCB Auth] Authentication ticket detected:",
+            window.GCB_AUTH_TICKET
+          );
           const ticket = String(window.GCB_AUTH_TICKET || "").trim();
           if (ticket) {
+            console.log("[GCB Auth] Exchanging authentication handoff ticket.");
             await exchangeTicket(ticket);
           }
           if (!hasSession()) {
@@ -11816,6 +11841,14 @@
       initializing = (async () => {
         try {
           const appContainer = await waitForElement("#app-container");
+          try {
+            const loaderHtml = await loadComponent("app-loader", "loader");
+            if (loaderHtml) {
+              document.body.insertAdjacentHTML("afterbegin", loaderHtml);
+            }
+          } catch (error) {
+            console.warn("[AppShell] Loader failed:", error);
+          }
           try {
             const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
             if (dialogsHtml) {
@@ -14938,17 +14971,21 @@
       setLoading(true);
       try {
         const loginUrl = await requestLoginUrl();
+        console.log("[GCB Login] Google login URL received:", loginUrl);
         if (!loginUrl) {
           throw new Error("Google login URL was not returned.");
         }
         if (window.parent !== window && window.GCB_IS_GITHUB_EMBEDDED === true) {
-          window.parent.postMessage(
+          console.log("[GCB Login] Sending login request to GitHub wrapper.");
+          console.log("[GCB Login] window.top:", window.top);
+          window.top.postMessage(
             {
               type: "GCB_LOGIN_REQUEST",
               url: loginUrl
             },
             "https://gcbops.github.io"
           );
+          console.log("[GCB Login] Login request sent to GitHub wrapper.");
           return;
         }
         window.location.href = loginUrl;

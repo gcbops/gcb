@@ -224,10 +224,20 @@
    */
 
   window.addEventListener("message", (event) => {
+    console.log(
+  "[GCB Wrapper] Message received:",
+  event.origin,
+  event.data,
+);
+
     if (
       event.origin !==
       "https://script.google.com"
     ) {
+      console.error(
+        "[GCB Wrapper] Ignored message from unexpected origin:",
+        event.origin,
+      );
       return;
     }
 
@@ -235,12 +245,28 @@
       event.data?.type ===
       "GCB_LOGIN_REQUEST"
     ) {
+      console.log(
+      "[GCB Wrapper] GCB_LOGIN_REQUEST received.",
+    );
+
       const loginUrl =
         event.data?.url;
 
+        console.log(
+      "[GCB Wrapper] Login URL:",
+      loginUrl,
+    );
+
       if (!loginUrl) {
+        console.error(
+          "[GCB Wrapper] Login URL is missing.",
+        );
         return;
       }
+
+      console.log(
+      "[GCB Wrapper] Navigating top-level window to Google OAuth.",
+    );
 
       window.location.href = loginUrl;
 
@@ -251,6 +277,10 @@
       event.data?.type ===
       "GCB_AUTH_HANDOFF_COMPLETE"
     ) {
+      console.log(
+      "[GCB Wrapper] GCB_AUTH_HANDOFF_COMPLETE received.",
+    );
+
       const url =
         new URL(window.location.href);
 
@@ -264,6 +294,10 @@
         url,
       );
 
+      console.log(
+      "[GCB Wrapper] Authentication ticket removed from URL.",
+    );
+
       return;
     }
 
@@ -271,6 +305,9 @@
       event.data?.type !==
       "GCB_NAVIGATION"
     ) {
+      console.error(
+        "[GCB Wrapper] Message was not a recognized GCB message.",
+      );
       return;
     }
 

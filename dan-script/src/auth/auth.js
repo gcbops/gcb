@@ -41,6 +41,11 @@ const GcbAuthModule = (() => {
       google.script.run
         .withSuccessHandler((result) => {
           try {
+            console.log(
+              "[GCB Auth] Authentication handoff exchange succeeded:",
+              result,
+            );
+
             saveSession(result);
 
             window.GCB_AUTH_TICKET = "";
@@ -49,11 +54,19 @@ const GcbAuthModule = (() => {
               window.GCB_IS_GITHUB_EMBEDDED === true &&
               window.parent !== window
             ) {
-              window.parent.postMessage(
+              console.log(
+                "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper.",
+              );
+
+              window.top.postMessage(
                 {
                   type: "GCB_AUTH_HANDOFF_COMPLETE",
                 },
                 "https://gcbops.github.io",
+              );
+
+              console.log(
+                "[GCB Auth] Authentication handoff completion message sent.",
               );
             }
 
@@ -65,6 +78,10 @@ const GcbAuthModule = (() => {
           }
         })
         .withFailureHandler((error) => {
+          console.error(
+            "[GCB Auth] Authentication handoff exchange failed:",
+            error,
+          );
           reject(error);
         })
         .exchangeGcbSessionHandoff(ticket);
@@ -111,12 +128,25 @@ const GcbAuthModule = (() => {
           return true;
         }
 
+        if (!window.GCB_AUTH_TICKET) {
+          console.error(
+            "[GCB Auth] Authentication ticket not detected"
+          );
+          return;
+        }
+
+        console.log(
+          "[GCB Auth] Authentication ticket detected:",
+          window.GCB_AUTH_TICKET,
+        );
+
         const ticket = String(window.GCB_AUTH_TICKET || "").trim();
 
         /*
          * Fresh OAuth login.
          */
         if (ticket) {
+          console.log("[GCB Auth] Exchanging authentication handoff ticket.");
           await exchangeTicket(ticket);
         }
 
