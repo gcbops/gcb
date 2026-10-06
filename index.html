@@ -230,14 +230,16 @@
   event.data,
 );
 
-    if (
-      event.origin !==
-      "https://script.google.com"
-    ) {
-      console.error(
+    const isGcbGasOrigin =
+      event.origin === "https://script.google.com" ||
+      event.origin.endsWith("-script.googleusercontent.com");
+
+    if (!isGcbGasOrigin) {
+      console.log(
         "[GCB Wrapper] Ignored message from unexpected origin:",
         event.origin,
       );
+
       return;
     }
 
