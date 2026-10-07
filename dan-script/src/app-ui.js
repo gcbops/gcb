@@ -1,3 +1,5 @@
+import { LoaderModule } from "./loader";
+
 const AppUI = (() => {
   function init() {
     initPerfectScrollbars();
@@ -7,7 +9,7 @@ const AppUI = (() => {
 
   function initLoadingState() {
     setTimeout(() => {
-      document.body.classList.add("loaded");
+      LoaderModule.hide();
 
       document.querySelectorAll(".drawer").forEach((drawer) => {
         drawer.classList.add("reg");

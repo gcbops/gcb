@@ -1,4 +1,5 @@
 import { GcbAuthModule } from "./auth/auth.js";
+import { LoaderModule } from "./loader.js";
 import { RouterModule } from "./routers.js";
 import { AppUtils } from "./utils.js";
 
@@ -30,9 +31,18 @@ const ActionRouterModule = (() => {
 
     if (!pageBtn) {
       if (e.target.closest("#logout")) {
-        GcbAuthModule.logout().finally(() => {
-          AppUtils.showDashboardToast("Logged out succesfully.", "success");
+        
+        AppUtils.openConfirmationModal({
+          ns: "logout",
+          title: "Sign Out & Clear Session?",
+          message:
+            "This will sign you out of GCB dashboard and clear temporary session data from your browser. You will need to sign in again to continue.",
+          onProceed: ($modal, $btn) => {
+            LoaderModule.show("logout");
+          },
+        });
 
+        GcbAuthModule.logout().finally(() => {
           if (window.GCB_IS_GITHUB_EMBEDDED === true) {
             window.top.postMessage(
               {
