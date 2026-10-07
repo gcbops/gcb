@@ -123,6 +123,12 @@ const integrationsConfigurationPage = (() => {
     bound = false;
 
     $(document).off("click.integrationPage", "[data-integration-configure]");
+
+    $(MODAL_ID).off(".integrationConfig");
+
+    $(window).off("focus.integrationAuthorization");
+
+    $(MODAL_ID).removeData("integration");
   };
 
   const bindActions = () => {
@@ -439,7 +445,7 @@ const integrationsConfigurationPage = (() => {
       return;
     }
 
-    const ns = `.integrationConfig-${integration}`;
+    const ns = `.integrationConfig`;
 
     AppUtils.openModal(MODAL_ID, {
       size: "md",
@@ -524,6 +530,8 @@ const integrationsConfigurationPage = (() => {
         $modal.off(ns);
 
         $(window).off("focus.integrationAuthorization");
+
+        $modal.removeData("integration");
       },
     });
   }

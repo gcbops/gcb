@@ -849,7 +849,18 @@ function saveBillingRecordsCSV(sessionId, signature, startDate, endDate) {
     );
   }
 
-  const folder = getReportFolder();
+  let folder;
+
+  try {
+    folder = getReportFolder();
+  } catch (error) {
+    console.error("[Billing Export] Drive folder access failed:", error);
+
+    throw new Error(
+      "Google Drive authorization/access is required to save the Billing CSV. " +
+        `Details: ${error?.message || error}`,
+    );
+  }
 
   const headers = [
     "Client",

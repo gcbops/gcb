@@ -196,37 +196,108 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
     "drive",
   ]);
 
-  const scopeMap = {
-    gmail: "https://www.googleapis.com/auth/script.send_mail",
-    sheets: "https://www.googleapis.com/auth/spreadsheets",
-    drive: "https://www.googleapis.com/auth/drive",
-  };
+  switch (integrationType) {
+    case "discord":
+      return {
+        authorized: true,
+        service: "discord",
+        message: "Discord does not require Google authorization.",
+      };
 
-  if (integrationType === "discord") {
-    return {
-      authorized: true,
-      service: "discord",
-      message: "Discord does not require Google authorization.",
-    };
+    case "drive": {
+      const properties = PropertiesService.getScriptProperties();
+
+      const reportFolderId = properties.getProperty("REPORT_FOLDER_ID");
+
+      if (!reportFolderId) {
+        return {
+          authorized: true,
+          service: "drive",
+          message:
+            "Google Drive access is authorized, but no report folder is configured.",
+        };
+      }
+
+      try {
+        const folder = DriveApp.getFolderById(reportFolderId);
+
+        return {
+          authorized: true,
+          service: "drive",
+          message: "Google Drive access is authorized.",
+          name: folder.getName(),
+        };
+      } catch (error) {
+        console.error("[Integration] Drive authorization check failed:", error);
+
+        return {
+          authorized: false,
+          service: "drive",
+          message: "Google Drive access is not available.",
+        };
+      }
+    }
+
+    case "sheets": {
+      const properties = PropertiesService.getScriptProperties();
+
+      const spreadsheetId = properties.getProperty("SPREADSHEET_ID");
+
+      if (!spreadsheetId) {
+        return {
+          authorized: true,
+          service: "sheets",
+          message:
+            "Google Sheets access is authorized, but no spreadsheet is configured.",
+        };
+      }
+
+      try {
+        const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+
+        return {
+          authorized: true,
+          service: "sheets",
+          message: "Google Sheets access is authorized.",
+          name: spreadsheet.getName(),
+        };
+      } catch (error) {
+        console.error(
+          "[Integration] Sheets authorization check failed:",
+          error,
+        );
+
+        return {
+          authorized: false,
+          service: "sheets",
+          message: "Google Sheets access is not available.",
+        };
+      }
+    }
+
+    case "gmail": {
+      try {
+        MailApp.getRemainingDailyQuota();
+
+        return {
+          authorized: true,
+          service: "gmail",
+          message: "Google mail access is authorized.",
+        };
+      } catch (error) {
+        console.error("[Integration] Gmail authorization check failed:", error);
+
+        return {
+          authorized: false,
+          service: "gmail",
+          message: "Google mail access is not available.",
+        };
+      }
+    }
+
+    default:
+      throw new Error(`Unsupported integration: ${integrationType}`);
   }
-
-  const scope = scopeMap[integrationType];
-
-  const authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL, [
-    scope,
-  ]);
-
-  const authorized =
-    authInfo.getAuthorizationStatus() ===
-    ScriptApp.AuthorizationStatus.NOT_REQUIRED;
-
-  return {
-    authorized,
-    service: integrationType,
-    message: authorized
-      ? getIntegrationAuthorizationMessage(integrationType, true)
-      : getIntegrationAuthorizationMessage(integrationType, false),
-  };
 }
 
 function getIntegrationAuthorizationMessage(

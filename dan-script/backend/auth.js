@@ -212,13 +212,12 @@ function handleGcbOAuthCallback(e) {
             href="${redirectUrl}"
             target="_blank"
             rel="noopener noreferrer"
-            onclick="setTimeout(() => window.close(), 10000);"
           >
             Continue to Go Crayons GS
           </a>
 
           <div class="gcb-auth-note">
-            This tab will close 10 seconds after continuing.
+            You can close this tab after continuing.
           </div>
 
         </div>
@@ -928,4 +927,33 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function testGcbDriveAccess() {
+
+  const folderId =
+    PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
+
+  if (!folderId) {
+    throw new Error("REPORT_FOLDER_ID is not configured.");
+  }
+
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+
+    return {
+      success: true,
+      authorized: true,
+      folderId: folder.getId(),
+      folderName: folder.getName(),
+    };
+  } catch (error) {
+    console.error("[Integration] Drive test failed:", error);
+
+    return {
+      success: false,
+      authorized: false,
+      message: error?.message || String(error),
+    };
+  }
 }
