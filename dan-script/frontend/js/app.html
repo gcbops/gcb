@@ -15680,6 +15680,7 @@
       if (!pageBtn) {
         if (e.target.closest("#logout")) {
           GcbAuthModule.logout().finally(() => {
+            AppUtils.showDashboardToast("Logged out succesfully.", "success");
             if (window.GCB_IS_GITHUB_EMBEDDED === true) {
               window.top.postMessage(
                 {

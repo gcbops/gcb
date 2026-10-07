@@ -303,6 +303,23 @@
       return;
     }
 
+    if (event.data?.type === "GCB_AUTH_POPUP_COMPLETE") {
+  console.log(
+    "[GCB Wrapper] OAuth popup authentication completed.",
+  );
+
+  window.GCB_AUTH_WINDOW = null;
+
+  // Reload the original GAS iframe so it
+  // detects the newly-created session.
+  loadGasPage(
+    getCurrentPage(),
+    getCurrentClient(),
+  );
+
+  return;
+}
+
     if (
       event.data?.type ===
       "GCB_AUTH_HANDOFF_COMPLETE"
@@ -337,7 +354,19 @@
           "[GCB Wrapper] Closing OAuth popup.",
         );
 
+        window.opener.postMessage(
+          {
+            type: "GCB_AUTH_POPUP_COMPLETE",
+          },
+          "https://gcbops.github.io",
+        );
+
+        console.log(
+          "[GCB Wrapper] Closing OAuth popup.",
+        );
+
         window.close();
+
       }
 
       return;

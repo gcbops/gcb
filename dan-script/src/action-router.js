@@ -1,5 +1,6 @@
 import { GcbAuthModule } from "./auth/auth.js";
 import { RouterModule } from "./routers.js";
+import { AppUtils } from "./utils.js";
 
 const ActionRouterModule = (() => {
   let initialized = false;
@@ -30,6 +31,8 @@ const ActionRouterModule = (() => {
     if (!pageBtn) {
       if (e.target.closest("#logout")) {
         GcbAuthModule.logout().finally(() => {
+          AppUtils.showDashboardToast("Logged out succesfully.", "success");
+
           if (window.GCB_IS_GITHUB_EMBEDDED === true) {
             window.top.postMessage(
               {
