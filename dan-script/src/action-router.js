@@ -30,9 +30,21 @@ const ActionRouterModule = (() => {
     if (!pageBtn) {
       if (e.target.closest("#logout")) {
         GcbAuthModule.logout().finally(() => {
-          window.location.reload();
+          if (window.GCB_IS_GITHUB_EMBEDDED === true) {
+            window.top.postMessage(
+              {
+                type: "GCB_RELOAD_REQUEST",
+              },
+              "https://gcbops.github.io",
+            );
+          } else {
+            window.location.reload();
+          }
         });
+
+        return;
       }
+
       return;
     }
 

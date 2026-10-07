@@ -53,7 +53,7 @@ function handleGcbOAuthCallback(e) {
       handoffTicket,
     )}`;
 
-    // console.log("[GCB Auth] Redirect URL:", redirectUrl);
+    console.log("[GCB Auth] Redirect URL:", redirectUrl);
 
     return HtmlService.createHtmlOutput(`
       <!DOCTYPE html>
@@ -159,7 +159,7 @@ function handleGcbOAuthCallback(e) {
             border: 0;
             border-radius: 10px;
 
-            background: #0d6efd;
+            background: #008B8B;
             color: #fff;
 
             font-size: 14px;
@@ -175,7 +175,7 @@ function handleGcbOAuthCallback(e) {
           }
 
           .gcb-auth-button:hover {
-            background: #0b5ed7;
+            background: #007A7A;
 
             box-shadow:
               0 4px 12px rgba(13, 110, 253, 0.2);
@@ -210,8 +210,14 @@ function handleGcbOAuthCallback(e) {
             id="gcb-continue-button"
             class="gcb-auth-button"
             href="${redirectUrl}"
-            rel="noopener noreferrer"
-            onclick="setTimeout(() => window.close(), 10000);"
+            onclick="
+              console.log('[GCB Auth] Continue clicked.');
+
+              setTimeout(() => {
+                console.log('[GCB Auth] Attempting to close OAuth window.');
+                window.close();
+              }, 10000);
+            "
           >
             Continue to Go Crayons GS
           </a>
@@ -927,31 +933,4 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function authorizeGcbDrive() {
-  const folder = DriveApp.getRootFolder();
-
-  Logger.log(folder.getName());
-
-  return true;
-}
-
-function authorizeGcbDrive() {
-  const folder = DriveApp.getRootFolder();
-
-  Logger.log(folder.getName());
-
-  return true;
-}
-
-function authorizeGcbGmail() {
-  const drafts =
-    GmailApp.getDrafts();
-
-  Logger.log(
-    `Gmail authorized. Draft count: ${drafts.length}`,
-  );
-
-  return true;
 }

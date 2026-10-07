@@ -11,7 +11,6 @@ const integrationsConfigurationPage = (() => {
       title: "Gmail",
       description:
         "Configure the email address used by the application for notifications.",
-      service: "gmail",
       authorizationRequired: true,
       fields: [
         {
@@ -28,7 +27,6 @@ const integrationsConfigurationPage = (() => {
       title: "Discord",
       description:
         "Send application notifications and updates to a Discord channel.",
-      service: null,
       authorizationRequired: false,
       fields: [
         {
@@ -45,7 +43,6 @@ const integrationsConfigurationPage = (() => {
       title: "Google Sheets",
       description:
         "Connect the application to its Google Sheets and external sheet template.",
-      service: "sheets",
       authorizationRequired: true,
       fields: [
         {
@@ -70,7 +67,6 @@ const integrationsConfigurationPage = (() => {
       title: "Google Drive",
       description:
         "Configure the Google Drive folders used by the application.",
-      service: "drive",
       authorizationRequired: true,
       fields: [
         {
@@ -100,9 +96,9 @@ const integrationsConfigurationPage = (() => {
 
     calendar: {
       title: "Google Calendar",
-      description: "Connect Google Calendar for application calendar features.",
-      service: "calendar",
-      authorizationRequired: true,
+      description: "Google Calendar integration is not available yet.",
+      authorizationRequired: false,
+      unavailable: true,
       fields: [],
       logo: "https://s13.gifyu.com/images/bnmHq.png",
     },
@@ -148,8 +144,28 @@ const integrationsConfigurationPage = (() => {
       return;
     }
 
+    const config = getIntegrationConfig(integration);
+
+    if (config?.unavailable) {
+      AppUtils.showDashboardToast(
+        "Google Calendar integration is not available yet.",
+        "info",
+      );
+      return;
+    }
+
     openIntegrationModal(integration);
   };
+
+  function bindAuthorizationRefresh(integration, $modal) {
+    const refresh = () => {
+      loadIntegrationAuthorization(integration, $modal);
+    };
+
+    $(window)
+      .off("focus.integrationAuthorization")
+      .on("focus.integrationAuthorization", refresh);
+  }
 
   const loadData = async () => {
     try {
@@ -210,6 +226,7 @@ const integrationsConfigurationPage = (() => {
 
       AppUtils.gScriptRun({
         gscriptFunc: "getIntegrationAuthorizationStatus",
+
         args: [sessionId, signature, integration],
 
         onSuccess: (data) => {
@@ -222,12 +239,11 @@ const integrationsConfigurationPage = (() => {
           $message.text(
             authorized
               ? data.message || "Google service access is authorized."
-              : data.message ||
-                  "Google service authorization is required before this integration can be used.",
+              : data.message || "Google service authorization is required.",
           );
 
           if (!authorized) {
-            $button.removeClass("d-none");
+            $button.removeClass("d-none").text("Authorize Google Access");
           } else {
             $button.addClass("d-none");
           }
@@ -246,7 +262,7 @@ const integrationsConfigurationPage = (() => {
             err?.message || "Unable to determine Google service authorization.",
           );
 
-          $button.removeClass("d-none");
+          $button.removeClass("d-none").text("Authorize Google Access");
 
           updateIntegrationSaveState($modal, false);
         },
@@ -260,6 +276,77 @@ const integrationsConfigurationPage = (() => {
       $message.text(error?.message || "Authentication required.");
 
       updateIntegrationSaveState($modal, false);
+    }
+  }
+
+  async function authorizeIntegration(integration, $modal) {
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.gScriptRun({
+        gscriptFunc: "getIntegrationAuthorizationUrl",
+
+        args: [sessionId, signature, integration],
+
+        onSuccess: (data) => {
+          if (data?.authorized === true) {
+            loadIntegrationAuthorization(integration, $modal);
+
+            return;
+          }
+
+          const authorizationUrl = String(data?.url || "").trim();
+
+          if (!authorizationUrl) {
+            AppUtils.showDashboardToast(
+              "Google authorization URL is unavailable.",
+              "error",
+            );
+
+            return;
+          }
+
+          /*
+           * Open Google's authorization flow in a
+           * separate top-level browser tab/window.
+           */
+          const authWindow = window.open(
+            authorizationUrl,
+            "_blank",
+            "noopener,noreferrer",
+          );
+
+          if (!authWindow) {
+            AppUtils.showDashboardToast(
+              "Please allow pop-ups for GCB so Google authorization can continue.",
+              "error",
+            );
+
+            return;
+          }
+
+          AppUtils.showDashboardToast(
+            "Complete the Google authorization in the new tab, then return to GCB.",
+            "info",
+          );
+        },
+
+        onError: (err) => {
+          console.error("getIntegrationAuthorizationUrl failed:", err);
+
+          AppUtils.showDashboardToast(
+            err?.message || "Unable to start Google authorization.",
+            "error",
+          );
+        },
+      });
+    } catch (error) {
+      console.error("Authentication required for Google authorization:", error);
+
+      AppUtils.showDashboardToast(
+        error?.message || "Authentication required.",
+        "error",
+      );
     }
   }
 
@@ -425,15 +512,18 @@ const integrationsConfigurationPage = (() => {
             saveIntegration(integration, $modal, $btn);
           })
           .on(`click${ns}`, "#integration-authorize-button", () => {
-            loadIntegrationAuthorization(integration, $modal);
+            authorizeIntegration(integration, $modal);
           });
 
         loadIntegrationConfigStatus(integration, $modal);
         loadIntegrationAuthorization(integration, $modal);
+        bindAuthorizationRefresh(integration, $modal);
       },
 
       onClose($modal) {
         $modal.off(ns);
+
+        $(window).off("focus.integrationAuthorization");
       },
     });
   }
@@ -483,7 +573,7 @@ const integrationsConfigurationPage = (() => {
               class="btn btn-outline-gc btn-sm mt-2 d-none"
               id="integration-authorize-button"
             >
-              Check Google Access
+               Authorize Google Access
             </button>
           </div>
         </div>

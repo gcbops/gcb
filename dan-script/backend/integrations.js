@@ -81,7 +81,12 @@ function getIntegrationStatus(sessionId, signature) {
     },
 
     calendar: {
-      authorization: getAuthorization("calendar"),
+      authorization: {
+        authorized: false,
+        service: "calendar",
+        configured: false,
+        message: "Google Calendar integration is not implemented yet.",
+      },
     },
   };
 }
@@ -189,77 +194,119 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
     "discord",
     "sheets",
     "drive",
-    "calendar",
   ]);
 
-  try {
-    switch (integrationType) {
-      case "drive": {
-        const root = DriveApp.getRootFolder();
+  const scopeMap = {
+    gmail: "https://www.googleapis.com/auth/script.send_mail",
+    sheets: "https://www.googleapis.com/auth/spreadsheets",
+    drive: "https://www.googleapis.com/auth/drive",
+  };
 
-        return {
-          authorized: true,
-          service: "drive",
-          message: "Google Drive access is authorized.",
-          name: root.getName(),
-        };
-      }
-
-      case "sheets": {
-        const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-
-        return {
-          authorized: true,
-          service: "sheets",
-          message: "Google Sheets access is authorized.",
-          name: spreadsheet?.getName?.() || "Google Sheets access available.",
-        };
-      }
-
-      case "gmail": {
-        const draft = GmailApp.getDrafts();
-
-        return {
-          authorized: true,
-          service: "gmail",
-          message: "Gmail access is authorized.",
-        };
-      }
-
-      case "calendar": {
-        const calendar = CalendarApp.getDefaultCalendar();
-
-        return {
-          authorized: true,
-          service: "calendar",
-          message: "Google Calendar access is authorized.",
-          name: calendar.getName(),
-        };
-      }
-
-      case "discord":
-        return {
-          authorized: true,
-          service: "discord",
-          message: "Discord does not require Google authorization.",
-        };
-
-      default:
-        throw new Error(`Unsupported integration: ${integrationType}`);
-    }
-  } catch (error) {
-    console.error(
-      `[Integration] ${integrationType} authorization check failed:`,
-      error,
-    );
-
+  if (integrationType === "discord") {
     return {
-      authorized: false,
-      service: integrationType,
-      message:
-        "Google service authorization is required before this integration can be used.",
+      authorized: true,
+      service: "discord",
+      message: "Discord does not require Google authorization.",
     };
   }
+
+  const scope = scopeMap[integrationType];
+
+  const authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL, [
+    scope,
+  ]);
+
+  const authorized =
+    authInfo.getAuthorizationStatus() ===
+    ScriptApp.AuthorizationStatus.NOT_REQUIRED;
+
+  return {
+    authorized,
+    service: integrationType,
+    message: authorized
+      ? getIntegrationAuthorizationMessage(integrationType, true)
+      : getIntegrationAuthorizationMessage(integrationType, false),
+  };
+}
+
+function getIntegrationAuthorizationMessage(
+  integration,
+  authorized,
+) {
+  if (authorized) {
+    switch (integration) {
+      case "gmail":
+        return "Google mail access is authorized.";
+
+      case "sheets":
+        return "Google Sheets access is authorized.";
+
+      case "drive":
+        return "Google Drive access is authorized.";
+
+      default:
+        return "Google service access is authorized.";
+    }
+  }
+
+  switch (integration) {
+    case "gmail":
+      return "Google mail authorization is required.";
+
+    case "sheets":
+      return "Google Sheets authorization is required.";
+
+    case "drive":
+      return "Google Drive authorization is required.";
+
+    default:
+      return "Google service authorization is required.";
+  }
+}
+
+function getIntegrationAuthorizationUrl(sessionId, signature, integration) {
+  requireCapability(sessionId, signature, "settings.manage");
+
+  const integrationType = Validation.enumValue(integration, "integration", [
+    "gmail",
+    "sheets",
+    "drive",
+  ]);
+
+  const scopeMap = {
+    gmail: "https://www.googleapis.com/auth/script.send_mail",
+    sheets: "https://www.googleapis.com/auth/spreadsheets",
+    drive: "https://www.googleapis.com/auth/drive",
+  };
+
+  const scope = scopeMap[integrationType];
+
+  const authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL, [
+    scope,
+  ]);
+
+  if (
+    authInfo.getAuthorizationStatus() ===
+    ScriptApp.AuthorizationStatus.NOT_REQUIRED
+  ) {
+    return {
+      authorized: true,
+      url: null,
+      integration: integrationType,
+    };
+  }
+
+  const authorizationUrl = authInfo.getAuthorizationUrl();
+
+  if (!authorizationUrl) {
+    throw new Error("Google authorization URL could not be generated.");
+  }
+
+  return {
+    authorized: false,
+    url: authorizationUrl,
+    integration: integrationType,
+  };
 }
 
 function verifyDriveFolderAccess(folderId, label) {
@@ -313,68 +360,106 @@ function saveIntegration(sessionId, signature, integration, value) {
   const properties = PropertiesService.getScriptProperties();
 
   if (integrationType === "drive") {
-    Validation.requireObject(value, "Google Drive configuration");
+    Validation.requireObject(value, "Drive configuration");
 
-    const reportFolderId = String(value?.reportFolderId || "").trim();
+    const validated = {};
 
-    const backupFolderId = String(value?.backupFolderId || "").trim();
+    if (value.reportFolderId) {
+      const folderId = Validation.driveFolderId(
+        value.reportFolderId,
+        "Report folder ID",
+      );
 
-    const mainSheetsFolderId = String(value?.mainSheetsFolderId || "").trim();
-
-    /*
-     * Only validate values that were provided.
-     * Blank fields keep the existing configuration.
-     */
-    if (reportFolderId) {
-      verifyDriveFolderAccess(reportFolderId, "Report Folder ID");
-
-      properties.setProperty("REPORT_FOLDER_ID", reportFolderId);
+      validated.reportFolderId = verifyDriveFolderAccess(
+        folderId,
+        "Report folder",
+      );
     }
 
-    if (backupFolderId) {
-      verifyDriveFolderAccess(backupFolderId, "Backup Folder ID");
+    if (value.backupFolderId) {
+      const folderId = Validation.driveFolderId(
+        value.backupFolderId,
+        "Backup folder ID",
+      );
 
-      properties.setProperty("BACKUP_FOLDER_ID", backupFolderId);
+      validated.backupFolderId = verifyDriveFolderAccess(
+        folderId,
+        "Backup folder",
+      );
     }
 
-    if (mainSheetsFolderId) {
-      verifyDriveFolderAccess(mainSheetsFolderId, "Main Sheets Folder ID");
+    if (value.mainSheetsFolderId) {
+      const folderId = Validation.driveFolderId(
+        value.mainSheetsFolderId,
+        "Main sheets folder ID",
+      );
 
-      properties.setProperty("MAIN_SHEETS_FOLDER_ID", mainSheetsFolderId);
+      validated.mainSheetsFolderId = verifyDriveFolderAccess(
+        folderId,
+        "Main sheets folder",
+      );
+    }
+
+    if (validated.reportFolderId) {
+      properties.setProperty("REPORT_FOLDER_ID", validated.reportFolderId.id);
+    }
+
+    if (validated.backupFolderId) {
+      properties.setProperty("BACKUP_FOLDER_ID", validated.backupFolderId.id);
+    }
+
+    if (validated.mainSheetsFolderId) {
+      properties.setProperty(
+        "MAIN_SHEETS_FOLDER_ID",
+        validated.mainSheetsFolderId.id,
+      );
     }
 
     reconcileScheduledTriggersInternal();
 
     return {
       success: true,
-      integration: integrationType,
+      integration: "drive",
     };
   }
 
   if (integrationType === "sheets") {
-    Validation.requireObject(value, "Google Sheets configuration");
+    Validation.requireObject(value, "Sheets configuration");
 
-    const spreadsheetId = String(value?.spreadsheetId || "").trim();
+    const validated = {};
 
-    const externalSheetTemplateId = String(
-      value?.externalSheetTemplateId || "",
-    ).trim();
-
-    if (spreadsheetId) {
-      verifySpreadsheetAccess(spreadsheetId, "Google Spreadsheet ID");
-
-      properties.setProperty("SPREADSHEET_ID", spreadsheetId);
-    }
-
-    if (externalSheetTemplateId) {
-      verifySpreadsheetAccess(
-        externalSheetTemplateId,
-        "External Sheet Template ID",
+    if (value.spreadsheetId) {
+      const spreadsheetId = Validation.spreadsheetId(
+        value.spreadsheetId,
+        "Spreadsheet ID",
       );
 
+      validated.spreadsheetId = verifySpreadsheetAccess(
+        spreadsheetId,
+        "Main spreadsheet",
+      );
+    }
+
+    if (value.externalSheetTemplateId) {
+      const templateId = Validation.spreadsheetId(
+        value.externalSheetTemplateId,
+        "External sheet template ID",
+      );
+
+      validated.externalSheetTemplateId = verifySpreadsheetAccess(
+        templateId,
+        "External sheet template",
+      );
+    }
+
+    if (validated.spreadsheetId) {
+      properties.setProperty("SPREADSHEET_ID", validated.spreadsheetId.id);
+    }
+
+    if (validated.externalSheetTemplateId) {
       properties.setProperty(
         "EXTERNAL_SHEET_TEMPLATE_ID",
-        externalSheetTemplateId,
+        validated.externalSheetTemplateId.id,
       );
     }
 
@@ -382,7 +467,7 @@ function saveIntegration(sessionId, signature, integration, value) {
 
     return {
       success: true,
-      integration: integrationType,
+      integration: "sheets",
     };
   }
 
