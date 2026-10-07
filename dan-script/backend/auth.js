@@ -210,14 +210,9 @@ function handleGcbOAuthCallback(e) {
             id="gcb-continue-button"
             class="gcb-auth-button"
             href="${redirectUrl}"
-            onclick="
-              console.log('[GCB Auth] Continue clicked.');
-
-              setTimeout(() => {
-                console.log('[GCB Auth] Attempting to close OAuth window.');
-                window.close();
-              }, 10000);
-            "
+            target="_blank"
+            rel="noopener noreferrer"
+            onclick="setTimeout(() => window.close(), 10000);"
           >
             Continue to Go Crayons GS
           </a>

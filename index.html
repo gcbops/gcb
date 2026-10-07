@@ -274,51 +274,14 @@
         return;
       }
 
-      const authWindow = window.open(
-        loginUrl,
-        "gcbGoogleAuth",
-        "width=500,height=700,resizable=yes,scrollbars=yes",
-      );
-
-      if (!authWindow) {
-        console.error(
-          "[GCB Wrapper] OAuth popup was blocked.",
-        );
-
-        return;
-      }
-
-      window.GCB_AUTH_WINDOW = authWindow;
-
-      console.log(
-        "[GCB Wrapper] OAuth popup opened.",
-      );
-
       // console.log(
       //   "[GCB Wrapper] Navigating top-level window to Google OAuth.",
       // );
 
-      // window.location.href = loginUrl;
+      window.location.href = loginUrl;
 
       return;
     }
-
-    if (event.data?.type === "GCB_AUTH_POPUP_COMPLETE") {
-  console.log(
-    "[GCB Wrapper] OAuth popup authentication completed.",
-  );
-
-  window.GCB_AUTH_WINDOW = null;
-
-  // Reload the original GAS iframe so it
-  // detects the newly-created session.
-  loadGasPage(
-    getCurrentPage(),
-    getCurrentClient(),
-  );
-
-  return;
-}
 
     if (
       event.data?.type ===
@@ -344,30 +307,6 @@
       // console.log(
       //   "[GCB Wrapper] Authentication ticket removed from URL.",
       // );
-
-      /*
-      * If this GitHub page is running inside
-      * an OAuth popup, close the popup.
-      */
-      if (window.opener && !window.opener.closed) {
-        console.log(
-          "[GCB Wrapper] Closing OAuth popup.",
-        );
-
-        window.opener.postMessage(
-          {
-            type: "GCB_AUTH_POPUP_COMPLETE",
-          },
-          "https://gcbops.github.io",
-        );
-
-        console.log(
-          "[GCB Wrapper] Closing OAuth popup.",
-        );
-
-        window.close();
-
-      }
 
       return;
     }
