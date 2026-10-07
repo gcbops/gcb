@@ -41,11 +41,11 @@ function handleGcbOAuthCallback(e) {
 
     const gcbSession = createGcbSession(authorizedUser);
 
-    console.log("[GCB Auth] GCB session created.");
+    // console.log("[GCB Auth] GCB session created.");
 
     const handoffTicket = createGcbSessionHandoff(gcbSession);
 
-    console.log("[GCB Auth] Handoff ticket created.");
+    // console.log("[GCB Auth] Handoff ticket created.");
 
     const githubUrl = "https://gcbops.github.io/gcb/";
 
@@ -53,7 +53,7 @@ function handleGcbOAuthCallback(e) {
       handoffTicket,
     )}`;
 
-    console.log("[GCB Auth] Redirect URL:", redirectUrl);
+    // console.log("[GCB Auth] Redirect URL:", redirectUrl);
 
     return HtmlService.createHtmlOutput(`
       <!DOCTYPE html>
@@ -210,7 +210,6 @@ function handleGcbOAuthCallback(e) {
             id="gcb-continue-button"
             class="gcb-auth-button"
             href="${redirectUrl}"
-            target="_blank"
             rel="noopener noreferrer"
             onclick="setTimeout(() => window.close(), 10000);"
           >
@@ -427,7 +426,7 @@ function createGcbSession(authorizedUser) {
   CacheService.getScriptCache().put(
     `gcb_session_${sessionId}`,
     JSON.stringify(session),
-    21600, // GCB session lifetime = 6 hours
+    86400, // GCB session lifetime = 1 day
   );
 
   return session;
@@ -602,11 +601,13 @@ function validateGcbSession(sessionId, signature) {
     return null;
   }
 
-  const cachedSession = CacheService.getScriptCache().get(
-    `gcb_session_${sessionId}`,
-  );
+  const sessionCacheKey = `gcb_session_${sessionId}`;
+
+  const cachedSession = CacheService.getScriptCache().get(sessionCacheKey);
 
   if (!cachedSession) {
+    console.error("[Auth] Session not found in ScriptCache:", sessionCacheKey);
+
     return null;
   }
 
@@ -649,6 +650,8 @@ function validateGcbSession(sessionId, signature) {
   const expectedSignature = Utilities.base64EncodeWebSafe(signatureBytes);
 
   if (signature !== expectedSignature) {
+    console.error("[Auth] Session signature mismatch.");
+
     return null;
   }
 
@@ -658,16 +661,22 @@ function validateGcbSession(sessionId, signature) {
     !Number.isFinite(session.createdAt) ||
     Date.now() - session.createdAt > SESSION_LIFETIME
   ) {
+    console.error("[Auth] Session expired.");
+
     return null;
   }
 
   const authorizedUser = getAuthorizedUserByGoogleSub(session.googleSub);
 
   if (!authorizedUser) {
+    console.error("[Auth] Authorized user not found for session.");
+
     return null;
   }
 
   if (!authorizedUser.enabled) {
+    console.error("[Auth] Authorized user is disabled.");
+
     return null;
   }
 
@@ -918,4 +927,31 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function authorizeGcbDrive() {
+  const folder = DriveApp.getRootFolder();
+
+  Logger.log(folder.getName());
+
+  return true;
+}
+
+function authorizeGcbDrive() {
+  const folder = DriveApp.getRootFolder();
+
+  Logger.log(folder.getName());
+
+  return true;
+}
+
+function authorizeGcbGmail() {
+  const drafts =
+    GmailApp.getDrafts();
+
+  Logger.log(
+    `Gmail authorized. Draft count: ${drafts.length}`,
+  );
+
+  return true;
 }

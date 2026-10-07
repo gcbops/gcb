@@ -20,7 +20,7 @@ const ReportHistory = (() => {
     }
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -107,7 +107,7 @@ const ReportHistory = (() => {
       </td>
 
       <td class="text-center">
-        <span class="badge bg-light text-info">
+        <span class="badge bg-light text-gc">
           <i class="fa-solid ${fileIcon}"></i>
           ${AppUtils.escapeHtml(reportName)}
         </span>

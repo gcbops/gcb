@@ -850,15 +850,13 @@ function getReportsOverview(sessionId, signature) {
   const yearlyCount = Number(getLabValue("AY30", 0)) || 0;
   const pdfGenerated = Number(getLabValue("AZ30", 0)) || 0;
 
-  let driveStorage = false;
+  const properties = PropertiesService.getScriptProperties();
 
-  try {
-    const folder = getReportFolder();
-    folder.getName();
-    driveStorage = true;
-  } catch (err) {
-    driveStorage = false;
-  }
+  const reportFolderId = String(
+    properties.getProperty("REPORT_FOLDER_ID") || "",
+  ).trim();
+
+  const driveStorage = Boolean(reportFolderId);
 
   const discord = Boolean(getDiscordWebhook());
   const email = Boolean(getNotificationEmail());

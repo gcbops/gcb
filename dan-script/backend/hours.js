@@ -152,42 +152,6 @@ const ActivityValidation = (() => {
   };
 })();
 
-function recordManualClientHours(clientName, task, hours, date = new Date()) {
-  requireCapability(sessionId, signature, "hours.add");
-
-  if (!isNonEmptyString(clientName)) {
-    return logResponse("Invalid client name provided.");
-  }
-
-  if (!isNonEmptyString(task)) {
-    return logResponse("Task cannot be empty.");
-  }
-
-  const hoursNum = Number(hours);
-
-  if (!isValidNumber(hoursNum)) {
-    return logResponse("Hours must be a valid number (e.g. 1, 1.5).");
-  }
-
-  const sheet = getSheetSafe(clientName);
-
-  if (!sheet) {
-    return logResponse(`Client sheet "${clientName}" not found.`);
-  }
-
-  const dateObj = toDate(date);
-  const row = getFirstEmptyRow(sheet, 1, 2);
-
-  sheet
-    .getRange(row, 1, 1, 3)
-    .setValues([[formatDateSafe(dateObj, "M/d/yyyy"), task, hoursNum]]);
-
-  logResponse(
-    `Recorded ${hoursNum} hours for ${clientName} on "${task}".`,
-    "Success",
-  );
-}
-
 function validateManualHoursFormData(formData) {
   return ActivityValidation.clientActivityForm(formData);
 }

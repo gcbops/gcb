@@ -165,7 +165,7 @@ const reportsMonthlyReportPage = (() => {
 
   const loadReportsOverview = async () => {
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         "reportsOverview",

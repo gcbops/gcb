@@ -85,7 +85,7 @@ const TodayHoursEditor = (() => {
 
   async function load(clientName, $modal) {
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `${CACHE_PREFIX}${clientName}`,
@@ -116,7 +116,7 @@ const TodayHoursEditor = (() => {
 
   async function loadTaskOptions(clientName, $modal, records) {
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getTaskOptions_${clientName}`,

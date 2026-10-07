@@ -11,7 +11,7 @@ const ReportsOverview = (() => {
     DataTableModule.showLoader(TABLE_ID);
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         "reportsOverview",
@@ -101,7 +101,7 @@ const ReportsOverview = (() => {
         </td>
 
         <td class="text-center">
-          <span class="badge bg-light text-info">
+          <span class="badge bg-light text-gc">
             <i class="fa-solid fa-file-pdf"></i>
             ${AppUtils.escapeHtml(log.name ?? "")}
           </span>

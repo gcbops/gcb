@@ -172,7 +172,7 @@ const dailyOverviewPage = (() => {
     }
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `dailyOverviewChart_${startDate}_${endDate}`,

@@ -131,7 +131,7 @@ const growthComparisonOverviewPage = (() => {
     }
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,

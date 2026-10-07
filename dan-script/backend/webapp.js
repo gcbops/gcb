@@ -26,11 +26,20 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function resolveHtmlPath(name) {
+function resolveHtmlPath(name, paths = CONFIG.HTML.PATHS) {
+  if (typeof name !== "string" || !name.trim()) {
+    throw new Error("Invalid HTML file name.");
+  }
+
+  if (name.includes("..") || name.includes("/") || name.includes("\\")) {
+    throw new Error("Invalid HTML file path.");
+  }
+
   const attemptedPaths = [];
 
-  for (const folder of CONFIG.HTML.PATHS) {
+  for (const folder of paths) {
     const path = `${folder}${name}`;
+
     attemptedPaths.push(path);
 
     try {
@@ -48,7 +57,7 @@ function resolveHtmlPath(name) {
 
 function loadHtmlComponent(name) {
   return HtmlService.createHtmlOutputFromFile(
-    resolveHtmlPath(name),
+    resolveHtmlPath(name, ["frontend/components/", "frontend/pages/"]),
   ).getContent();
 }
 

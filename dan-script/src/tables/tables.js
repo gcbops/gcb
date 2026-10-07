@@ -86,7 +86,7 @@ const TableModule = (() => {
     }
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `sheetExists_${clientName}`,
@@ -125,7 +125,7 @@ const TableModule = (() => {
     AppUtils.showDashboardToast("Loading records ...", "info");
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `sheetExists_${clientName}`,
@@ -210,7 +210,7 @@ const TableModule = (() => {
     $submitBtn.prop("disabled", true);
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getTaskOptions_${clientName}`,
@@ -316,7 +316,7 @@ const TableModule = (() => {
     `);
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getClientHourLogData_${clientName}`,
@@ -367,7 +367,7 @@ const TableModule = (() => {
 
   async function loadClientHoursOverview(clientName) {
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getClientHours_${clientName}`,

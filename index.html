@@ -224,21 +224,21 @@
    */
 
   window.addEventListener("message", (event) => {
-    console.log(
-  "[GCB Wrapper] Message received:",
-  event.origin,
-  event.data,
-);
+    // console.log(
+    //   "[GCB Wrapper] Message received:",
+    //   event.origin,
+    //   event.data,
+    // );
 
     const isGcbGasOrigin =
       event.origin === "https://script.google.com" ||
       event.origin.endsWith("-script.googleusercontent.com");
 
     if (!isGcbGasOrigin) {
-      console.log(
-        "[GCB Wrapper] Ignored message from unexpected origin:",
-        event.origin,
-      );
+      // console.log(
+      //   "[GCB Wrapper] Ignored message from unexpected origin:",
+      //   event.origin,
+      // );
 
       return;
     }
@@ -247,17 +247,17 @@
       event.data?.type ===
       "GCB_LOGIN_REQUEST"
     ) {
-      console.log(
-      "[GCB Wrapper] GCB_LOGIN_REQUEST received.",
-    );
+      // console.log(
+      //   "[GCB Wrapper] GCB_LOGIN_REQUEST received.",
+      // );
 
       const loginUrl =
         event.data?.url;
 
-        console.log(
-      "[GCB Wrapper] Login URL:",
-      loginUrl,
-    );
+        // console.log(
+        //   "[GCB Wrapper] Login URL:",
+        //   loginUrl,
+        // );
 
       if (!loginUrl) {
         console.error(
@@ -266,9 +266,9 @@
         return;
       }
 
-      console.log(
-      "[GCB Wrapper] Navigating top-level window to Google OAuth.",
-    );
+      // console.log(
+      //   "[GCB Wrapper] Navigating top-level window to Google OAuth.",
+      // );
 
       window.location.href = loginUrl;
 
@@ -279,9 +279,9 @@
       event.data?.type ===
       "GCB_AUTH_HANDOFF_COMPLETE"
     ) {
-      console.log(
-      "[GCB Wrapper] GCB_AUTH_HANDOFF_COMPLETE received.",
-    );
+      // console.log(
+      //   "[GCB Wrapper] GCB_AUTH_HANDOFF_COMPLETE received.",
+      // );
 
       const url =
         new URL(window.location.href);
@@ -296,9 +296,9 @@
         url,
       );
 
-      console.log(
-      "[GCB Wrapper] Authentication ticket removed from URL.",
-    );
+      // console.log(
+      //   "[GCB Wrapper] Authentication ticket removed from URL.",
+      // );
 
       return;
     }

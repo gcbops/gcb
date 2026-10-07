@@ -46,19 +46,19 @@ const GcbAuthModule = (() => {
       google.script.run
         .withSuccessHandler((result) => {
           try {
-            console.log(
-              "[GCB Auth] Authentication handoff exchange succeeded:",
-              result,
-            );
+            // console.log(
+            //   "[GCB Auth] Authentication handoff exchange succeeded:",
+            //   result,
+            // );
 
             saveSession(result);
 
             window.GCB_AUTH_TICKET = "";
 
             if (window.GCB_IS_GITHUB_EMBEDDED === true) {
-              console.log(
-                "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper.",
-              );
+              // console.log(
+              //   "[GCB Auth] Sending GCB_AUTH_HANDOFF_COMPLETE to GitHub wrapper.",
+              // );
 
               window.top.postMessage(
                 {
@@ -67,12 +67,12 @@ const GcbAuthModule = (() => {
                 "https://gcbops.github.io",
               );
 
-              console.log(
-                "[GCB Auth] Authentication handoff completion message sent.",
-              );
+              // console.log(
+              //   "[GCB Auth] Authentication handoff completion message sent.",
+              // );
             }
 
-            console.log("[GCB Auth] Session handoff completed.");
+            // console.log("[GCB Auth] Session handoff completed.");
 
             resolve(true);
           } catch (error) {
@@ -137,10 +137,10 @@ const GcbAuthModule = (() => {
           return;
         }
 
-        console.log(
-          "[GCB Auth] Authentication ticket detected:",
-          window.GCB_AUTH_TICKET,
-        );
+        // console.log(
+        //   "[GCB Auth] Authentication ticket detected:",
+        //   window.GCB_AUTH_TICKET,
+        // );
 
         const ticket = String(window.GCB_AUTH_TICKET || "").trim();
 
@@ -148,7 +148,7 @@ const GcbAuthModule = (() => {
          * Fresh OAuth login.
          */
         if (ticket) {
-          console.log("[GCB Auth] Exchanging authentication handoff ticket.");
+          // console.log("[GCB Auth] Exchanging authentication handoff ticket.");
           await exchangeTicket(ticket);
         }
 

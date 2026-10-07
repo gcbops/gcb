@@ -1,3 +1,4 @@
+import { GcbAuthModule } from "./auth/auth.js";
 import { RouterModule } from "./routers.js";
 
 const ActionRouterModule = (() => {
@@ -27,6 +28,11 @@ const ActionRouterModule = (() => {
     const pageBtn = e.target.closest("[data-page]");
 
     if (!pageBtn) {
+      if (e.target.closest("#logout")) {
+        GcbAuthModule.logout().finally(() => {
+          window.location.reload();
+        });
+      }
       return;
     }
 

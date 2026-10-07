@@ -47,7 +47,7 @@ const performanceProductivityPage = (() => {
 
   async function loadProductivityData(reset = false) {
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,

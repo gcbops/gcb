@@ -26,7 +26,7 @@ const ProjectRankings = (() => {
 
   async function loadProjectRankings(forceRefresh = false) {
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
@@ -60,7 +60,7 @@ const ProjectRankings = (() => {
   async function renderSummary(summary) {
     if (summary === undefined) {
       try {
-        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
         AppUtils.cachedGScriptCall(
           CACHE_KEY,
@@ -92,7 +92,7 @@ const ProjectRankings = (() => {
   async function renderTopProjects(projects) {
     if (projects === undefined) {
       try {
-        const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
         AppUtils.cachedGScriptCall(
           CACHE_KEY,

@@ -11,6 +11,8 @@ const integrationsConfigurationPage = (() => {
       title: "Gmail",
       description:
         "Configure the email address used by the application for notifications.",
+      service: "gmail",
+      authorizationRequired: true,
       fields: [
         {
           name: "notifEmail",
@@ -21,10 +23,13 @@ const integrationsConfigurationPage = (() => {
       ],
       logo: "https://s13.gifyu.com/images/bnmHx.png",
     },
+
     discord: {
       title: "Discord",
       description:
         "Send application notifications and updates to a Discord channel.",
+      service: null,
+      authorizationRequired: false,
       fields: [
         {
           name: "notifDiscord",
@@ -35,10 +40,13 @@ const integrationsConfigurationPage = (() => {
       ],
       logo: "https://s13.gifyu.com/images/bnmHv.png",
     },
+
     sheets: {
       title: "Google Sheets",
       description:
         "Connect the application to its Google Sheets and external sheet template.",
+      service: "sheets",
+      authorizationRequired: true,
       fields: [
         {
           name: "spreadsheetId",
@@ -57,10 +65,13 @@ const integrationsConfigurationPage = (() => {
       ],
       logo: "https://s13.gifyu.com/images/bnmHH.png",
     },
+
     drive: {
       title: "Google Drive",
       description:
         "Configure the Google Drive folders used by the application.",
+      service: "drive",
+      authorizationRequired: true,
       fields: [
         {
           name: "reportFolderId",
@@ -85,6 +96,15 @@ const integrationsConfigurationPage = (() => {
         },
       ],
       logo: "https://s13.gifyu.com/images/bnmHK.png",
+    },
+
+    calendar: {
+      title: "Google Calendar",
+      description: "Connect Google Calendar for application calendar features.",
+      service: "calendar",
+      authorizationRequired: true,
+      fields: [],
+      logo: "https://s13.gifyu.com/images/bnmHq.png",
     },
   };
 
@@ -168,6 +188,99 @@ const integrationsConfigurationPage = (() => {
     return config?.logo || "";
   }
 
+  async function loadIntegrationAuthorization(integration, $modal) {
+    const config = getIntegrationConfig(integration);
+
+    if (!config?.authorizationRequired) {
+      return;
+    }
+
+    const $status = $modal.find("#integration-authorization-status");
+
+    const $message = $modal.find("#integration-authorization-message");
+
+    const $button = $modal.find("#integration-authorize-button");
+
+    if (!$status.length || !$message.length) {
+      return;
+    }
+
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      AppUtils.gScriptRun({
+        gscriptFunc: "getIntegrationAuthorizationStatus",
+        args: [sessionId, signature, integration],
+
+        onSuccess: (data) => {
+          const authorized = data?.authorized === true;
+
+          $status
+            .removeClass("alert-light alert-danger alert-success alert-warning")
+            .addClass(authorized ? "alert-success" : "alert-warning");
+
+          $message.text(
+            authorized
+              ? data.message || "Google service access is authorized."
+              : data.message ||
+                  "Google service authorization is required before this integration can be used.",
+          );
+
+          if (!authorized) {
+            $button.removeClass("d-none");
+          } else {
+            $button.addClass("d-none");
+          }
+
+          updateIntegrationSaveState($modal, authorized);
+        },
+
+        onError: (err) => {
+          console.error("getIntegrationAuthorizationStatus failed:", err);
+
+          $status
+            .removeClass("alert-light alert-success alert-warning")
+            .addClass("alert-danger");
+
+          $message.text(
+            err?.message || "Unable to determine Google service authorization.",
+          );
+
+          $button.removeClass("d-none");
+
+          updateIntegrationSaveState($modal, false);
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Authentication required for integration authorization:",
+        error,
+      );
+
+      $message.text(error?.message || "Authentication required.");
+
+      updateIntegrationSaveState($modal, false);
+    }
+  }
+
+  function updateIntegrationSaveState($modal, authorized) {
+    const integration = $modal.data("integration");
+
+    const config = getIntegrationConfig(integration);
+
+    if (!config?.authorizationRequired) {
+      return;
+    }
+
+    const $save = $modal.find(".btn-save");
+
+    if (!$save.length) {
+      return;
+    }
+
+    $save.prop("disabled", authorized !== true);
+  }
+
   function updateIntegrationStatus(data) {
     if (!data || typeof data !== "object") {
       console.warn("Invalid integration status:", data);
@@ -183,27 +296,42 @@ const integrationsConfigurationPage = (() => {
         return;
       }
 
+      const integrationData = data[integration] || {};
+
       const fields = config.fields || [];
 
       const configuredCount = fields.reduce((count, field) => {
-        return count + (data[field.name]?.configured ? 1 : 0);
+        return count + (integrationData[field.name]?.configured ? 1 : 0);
       }, 0);
 
       const totalFields = fields.length;
 
+      const authorized = config.authorizationRequired
+        ? integrationData.authorization?.authorized === true
+        : true;
+
       let statusText = "Not configured";
 
-      if (configuredCount === totalFields) {
+      if (config.authorizationRequired && !authorized) {
+        statusText = "Authorization required";
+      } else if (totalFields === 0 && authorized) {
+        statusText = "Authorized";
+      } else if (configuredCount === totalFields) {
         statusText = "Configured";
       } else if (configuredCount > 0) {
         statusText = `${configuredCount} of ${totalFields} configured`;
+      } else if (authorized) {
+        statusText = "Authorized — not configured";
       }
 
-      statusEl.classList.toggle("is-inactive", configuredCount === 0);
+      statusEl.classList.toggle("is-inactive", !authorized);
 
       statusEl.classList.toggle(
         "is-partial",
-        configuredCount > 0 && configuredCount < totalFields,
+        authorized &&
+          totalFields > 0 &&
+          configuredCount > 0 &&
+          configuredCount < totalFields,
       );
 
       statusEl.textContent = statusText;
@@ -213,6 +341,7 @@ const integrationsConfigurationPage = (() => {
 
     if (selected) {
       openIntegrationModal(selected);
+
       AppUtils.cacheClear("selectedIntegration");
     }
   }
@@ -262,6 +391,8 @@ const integrationsConfigurationPage = (() => {
     `,
 
       onOpen($modal) {
+        $modal.data("integration", integration);
+
         $modal
           .off(ns)
           // Cancel Click -> Dismisses modal layout context
@@ -292,9 +423,13 @@ const integrationsConfigurationPage = (() => {
 
             AppUtils.lockModal(MODAL_ID);
             saveIntegration(integration, $modal, $btn);
+          })
+          .on(`click${ns}`, "#integration-authorize-button", () => {
+            loadIntegrationAuthorization(integration, $modal);
           });
 
         loadIntegrationConfigStatus(integration, $modal);
+        loadIntegrationAuthorization(integration, $modal);
       },
 
       onClose($modal) {
@@ -320,63 +455,117 @@ const integrationsConfigurationPage = (() => {
   function buildBodyHtml(config) {
     const description = AppUtils.escapeHtml(config.description);
 
-    const fields = config.fields || [config.field];
+    const fields = config.fields || [];
+
+    const authorizationHtml = config.authorizationRequired
+      ? `
+      <div
+        id="integration-authorization-status"
+        class="alert alert-light border mb-4"
+      >
+        <div class="d-flex align-items-start gap-2">
+          <div class="integration-authorization-icon">
+            <i class="pe-7s-lock"></i>
+          </div>
+
+          <div class="flex-grow-1">
+            <strong>Google service authorization</strong>
+
+            <div
+              id="integration-authorization-message"
+              class="small text-muted mt-1"
+            >
+              Checking authorization...
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-outline-gc btn-sm mt-2 d-none"
+              id="integration-authorize-button"
+            >
+              Check Google Access
+            </button>
+          </div>
+        </div>
+      </div>
+    `
+      : "";
+
+    const fieldsHtml = fields.length
+      ? `
+      <form id="integrationConfigForm">
+        ${fields
+          .map((field) => {
+            const fieldLabel = AppUtils.escapeHtml(field.label);
+            const fieldType = field.type;
+            const fieldName = AppUtils.escapeHtml(field.name);
+            const placeholder = AppUtils.escapeHtml(field.placeholder || "");
+            const help = AppUtils.escapeHtml(
+              field.help || "Leave blank to keep the current configuration.",
+            );
+
+            return `
+              <div class="position-relative form-group mb-3">
+                <label for="integrationConfigValue-${fieldName}">
+                  ${fieldLabel}
+                </label>
+
+                <input
+                  type="${fieldType}"
+                  id="integrationConfigValue-${fieldName}"
+                  name="${fieldName}"
+                  class="form-control"
+                  placeholder="${placeholder}"
+                  autocomplete="off"
+                >
+
+                <small
+                  id="integrationConfigHelp-${fieldName}"
+                  class="form-text text-muted"
+                >
+                  ${help}
+                </small>
+
+                <div
+                  id="${fieldName}IntegrationStatus"
+                  class="integration-config-status mt-1"
+                ></div>
+              </div>
+            `;
+          })
+          .join("")}
+      </form>
+    `
+      : `
+      <div class="text-muted">
+        No additional configuration is required for this integration.
+      </div>
+    `;
 
     return `
     <div class="integration-modal-description mb-4">
       ${description}
     </div>
 
-    <form id="integrationConfigForm">
-      ${fields
-        .map((field) => {
-          const fieldLabel = AppUtils.escapeHtml(field.label);
-          const fieldType = field.type;
-          const fieldName = AppUtils.escapeHtml(field.name);
-          const placeholder = AppUtils.escapeHtml(field.placeholder || "");
-          const help = AppUtils.escapeHtml(
-            field.help || "Leave blank to keep the current configuration.",
-          );
+    ${authorizationHtml}
 
-          return `
-            <div class="position-relative form-group mb-3">
-              <label for="integrationConfigValue-${fieldName}">
-                ${fieldLabel}
-              </label>
-
-              <input
-                type="${fieldType}"
-                id="integrationConfigValue-${fieldName}"
-                name="${fieldName}"
-                class="form-control"
-                placeholder="${placeholder}"
-                autocomplete="off"
-              >
-
-              <small
-                id="integrationConfigHelp-${fieldName}"
-                class="form-text text-muted"
-              >
-                ${help}
-              </small>
-
-              <div
-                id="${fieldName}IntegrationStatus"
-                class="integration-config-status mt-1"
-              ></div>
-            </div>
-          `;
-        })
-        .join("")}
-    </form>
+    ${fieldsHtml}
   `;
   }
 
   function buildFooterHtml() {
     return `
-      <button type="button" class="btn btn-secondary btn-cancel">Cancel</button>
-      <button type="button" class="btn btn-primary btn-save">Save Changes</button>
-    `;
+    <button type="button" class="btn btn-secondary btn-cancel">
+      Cancel
+    </button>
+
+    <button
+      type="button"
+      class="btn btn-primary btn-save"
+    >
+      Save Changes
+    </button>
+  `;
   }
 
   async function loadIntegrationConfigStatus(integration, $modal) {

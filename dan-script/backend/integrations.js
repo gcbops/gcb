@@ -19,40 +19,69 @@ function getIntegrationStatus(sessionId, signature) {
 
   const mainSheetsFolderId = properties.getProperty("MAIN_SHEETS_FOLDER_ID");
 
+  const getAuthorization = (integration) => {
+    try {
+      return getIntegrationAuthorizationStatus(
+        sessionId,
+        signature,
+        integration,
+      );
+    } catch (error) {
+      return {
+        authorized: false,
+        service: integration,
+        message: "Authorization status unavailable.",
+      };
+    }
+  };
+
   return {
-    notifEmail: {
-      configured: Boolean(notificationEmail),
-      masked: maskSecret(notificationEmail),
+    gmail: {
+      authorization: getAuthorization("gmail"),
+      notifEmail: {
+        configured: Boolean(notificationEmail),
+        masked: maskSecret(notificationEmail),
+      },
     },
 
-    notifDiscord: {
-      configured: Boolean(discordWebhook),
-      masked: maskSecret(discordWebhook),
+    discord: {
+      authorization: getAuthorization("discord"),
+      notifDiscord: {
+        configured: Boolean(discordWebhook),
+        masked: maskSecret(discordWebhook),
+      },
     },
 
-    spreadsheetId: {
-      configured: Boolean(spreadsheetId),
-      masked: maskSecret(spreadsheetId),
+    sheets: {
+      authorization: getAuthorization("sheets"),
+      spreadsheetId: {
+        configured: Boolean(spreadsheetId),
+        masked: maskSecret(spreadsheetId),
+      },
+      externalSheetTemplateId: {
+        configured: Boolean(externalSheetTemplateId),
+        masked: maskSecret(externalSheetTemplateId),
+      },
     },
 
-    externalSheetTemplateId: {
-      configured: Boolean(externalSheetTemplateId),
-      masked: maskSecret(externalSheetTemplateId),
+    drive: {
+      authorization: getAuthorization("drive"),
+      reportFolderId: {
+        configured: Boolean(reportFolderId),
+        masked: maskSecret(reportFolderId),
+      },
+      backupFolderId: {
+        configured: Boolean(backupFolderId),
+        masked: maskSecret(backupFolderId),
+      },
+      mainSheetsFolderId: {
+        configured: Boolean(mainSheetsFolderId),
+        masked: maskSecret(mainSheetsFolderId),
+      },
     },
 
-    reportFolderId: {
-      configured: Boolean(reportFolderId),
-      masked: maskSecret(reportFolderId),
-    },
-
-    backupFolderId: {
-      configured: Boolean(backupFolderId),
-      masked: maskSecret(backupFolderId),
-    },
-
-    mainSheetsFolderId: {
-      configured: Boolean(mainSheetsFolderId),
-      masked: maskSecret(mainSheetsFolderId),
+    calendar: {
+      authorization: getAuthorization("calendar"),
     },
   };
 }
@@ -152,6 +181,125 @@ function getIntegrationConfigStatus(sessionId, signature, integration) {
   }
 }
 
+function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
+  requireCapability(sessionId, signature, "settings.manage");
+
+  const integrationType = Validation.enumValue(integration, "integration", [
+    "gmail",
+    "discord",
+    "sheets",
+    "drive",
+    "calendar",
+  ]);
+
+  try {
+    switch (integrationType) {
+      case "drive": {
+        const root = DriveApp.getRootFolder();
+
+        return {
+          authorized: true,
+          service: "drive",
+          message: "Google Drive access is authorized.",
+          name: root.getName(),
+        };
+      }
+
+      case "sheets": {
+        const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+        return {
+          authorized: true,
+          service: "sheets",
+          message: "Google Sheets access is authorized.",
+          name: spreadsheet?.getName?.() || "Google Sheets access available.",
+        };
+      }
+
+      case "gmail": {
+        const draft = GmailApp.getDrafts();
+
+        return {
+          authorized: true,
+          service: "gmail",
+          message: "Gmail access is authorized.",
+        };
+      }
+
+      case "calendar": {
+        const calendar = CalendarApp.getDefaultCalendar();
+
+        return {
+          authorized: true,
+          service: "calendar",
+          message: "Google Calendar access is authorized.",
+          name: calendar.getName(),
+        };
+      }
+
+      case "discord":
+        return {
+          authorized: true,
+          service: "discord",
+          message: "Discord does not require Google authorization.",
+        };
+
+      default:
+        throw new Error(`Unsupported integration: ${integrationType}`);
+    }
+  } catch (error) {
+    console.error(
+      `[Integration] ${integrationType} authorization check failed:`,
+      error,
+    );
+
+    return {
+      authorized: false,
+      service: integrationType,
+      message:
+        "Google service authorization is required before this integration can be used.",
+    };
+  }
+}
+
+function verifyDriveFolderAccess(folderId, label) {
+  Validation.driveFolderId(folderId, label);
+
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+
+    return {
+      id: folderId,
+      name: folder.getName(),
+      accessible: true,
+    };
+  } catch (error) {
+    throw new Error(
+      `${label} could not be accessed. ` +
+        "Make sure the folder exists and the authorized Google account has access to it.",
+    );
+  }
+}
+
+function verifySpreadsheetAccess(spreadsheetId, label) {
+  Validation.spreadsheetId(spreadsheetId, label);
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+
+    return {
+      id: spreadsheetId,
+      name: spreadsheet.getName(),
+      accessible: true,
+    };
+  } catch (error) {
+    throw new Error(
+      `${label} could not be accessed. ` +
+        "Make sure the spreadsheet exists and the authorized Google account has access to it.",
+    );
+  }
+}
+
 function saveIntegration(sessionId, signature, integration, value) {
   requireCapability(sessionId, signature, "settings.manage");
 
@@ -178,19 +326,19 @@ function saveIntegration(sessionId, signature, integration, value) {
      * Blank fields keep the existing configuration.
      */
     if (reportFolderId) {
-      Validation.driveFolderId(reportFolderId, "Report Folder ID");
+      verifyDriveFolderAccess(reportFolderId, "Report Folder ID");
 
       properties.setProperty("REPORT_FOLDER_ID", reportFolderId);
     }
 
     if (backupFolderId) {
-      Validation.driveFolderId(backupFolderId, "Backup Folder ID");
+      verifyDriveFolderAccess(backupFolderId, "Backup Folder ID");
 
       properties.setProperty("BACKUP_FOLDER_ID", backupFolderId);
     }
 
     if (mainSheetsFolderId) {
-      Validation.driveFolderId(mainSheetsFolderId, "Main Sheets Folder ID");
+      verifyDriveFolderAccess(mainSheetsFolderId, "Main Sheets Folder ID");
 
       properties.setProperty("MAIN_SHEETS_FOLDER_ID", mainSheetsFolderId);
     }
@@ -213,13 +361,13 @@ function saveIntegration(sessionId, signature, integration, value) {
     ).trim();
 
     if (spreadsheetId) {
-      Validation.spreadsheetId(spreadsheetId, "Google Spreadsheet ID");
+      verifySpreadsheetAccess(spreadsheetId, "Google Spreadsheet ID");
 
       properties.setProperty("SPREADSHEET_ID", spreadsheetId);
     }
 
     if (externalSheetTemplateId) {
-      Validation.spreadsheetId(
+      verifySpreadsheetAccess(
         externalSheetTemplateId,
         "External Sheet Template ID",
       );

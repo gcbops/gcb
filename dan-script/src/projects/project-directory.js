@@ -48,7 +48,7 @@ const ProjectDirectory = (() => {
     DataTableModule.showLoader(TABLE_ID);
 
     try {
-      const { sessionId, signature } = GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,

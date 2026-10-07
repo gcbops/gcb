@@ -209,6 +209,11 @@ const PageLoaderModule = (() => {
          * of the shell untouched.
          */
 
+        if (typeof pageHtml !== "string") {
+          console.error("[Router] Invalid HTML response:", pageHtml);
+          return;
+        }
+
         pageContainer.innerHTML = pageHtml;
 
         AppUI.setupStaggerCards();

@@ -187,7 +187,12 @@ const AppUtils = (() => {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
 
-      if (key && key.startsWith(APP_CACHE_PREFIX)) {
+      if (
+        key &&
+        key.startsWith(APP_CACHE_PREFIX) &&
+        key !== "gcb_session_id" &&
+        key !== "gcb_session_signature"
+      ) {
         keysToRemove.push(key);
       }
     }
@@ -195,8 +200,6 @@ const AppUtils = (() => {
     keysToRemove.forEach((key) => {
       localStorage.removeItem(key);
     });
-
-    console.log(`App cache cleared: ${keysToRemove.length} item(s)`);
   }
 
   // ---- SAFERUN ----
