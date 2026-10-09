@@ -97,7 +97,6 @@ function getExternalSheets(sessionId, signature) {
 }
 
 function getExternalSheetsInternal() {
-  requireCapability(sessionId, signature, "clients.view");
 
   const sheet = getSheetSafe("External Sheets");
 
@@ -160,9 +159,14 @@ function getExternalSheetsInternal() {
 /**
  * Create a new external spreadsheet from the template.
  */
-function createExternalSheet(data) {
+function createExternalSheet(sessionId, signature, data) {
+  requireRole(sessionId, signature, "admin");
   requireCapability(sessionId, signature, "clients.create");
-  
+
+  enforceUserRateLimit("external_sheet_creation", sessionId, 3, 60);
+
+  enforceGlobalRateLimit("external_sheet_creation", 5, 60);
+
   const clientName = Validation.sheetName(data.clientName, "Client name");
 
   const projects = normalizeProjectNames(data.projects);
@@ -345,36 +349,6 @@ function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
     "Active",
     new Date(),
   ]);
-}
-
-/**
- * Calculate summary information
- * from an external spreadsheet.
- */
-function getExternalSheetSummary(spreadsheetId) {
-  requireCapability(sessionId, signature, "clients.view");
-
-  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-
-  const projectsSheet = spreadsheet.getSheetByName("Projects");
-
-  if (!projectsSheet) {
-    throw new Error('External spreadsheet is missing the "Projects" sheet.');
-  }
-
-  const totalHours = Number(projectsSheet.getRange("B8").getValue()) || 0;
-
-  const projectCount = spreadsheet
-    .getSheets()
-    .filter(
-      (sheet) => sheet.getName() !== "Projects" && sheet.getName() !== "BLANK",
-    ).length;
-
-  return {
-    totalHours,
-    projectCount,
-    accessible: true,
-  };
 }
 
 function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {

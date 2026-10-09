@@ -121,10 +121,9 @@ const AppUI = (() => {
     if (currentScrollY > lastScrollY && currentScrollY > 80) {
       footer.classList.add("footer-hidden");
     } else {
-
-    /*
-     * Scrolling up or near top → show footer.
-     */
+      /*
+       * Scrolling up or near top → show footer.
+       */
       footer.classList.remove("footer-hidden");
     }
   }
@@ -174,11 +173,61 @@ const AppUI = (() => {
     });
   }
 
+  // Set up skeleton state on each card
+  function setupSkeletonCards(container = "#app-main__inner") {
+    const root =
+      typeof container === "string"
+        ? document.querySelector(container)
+        : container;
+
+    if (!root) {
+      return;
+    }
+
+    root.querySelectorAll(".card").forEach((card) => {
+      card.classList.remove("loaded");
+      card.classList.add("skeleton");
+    });
+  }
+
+  // Reveal cards with optional stagger
+  function playSkeletonReveal(container = "#app-main__inner") {
+    const root =
+      typeof container === "string"
+        ? document.querySelector(container)
+        : container;
+
+    if (!root) {
+      return;
+    }
+
+    const containerEl = document.getElementById("app-main-inner-container");
+    if (containerEl) {
+      containerEl.classList.remove("opacity-0");
+    }
+
+    const cards = root.querySelectorAll(".card.skeleton");
+    const stagger = 350; // ms between each card
+
+    cards.forEach((card, index) => {
+      setTimeout(
+        () => {
+          card.classList.add("loaded");
+          // Optionally remove 'skeleton' class after animation if you want
+          // setTimeout(() => card.classList.remove("skeleton"), 400);
+        },
+        100 + index * stagger,
+      );
+    });
+  }
+
   return {
     init,
     activateNavigation,
     setupStaggerCards,
     playStaggerReveal,
+    setupSkeletonCards,
+    playSkeletonReveal
   };
 })();
 

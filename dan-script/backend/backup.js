@@ -47,7 +47,7 @@ function getBackupFolder() {
  * directly inside the main sheets folder.
  */
 function backupAllSheets(sessionId, signature) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   return backupAllSheetsInternal();
 }

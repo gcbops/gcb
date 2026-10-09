@@ -40,7 +40,7 @@ function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
 }
 
 function applyFormulaToMainSheets(sessionId, signature, cellRef, formula) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
@@ -105,7 +105,7 @@ function applyFormulaToExternalProjects(
   cellRef,
   formula,
 ) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
@@ -187,7 +187,7 @@ function applyFormulaToExternalProjectSheets(
   cellRef,
   formula,
 ) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 

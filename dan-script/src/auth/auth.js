@@ -1,12 +1,15 @@
+import { AppUtils } from "../utils";
+
 const GcbAuthModule = (() => {
   const SESSION_ID_KEY = "gcb_session_id";
-
   const SESSION_SIGNATURE_KEY = "gcb_session_signature";
-
-  const APP_CACHE_PREFIX = "gcb_";
+  const SESSION_TIME_KEY = "gcb_session_time";
+  const SESSION_EXPIRY = 24 * 60 * 60 * 1000;
 
   let initialized = false;
   let initializing = null;
+  let currentCapabilities = [];
+  let currentRole = "";
 
   function getSessionId() {
     return localStorage.getItem(SESSION_ID_KEY) || "";
@@ -17,7 +20,16 @@ const GcbAuthModule = (() => {
   }
 
   function hasSession() {
-    return Boolean(getSessionId() && getSessionSignature());
+    if (!getSessionId() || !getSessionSignature()) {
+      return false;
+    }
+
+    if (sessionExpired()) {
+      clearSession();
+      return false;
+    }
+
+    return true;
   }
 
   function saveSession(result) {
@@ -28,17 +40,30 @@ const GcbAuthModule = (() => {
     localStorage.setItem(SESSION_ID_KEY, result.sessionId);
 
     localStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+
+    localStorage.setItem(SESSION_TIME_KEY, String(Date.now()));
+  }
+
+  function sessionExpired() {
+    const sessionTime = Number(localStorage.getItem(SESSION_TIME_KEY) || 0);
+
+    if (!sessionTime) {
+      return true;
+    }
+
+    return Date.now() - sessionTime > SESSION_EXPIRY;
   }
 
   function clearSession() {
     localStorage.removeItem(SESSION_ID_KEY);
-
     localStorage.removeItem(SESSION_SIGNATURE_KEY);
+    localStorage.removeItem(SESSION_TIME_KEY);
 
     // Clean up sessions created before the localStorage migration.
     sessionStorage.removeItem(SESSION_ID_KEY);
-
     sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+
+    clearAuthorizationState();
   }
 
   function exchangeTicket(ticket) {
@@ -90,20 +115,52 @@ const GcbAuthModule = (() => {
     });
   }
 
-  function clearAppCache() {
-    const keysToRemove = [];
+  function setAuthorizationState(user) {
+    currentRole = String(user?.role || "");
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
+    currentCapabilities = Array.isArray(user?.capabilities)
+      ? [...user.capabilities]
+      : [];
+  }
 
-      if (key && key.startsWith(APP_CACHE_PREFIX)) {
-        keysToRemove.push(key);
-      }
+  function clearAuthorizationState() {
+    currentRole = "";
+    currentCapabilities = [];
+  }
+
+  function getRole() {
+    return currentRole;
+  }
+
+  function getCapabilities() {
+    return [...currentCapabilities];
+  }
+
+  function hasCapability(capability) {
+    if (!capability) {
+      return false;
     }
 
-    keysToRemove.forEach((key) => {
-      localStorage.removeItem(key);
-    });
+    return (
+      currentCapabilities.includes("*") ||
+      currentCapabilities.includes(capability)
+    );
+  }
+
+  function hasAnyCapability(capabilities = []) {
+    if (!Array.isArray(capabilities) || !capabilities.length) {
+      return false;
+    }
+
+    return capabilities.some((capability) => hasCapability(capability));
+  }
+
+  function hasAllCapabilities(capabilities = []) {
+    if (!Array.isArray(capabilities) || !capabilities.length) {
+      return false;
+    }
+
+    return capabilities.every((capability) => hasCapability(capability));
   }
 
   async function init() {
@@ -125,6 +182,8 @@ const GcbAuthModule = (() => {
          * again.
          */
         if (hasSession()) {
+          await loadAuthorizationState();
+
           initialized = true;
 
           return true;
@@ -162,6 +221,8 @@ const GcbAuthModule = (() => {
           return false;
         }
 
+        await loadAuthorizationState();
+
         initialized = true;
 
         return true;
@@ -191,6 +252,38 @@ const GcbAuthModule = (() => {
     return [getSessionId(), getSessionSignature()];
   }
 
+  async function loadAuthorizationState() {
+    const sessionId = getSessionId();
+    const signature = getSessionSignature();
+
+    if (!sessionId || !signature) {
+      throw new Error("Authentication required.");
+    }
+
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler((user) => {
+          try {
+            if (!user) {
+              throw new Error(
+                "Authenticated user information was not returned.",
+              );
+            }
+
+            setAuthorizationState(user);
+
+            resolve(user);
+          } catch (error) {
+            reject(error);
+          }
+        })
+        .withFailureHandler((error) => {
+          reject(error);
+        })
+        .getCurrentGcbUser(sessionId, signature);
+    });
+  }
+
   async function logout() {
     if (!hasSession()) {
       clearSession();
@@ -215,7 +308,7 @@ const GcbAuthModule = (() => {
       clearSession();
       window.GCB_AUTH_TICKET = "";
 
-      clearAppCache();
+      AppUtils.clearAppCache();
     }
 
     return true;
@@ -229,6 +322,12 @@ const GcbAuthModule = (() => {
     clearSession,
     getAuthArgs,
     logout,
+
+    getRole,
+    getCapabilities,
+    hasCapability,
+    hasAnyCapability,
+    hasAllCapabilities,
   };
 })();
 

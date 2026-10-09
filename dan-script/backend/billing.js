@@ -772,7 +772,7 @@ function getBillingRecordsForExport(sessionId, signature, startDate, endDate) {
 
 function getBillingRecordsForExportInternal(startDate, endDate) {
   const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Billing Records");
+    getSpreadsheet().getSheetByName("Billing Records");
 
   if (!sheet) {
     throw new Error('Sheet "Billing Records" was not found.');
@@ -825,6 +825,10 @@ function getBillingRecordsForExportInternal(startDate, endDate) {
 
 function saveBillingRecordsCSV(sessionId, signature, startDate, endDate) {
   requireCapability(sessionId, signature, "billing.export");
+
+  enforceUserRateLimit("billing_export", sessionId, 5, 60);
+
+  enforceGlobalRateLimit("billing_export", 10, 60);
 
   if (!startDate || !endDate) {
     throw new Error("A start date and end date are required.");
@@ -919,7 +923,7 @@ function saveBillingRecordsCSV(sessionId, signature, startDate, endDate) {
 }
 
 function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
 
   let sheet = ss.getSheetByName("BillingRecordsExport_Log");
 
@@ -951,7 +955,7 @@ function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
 function getBillingRecordsCSVExportCount(sessionId, signature) {
   requireCapability(sessionId, signature, "billing.view");
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+  const sheet = getSpreadsheet().getSheetByName(
     "BillingRecordsExport_Log",
   );
 

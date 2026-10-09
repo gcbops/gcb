@@ -388,7 +388,8 @@ const RouterModule = (() => {
       AppUI.activateNavigation(resolvedPageName);
 
       requestAnimationFrame(() => {
-        AppUI.playStaggerReveal();
+        AppUI.playSkeletonReveal();
+        // AppUI.playStaggerReveal();
       });
 
     });

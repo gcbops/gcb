@@ -206,7 +206,7 @@ function recordClientHoursToSheet(sheet, data) {
 }
 
 function recordManualClientHoursFromForm(sessionId, signature, formData) {
-  requireCapability(sessionId, signature, "hours.add");
+  requireRole(sessionId, signature, "admin");
 
   try {
     const data = ActivityValidation.clientActivityForm(formData);
@@ -228,7 +228,7 @@ function recordManualClientHoursFromForm(sessionId, signature, formData) {
 }
 
 function recordExternalClientHoursFromForm(sessionId, signature, formData) {
-  requireCapability(sessionId, signature, "hours.add");
+  requireRole(sessionId, signature, "admin");
 
   try {
     const data = ActivityValidation.clientActivityForm(formData);
@@ -704,7 +704,7 @@ function getTodayClientHours(sessionId, signature, clientName) {
 }
 
 function saveEditedTodayClientHours(sessionId, signature, formData) {
-  requireCapability(sessionId, signature, "hours.edit");
+  requireRole(sessionId, signature, "admin");
 
   try {
     Validation.requireObject(formData, "Form data");

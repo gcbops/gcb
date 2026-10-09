@@ -1,5 +1,5 @@
 function addUpsellEntry(sessionId, signature, data) {
-  requireCapability(sessionId, signature, "clients.edit");
+  requireRole(sessionId, signature, "admin");
 
   Validation.requireObject(data, "Upsell data");
 

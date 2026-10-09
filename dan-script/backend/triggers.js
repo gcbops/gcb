@@ -101,52 +101,13 @@ function triggerExists(functionName) {
   return Boolean(getTrigger(functionName));
 }
 
-function createScheduledTrigger(name) {
-  requireCapability(sessionId, signature, "settings.manage");
-
-  const config = SCHEDULED_TRIGGERS[name];
-
-  if (!config) {
-    throw new Error(`Unknown scheduled trigger: ${name}`);
-  }
-
-  if (triggerExists(config.functionName)) {
-    return false;
-  }
-
-  config.create();
-
-  return true;
-}
-
-function deleteScheduledTrigger(name) {
-  requireCapability(sessionId, signature, "settings.manage");
-
-  const config = SCHEDULED_TRIGGERS[name];
-
-  if (!config) {
-    throw new Error(`Unknown scheduled trigger: ${name}`);
-  }
-
-  const triggers = ScriptApp.getProjectTriggers().filter(
-    (trigger) => trigger.getHandlerFunction() === config.functionName,
-  );
-
-  triggers.forEach((trigger) => {
-    ScriptApp.deleteTrigger(trigger);
-  });
-
-  return triggers.length > 0;
-}
-
 function reconcileScheduledTriggers(sessionId, signature) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   return reconcileScheduledTriggersInternal();
 }
 
 function reconcileScheduledTriggersInternal() {
-  requireCapability(sessionId, signature, "settings.manage");
 
   const results = [];
 

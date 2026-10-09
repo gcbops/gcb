@@ -321,6 +321,7 @@ const ClientDirectory = (() => {
       <button
         type="button"
         class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-required-role="admin"
         data-profile-client-action="add-hours"
         data-client-name="${AppUtils.escapeHtml(client.name)}"
       >
@@ -331,6 +332,7 @@ const ClientDirectory = (() => {
       <button
         type="button"
         class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-required-capability="clients.edit"
         data-profile-client-action="open-sheet"
         data-client-name="${AppUtils.escapeHtml(client.name)}"
       >
@@ -340,40 +342,6 @@ const ClientDirectory = (() => {
     `,
     };
   }
-
-  //   function getClientProfilePopoverOptions(client) {
-  //   return {
-  //     content: `
-  //     <div class="small text-muted mb-2">
-  //       Collection Rate
-  //     </div>
-
-  //     <div class="fw-semibold">
-  //       ${formatPercent(client.collectionRate)}
-  //     </div>
-  //   `,
-
-  //     actions: `
-  //     <button
-  //       type="button"
-  //       class="btn btn-gc btn-sm"
-  //       data-profile-client-action="details"
-  //       data-client-name="${AppUtils.escapeHtml(client.name)}"
-  //     >
-  //       View Client
-  //     </button>
-
-  //     <button
-  //       type="button"
-  //       class="btn btn-outline-gc btn-sm"
-  //       data-profile-client-action="open-sheet"
-  //       data-client-name="${AppUtils.escapeHtml(client.name)}"
-  //     >
-  //       Open Sheet
-  //     </button>
-  //   `,
-  //   };
-  // }
 
   function formatAmount(value) {
     return (Number(value) || 0).toLocaleString("en-PH", {

@@ -1,4 +1,5 @@
 import { GcbAuthModule } from "./auth/auth.js";
+import { AuthorizationUIModule } from "./auth/authorization-ui.js";
 import { RouterModule } from "./routers.js";
 
 const AppUtils = (() => {
@@ -1237,43 +1238,45 @@ const AppUtils = (() => {
       .replace("<!-- APP-MODAL-REVIEW-ACTIONS -->", reviewFooterActions);
 
     $content.html(`
-    ${
-      header
-        ? `
-      <div class="modal-header">
-        ${header}
+      ${
+        header
+          ? `
+        <div class="modal-header">
+          ${header}
 
-        ${
-          closable
-            ? `
-          <button
-            type="button"
-            class="btn-close"
-            data-bs-dismiss="modal"
-            aria-label="Close">
-          </button>
-        `
-            : ""
-        }
+          ${
+            closable
+              ? `
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close">
+            </button>
+          `
+              : ""
+          }
+        </div>
+      `
+          : ""
+      }
+
+      <div class="modal-body text-center">
+        ${body}
       </div>
-    `
-        : ""
-    }
 
-    <div class="modal-body text-center">
-      ${body}
-    </div>
+      ${
+        processedFooter
+          ? `
+        <div class="modal-footer justify-content-center">
+          ${processedFooter}
+        </div>
+      `
+          : ""
+      }
+    `);
 
-    ${
-      processedFooter
-        ? `
-      <div class="modal-footer justify-content-center">
-        ${processedFooter}
-      </div>
-    `
-        : ""
-    }
-  `);
+    AuthorizationUIModule.applyActionPermissions();
 
     /*
      * Clean up previous AppUtils handlers.

@@ -608,7 +608,7 @@ const ChartModule = (() => {
             stacked: false,
 
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -632,7 +632,7 @@ const ChartModule = (() => {
             },
 
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -781,7 +781,7 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -807,7 +807,7 @@ const ChartModule = (() => {
             },
 
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -966,7 +966,7 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -984,7 +984,7 @@ const ChartModule = (() => {
             beginAtZero: true,
 
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -1147,7 +1147,7 @@ const ChartModule = (() => {
         scales: {
           x: {
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -1165,7 +1165,7 @@ const ChartModule = (() => {
             beginAtZero: true,
 
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -1283,7 +1283,7 @@ const ChartModule = (() => {
             beginAtZero: true,
 
             grid: {
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
 
             ticks: {
@@ -1474,7 +1474,7 @@ const ChartModule = (() => {
 
             grid: {
               display: showGrid,
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
           },
 
@@ -1495,7 +1495,7 @@ const ChartModule = (() => {
 
             grid: {
               display: showGrid,
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
           },
         },
@@ -1758,7 +1758,7 @@ const ChartModule = (() => {
 
             grid: {
               display: showGrid,
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
           },
 
@@ -1777,7 +1777,7 @@ const ChartModule = (() => {
 
             grid: {
               display: showGrid,
-              color: "rgba(0, 0, 0, 0.04)",
+              color: gridColor,
             },
           },
         },
@@ -2017,6 +2017,17 @@ const ChartModule = (() => {
 
     return gradient;
   }
+
+  const gridColor = (context) => {
+    const tickCount = context.scale?.ticks?.length || 1;
+    const index = context.index || 0;
+
+    const ratio = tickCount > 1 ? index / (tickCount - 1) : 0;
+
+    const alpha = 0.04 - ratio * 0.025;
+
+    return `rgba(0, 0, 0, ${alpha})`;
+  };
 
   function createChartCanvas(chartDiv, type) {
     if (!chartDiv) {

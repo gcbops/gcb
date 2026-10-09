@@ -2,19 +2,21 @@ function handleGcbOAuthCallback(e) {
   const state = String(e?.parameter?.state || "").trim();
 
   if (!validateGcbOAuthState(state)) {
-    return HtmlService.createHtmlOutput(`
-      <h2>Authentication failed</h2>
-      <p>The OAuth request could not be verified.</p>
-    `);
+    return buildGcbAuthResultPage({
+      type: "error",
+      title: "Authentication failed",
+      message: "The OAuth request could not be verified.",
+    });
   }
 
   const code = String(e?.parameter?.code || "").trim();
 
   if (!code) {
-    return HtmlService.createHtmlOutput(`
-      <h2>Authentication failed</h2>
-      <p>The Google authorization code is missing.</p>
-    `);
+    return buildGcbAuthResultPage({
+      type: "error",
+      title: "Authentication failed",
+      message: "The Google authorization code is missing.",
+    });
   }
 
   try {
@@ -26,217 +28,387 @@ function handleGcbOAuthCallback(e) {
     );
 
     if (!authorizedUser) {
-      return HtmlService.createHtmlOutput(`
-        <h2>Access denied</h2>
-        <p>Your Google account is not authorized for GCB.</p>
-      `);
+      return buildGcbAuthResultPage({
+        type: "error",
+        title: "Access denied",
+        message:
+          "Your Google account is not authorized to access Go Crayons GS.",
+        note:
+          "Please contact your GCB administrator if you believe you should have access.",
+      });
     }
 
     if (!authorizedUser.enabled) {
-      return HtmlService.createHtmlOutput(`
-        <h2>Access denied</h2>
-        <p>Your GCB account is currently disabled.</p>
-      `);
+      return buildGcbAuthResultPage({
+        type: "error",
+        title: "Account disabled",
+        message:
+          "Your GCB account is currently disabled.",
+        note:
+          "Please contact your GCB administrator for assistance.",
+      });
     }
 
     const gcbSession = createGcbSession(authorizedUser);
 
-    // console.log("[GCB Auth] GCB session created.");
+    const handoffTicket =
+      createGcbSessionHandoff(gcbSession);
 
-    const handoffTicket = createGcbSessionHandoff(gcbSession);
+    const githubUrl =
+      "https://gcbops.github.io/gcb/";
 
-    // console.log("[GCB Auth] Handoff ticket created.");
+    const redirectUrl =
+      `${githubUrl}?gcb_auth_ticket=${encodeURIComponent(
+        handoffTicket,
+      )}`;
 
-    const githubUrl = "https://gcbops.github.io/gcb/";
+    console.log(
+      "[GCB Auth] Redirect URL:",
+      redirectUrl,
+    );
 
-    const redirectUrl = `${githubUrl}?gcb_auth_ticket=${encodeURIComponent(
-      handoffTicket,
-    )}`;
+    return buildGcbAuthResultPage({
+      type: "success",
+      title: "Authentication successful",
+      message:
+        "Your Google account has been verified. Continue to Go Crayons GS to open the dashboard.",
+      buttonText: "Continue to Go Crayons GS",
+      buttonUrl: redirectUrl,
+      note: "You can close this tab after continuing.",
+    });
+  } catch (error) {
+    console.error(
+      "[GCB Auth] OAuth callback failed:",
+      error,
+    );
 
-    console.log("[GCB Auth] Redirect URL:", redirectUrl);
+    return buildGcbAuthResultPage({
+      type: "error",
+      title: "Authentication failed",
+      message:
+        error?.message ||
+        "An unexpected error occurred while completing authentication.",
+    });
+  }
+}
 
-    return HtmlService.createHtmlOutput(`
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <base target="_blank">
-        <meta charset="UTF-8">
+function buildGcbAuthResultPage({
+  type = "error",
+  title = "Authentication failed",
+  message = "",
+  buttonText = "",
+  buttonUrl = "",
+  note = "",
+} = {}) {
+  const isSuccess = type === "success";
 
-        <title>Go Crayons GS</title>
+  const icon = isSuccess ? "✓" : "!";
 
-        <style>
-          html,
+  const iconClass = isSuccess ? "gcb-auth-icon-success" : "gcb-auth-icon-error";
+
+  const buttonHtml =
+    buttonUrl && buttonText
+      ? `
+        <a
+          id="gcb-auth-button"
+          class="gcb-auth-button"
+          href="${escapeHtml(buttonUrl)}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          ${escapeHtml(buttonText)}
+        </a>
+      `
+      : "";
+
+  const noteHtml = note
+    ? `
+        <div class="gcb-auth-note">
+          ${escapeHtml(note)}
+        </div>
+      `
+    : "";
+
+  return HtmlService.createHtmlOutput(`
+    <!DOCTYPE html>
+    <html lang="en">
+
+    <head>
+      <base target="_blank">
+
+      <meta charset="UTF-8">
+
+      <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+      >
+
+      <title>Go Crayons GS</title>
+
+      <style>
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+
+          width: 100%;
+          min-height: 100%;
+        }
+
+        body {
+          min-height: 100vh;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          padding: 24px;
+
+          box-sizing: border-box;
+
+          font-family:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Arial,
+            sans-serif;
+
+          background:
+            linear-gradient(
+              180deg,
+              #f8fafc 0%,
+              #f1f5f9 100%
+            );
+
+          color: #212529;
+        }
+
+        .gcb-auth-wrapper {
+          width: 100%;
+          max-width: 440px;
+        }
+
+        .gcb-auth-brand {
+          margin-bottom: 18px;
+
+          text-align: center;
+        }
+
+        .gcb-auth-brand-name {
+          margin: 0;
+
+          color: #008B8B;
+
+          font-size: 18px;
+          font-weight: 700;
+
+          letter-spacing: -0.2px;
+        }
+
+        .gcb-auth-brand-subtitle {
+          margin-top: 4px;
+
+          color: #98a2b3;
+
+          font-size: 12px;
+        }
+
+        .gcb-auth-result {
+          width: 100%;
+
+          padding: 36px 32px 32px;
+
+          box-sizing: border-box;
+
+          text-align: center;
+
+          background: #ffffff;
+
+          border: 1px solid rgba(0, 0, 0, 0.06);
+
+          border-radius: 16px;
+
+          box-shadow:
+            0 18px 45px rgba(16, 24, 40, 0.08);
+        }
+
+        .gcb-auth-icon {
+          width: 52px;
+          height: 52px;
+
+          margin: 0 auto 20px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          border-radius: 50%;
+
+          font-size: 24px;
+          font-weight: 700;
+        }
+
+        .gcb-auth-icon-success {
+          background: #ecfdf3;
+          color: #12b76a;
+        }
+
+        .gcb-auth-icon-error {
+          background: #fef3f2;
+          color: #d92d20;
+        }
+
+        .gcb-auth-result h1 {
+          margin: 0 0 10px;
+
+          color: #101828;
+
+          font-size: 22px;
+          font-weight: 700;
+
+          line-height: 1.3;
+        }
+
+        .gcb-auth-message {
+          margin: 0 auto 24px;
+
+          max-width: 360px;
+
+          color: #667085;
+
+          font-size: 14px;
+          line-height: 1.65;
+        }
+
+        .gcb-auth-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          width: 100%;
+          min-height: 48px;
+
+          padding: 0 20px;
+
+          box-sizing: border-box;
+
+          border: 0;
+          border-radius: 10px;
+
+          background: #008B8B;
+          color: #ffffff;
+
+          font-size: 14px;
+          font-weight: 600;
+
+          text-decoration: none;
+
+          cursor: pointer;
+
+          transition:
+            background-color 0.15s ease,
+            box-shadow 0.15s ease,
+            transform 0.15s ease;
+        }
+
+        .gcb-auth-button:hover {
+          background: #007A7A;
+
+          color: #ffffff;
+
+          box-shadow:
+            0 5px 14px rgba(0, 139, 139, 0.20);
+
+          transform: translateY(-1px);
+        }
+
+        .gcb-auth-button:active {
+          transform: translateY(0);
+        }
+
+        .gcb-auth-note {
+          margin-top: 14px;
+
+          color: #98a2b3;
+
+          font-size: 11px;
+          line-height: 1.5;
+        }
+
+        .gcb-auth-footer {
+          margin-top: 18px;
+
+          text-align: center;
+
+          color: #98a2b3;
+
+          font-size: 11px;
+        }
+
+        @media (max-width: 480px) {
           body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-          }
-
-          body {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            padding: 24px;
-            box-sizing: border-box;
-
-            font-family:
-              -apple-system,
-              BlinkMacSystemFont,
-              "Segoe UI",
-              Roboto,
-              Arial,
-              sans-serif;
-
-            background: #f8f9fa;
-            color: #212529;
+            padding: 16px;
           }
 
           .gcb-auth-result {
-            width: min(420px, 100%);
-
-            padding: 32px;
-
-            text-align: center;
-
-            background: #fff;
-
-            border: 1px solid rgba(0, 0, 0, 0.06);
-            border-radius: 16px;
-
-            box-shadow:
-              0 16px 40px rgba(0, 0, 0, 0.08);
-          }
-
-          .gcb-auth-icon {
-            width: 48px;
-            height: 48px;
-
-            margin: 0 auto 18px;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            border-radius: 50%;
-
-            background: #ecfdf3;
-            color: #12b76a;
-
-            font-size: 24px;
-            font-weight: 700;
+            padding: 30px 22px 26px;
           }
 
           .gcb-auth-result h1 {
-            margin: 0 0 8px;
-
-            font-size: 22px;
-            font-weight: 700;
+            font-size: 20px;
           }
+        }
+      </style>
+    </head>
 
-          .gcb-auth-result p {
-            margin: 0 0 24px;
+    <body>
+      <div class="gcb-auth-wrapper">
 
-            color: #667085;
+        <div class="gcb-auth-brand">
+          <div class="gcb-auth-brand-name">
+            Go Crayons GS
+          </div>
 
-            font-size: 14px;
-            line-height: 1.6;
-          }
+          <div class="gcb-auth-brand-subtitle">
+            GCB Operations Dashboard
+          </div>
+        </div>
 
-          .gcb-auth-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-
-            width: 100%;
-            min-height: 48px;
-
-            padding: 0 20px;
-
-            box-sizing: border-box;
-
-            border: 0;
-            border-radius: 10px;
-
-            background: #008B8B;
-            color: #fff;
-
-            font-size: 14px;
-            font-weight: 600;
-
-            text-decoration: none;
-
-            cursor: pointer;
-
-            transition:
-              background-color 0.15s ease,
-              box-shadow 0.15s ease;
-          }
-
-          .gcb-auth-button:hover {
-            background: #007A7A;
-
-            box-shadow:
-              0 4px 12px rgba(13, 110, 253, 0.2);
-          }
-
-          .gcb-auth-note {
-            margin-top: 14px;
-
-            font-size: 11px;
-            color: #98a2b3;
-          }
-        </style>
-      </head>
-
-      <body>
         <div class="gcb-auth-result">
 
-          <div class="gcb-auth-icon">
-            ✓
+          <div class="gcb-auth-icon ${iconClass}">
+            ${icon}
           </div>
 
           <h1>
-            Authentication successful
+            ${escapeHtml(title)}
           </h1>
 
-          <p>
-            Your Google account has been verified.
-            Continue to Go Crayons GS to open the dashboard.
+          <p class="gcb-auth-message">
+            ${escapeHtml(message)}
           </p>
 
-          <a
-            id="gcb-continue-button"
-            class="gcb-auth-button"
-            href="${redirectUrl}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Continue to Go Crayons GS
-          </a>
+          ${buttonHtml}
 
-          <div class="gcb-auth-note">
-            You can close this tab after continuing.
-          </div>
+          ${noteHtml}
 
         </div>
-      </body>
-      </html>
-    `);
-  } catch (error) {
-    console.error("[GCB Auth] OAuth callback failed:", error);
 
-    return HtmlService.createHtmlOutput(`
-      <h2>Authentication failed</h2>
-      <p>${escapeHtml(error?.message || String(error))}</p>
-    `);
-  }
+        <div class="gcb-auth-footer">
+          Go Crayons GS &middot; Secure Authentication
+        </div>
+
+      </div>
+    </body>
+
+    </html>
+  `);
 }
 
 function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
   const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("AUTHORIZED_USERS");
+    getSpreadsheet().getSheetByName("AUTHORIZED_USERS");
 
   if (!sheet) {
     throw new Error("AUTHORIZED_USERS sheet was not found.");
@@ -328,7 +500,7 @@ function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
 
 function getAuthorizedUserByGoogleSub(googleSub) {
   const sheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("AUTHORIZED_USERS");
+    getSpreadsheet().getSheetByName("AUTHORIZED_USERS");
 
   if (!sheet) {
     throw new Error("AUTHORIZED_USERS sheet was not found.");
@@ -387,6 +559,16 @@ function getSessionCapabilities(session) {
     .split(",")
     .map((capability) => capability.trim())
     .filter(Boolean);
+}
+
+function getCurrentGcbUser(sessionId, signature) {
+  const session = requireAuthenticatedUser(sessionId, signature);
+
+  return {
+    email: session.email,
+    role: session.role,
+    capabilities: getSessionCapabilities(session),
+  };
 }
 
 function createGcbSession(authorizedUser) {
@@ -469,6 +651,7 @@ function createGcbLoginUrl() {
     response_type: "code",
     scope: "openid email profile",
     state,
+    prompt: "select_account",
   };
 
   const query = Object.entries(params)
@@ -655,7 +838,7 @@ function validateGcbSession(sessionId, signature) {
     return null;
   }
 
-  const SESSION_LIFETIME = 6 * 60 * 60 * 1000;
+  const SESSION_LIFETIME = 24 * 60 * 60 * 1000;
 
   if (
     !Number.isFinite(session.createdAt) ||
@@ -927,33 +1110,4 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function testGcbDriveAccess() {
-
-  const folderId =
-    PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
-
-  if (!folderId) {
-    throw new Error("REPORT_FOLDER_ID is not configured.");
-  }
-
-  try {
-    const folder = DriveApp.getFolderById(folderId);
-
-    return {
-      success: true,
-      authorized: true,
-      folderId: folder.getId(),
-      folderName: folder.getName(),
-    };
-  } catch (error) {
-    console.error("[Integration] Drive test failed:", error);
-
-    return {
-      success: false,
-      authorized: false,
-      message: error?.message || String(error),
-    };
-  }
 }

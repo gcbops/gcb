@@ -9,8 +9,8 @@ function dailyNotification() {
 
 function monthlyNotification() {
   const today = new Date();
-  const tomorrow = new Date(today);
 
+  const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
 
   if (tomorrow.getDate() !== 1) {
@@ -18,17 +18,22 @@ function monthlyNotification() {
   }
 
   try {
-    saveMonthlyReportPDF();
+    const fileUrl = saveMonthlyReportPDF();
+
     sendMonthlyReport();
+
+    logResponse(`✅ Monthly scheduled report completed: ${fileUrl}`);
   } catch (err) {
-    logResponse(err);
+    logResponse(`❌ Monthly scheduled report failed: ${err?.message || err}`);
+
+    throw err;
   }
 }
 
 function yearlyNotification() {
   const today = new Date();
-  const tomorrow = new Date(today);
 
+  const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
 
   const isLastDayOfYear = tomorrow.getMonth() === 0 && tomorrow.getDate() === 1;
@@ -38,10 +43,15 @@ function yearlyNotification() {
   }
 
   try {
-    saveYearlyReportPDF();
+    const fileUrl = saveYearlyReportPDF();
+
     sendYearlyReport();
+
+    logResponse(`✅ Yearly scheduled report completed: ${fileUrl}`);
   } catch (err) {
-    logResponse(err);
+    logResponse(`❌ Yearly scheduled report failed: ${err?.message || err}`);
+
+    throw err;
   }
 }
 

@@ -11,27 +11,6 @@ function getClientSheetsList() {
     .sort();
 }
 
-function getActiveClients() {
-  requireCapability(sessionId, signature, "clients.view");
-
-  const sheet = getSheetSafe("Client Names");
-
-  if (!sheet) {
-    return [];
-  }
-
-  return sheet.getRange("I2:I30").getValues().flat().filter(isNonEmptyString);
-}
-
-function getClientSheetsListAndActive() {
-  requireCapability(sessionId, signature, "clients.view");
-
-  return {
-    sheets: getClientSheetsList(),
-    activeClients: getActiveClients(),
-  };
-}
-
 function syncClientSheetList(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.manage");
 
@@ -175,24 +154,6 @@ function getActiveClientsPaidOwed(sessionId, signature) {
   }
 }
 
-function getTopPaidClients() {
-  requireCapability(sessionId, signature, "clients.view");
-
-  const sheet = getSheetSafe("Paid & Owed Log");
-
-  if (!sheet) {
-    return [];
-  }
-
-  const lastRow = sheet.getLastRow();
-
-  if (lastRow < 2) {
-    return [];
-  }
-
-  return sheet.getRange(2, 10, lastRow - 1, 4).getValues();
-}
-
 function getRoleFromSheet(name) {
   try {
     const sheet = getSheetSafe(name);
@@ -258,6 +219,10 @@ function getClientSheetUrl(sessionId, signature, name) {
 
 function createClientSheet(sessionId, signature, input) {
   requireCapability(sessionId, signature, "clients.create");
+
+  enforceUserRateLimit("client_sheet_creation", sessionId, 5, 60);
+
+  enforceGlobalRateLimit("client_sheet_creation", 15, 60);
 
   Validation.requireObject(input, "Client data");
 
@@ -335,75 +300,6 @@ function getClientDirectoryData(sessionId, signature) {
       externalUrl: externalClientMap.get(normalizeText(name)) || "",
     };
   });
-}
-
-function getClientDirectoryAnalytics() {
-  requireCapability(sessionId, signature, "clients.view");
-
-  const sheet = getSheetSafe("Client Analytics");
-
-  if (!sheet) {
-    return {
-      summary: {
-        totalClients: 0,
-        totalHours: 0,
-        totalPaid: 0,
-        totalOwed: 0,
-        activeClients: 0,
-      },
-      clients: [],
-    };
-  }
-
-  const lastRow = sheet.getLastRow();
-
-  if (lastRow < 2) {
-    return {
-      summary: {
-        totalClients: 0,
-        totalHours: 0,
-        totalPaid: 0,
-        totalOwed: 0,
-        activeClients: 0,
-      },
-      clients: [],
-    };
-  }
-
-  const values = sheet
-    .getRange(2, 1, lastRow - 1, 8)
-    .getValues()
-    .filter((row) => row[0] !== "" && row[0] !== null);
-
-  const clients = values.map((row) => ({
-    client: String(row[0] || ""),
-    paid: Number(row[1]) || 0,
-    owed: Number(row[2]) || 0,
-    netPaid: Number(row[3]) || 0,
-    collectionRate: Number(row[4]) || 0,
-    hours: Number(row[5]) || 0,
-    projects: Number(row[6]) || 0,
-    debtExposure: Number(row[7]) || 0,
-  }));
-
-  const totalPaid = clients.reduce((sum, client) => sum + client.paid, 0);
-
-  const totalOwed = clients.reduce((sum, client) => sum + client.owed, 0);
-
-  const totalHours = clients.reduce((sum, client) => sum + client.hours, 0);
-
-  return {
-    summary: {
-      totalClients: clients.length,
-      totalHours,
-      totalPaid,
-      totalOwed,
-      collectionRate:
-        totalPaid + totalOwed > 0 ? totalPaid / (totalPaid + totalOwed) : 0,
-    },
-
-    clients,
-  };
 }
 
 function getClientPaidOwedDataHistory(sessionId, signature, clientName) {
@@ -652,7 +548,7 @@ function getLegacyClients(sessionId, signature) {
   }
 }
 
-function getClientDetails(clientName) {
+function getClientDetails(sessionId, signature, clientName) {
   requireCapability(sessionId, signature, "clients.view");
 
   if (!isNonEmptyString(clientName)) {

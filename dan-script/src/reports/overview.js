@@ -146,6 +146,7 @@ const ReportsOverview = (() => {
               type="button"
               tabindex="0"
               role="menuitem"
+              data-required-role="admin"
               class="dropdown-item btn-report-action btn-email-report"
               data-id="${AppUtils.escapeHtml(log.id ?? "")}"
             >
@@ -157,6 +158,7 @@ const ReportsOverview = (() => {
               type="button"
               tabindex="0"
               role="menuitem"
+              data-required-role="admin"
               class="dropdown-item btn-report-action btn-discord-report"
               data-id="${AppUtils.escapeHtml(log.id ?? "")}"
             >

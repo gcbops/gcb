@@ -1,5 +1,5 @@
 function getIntegrationStatus(sessionId, signature) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const properties = PropertiesService.getScriptProperties();
 
@@ -92,7 +92,7 @@ function getIntegrationStatus(sessionId, signature) {
 }
 
 function getIntegrationConfigStatus(sessionId, signature, integration) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const properties = PropertiesService.getScriptProperties();
 
@@ -187,7 +187,7 @@ function getIntegrationConfigStatus(sessionId, signature, integration) {
 }
 
 function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",
@@ -336,7 +336,7 @@ function getIntegrationAuthorizationMessage(
 }
 
 function getIntegrationAuthorizationUrl(sessionId, signature, integration) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",
@@ -419,7 +419,7 @@ function verifySpreadsheetAccess(spreadsheetId, label) {
 }
 
 function saveIntegration(sessionId, signature, integration, value) {
-  requireCapability(sessionId, signature, "settings.manage");
+  requireRole(sessionId, signature, "admin");
 
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",

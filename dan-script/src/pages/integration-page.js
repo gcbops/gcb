@@ -659,6 +659,7 @@ const integrationsConfigurationPage = (() => {
 
     <button
       type="button"
+      data-required-role="admin"
       class="btn btn-primary btn-save"
     >
       Save Changes

@@ -90,7 +90,7 @@ const GcbLoginModule = (() => {
     try {
       const loginUrl = await requestLoginUrl();
 
-      console.log("[GCB Login] Google login URL received:", loginUrl);
+      // console.log("[GCB Login] Google login URL received:", loginUrl);
 
       if (!loginUrl) {
         throw new Error("Google login URL was not returned.");
@@ -103,9 +103,9 @@ const GcbLoginModule = (() => {
        * top-level navigation to Google.
        */
       if (window.parent !== window && window.GCB_IS_GITHUB_EMBEDDED === true) {
-        console.log("[GCB Login] Sending login request to GitHub wrapper.");
+        // console.log("[GCB Login] Sending login request to GitHub wrapper.");
 
-        console.log("[GCB Login] window.top:", window.top);
+        // console.log("[GCB Login] window.top:", window.top);
 
         window.top.postMessage(
           {
@@ -115,7 +115,7 @@ const GcbLoginModule = (() => {
           "https://gcbops.github.io",
         );
 
-        console.log("[GCB Login] Login request sent to GitHub wrapper.");
+        // console.log("[GCB Login] Login request sent to GitHub wrapper.");
 
         return;
       }
@@ -123,6 +123,7 @@ const GcbLoginModule = (() => {
       /*
        * Direct GAS access fallback.
        */
+      setLoading(false);
       window.location.href = loginUrl;
     } catch (error) {
       console.error("[GCB Login] Failed to start login:", error);

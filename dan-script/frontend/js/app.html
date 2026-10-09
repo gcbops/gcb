@@ -2,12 +2,15 @@
 
 (() => {
   // src/auth/auth.js
-  var GcbAuthModule = /* @__PURE__ */ (() => {
+  var GcbAuthModule = (() => {
     const SESSION_ID_KEY = "gcb_session_id";
     const SESSION_SIGNATURE_KEY = "gcb_session_signature";
-    const APP_CACHE_PREFIX = "gcb_";
+    const SESSION_TIME_KEY = "gcb_session_time";
+    const SESSION_EXPIRY = 24 * 60 * 60 * 1e3;
     let initialized = false;
     let initializing = null;
+    let currentCapabilities = [];
+    let currentRole = "";
     function getSessionId() {
       return localStorage.getItem(SESSION_ID_KEY) || "";
     }
@@ -15,7 +18,14 @@
       return localStorage.getItem(SESSION_SIGNATURE_KEY) || "";
     }
     function hasSession() {
-      return Boolean(getSessionId() && getSessionSignature());
+      if (!getSessionId() || !getSessionSignature()) {
+        return false;
+      }
+      if (sessionExpired()) {
+        clearSession();
+        return false;
+      }
+      return true;
     }
     function saveSession(result) {
       if (!result?.sessionId || !result?.signature) {
@@ -23,12 +33,22 @@
       }
       localStorage.setItem(SESSION_ID_KEY, result.sessionId);
       localStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
+      localStorage.setItem(SESSION_TIME_KEY, String(Date.now()));
+    }
+    function sessionExpired() {
+      const sessionTime = Number(localStorage.getItem(SESSION_TIME_KEY) || 0);
+      if (!sessionTime) {
+        return true;
+      }
+      return Date.now() - sessionTime > SESSION_EXPIRY;
     }
     function clearSession() {
       localStorage.removeItem(SESSION_ID_KEY);
       localStorage.removeItem(SESSION_SIGNATURE_KEY);
+      localStorage.removeItem(SESSION_TIME_KEY);
       sessionStorage.removeItem(SESSION_ID_KEY);
       sessionStorage.removeItem(SESSION_SIGNATURE_KEY);
+      clearAuthorizationState();
     }
     function exchangeTicket(ticket) {
       return new Promise((resolve, reject) => {
@@ -58,17 +78,37 @@
         }).exchangeGcbSessionHandoff(ticket);
       });
     }
-    function clearAppCache() {
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(APP_CACHE_PREFIX)) {
-          keysToRemove.push(key);
-        }
+    function setAuthorizationState(user) {
+      currentRole = String(user?.role || "");
+      currentCapabilities = Array.isArray(user?.capabilities) ? [...user.capabilities] : [];
+    }
+    function clearAuthorizationState() {
+      currentRole = "";
+      currentCapabilities = [];
+    }
+    function getRole() {
+      return currentRole;
+    }
+    function getCapabilities() {
+      return [...currentCapabilities];
+    }
+    function hasCapability(capability) {
+      if (!capability) {
+        return false;
       }
-      keysToRemove.forEach((key) => {
-        localStorage.removeItem(key);
-      });
+      return currentCapabilities.includes("*") || currentCapabilities.includes(capability);
+    }
+    function hasAnyCapability(capabilities = []) {
+      if (!Array.isArray(capabilities) || !capabilities.length) {
+        return false;
+      }
+      return capabilities.some((capability) => hasCapability(capability));
+    }
+    function hasAllCapabilities(capabilities = []) {
+      if (!Array.isArray(capabilities) || !capabilities.length) {
+        return false;
+      }
+      return capabilities.every((capability) => hasCapability(capability));
     }
     async function init() {
       if (initialized) {
@@ -80,6 +120,7 @@
       initializing = (async () => {
         try {
           if (hasSession()) {
+            await loadAuthorizationState();
             initialized = true;
             return true;
           }
@@ -98,6 +139,7 @@
             console.warn("[GCB Auth] No authenticated session.");
             return false;
           }
+          await loadAuthorizationState();
           initialized = true;
           return true;
         } catch (error) {
@@ -118,6 +160,30 @@
       }
       return [getSessionId(), getSessionSignature()];
     }
+    async function loadAuthorizationState() {
+      const sessionId = getSessionId();
+      const signature = getSessionSignature();
+      if (!sessionId || !signature) {
+        throw new Error("Authentication required.");
+      }
+      return new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler((user) => {
+          try {
+            if (!user) {
+              throw new Error(
+                "Authenticated user information was not returned."
+              );
+            }
+            setAuthorizationState(user);
+            resolve(user);
+          } catch (error) {
+            reject(error);
+          }
+        }).withFailureHandler((error) => {
+          reject(error);
+        }).getCurrentGcbUser(sessionId, signature);
+      });
+    }
     async function logout() {
       if (!hasSession()) {
         clearSession();
@@ -136,7 +202,7 @@
       } finally {
         clearSession();
         window.GCB_AUTH_TICKET = "";
-        clearAppCache();
+        AppUtils.clearAppCache();
       }
       return true;
     }
@@ -147,7 +213,148 @@
       hasSession,
       clearSession,
       getAuthArgs,
-      logout
+      logout,
+      getRole,
+      getCapabilities,
+      hasCapability,
+      hasAnyCapability,
+      hasAllCapabilities
+    };
+  })();
+
+  // src/auth/authorization-ui.js
+  var AuthorizationUIModule = /* @__PURE__ */ (() => {
+    const ROUTE_REQUIREMENTS = {
+      // Clients
+      clientDirectory: {
+        capability: "clients.view"
+      },
+      clientActivity: {
+        capability: "clients.view"
+      },
+      clientRankings: {
+        capability: "clients.view"
+      },
+      clientOpportunities: {
+        capability: "clients.view"
+      },
+      clientDetails: {
+        capability: "clients.view"
+      },
+      // Projects
+      projectDirectory: {
+        capability: "clients.view"
+      },
+      projectRankings: {
+        capability: "clients.view"
+      },
+      // Billing
+      billingOverview: {
+        capability: "billing.view"
+      },
+      billingPaidHours: {
+        capability: "billing.view"
+      },
+      billingOwedHours: {
+        capability: "billing.view"
+      },
+      billingInvoiceStatus: {
+        capability: "billing.view"
+      },
+      // Performance
+      performanceOverview: {
+        capability: "hours.view"
+      },
+      performanceTarget: {
+        capability: "hours.view"
+      },
+      performanceProductivity: {
+        capability: "hours.view"
+      },
+      // Reports
+      reportsMonthlyReport: {
+        capability: "reports.view"
+      },
+      reportsAnnualReport: {
+        capability: "reports.view"
+      },
+      reportsDataExport: {
+        capability: "reports.view"
+      },
+      // Settings
+      settingsConfiguration: {
+        capability: "settings.manage"
+      },
+      // Integrations — admin only
+      integrationsConfiguration: {
+        capability: "settings.manage",
+        role: "admin"
+      }
+    };
+    function canAccessRoute(pageName) {
+      const requirement = ROUTE_REQUIREMENTS[pageName];
+      if (!requirement) {
+        return true;
+      }
+      if (requirement.role && GcbAuthModule.getRole() !== requirement.role) {
+        return false;
+      }
+      if (requirement.capability && !GcbAuthModule.hasCapability(requirement.capability)) {
+        return false;
+      }
+      return true;
+    }
+    function getRouteCapability(pageName) {
+      return ROUTE_REQUIREMENTS[pageName] || null;
+    }
+    function applyNavigationPermissions() {
+      document.querySelectorAll("[data-page]").forEach((element) => {
+        const pageName = element.dataset.page;
+        if (!pageName) {
+          return;
+        }
+        const allowed = canAccessRoute(pageName);
+        element.closest("li")?.classList.toggle("d-none", !allowed);
+      });
+      document.querySelectorAll(".vertical-nav-menu > li").forEach((section) => {
+        const childLinks = section.querySelectorAll("ul [data-page]");
+        if (!childLinks.length) {
+          return;
+        }
+        const hasVisibleChild = [...childLinks].some(
+          (link) => !link.closest("li")?.classList.contains("d-none")
+        );
+        section.classList.toggle("d-none", !hasVisibleChild);
+      });
+    }
+    function canAccessRequirement({ capability = null, role = null } = {}) {
+      if (role && GcbAuthModule.getRole() !== role) {
+        return false;
+      }
+      if (capability && !GcbAuthModule.hasCapability(capability)) {
+        return false;
+      }
+      return true;
+    }
+    function applyActionPermissions() {
+      document.querySelectorAll("[data-required-capability], [data-required-role]").forEach((element) => {
+        const capability = element.dataset.requiredCapability || null;
+        const role = element.dataset.requiredRole || null;
+        const allowed = canAccessRequirement({
+          capability,
+          role
+        });
+        if (!allowed) {
+          element.remove();
+        }
+      });
+    }
+    return {
+      canAccessRoute,
+      getRouteCapability,
+      applyNavigationPermissions,
+      canAccessRequirement,
+      applyActionPermissions
     };
   })();
 
@@ -956,31 +1163,32 @@
       const reviewFooterActions = buildFooterActions("review");
       const processedFooter = footer.replace("<!-- APP-MODAL-MAIN-ACTIONS -->", mainFooterActions).replace("<!-- APP-MODAL-REVIEW-ACTIONS -->", reviewFooterActions);
       $content.html(`
-    ${header ? `
-      <div class="modal-header">
-        ${header}
+      ${header ? `
+        <div class="modal-header">
+          ${header}
 
-        ${closable ? `
-          <button
-            type="button"
-            class="btn-close"
-            data-bs-dismiss="modal"
-            aria-label="Close">
-          </button>
-        ` : ""}
+          ${closable ? `
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close">
+            </button>
+          ` : ""}
+        </div>
+      ` : ""}
+
+      <div class="modal-body text-center">
+        ${body}
       </div>
-    ` : ""}
 
-    <div class="modal-body text-center">
-      ${body}
-    </div>
-
-    ${processedFooter ? `
-      <div class="modal-footer justify-content-center">
-        ${processedFooter}
-      </div>
-    ` : ""}
-  `);
+      ${processedFooter ? `
+        <div class="modal-footer justify-content-center">
+          ${processedFooter}
+        </div>
+      ` : ""}
+    `);
+      AuthorizationUIModule.applyActionPermissions();
       $modal.off(".AppUtilsModal");
       $modal.on(
         "click.AppUtilsModal",
@@ -2428,6 +2636,7 @@
         <button
           type="button"
           id="add-hours"
+          data-required-role="admin"
           class="dropdown-item add-hours"
         >
           <i class="pe-7s-plus me-2 text-primary"></i>
@@ -2437,6 +2646,7 @@
         ${canEdit ? `
               <button
                 type="button"
+                data-required-role="admin"
                 id="edit-today-hours"
                 class="dropdown-item edit-today-hours"
               >
@@ -2457,6 +2667,7 @@
         <button
           type="button"
           id="edit-client-sheet"
+          data-required-capability="clients.edit" 
           class="dropdown-item edit-client-sheet"
         >
           <i class="pe-7s-note2 me-2 text-info"></i>
@@ -2633,6 +2844,9 @@
         },
         createdCell(td, cellData, rowData, rowIndex, colIndex) {
           $(td).attr("data-col", colIndex);
+        },
+        drawCallback() {
+          AuthorizationUIModule.applyActionPermissions();
         },
         initComplete() {
           log("DataTable initComplete:", tableId);
@@ -3883,6 +4097,7 @@
       showTimer = setTimeout(() => {
         render(trigger, options);
       }, SHOW_DELAY);
+      AuthorizationUIModule.applyActionPermissions();
     }
     function render(trigger, options = {}) {
       const clientName = trigger.dataset.clientName?.trim();
@@ -4380,6 +4595,7 @@
       <button
         type="button"
         class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-required-role="admin"
         data-profile-client-action="add-hours"
         data-client-name="${AppUtils.escapeHtml(client.name)}"
       >
@@ -4390,6 +4606,7 @@
       <button
         type="button"
         class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-required-capability="clients.edit"
         data-profile-client-action="open-sheet"
         data-client-name="${AppUtils.escapeHtml(client.name)}"
       >
@@ -5100,6 +5317,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
+              data-required-role="admin"
               class="dropdown-item btn-report-action btn-email-report"
               data-id="${AppUtils.escapeHtml(log.id ?? "")}"
             >
@@ -5111,6 +5329,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
+              data-required-role="admin"
               class="dropdown-item btn-report-action btn-discord-report"
               data-id="${AppUtils.escapeHtml(log.id ?? "")}"
             >
@@ -5299,6 +5518,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
+              data-required-role="admin"
               class="dropdown-item btn-report-action btn-email-report"
               data-id="${AppUtils.escapeHtml(reportId)}"
               data-type="${AppUtils.escapeHtml(reportType)}"
@@ -5312,6 +5532,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
+              data-required-role="admin"
               class="dropdown-item btn-report-action btn-discord-report"
               data-id="${AppUtils.escapeHtml(reportId)}"
               data-type="${AppUtils.escapeHtml(reportType)}"
@@ -7628,7 +7849,7 @@
             x: {
               stacked: false,
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -7647,7 +7868,7 @@
                 text: "Hours"
               },
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -7757,7 +7978,7 @@
           scales: {
             x: {
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -7777,7 +7998,7 @@
                 text: "Hours"
               },
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -7896,7 +8117,7 @@
           scales: {
             x: {
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -7910,7 +8131,7 @@
             y: {
               beginAtZero: true,
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -8035,7 +8256,7 @@
           scales: {
             x: {
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -8049,7 +8270,7 @@
             y: {
               beginAtZero: true,
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -8135,7 +8356,7 @@
             x: {
               beginAtZero: true,
               grid: {
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               },
               ticks: {
                 font: {
@@ -8259,7 +8480,7 @@
               },
               grid: {
                 display: showGrid,
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               }
             },
             y: {
@@ -8275,7 +8496,7 @@
               },
               grid: {
                 display: showGrid,
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               }
             }
           },
@@ -8472,7 +8693,7 @@
               },
               grid: {
                 display: showGrid,
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               }
             },
             y: {
@@ -8487,7 +8708,7 @@
               },
               grid: {
                 display: showGrid,
-                color: "rgba(0, 0, 0, 0.04)"
+                color: gridColor
               }
             }
           }
@@ -8668,6 +8889,13 @@
       gradient.addColorStop(1, endColor);
       return gradient;
     }
+    const gridColor = (context) => {
+      const tickCount = context.scale?.ticks?.length || 1;
+      const index = context.index || 0;
+      const ratio = tickCount > 1 ? index / (tickCount - 1) : 0;
+      const alpha = 0.04 - ratio * 0.025;
+      return `rgba(0, 0, 0, ${alpha})`;
+    };
     function createChartCanvas(chartDiv, type) {
       if (!chartDiv) {
         return null;
@@ -12277,11 +12505,43 @@
         );
       });
     }
+    function setupSkeletonCards(container = "#app-main__inner") {
+      const root = typeof container === "string" ? document.querySelector(container) : container;
+      if (!root) {
+        return;
+      }
+      root.querySelectorAll(".card").forEach((card) => {
+        card.classList.remove("loaded");
+        card.classList.add("skeleton");
+      });
+    }
+    function playSkeletonReveal(container = "#app-main__inner") {
+      const root = typeof container === "string" ? document.querySelector(container) : container;
+      if (!root) {
+        return;
+      }
+      const containerEl = document.getElementById("app-main-inner-container");
+      if (containerEl) {
+        containerEl.classList.remove("opacity-0");
+      }
+      const cards = root.querySelectorAll(".card.skeleton");
+      const stagger = 350;
+      cards.forEach((card, index) => {
+        setTimeout(
+          () => {
+            card.classList.add("loaded");
+          },
+          100 + index * stagger
+        );
+      });
+    }
     return {
       init,
       activateNavigation,
       setupStaggerCards,
-      playStaggerReveal
+      playStaggerReveal,
+      setupSkeletonCards,
+      playSkeletonReveal
     };
   })();
 
@@ -12458,7 +12718,8 @@
             return;
           }
           pageContainer.innerHTML = pageHtml;
-          AppUI.setupStaggerCards();
+          AuthorizationUIModule.applyActionPermissions();
+          AppUI.playSkeletonReveal();
           if (typeof done === "function") {
             done();
           }
@@ -13108,6 +13369,7 @@
 
     <button
       type="button"
+      data-required-role="admin"
       class="btn btn-primary btn-save"
     >
       Save Changes
@@ -15863,7 +16125,7 @@
         currentModule = page;
         AppUI.activateNavigation(resolvedPageName);
         requestAnimationFrame(() => {
-          AppUI.playStaggerReveal();
+          AppUI.playSkeletonReveal();
         });
       });
     }
@@ -16026,13 +16288,10 @@
       setLoading(true);
       try {
         const loginUrl = await requestLoginUrl();
-        console.log("[GCB Login] Google login URL received:", loginUrl);
         if (!loginUrl) {
           throw new Error("Google login URL was not returned.");
         }
         if (window.parent !== window && window.GCB_IS_GITHUB_EMBEDDED === true) {
-          console.log("[GCB Login] Sending login request to GitHub wrapper.");
-          console.log("[GCB Login] window.top:", window.top);
           window.top.postMessage(
             {
               type: "GCB_LOGIN_REQUEST",
@@ -16040,9 +16299,9 @@
             },
             "https://gcbops.github.io"
           );
-          console.log("[GCB Login] Login request sent to GitHub wrapper.");
           return;
         }
+        setLoading(false);
         window.location.href = loginUrl;
       } catch (error) {
         console.error("[GCB Login] Failed to start login:", error);
@@ -16082,6 +16341,7 @@
       return;
     }
     GcbLoginModule.hide();
+    AuthorizationUIModule.applyNavigationPermissions();
     RouterModule.init();
     ActionRouterModule.init();
   });

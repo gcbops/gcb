@@ -637,6 +637,7 @@ const ActivityToday = (() => {
         <button
           type="button"
           id="add-hours"
+          data-required-role="admin"
           class="dropdown-item add-hours"
         >
           <i class="pe-7s-plus me-2 text-primary"></i>
@@ -648,6 +649,7 @@ const ActivityToday = (() => {
             ? `
               <button
                 type="button"
+                data-required-role="admin"
                 id="edit-today-hours"
                 class="dropdown-item edit-today-hours"
               >
@@ -670,6 +672,7 @@ const ActivityToday = (() => {
         <button
           type="button"
           id="edit-client-sheet"
+          data-required-capability="clients.edit" 
           class="dropdown-item edit-client-sheet"
         >
           <i class="pe-7s-note2 me-2 text-info"></i>

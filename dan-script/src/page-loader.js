@@ -1,4 +1,5 @@
 import { AppUI } from "./app-ui.js";
+import { AuthorizationUIModule } from "./auth/authorization-ui.js";
 import { AppUtils } from "./utils.js";
 
 const PageLoaderModule = (() => {
@@ -216,7 +217,10 @@ const PageLoaderModule = (() => {
 
         pageContainer.innerHTML = pageHtml;
 
-        AppUI.setupStaggerCards();
+        AuthorizationUIModule.applyActionPermissions();
+
+        // AppUI.setupStaggerCards();
+        AppUI.playSkeletonReveal();
 
         if (typeof done === "function") {
           done();

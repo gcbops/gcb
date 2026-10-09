@@ -1,4 +1,5 @@
 import { GcbAuthModule } from "../auth/auth";
+import { AuthorizationUIModule } from "../auth/authorization-ui";
 import { RouterModule } from "../routers";
 import { TableModule } from "../tables/tables";
 import { AppUtils } from "../utils";
@@ -237,6 +238,8 @@ const ProfilePopoverModule = (() => {
     showTimer = setTimeout(() => {
       render(trigger, options);
     }, SHOW_DELAY);
+
+    AuthorizationUIModule.applyActionPermissions();
   }
 
   function render(trigger, options = {}) {

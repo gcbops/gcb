@@ -1,3 +1,4 @@
+import { AuthorizationUIModule } from "../auth/authorization-ui.js";
 import { AppUtils } from "../utils.js";
 import { ActivityToday } from "./activity-today.js";
 
@@ -94,6 +95,10 @@ const DataTableModule = (() => {
         $(td).attr("data-col", colIndex);
       },
 
+      drawCallback() {
+        AuthorizationUIModule.applyActionPermissions();
+      },
+
       initComplete() {
         log("DataTable initComplete:", tableId);
 
@@ -105,7 +110,9 @@ const DataTableModule = (() => {
         // Apply min-height for "client activity"
         if (cleanTitle === "activity today") {
           // Prefer the DataTables wrapper
-          const $wrapper = $table.closest(".dataTable-wrapper, .dataTables_wrapper, div").first();
+          const $wrapper = $table
+            .closest(".dataTable-wrapper, .dataTables_wrapper, div")
+            .first();
           if ($wrapper.length) {
             $wrapper.css("min-height", "200px");
           } else {

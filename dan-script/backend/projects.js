@@ -27,26 +27,6 @@ function getProjects(sessionId, signature) {
     ]);
 }
 
-function getTopProjects() {
-  requireCapability(sessionId, signature, "clients.view");
-
-  const sheet = getSheetSafe("Projects");
-
-  if (!sheet) {
-    return [];
-  }
-
-  const lastRow = sheet.getLastRow();
-
-  if (lastRow < 2) {
-    return [];
-  }
-
-  const data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
-
-  return data.filter((row) => row[0] && row[1]);
-}
-
 function getProjectRankings(sessionId, signature) {
   requireCapability(sessionId, signature, "clients.view");
 

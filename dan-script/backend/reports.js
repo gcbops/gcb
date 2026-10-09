@@ -219,12 +219,13 @@ function saveReportPDF(config) {
     const file = folder.createFile(blob);
     const fileUrl = file.getUrl();
 
-    getSheetSafe(logSheet)?.appendRow([
-      new Date(),
-      reportNum,
-      reportName,
-      fileUrl,
-    ]);
+    const reportLogSheet = getSheetSafe(logSheet);
+
+    if (!reportLogSheet) {
+      throw new Error(`Report log sheet "${logSheet}" not found.`);
+    }
+
+    reportLogSheet.appendRow([new Date(), reportNum, reportName, fileUrl]);
 
     if (latestLinkCell) {
       getLabSheet()?.getRange(latestLinkCell).setValue(fileUrl);
@@ -274,6 +275,10 @@ function saveYearlyReportPDF() {
 
 function saveCustomReportPDF(sessionId, signature, type) {
   requireCapability(sessionId, signature, "reports.generate");
+
+  enforceUserRateLimit("report_generation", sessionId, 3, 60);
+
+  enforceGlobalRateLimit("report_generation", 5, 60);
 
   SpreadsheetApp.flush();
   Utilities.sleep(5000);
