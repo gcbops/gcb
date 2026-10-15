@@ -294,7 +294,10 @@ const performanceOverviewPage = (() => {
 
     DataTableModule.renderRows(TABLE_ID, data, createYearlyPerformanceRow);
 
-    DataTableModule.init(TABLE_TITLE, TABLE_ID, false);
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, {
+      hideAllControls: true,
+      scrollY: "450px",
+    });
   }
 
   function createYearlyPerformanceRow(row) {

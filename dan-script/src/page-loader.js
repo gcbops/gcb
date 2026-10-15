@@ -159,6 +159,11 @@ const PageLoaderModule = (() => {
       desc: "Set up and verify connections to external services used by the platform.",
       icon: "pe-7s-config icon-gradient " + getGradientBg(19),
     },
+    manageUsers: {
+      title: "Manage Users",
+      desc: "Manage user access, roles, capabilities, and account status.",
+      icon: "pe-7s-users icon-gradient " + getGradientBg(20),
+    },
   };
 
   function loadPage(pageName, done) {
@@ -220,7 +225,7 @@ const PageLoaderModule = (() => {
         AuthorizationUIModule.applyActionPermissions();
 
         // AppUI.setupStaggerCards();
-        AppUI.playSkeletonReveal();
+        AppUI.setupSkeletonCards();
 
         if (typeof done === "function") {
           done();

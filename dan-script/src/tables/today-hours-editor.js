@@ -1,7 +1,7 @@
 import { GcbAuthModule } from "../auth/auth.js";
-import { HourSummary } from "../hours/hour-summary.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
+import { RequestManager } from "../requests/request-manager.js";
 
 const TodayHoursEditor = (() => {
   const MODAL_ID = "#app-modal";
@@ -11,7 +11,6 @@ const TodayHoursEditor = (() => {
 
   const MAX_TYPE_LENGTH = 100;
   const MAX_TASK_LENGTH = 500;
-
   const MIN_HOURS = 0;
   const MAX_HOURS = 24;
 
@@ -29,18 +28,16 @@ const TodayHoursEditor = (() => {
       size: "xl",
       placement: "center",
 
-      header: `
-        <strong>Edit Today's Hours</strong>
-      `,
+      header: "<strong>Edit Today's Hours</strong>",
 
       body: `
         <input
           type="hidden"
-          id="${CLIENT_ID.replace("#", "")}"
+          id="${CLIENT_ID.slice(1)}"
           value="${AppUtils.escapeHtml(clientName)}"
         >
 
-        <div id="${RECORDS_ID.replace("#", "")}">
+        <div id="${RECORDS_ID.slice(1)}">
           <div class="text-center text-muted py-3">
             Loading today's records...
           </div>
@@ -48,15 +45,11 @@ const TodayHoursEditor = (() => {
       `,
 
       footer: `
-        <button
-          type="button"
-          class="btn btn-secondary btn-cancel">
+        <button type="button" class="btn btn-secondary btn-cancel">
           Cancel
         </button>
 
-        <button
-          type="button"
-          class="btn btn-primary btn-save">
+        <button type="button" class="btn btn-primary btn-save">
           Save Changes
         </button>
       `,
@@ -83,24 +76,40 @@ const TodayHoursEditor = (() => {
     });
   }
 
+  function isModalAvailable($modal) {
+    return Boolean(
+      $modal &&
+      $modal.length &&
+      $modal.find(CLIENT_ID).length &&
+      $modal.find(RECORDS_ID).length,
+    );
+  }
+
   async function load(clientName, $modal) {
     try {
       const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      if (!isModalAvailable($modal)) {
+        return;
+      }
 
       AppUtils.cachedGScriptCall(
         `${CACHE_PREFIX}${clientName}`,
         "getTodayClientHours",
         [sessionId, signature, clientName],
         (response) => {
+          if (!isModalAvailable($modal)) {
+            return;
+          }
+
           if (!response?.success) {
             $modal.find(RECORDS_ID).html(`
-            <div class="text-center text-danger py-3">
-              ${AppUtils.escapeHtml(
-                response?.message || "Unable to load today's records.",
-              )}
-            </div>
-          `);
-
+              <div class="text-center text-danger py-3">
+                ${AppUtils.escapeHtml(
+                  response?.message || "Unable to load today's records.",
+                )}
+              </div>
+            `);
             return;
           }
 
@@ -110,7 +119,9 @@ const TodayHoursEditor = (() => {
         false,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Unable to load today's records.");
+      if (isModalAvailable($modal)) {
+        AppUtils.showError(error?.message || "Unable to load today's records.");
+      }
     }
   }
 
@@ -118,26 +129,36 @@ const TodayHoursEditor = (() => {
     try {
       const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
+      if (!isModalAvailable($modal)) {
+        return;
+      }
+
       AppUtils.cachedGScriptCall(
         `getTaskOptions_${clientName}`,
         "getTaskOptions",
         [sessionId, signature, clientName],
         (returned) => {
-          const tasks = Array.isArray(returned)
-            ? returned
-            : (() => {
-                try {
-                  return JSON.parse(returned);
-                } catch {
-                  return [];
-                }
-              })();
+          if (!isModalAvailable($modal)) {
+            return;
+          }
 
-          render(records, tasks, $modal);
+          let tasks = returned;
+
+          if (typeof returned === "string") {
+            try {
+              tasks = JSON.parse(returned);
+            } catch {
+              tasks = [];
+            }
+          }
+
+          render(records, Array.isArray(tasks) ? tasks : [], $modal);
         },
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Unable to load task options.");
+      if (isModalAvailable($modal)) {
+        AppUtils.showError(error?.message || "Unable to load task options.");
+      }
     }
   }
 
@@ -148,129 +169,130 @@ const TodayHoursEditor = (() => {
 
     if (!Array.isArray(records) || !records.length) {
       $container.html(`
-      <div class="text-center text-muted py-3">
-        No records added today.
-      </div>
-    `);
-
+        <div class="text-center text-muted py-3">
+          No records added today.
+        </div>
+      `);
       return;
     }
 
     records.forEach((record) => {
       const rowNumber = Number(record.row);
 
-      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+      if (!Number.isInteger(rowNumber) || rowNumber < 3) {
         return;
       }
 
-      const sourceRow = Number(record.sourceRow);
-
-      /*
-       * External records have actual source metadata.
-       *
-       * Internal records can leave these empty.
-       */
       const sourceSheet = String(record.sourceSheet || "").trim();
-
+      const sourceRow = Number(record.sourceRow);
       const hasSourceRow = Number.isInteger(sourceRow) && sourceRow >= 1;
-
       const isExternal = Boolean(sourceSheet && hasSourceRow);
 
-      const taskOptions = buildTaskOptions(tasks, record.task);
+      const originalType = String(record.type ?? "");
+      const originalTask = String(record.task ?? "");
+      const originalHours = String(record.hours ?? "");
+      const originalDate = String(record.dateFormatted ?? record.date ?? "");
+
+      const taskOptions = buildTaskOptions(tasks, originalTask);
 
       const $row = $(`
-      <div
-        class="today-hours-record border rounded p-3 mb-3"
-        data-row="${rowNumber}"
-        data-source-sheet="${AppUtils.escapeHtml(sourceSheet)}"
-        data-source-row="${hasSourceRow ? sourceRow : ""}"
-        data-action="update"
-      >
-        <div class="row">
+        <div
+          class="today-hours-record border rounded p-3 mb-3"
+          data-row="${rowNumber}"
+          data-source-sheet="${AppUtils.escapeHtml(sourceSheet)}"
+          data-source-row="${hasSourceRow ? sourceRow : ""}"
+          data-action="update"
+          data-original-type="${AppUtils.escapeHtml(originalType)}"
+          data-original-task="${AppUtils.escapeHtml(originalTask)}"
+          data-original-hours="${AppUtils.escapeHtml(originalHours)}"
+          data-original-date="${AppUtils.escapeHtml(originalDate)}"
+        >
+          <div class="row">
+            <div class="col-md-4 mb-2">
+              <label>Type</label>
+              <select
+                class="form-control js-select2 today-hours-type"
+                required
+              >
+                <option value="DEV">Dev</option>
+                <option value="DESIGN">Design</option>
+                <option value="SEO">SEO</option>
+              </select>
+            </div>
 
-          <div class="col-md-4 mb-2">
-            <label>Type</label>
+            <div class="col-md-4 mb-2">
+              <label>Task / Project</label>
+              <select
+                class="form-control today-hours-task js-select2-dynamic"
+                ${isExternal ? "disabled" : ""}
+                required
+              >
+                ${taskOptions}
+              </select>
+            </div>
 
-            <select
-              class="form-control js-select2 today-hours-type"
-              required
-            >
-              <option value="DEV">Dev</option>
-              <option value="DESIGN">Design</option>
-              <option value="SEO">SEO</option>
-            </select>
+            <div class="col-md-2 mb-2">
+              <label>Hours</label>
+              <input
+                type="number"
+                min="0"
+                max="24"
+                step="0.01"
+                class="form-control today-hours-hours"
+                required
+              >
+            </div>
+
+            <div class="col-md-2 mb-2 d-flex align-items-end">
+              <button
+                type="button"
+                class="btn btn-outline-danger btn-block btn-delete-today-hours"
+              >
+                Delete
+              </button>
+            </div>
           </div>
 
-          <div class="col-md-4 mb-2">
-            <label>Task / Project</label>
-
-            <select
-              class="form-control today-hours-task js-select2-dynamic"
-              ${isExternal ? "disabled" : ""}
-              required
-            >
-              ${taskOptions}
-            </select>
+          <div class="small text-muted">
+            Date: ${AppUtils.escapeHtml(record.date ?? "")}
           </div>
-
-          <div class="col-md-2 mb-2">
-            <label>Hours</label>
-
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              class="form-control today-hours-hours"
-            >
-          </div>
-
-          <div class="col-md-2 mb-2 d-flex align-items-end">
-            <button
-              type="button"
-              class="btn btn-outline-danger btn-block btn-delete-today-hours"
-            >
-              Delete
-            </button>
-          </div>
-
         </div>
+      `);
 
-        <div class="small text-muted">
-          Date: ${AppUtils.escapeHtml(record.date || "")}
-        </div>
-      </div>
-    `);
-
-      $row.find(".today-hours-type").val(record.type || "");
-
-      $row.find(".today-hours-task").val(record.task || "");
-
-      $row.find(".today-hours-hours").val(record.hours ?? "");
+      $row.find(".today-hours-type").val(originalType);
+      $row.find(".today-hours-task").val(originalTask);
+      $row.find(".today-hours-hours").val(originalHours);
 
       $container.append($row);
     });
 
-    // Initialize ALL Select2 fields after ALL rows exist
+    if (!$container.find(".today-hours-record").length) {
+      $container.html(`
+        <div class="text-center text-muted py-3">
+          No valid records were returned.
+        </div>
+      `);
+      return;
+    }
+
     AppUtils.initSelect2($modal);
 
-    $container.find(".today-hours-type").each(function () {
-      $(this).trigger("change");
-    });
-
-    $container.find(".today-hours-task").each(function () {
-      $(this).trigger("change");
-    });
+    $container.find(".today-hours-type, .today-hours-task").trigger("change");
   }
 
   function buildTaskOptions(tasks, selectedTask) {
-    const options = [`<option value="" disabled>Select Task</option>`];
+    const options = ['<option value="">Select Task</option>'];
 
     tasks.forEach((task) => {
       const value =
-        typeof task === "object" ? task.value || task.id || "" : task;
+        typeof task === "object" && task !== null
+          ? task.value || task.id || ""
+          : task;
 
-      const text =
-        typeof task === "object" ? task.label || task.name || value : task;
+      const label =
+        typeof task === "object" && task !== null
+          ? task.label || task.name || value
+          : value;
 
       if (!value) {
         return;
@@ -280,12 +302,12 @@ const TodayHoursEditor = (() => {
         String(value) === String(selectedTask) ? " selected" : "";
 
       options.push(`
-      <option
-        value="${AppUtils.escapeHtml(value)}"
-        ${selected}>
-        ${AppUtils.escapeHtml(text)}
-      </option>
-    `);
+        <option
+          value="${AppUtils.escapeHtml(value)}"${selected}
+        >
+          ${AppUtils.escapeHtml(label)}
+        </option>
+      `);
     });
 
     return options.join("");
@@ -294,7 +316,7 @@ const TodayHoursEditor = (() => {
   function markForDelete($button) {
     const $row = $button.closest(".today-hours-record");
 
-    if (!$row.length) {
+    if (!$row.length || $row.attr("data-action") === "delete") {
       return;
     }
 
@@ -304,112 +326,103 @@ const TodayHoursEditor = (() => {
 
     $button
       .text("Deleted")
+      .prop("disabled", true)
       .removeClass("btn-outline-danger")
       .addClass("btn-secondary");
   }
 
   function save($modal) {
+    const $saveButton = $modal.find(".btn-save");
     const clientName = String($modal.find(CLIENT_ID).val() || "").trim();
 
     if (!clientName) {
       AppUtils.showDashboardToast("Client is required.", "error");
+      return;
+    }
 
+    if ($saveButton.prop("disabled")) {
       return;
     }
 
     const records = [];
-    let hasValidationError = false;
+    let validationError = null;
 
     $modal.find(".today-hours-record").each(function () {
       const $row = $(this);
 
+      const sourceRowValue = $row.attr("data-source-row");
+
       const record = {
         row: Number($row.attr("data-row")),
-
         action: $row.attr("data-action") === "delete" ? "delete" : "update",
-
         sourceSheet: String($row.attr("data-source-sheet") || "").trim(),
-
-        sourceRow: (() => {
-          const value = $row.attr("data-source-row");
-
-          if (value === undefined || value === null || value === "") {
-            return null;
-          }
-
-          return Number(value);
-        })(),
+        sourceRow:
+          sourceRowValue === undefined || sourceRowValue === ""
+            ? null
+            : Number(sourceRowValue),
+        originalType: $row.attr("data-original-type"),
+        originalTask: $row.attr("data-original-task"),
+        originalHours: $row.attr("data-original-hours"),
+        originalDate: $row.attr("data-original-date"),
       };
 
-      /*
-       * Deleted rows don't need form values.
-       */
-      if (record.action === "delete") {
-        records.push(record);
-        return;
+      if (record.action !== "delete") {
+        record.type = String($row.find(".today-hours-type").val() || "").trim();
+
+        record.task = String($row.find(".today-hours-task").val() || "").trim();
+
+        record.hours = $row.find(".today-hours-hours").val();
       }
-
-      record.type = String($row.find(".today-hours-type").val() || "").trim();
-
-      record.task = String($row.find(".today-hours-task").val() || "").trim();
-
-      record.hours = $row.find(".today-hours-hours").val();
 
       const validation = todayHoursRecord(record);
 
       if (!validation.valid) {
-        AppUtils.showDashboardToast(validation.message, "error");
-
-        hasValidationError = true;
-
+        validationError = validation.message;
         return false;
       }
 
       records.push(validation.value);
     });
 
-    if (hasValidationError) {
+    if (validationError) {
+      AppUtils.showDashboardToast(validationError, "error");
       return;
     }
 
     if (!records.length) {
       AppUtils.showDashboardToast("No changes to save.", "info");
-
       return;
     }
 
-    const $saveButton = $modal.find(".btn-save");
+    try {
+      // Prevent duplicate submissions while enqueueing.
+      $saveButton.prop("disabled", true);
 
-    AppUtils.submitForm({
-      gscriptFunc: "saveEditedTodayClientHours",
+      RequestManager.enqueue(
+        "edit-today-hours",
+        {
+          client: clientName,
+          records,
+        },
+        `Edit today's hours — ${clientName}`,
+      );
 
-      data: {
-        client: clientName,
-        records,
-      },
+      AppUtils.closeModal(MODAL_ID);
 
-      $btn: $saveButton,
-      loadingText: "Saving changes",
+      AppUtils.showDashboardToast(
+        "Today's hours changes added to the request queue.",
+        "success",
+      );
+    } catch (error) {
+      $saveButton.prop("disabled", false);
 
-      onSuccess: () => {
-        AppUtils.cacheClear(`${CACHE_PREFIX}${clientName}`);
+      console.error("[TodayHoursEditor] Unable to queue changes:", error);
 
-        AppUtils.cacheClear(`getClientHourLogData_${clientName}`);
-
-        AppUtils.cacheClear(`getClientHours_${clientName}`);
-
-        AppUtils.resetCacheKeys(AppUtils.resetableCacheKeyForUpdatingHours);
-
-        AppUtils.showDashboardToast(
-          "Today's hours updated successfully!",
-          "success",
-        );
-
-        HourSummary.loadTodayChargedHours();
-
-        AppUtils.closeModal(MODAL_ID);
-      },
-    });
+      AppUtils.showDashboardToast(
+        error?.message || "Unable to queue today's changes.",
+        "error",
+      );
+    }
   }
 
   function todayHoursRecord(record) {
@@ -422,6 +435,29 @@ const TodayHoursEditor = (() => {
       };
     }
 
+    const sourceSheet = String(record.sourceSheet || "").trim();
+
+    const sourceRow =
+      record.sourceRow === null ||
+      record.sourceRow === undefined ||
+      record.sourceRow === ""
+        ? null
+        : Number(record.sourceRow);
+
+    if (sourceRow !== null && (!Number.isInteger(sourceRow) || sourceRow < 1)) {
+      return {
+        valid: false,
+        message: "Invalid external source row.",
+      };
+    }
+
+    const snapshot = {
+      originalType: record.originalType,
+      originalTask: record.originalTask,
+      originalHours: record.originalHours,
+      originalDate: record.originalDate,
+    };
+
     const action = record.action === "delete" ? "delete" : "update";
 
     if (action === "delete") {
@@ -430,13 +466,9 @@ const TodayHoursEditor = (() => {
         value: {
           row,
           action,
-          sourceSheet: String(record.sourceSheet || "").trim(),
-          sourceRow:
-            record.sourceRow === null ||
-            record.sourceRow === undefined ||
-            record.sourceRow === ""
-              ? null
-              : Number(record.sourceRow),
+          sourceSheet,
+          sourceRow,
+          ...snapshot,
         },
       };
     }
@@ -481,51 +513,12 @@ const TodayHoursEditor = (() => {
         type: type.value,
         task: task.value,
         hours: hours.value,
-        sourceSheet: String(record.sourceSheet || "").trim(),
-        sourceRow:
-          record.sourceRow === null ||
-          record.sourceRow === undefined ||
-          record.sourceRow === ""
-            ? null
-            : Number(record.sourceRow),
+        sourceSheet,
+        sourceRow,
+        ...snapshot,
       },
     };
   }
-
-  // function todayHoursRecords(records) {
-  //   if (!Array.isArray(records)) {
-  //     return {
-  //       valid: false,
-  //       message: "Invalid records.",
-  //     };
-  //   }
-
-  //   const normalized = [];
-  //   const rows = new Set();
-
-  //   for (const record of records) {
-  //     const result = todayHoursRecord(record);
-
-  //     if (!result.valid) {
-  //       return result;
-  //     }
-
-  //     if (rows.has(result.value.row)) {
-  //       return {
-  //         valid: false,
-  //         message: `Duplicate row submitted: ${result.value.row}`,
-  //       };
-  //     }
-
-  //     rows.add(result.value.row);
-  //     normalized.push(result.value);
-  //   }
-
-  //   return {
-  //     valid: true,
-  //     value: normalized,
-  //   };
-  // }
 
   return {
     open,

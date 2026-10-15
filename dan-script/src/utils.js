@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "./auth/auth.js";
+import {
+  getAuthArgs as getGcbAuthArgs,
+  handleInvalidSessionError,
+} from "./auth/auth-error-handler.js";
 import { AuthorizationUIModule } from "./auth/authorization-ui.js";
 import { RouterModule } from "./routers.js";
 
@@ -271,6 +274,10 @@ const AppUtils = (() => {
                 console.log(`[GScript] Ignored stale error: ${gscriptFunc}`);
               }
 
+              return;
+            }
+
+            if (handleInvalidSessionError(error)) {
               return;
             }
 
@@ -567,7 +574,7 @@ const AppUtils = (() => {
     msg,
     type = "success",
     duration = 4000,
-    position = "bottom-right",
+    position = "bottom-center",
   ) {
     const message = String(msg || "").trim();
 
@@ -615,7 +622,7 @@ const AppUtils = (() => {
       "bottom-right": "bottom-0 end-0",
     };
 
-    const positionClass = positionMap[position] || positionMap["bottom-right"];
+    const positionClass = positionMap[position] || positionMap["bottom-center"];
 
     let container = document.getElementById("dashboard-toast-container");
 
@@ -821,6 +828,21 @@ const AppUtils = (() => {
     }
   }
 
+  function toggleDrawer(drawerSelector, options = {}) {
+    const $drawer =
+      drawerSelector instanceof jQuery ? drawerSelector : $(drawerSelector);
+
+    if (!$drawer.length) {
+      return;
+    }
+
+    if ($drawer.hasClass("drawer-open")) {
+      closeDrawer($drawer, null, options.onClose);
+    } else {
+      openDrawer($drawer, options);
+    }
+  }
+
   function closeAllDrawers() {
     $(".drawer-open").each(function () {
       closeDrawer($(this));
@@ -843,8 +865,12 @@ const AppUtils = (() => {
     let authArgs;
 
     try {
-      authArgs = await GcbAuthModule.getAuthArgs();
+      authArgs = await getGcbAuthArgs();
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       showError(error?.message || "Authentication required.");
       return;
     }
@@ -891,6 +917,10 @@ const AppUtils = (() => {
 
   function setButtonLoading(btn, loadingText = "Loading", isSync = false) {
     const $button = $(btn);
+
+    if(!$button) {
+      return false;
+    }
 
     if (!$button.data("original-text")) {
       $button.data("original-text", $button.html());
@@ -1836,6 +1866,7 @@ const AppUtils = (() => {
     // drawer and modal helpers
     openDrawer,
     closeDrawer,
+    toggleDrawer,
     closeAllDrawers,
     openModal,
     closeModal,

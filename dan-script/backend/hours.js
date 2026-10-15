@@ -74,12 +74,58 @@ const ActivityValidation = (() => {
       );
     }
 
+    const snapshotFields = [
+      "originalType",
+      "originalTask",
+      "originalHours",
+      "originalDate",
+    ];
+
+    snapshotFields.forEach((field) => {
+      if (!Object.prototype.hasOwnProperty.call(record, field)) {
+        throw new Error(
+          `Record ${index + 1} is missing its original record snapshot.`,
+        );
+      }
+    });
+
+    const originalType = Validation.optionalString(
+      record.originalType,
+      `Record ${index + 1} original type`,
+      { maxLength: MAX_TYPE_LENGTH },
+    );
+
+    const originalTask = Validation.optionalString(
+      record.originalTask,
+      `Record ${index + 1} original task`,
+      { maxLength: MAX_TASK_LENGTH },
+    );
+
+    const originalHours = Validation.number(
+      record.originalHours,
+      `Record ${index + 1} original hours`,
+      {
+        min: MIN_HOURS,
+        max: MAX_HOURS,
+      },
+    );
+
+    const originalDate = Validation.requiredString(
+      record.originalDate,
+      `Record ${index + 1} original date`,
+      { maxLength: 20 },
+    );
+
     if (recordAction === "delete") {
       return {
         row,
         action: "delete",
         sourceSheet,
         sourceRow,
+        originalType,
+        originalTask,
+        originalHours,
+        originalDate,
       };
     }
 
@@ -116,6 +162,10 @@ const ActivityValidation = (() => {
       hours,
       sourceSheet,
       sourceRow,
+      originalType,
+      originalTask,
+      originalHours,
+      originalDate,
     };
   }
 
@@ -152,8 +202,288 @@ const ActivityValidation = (() => {
   };
 })();
 
+const GCB_HOURS_REQUEST_LEDGER_CONFIG = {
+  sheetName: "__GCB_HOURS_REQUEST_LEDGER",
+  headers: [
+    "Entry ID",
+    "Batch ID",
+    "Client",
+    "Task",
+    "Type",
+    "Date",
+    "Target Tab ID",
+    "Target Row",
+    "Applied At",
+  ],
+};
+
+function withHoursSaveLock_(callback) {
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(10000)) {
+    throw new Error(
+      "Another hours update is in progress. Please try again in a few seconds.",
+    );
+  }
+
+  try {
+    return callback();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function validateManualHoursFormData(formData) {
   return ActivityValidation.clientActivityForm(formData);
+}
+
+function getHoursIdempotencyLedger_(spreadsheet) {
+  if (!spreadsheet) {
+    throw new Error("Unable to access the hours ledger spreadsheet.");
+  }
+
+  let ledger = spreadsheet.getSheetByName(
+    GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName,
+  );
+
+  if (!ledger) {
+    ledger = spreadsheet.insertSheet(GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName);
+  }
+
+  if (ledger.getLastRow() === 0) {
+    ledger
+      .getRange(1, 1, 1, GCB_HOURS_REQUEST_LEDGER_CONFIG.headers.length)
+      .setValues([GCB_HOURS_REQUEST_LEDGER_CONFIG.headers]);
+
+    ledger.setFrozenRows(1);
+  }
+
+  // Hide the ledger if another visible sheet is available.
+  if (!ledger.isSheetHidden()) {
+    const hasOtherVisibleSheet = spreadsheet
+      .getSheets()
+      .some(
+        (sheet) =>
+          sheet.getSheetId() !== ledger.getSheetId() && !sheet.isSheetHidden(),
+      );
+
+    if (hasOtherVisibleSheet) {
+      ledger.hideSheet();
+    }
+  }
+
+  return ledger;
+}
+
+/**
+ * Gets the hours request ledger from the main GCB spreadsheet.
+ * Uses the project's customized getSpreadsheet() helper.
+ */
+function getGcbHoursRequestLedgerSheet_() {
+  const spreadsheet = getSpreadsheet();
+
+  if (!spreadsheet) {
+    throw new Error("Unable to access the main GCB spreadsheet.");
+  }
+
+  return getHoursIdempotencyLedger_(spreadsheet);
+}
+
+/**
+ * Selects the correct ledger for an hours destination.
+ *
+ * Internal client sheets use the main GCB ledger.
+ * External client sheets use a ledger in their own spreadsheet.
+ */
+function getHoursIdempotencyLedgerForSheet_(targetSheet) {
+  const targetSpreadsheet = targetSheet.getParent();
+  const mainSpreadsheet = getSpreadsheet();
+
+  if (!mainSpreadsheet) {
+    throw new Error("Unable to access the main GCB spreadsheet.");
+  }
+
+  if (targetSpreadsheet.getId() === mainSpreadsheet.getId()) {
+    return getGcbHoursRequestLedgerSheet_();
+  }
+
+  return getHoursIdempotencyLedger_(targetSpreadsheet);
+}
+
+function findAppliedHoursEntry_(ledger, entryId) {
+  const lastRow = ledger.getLastRow();
+
+  if (lastRow < 2) {
+    return null;
+  }
+
+  return ledger
+    .getRange(2, 1, lastRow - 1, 1)
+    .createTextFinder(String(entryId))
+    .matchCase(true)
+    .matchEntireCell(true)
+    .findNext();
+}
+
+function makeCellValue_(value) {
+  if (typeof value === "number") {
+    return { userEnteredValue: { numberValue: value } };
+  }
+
+  return {
+    userEnteredValue: {
+      stringValue: String(value ?? ""),
+    },
+  };
+}
+
+/**
+ * Applies one hours entry and its ledger record atomically.
+ *
+ * Must be called while holding withHoursSaveLock_().
+ * The entryId must remain the same across retries.
+ */
+function recordClientHoursToSheetIdempotent_(
+  sheet,
+  data,
+  entryId,
+  batchId,
+  clientName,
+) {
+  const spreadsheet = sheet.getParent();
+  const ledger = getHoursIdempotencyLedgerForSheet_(sheet);
+
+  // A previous attempt may have committed successfully even if the
+  // browser did not receive its response. Never add it a second time.
+  if (findAppliedHoursEntry_(ledger, entryId)) {
+    return {
+      success: true,
+      action: "already-applied",
+      duplicatePrevented: true,
+    };
+  }
+
+  const { type, task, hours } = data;
+  const startRow = 3;
+  const today = formatDateSafe(new Date(), "M/d/yyyy");
+  const lastRow = sheet.getLastRow();
+  const rowCount = Math.max(1, lastRow - startRow + 1);
+  const values = sheet.getRange(startRow, 5, rowCount, 4).getValues();
+
+  let targetRow = null;
+  let currentHours = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const [existingType, existingTask, existingHours, entryDate] = values[i];
+
+    const sameType = normalizeText(existingType) === normalizeText(type);
+    const sameTask = normalizeText(existingTask) === normalizeText(task);
+    const sameDate = formatDateSafe(entryDate, "M/d/yyyy") === today;
+
+    if (sameType && sameTask && sameDate) {
+      targetRow = startRow + i;
+      currentHours = Number(existingHours) || 0;
+      break;
+    }
+  }
+
+  let action;
+  let requests;
+
+  if (targetRow !== null) {
+    const newHours = currentHours + hours;
+    action = "updated";
+
+    requests = [
+      {
+        updateCells: {
+          range: {
+            sheetId: sheet.getSheetId(),
+            startRowIndex: targetRow - 1,
+            endRowIndex: targetRow,
+            startColumnIndex: 6,
+            endColumnIndex: 7,
+          },
+          rows: [
+            {
+              values: [makeCellValue_(newHours)],
+            },
+          ],
+          fields: "userEnteredValue",
+        },
+      },
+    ];
+  } else {
+    targetRow = getFirstEmptyRow(sheet, 5, startRow);
+    action = "created";
+
+    requests = [
+      {
+        updateCells: {
+          range: {
+            sheetId: sheet.getSheetId(),
+            startRowIndex: targetRow - 1,
+            endRowIndex: targetRow,
+            startColumnIndex: 4,
+            endColumnIndex: 8,
+          },
+          rows: [
+            {
+              values: [
+                makeCellValue_(type),
+                makeCellValue_(task),
+                makeCellValue_(hours),
+                makeCellValue_(today),
+              ],
+            },
+          ],
+          fields: "userEnteredValue",
+        },
+      },
+    ];
+  }
+
+  const ledgerRow = ledger.getLastRow() + 1;
+
+  const ledgerValues = [
+    entryId,
+    batchId,
+    clientName,
+    task,
+    type,
+    today,
+    sheet.getSheetId(),
+    targetRow,
+    new Date().toISOString(),
+  ];
+
+  requests.push({
+    updateCells: {
+      range: {
+        sheetId: ledger.getSheetId(),
+        startRowIndex: ledgerRow - 1,
+        endRowIndex: ledgerRow,
+        startColumnIndex: 0,
+        endColumnIndex: ledgerValues.length,
+      },
+      rows: [
+        {
+          values: ledgerValues.map(makeCellValue_),
+        },
+      ],
+      fields: "userEnteredValue",
+    },
+  });
+
+  // Both changes are committed together in the same spreadsheet.
+  Sheets.Spreadsheets.batchUpdate({ requests }, spreadsheet.getId());
+
+  return {
+    success: true,
+    action,
+    duplicatePrevented: false,
+    row: targetRow,
+  };
 }
 
 function recordClientHoursToSheet(sheet, data) {
@@ -208,6 +538,10 @@ function recordClientHoursToSheet(sheet, data) {
 function recordManualClientHoursFromForm(sessionId, signature, formData) {
   requireRole(sessionId, signature, "admin");
 
+  return withHoursSaveLock_(() => recordManualClientHoursFromForm_(formData));
+}
+
+function recordManualClientHoursFromForm_(formData) {
   try {
     const data = ActivityValidation.clientActivityForm(formData);
 
@@ -230,6 +564,10 @@ function recordManualClientHoursFromForm(sessionId, signature, formData) {
 function recordExternalClientHoursFromForm(sessionId, signature, formData) {
   requireRole(sessionId, signature, "admin");
 
+  return withHoursSaveLock_(() => recordExternalClientHoursFromForm_(formData));
+}
+
+function recordExternalClientHoursFromForm_(formData) {
   try {
     const data = ActivityValidation.clientActivityForm(formData);
 
@@ -275,13 +613,32 @@ function recordExternalClientHoursFromForm(sessionId, signature, formData) {
       );
     }
 
+    // const taskName = data.task;
+
+    // const projectSheet = externalSS.getSheetByName(taskName);
+
+    // if (!projectSheet) {
+    //   throw new Error(
+    //     `Project sheet "${taskName}" was not found in the external spreadsheet for "${data.client}".`,
+    //   );
+    // }
+
     const taskName = data.task;
+    const availableSheets = externalSS
+      .getSheets()
+      .map((sheet) => sheet.getName());
 
     const projectSheet = externalSS.getSheetByName(taskName);
 
     if (!projectSheet) {
       throw new Error(
-        `Project sheet "${taskName}" was not found in the external spreadsheet for "${data.client}".`,
+        [
+          `Project sheet "${taskName}" was not found.`,
+          `Client: ${data.client}`,
+          `Spreadsheet: ${externalSS.getName()}`,
+          `Spreadsheet ID: ${spreadsheetId}`,
+          `Available sheets: ${JSON.stringify(availableSheets)}`,
+        ].join("\n"),
       );
     }
 
@@ -303,6 +660,221 @@ function recordExternalClientHoursFromForm(sessionId, signature, formData) {
   } catch (err) {
     throw new Error(err?.message || String(err));
   }
+}
+
+function validateHoursBatchFormData_(formData) {
+  Validation.requireObject(formData, "Batch form data");
+
+  const client = Validation.requiredString(formData.client, "Client", {
+    maxLength: 100,
+  });
+
+  const requestId = Validation.requiredString(
+    formData.requestId,
+    "Request ID",
+    { maxLength: 200 },
+  );
+
+  if (!Array.isArray(formData.records) || formData.records.length === 0) {
+    throw new Error("At least one hours entry is required.");
+  }
+
+  const records = formData.records.map((record, index) => {
+    try {
+      const validated = ActivityValidation.clientActivityForm({
+        client,
+        type: record?.type,
+        task: record?.task,
+        hour: record?.hour,
+      });
+
+      return {
+        type: validated.type,
+        task: validated.task,
+        hour: validated.hour,
+      };
+    } catch (error) {
+      throw new Error(
+        `Invalid hours entry ${index + 1}: ${error.message || String(error)}`,
+      );
+    }
+  });
+
+  return { client, requestId, records };
+}
+
+/**
+ * Records a batch of hours for an internal GCB client.
+ *
+ * Each entry has a stable ID derived from the request ID and its
+ * position. A retry skips entries that were already committed.
+ */
+function recordManualClientHoursBatchFromForm(sessionId, signature, formData) {
+  requireRole(sessionId, signature, "admin");
+
+  return withHoursSaveLock_(() =>
+    recordManualClientHoursBatchFromForm_(formData),
+  );
+}
+
+function recordManualClientHoursBatchFromForm_(formData) {
+  const batch = validateHoursBatchFormData_(formData);
+  const clientSheet = getSheetSafe(batch.client);
+
+  if (!clientSheet) {
+    throw new Error(`Sheet "${batch.client}" not found.`);
+  }
+
+  const results = [];
+
+  batch.records.forEach((record, index) => {
+    const entryId = `${batch.requestId}:${index + 1}`;
+
+    results.push(
+      recordClientHoursToSheetIdempotent_(
+        clientSheet,
+        {
+          type: record.type,
+          task: record.task,
+          hours: record.hour,
+        },
+        entryId,
+        batch.requestId,
+        batch.client,
+      ),
+    );
+  });
+
+  return {
+    success: true,
+    client: batch.client,
+    requestId: batch.requestId,
+    entries: results.length,
+    duplicatePrevented: results.filter((result) => result.duplicatePrevented)
+      .length,
+    results,
+  };
+}
+
+/**
+ * Records a batch of hours for an external client.
+ *
+ * The hours and ledger entries are written to the external
+ * spreadsheet together. External summary data is synchronized
+ * after all entries have been applied.
+ */
+function recordExternalClientHoursBatchFromForm(
+  sessionId,
+  signature,
+  formData,
+) {
+  requireRole(sessionId, signature, "admin");
+
+  return withHoursSaveLock_(() =>
+    recordExternalClientHoursBatchFromForm_(formData),
+  );
+}
+
+function recordExternalClientHoursBatchFromForm_(formData) {
+  const batch = validateHoursBatchFormData_(formData);
+
+  const registrySheet = getSheetSafe("External Sheets");
+
+  if (!registrySheet || registrySheet.getLastRow() < 2) {
+    throw new Error("External Sheets registry not found.");
+  }
+
+  const registryValues = registrySheet
+    .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
+    .getValues();
+
+  const normalizedClient = normalizeText(batch.client);
+
+  const externalRow = registryValues.find(
+    (row) =>
+      normalizeText(String(row[1] || "")) === normalizedClient &&
+      String(row[0] || "").trim() !== "",
+  );
+
+  if (!externalRow) {
+    throw new Error(
+      `External client "${batch.client}" was not found in the External Sheets registry.`,
+    );
+  }
+
+  const spreadsheetId = String(externalRow[0] || "").trim();
+
+  let externalSS;
+
+  try {
+    externalSS = SpreadsheetApp.openById(spreadsheetId);
+  } catch (error) {
+    throw new Error(
+      `Unable to access the external spreadsheet for "${batch.client}".`,
+    );
+  }
+
+  // Resolve and validate all project sheets before writing any hours.
+  const resolvedRecords = batch.records.map((record, index) => {
+    const projectSheet = externalSS.getSheetByName(record.task);
+
+    if (!projectSheet) {
+      throw new Error(
+        [
+          `Project sheet "${record.task}" was not found.`,
+          `Client: ${batch.client}`,
+          `Spreadsheet: ${externalSS.getName()}`,
+          `Available sheets: ${JSON.stringify(
+            externalSS.getSheets().map((sheet) => sheet.getName()),
+          )}`,
+        ].join("\n"),
+      );
+    }
+
+    const sheetName = projectSheet.getName();
+
+    if (sheetName === "Projects" || sheetName === "BLANK") {
+      throw new Error(`Invalid project sheet "${sheetName}".`);
+    }
+
+    return {
+      ...record,
+      projectSheet,
+      entryId: `${batch.requestId}:${index + 1}`,
+    };
+  });
+
+  const results = [];
+
+  resolvedRecords.forEach((record) => {
+    results.push(
+      recordClientHoursToSheetIdempotent_(
+        record.projectSheet,
+        {
+          type: record.type,
+          task: record.task,
+          hours: record.hour,
+        },
+        record.entryId,
+        batch.requestId,
+        batch.client,
+      ),
+    );
+  });
+
+  // Run even on a retry where all entries were already applied:
+  // a previous attempt might have failed during this synchronization.
+  combineExternalSheetData(spreadsheetId);
+
+  return {
+    success: true,
+    client: batch.client,
+    requestId: batch.requestId,
+    entries: results.length,
+    duplicatePrevented: results.filter((result) => result.duplicatePrevented)
+      .length,
+    results,
+  };
 }
 
 function getTaskOptions(sessionId, signature, clientName) {
@@ -706,6 +1278,10 @@ function getTodayClientHours(sessionId, signature, clientName) {
 function saveEditedTodayClientHours(sessionId, signature, formData) {
   requireRole(sessionId, signature, "admin");
 
+  return withHoursSaveLock_(() => saveEditedTodayClientHours_(formData));
+}
+
+function saveEditedTodayClientHours_(formData) {
   try {
     Validation.requireObject(formData, "Form data");
 
@@ -842,6 +1418,8 @@ function saveEditedTodayClientHours(sessionId, signature, formData) {
         if (actual.dateFormatted !== today) {
           throw new Error(`Row ${rowNumber} is no longer a record from today.`);
         }
+
+        assertTodayHoursRecordUnchanged_(record, actual, `Row ${rowNumber}`);
       });
 
       /*
@@ -1074,6 +1652,17 @@ function saveEditedTodayClientHours(sessionId, signature, formData) {
         }
       }
 
+      assertTodayHoursRecordUnchanged_(
+        record,
+        {
+          type: actualType,
+          task: actualTask,
+          hours: actualHours,
+          dateFormatted: actualDateFormatted,
+        },
+        `External record "${sourceSheetName}" row ${sourceRow}`,
+      );
+
       resolvedRecords.push({
         record,
         sheet: projectSheet,
@@ -1169,6 +1758,35 @@ function saveEditedTodayClientHours(sessionId, signature, formData) {
     };
   } catch (err) {
     throw new Error(err.message || String(err));
+  }
+}
+
+function assertTodayHoursRecordUnchanged_(record, actual, label) {
+  const originalType = String(record.originalType ?? "");
+  const originalTask = String(record.originalTask ?? "");
+  const originalHours = Number(record.originalHours);
+  const originalDate = String(record.originalDate ?? "").trim();
+
+  if (!Number.isFinite(originalHours) || originalHours < 0 || !originalDate) {
+    throw new Error(`Original record snapshot is invalid for ${label}.`);
+  }
+
+  const actualType = String(actual.type ?? "");
+  const actualTask = String(actual.task ?? "");
+  const actualHours = Number(actual.hours);
+  const actualDate = String(actual.dateFormatted ?? "").trim();
+
+  const unchanged =
+    actualType === originalType &&
+    actualTask === originalTask &&
+    Number.isFinite(actualHours) &&
+    actualHours === originalHours &&
+    actualDate === originalDate;
+
+  if (!unchanged) {
+    throw new Error(
+      `${label} has changed since it was loaded. Reload today's hours and try again.`,
+    );
   }
 }
 
@@ -1612,7 +2230,12 @@ function getMonthlyHoursSummary(sessionId, signature) {
   };
 }
 
-function getGrowthComparisonSummary(sessionId, signature, currentYear, comparisonYear) {
+function getGrowthComparisonSummary(
+  sessionId,
+  signature,
+  currentYear,
+  comparisonYear,
+) {
   requireCapability(sessionId, signature, "hours.view");
 
   const sheet = getSheetSafe("Other Analytics");

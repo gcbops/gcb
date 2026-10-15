@@ -2,7 +2,10 @@ import { DataTableModule } from "./data-table.js";
 import { TableRenderer } from "./table-renderer.js";
 import { AppUtils } from "../utils.js";
 import { TodayHoursEditor } from "./today-hours-editor.js";
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const TableModule = (() => {
   /* ============================================================
@@ -81,12 +84,18 @@ const TableModule = (() => {
       return;
     }
 
-    if ($("#client").length && !manual) {
-      $("#client").val(clientName).trigger("change");
+    const $clientSelect = $("#client");
+    if ($clientSelect.length && !manual) {
+      $clientSelect.val(clientName).trigger("change");
+    }
+
+    const $submitBtn = $("#submit-new-hours");
+    if($submitBtn.length) {
+      $submitBtn.prop("disabled", true);
     }
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `sheetExists_${clientName}`,
@@ -101,14 +110,22 @@ const TableModule = (() => {
             return;
           }
 
-          AppUtils.openDrawer("#drawerManualAdd");
+          if (!$("#drawerManualAdd").hasClass("drawer-open")) {
+            AppUtils.openDrawer("#drawerManualAdd");
+          }
 
           if (!isForProject) {
-            loadClientTasks(clientName);
+            loadClientTasks(clientName, $submitBtn);
           }
         },
       );
     } catch (error) {
+      $submitBtn.prop("disabled", false);
+
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error("[TableModule] Failed to check client sheet:", error);
 
       AppUtils.showError(error?.message || "Unable to check client sheet.");
@@ -125,7 +142,7 @@ const TableModule = (() => {
     AppUtils.showDashboardToast("Loading records ...", "info");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `sheetExists_${clientName}`,
@@ -145,6 +162,10 @@ const TableModule = (() => {
         },
       );
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error("[TableModule] Failed to check client sheet:", error);
 
       AppUtils.showError(error?.message || "Unable to check client sheet.");
@@ -159,7 +180,7 @@ const TableModule = (() => {
     AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getClientSheetUrl",
@@ -178,7 +199,11 @@ const TableModule = (() => {
         },
       });
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to redirect to the sheet.");
     }
   }
 
@@ -186,14 +211,15 @@ const TableModule = (() => {
    * CLIENT TASKS
    * ========================================================== */
 
-  async function loadClientTasks(clientName) {
-    if (!clientName) {
+  async function loadClientTasks(
+    clientName,
+    $submitBtn = $("#submit-new-hours"),
+  ) {
+    if (!clientName && !$submitBtn) {
       return;
     }
 
     const $taskSelect = $("#task");
-
-    const $submitBtn = $("#submit-new-hours");
 
     if (!$taskSelect.length) {
       return;
@@ -207,10 +233,8 @@ const TableModule = (() => {
       .val("")
       .trigger("change");
 
-    $submitBtn.prop("disabled", true);
-
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getTaskOptions_${clientName}`,
@@ -259,15 +283,19 @@ const TableModule = (() => {
         },
       );
     } catch (error) {
-      console.error("[TableModule] Failed to load client tasks:", error);
-
       $taskSelect
-        .empty()
-        .append(new Option("Unable to load tasks", ""))
-        .val("")
-        .trigger("change");
-
+      .empty()
+      .append(new Option("Unable to load tasks", ""))
+      .val("")
+      .trigger("change");
+      
       $submitBtn.prop("disabled", true);
+
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      console.error("[TableModule] Failed to load client tasks:", error);
 
       AppUtils.showError(error?.message || "Unable to load client tasks.");
     }
@@ -316,7 +344,7 @@ const TableModule = (() => {
     `);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getClientHourLogData_${clientName}`,
@@ -353,8 +381,6 @@ const TableModule = (() => {
         },
       );
     } catch (error) {
-      console.error("[TableModule] Failed to load client hour history:", error);
-
       $tbody.html(`
       <tr>
         <td colspan="${colspan}" class="text-center">
@@ -362,12 +388,18 @@ const TableModule = (() => {
         </td>
       </tr>
     `);
+
+    if (handleInvalidSessionError(error)) {
+      return;
+    }
+
+      console.error("[TableModule] Failed to load client hour history:", error);
     }
   }
 
   async function loadClientHoursOverview(clientName) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         `getClientHours_${clientName}`,
@@ -379,7 +411,7 @@ const TableModule = (() => {
             return;
           }
 
-          AppUtils.openDrawer("#drawerManualInfo");
+          AppUtils.toggleDrawer("#drawerManualInfo");
 
           $("#total-hours").text(data.totalHrs || 0);
           $("#weekly-hours").text(data.weekHrs || 0);
@@ -388,6 +420,10 @@ const TableModule = (() => {
         },
       );
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error(
         "[TableModule] Failed to load client hours overview:",
         error,
@@ -442,7 +478,16 @@ const TableModule = (() => {
 
     bindTableActions($tbody, selector);
 
-    DataTableModule.init(title, selector);
+    DataTableModule.init(title, selector, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
   }
 
   /* ============================================================

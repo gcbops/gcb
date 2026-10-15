@@ -1,5 +1,9 @@
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { HourSummary } from "../hours/hour-summary.js";
+import { RequestManager } from "../requests/request-manager.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
 import { DataTableModule } from "./data-table.js";
@@ -310,16 +314,122 @@ const ActivityToday = (() => {
     AppUtils.openDrawer("#drawerManualAdd");
   }
 
+  // function handleTaskSubmit(event) {
+  //   event.preventDefault();
+
+  //   const $form = $(this);
+
+  //   let $submitBtn = $form.find('button[type="submit"]');
+
+  //   if (!$submitBtn.length) {
+  //     $submitBtn = $("#submit-new-hours");
+  //   }
+
+  //   const formData = {
+  //     client: String($("#client").val() || "").trim(),
+  //     hour: String($("#hour").val() || "").trim(),
+  //     type: String($("#type").val() || "").trim(),
+  //     task: String($("#task").val() || "").trim(),
+  //   };
+
+  //   const validation = clientActivityForm(formData);
+
+  //   if (!validation.valid) {
+  //     AppUtils.showDashboardToast(validation.message, "error");
+  //     return;
+  //   }
+
+  //   const validatedData = validation.value;
+
+  //   const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
+
+  //   $("#taskForm").find("select, input.form-control").prop("disabled", true);
+
+  //   (async () => {
+  //     try {
+  //       const [sessionId, signature] = await getAuthArgs();
+
+  //       AppUtils.gScriptRun({
+  //         gscriptFunc: "isExternalClient",
+  //         args: [sessionId, signature, validatedData.client],
+
+  //         onSuccess: (isExternal) => {
+  //           submitHours(isExternal === true);
+  //         },
+
+  //         onError: (err) => {
+  //           console.error("isExternalClient failed:", err);
+
+  //           $("#taskForm")
+  //             .find("select, input.form-control")
+  //             .prop("disabled", false);
+
+  //           loading.restore();
+
+  //           AppUtils.showDashboardToast(
+  //             "Unable to determine client type.",
+  //             "error",
+  //           );
+  //         },
+  //       });
+  //     } catch (error) {
+  //       $("#taskForm")
+  //       .find("select, input.form-control")
+  //       .prop("disabled", false);
+        
+  //       loading.restore();
+
+  //       if (handleInvalidSessionError(error)) {
+  //         return;
+  //       }
+
+  //       console.error("[ActivityToday] Authentication failed:", error);
+
+  //       AppUtils.showDashboardToast(
+  //         error?.message || "Unable to determine client type.",
+  //         "error",
+  //       );
+  //     }
+  //   })();
+
+  //   function submitHours(isExternal) {
+  //     const gscriptFunc = isExternal
+  //       ? "recordExternalClientHoursFromForm"
+  //       : "recordManualClientHoursFromForm";
+
+  //     AppUtils.submitForm({
+  //       gscriptFunc,
+  //       data: validatedData,
+  //       $btn: null,
+  //       loadingText: "Saving",
+
+  //       onSuccess: () => {
+  //         $("#taskForm")
+  //           .find("select, input.form-control")
+  //           .prop("disabled", false);
+
+  //         loading.restore();
+
+  //         handleTaskSaveSuccess(formData);
+  //       },
+
+  //       onError: (error) => {
+  //         $("#taskForm")
+  //           .find("select, input.form-control")
+  //           .prop("disabled", false);
+
+  //         loading.restore();
+
+  //         console.error("[ActivityToday] Failed to record hours:", error);
+
+  //         AppUtils.showDashboardToast("Something went wrong!", "error");
+  //       },
+  //     });
+  //   }
+  // }
+
   function handleTaskSubmit(event) {
     event.preventDefault();
-
-    const $form = $(this);
-
-    let $submitBtn = $form.find('button[type="submit"]');
-
-    if (!$submitBtn.length) {
-      $submitBtn = $("#submit-new-hours");
-    }
 
     const formData = {
       client: String($("#client").val() || "").trim(),
@@ -337,85 +447,87 @@ const ActivityToday = (() => {
 
     const validatedData = validation.value;
 
-    const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
+    try {
+      RequestManager.enqueue(
+        "record-hours",
+        validatedData,
+        `Add ${validatedData.hour} hours — ${validatedData.client}`,
+      );
 
-    $("#taskForm").find("select, input.form-control").prop("disabled", true);
+      $("#hour").val("");
 
-    (async () => {
-      try {
-        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      AppUtils.showDashboardToast(
+        "Hours request added to the queue.",
+        "success",
+      );
+    } catch (error) {
+      console.error("[ActivityToday] Unable to queue hours:", error);
 
-        AppUtils.gScriptRun({
-          gscriptFunc: "isExternalClient",
-          args: [sessionId, signature, validatedData.client],
-
-          onSuccess: (isExternal) => {
-            submitHours(isExternal === true);
-          },
-
-          onError: (err) => {
-            console.error("isExternalClient failed:", err);
-
-            $("#taskForm")
-              .find("select, input.form-control")
-              .prop("disabled", false);
-
-            loading.restore();
-
-            AppUtils.showDashboardToast(
-              "Unable to determine client type.",
-              "error",
-            );
-          },
-        });
-      } catch (error) {
-        console.error("[ActivityToday] Authentication failed:", error);
-
-        $("#taskForm")
-          .find("select, input.form-control")
-          .prop("disabled", false);
-
-        loading.restore();
-
-        AppUtils.showDashboardToast(
-          error?.message || "Authentication required.",
-          "error",
-        );
-      }
-    })();
-
-    function submitHours(isExternal) {
-      const gscriptFunc = isExternal
-        ? "recordExternalClientHoursFromForm"
-        : "recordManualClientHoursFromForm";
-
-      AppUtils.submitForm({
-        gscriptFunc,
-        data: validatedData,
-        $btn: null,
-        loadingText: "Saving",
-
-        onSuccess: () => {
-          $("#taskForm")
-            .find("select, input.form-control")
-            .prop("disabled", false);
-
-          loading.restore();
-
-          handleTaskSaveSuccess(formData);
-        },
-
-        onError: (error) => {
-          $("#taskForm")
-            .find("select, input.form-control")
-            .prop("disabled", false);
-
-          loading.restore();
-
-          console.error("[ActivityToday] Failed to record hours:", error);
-        },
-      });
+      AppUtils.showDashboardToast(
+        error?.message || "Unable to queue this hours request.",
+        "error",
+      );
     }
+  }
+
+  function handleTaskSaveSuccess(formData) {
+
+    AppUtils.showDashboardToast(
+      "Hours have been successfully recorded!",
+      "success",
+    );
+
+    HourSummary.loadTodayChargedHours();
+
+    const activityTable = DataTableModule.getInstance("#table");
+
+    if (activityTable) {
+      refreshActivityTable(activityTable);
+    }
+
+    // const task = $("#task").val();
+    const task = formData.task;
+    const client = formData.client;
+
+    const cacheKey = `gcb_getTaskOptions_${client}`;
+    const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
+
+    if (!cachedTasks.includes(task)) {
+      (async () => {
+        try {
+          const [sessionId, signature] = await getAuthArgs();
+
+          AppUtils.gScriptRun({
+            gscriptFunc: "syncClientProjects",
+            args: [sessionId, signature],
+
+            onError: (error) => {
+              console.warn(
+                "[TaskSubmit] Failed to sync client projects:",
+                error,
+              );
+            },
+          });
+        } catch (error) {
+          if (handleInvalidSessionError(error)) {
+            return;
+          }
+
+          console.warn(
+            "[TaskSubmit] Unable to authenticate project sync:",
+            error,
+          );
+        }
+      })();
+    }
+
+    clearClientCaches(client);
+
+    AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
+
+    resetYearlyChartCaches();
+
+    // $("#hour").val("");
   }
 
   function clientActivityForm(data) {
@@ -468,61 +580,6 @@ const ActivityToday = (() => {
         task: task.value,
       },
     };
-  }
-
-  function handleTaskSaveSuccess(formData) {
-    AppUtils.showDashboardToast(
-      "Hours have been successfully recorded!",
-      "success",
-    );
-
-    HourSummary.loadTodayChargedHours();
-
-    const activityTable = DataTableModule.getInstance("#table");
-
-    if (activityTable) {
-      refreshActivityTable(activityTable);
-    }
-
-    const task = $("#task").val();
-    const client = formData.client;
-
-    const cacheKey = `gcb_getTaskOptions_${client}`;
-    const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
-
-    if (!cachedTasks.includes(task)) {
-      (async () => {
-        try {
-          const [sessionId, signature] =
-            await GcbAuthModule.getAuthArgs();
-
-          AppUtils.gScriptRun({
-            gscriptFunc: "syncClientProjects",
-            args: [sessionId, signature],
-
-            onError: (error) => {
-              console.warn(
-                "[TaskSubmit] Failed to sync client projects:",
-                error,
-              );
-            },
-          });
-        } catch (error) {
-          console.warn(
-            "[TaskSubmit] Unable to authenticate project sync:",
-            error,
-          );
-        }
-      })();
-    }
-
-    clearClientCaches(client);
-
-    AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
-
-    resetYearlyChartCaches();
-
-    $("#hour").val("");
   }
 
   function refreshActivityTable(dataTable) {
@@ -580,7 +637,7 @@ const ActivityToday = (() => {
     const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getClientSheetUrl",
@@ -603,7 +660,11 @@ const ActivityToday = (() => {
     } catch (error) {
       loading.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Sheet doesn't exist.");
     }
   }
 
@@ -616,71 +677,71 @@ const ActivityToday = (() => {
     const canEdit = hours > 0;
 
     return $(`
-    <div class="dropleft btn-group">
-      <button
-        type="button"
-        class="p-0 btn border-0"
-        data-bs-toggle="dropdown"
-        aria-haspopup="true"
-        aria-expanded="false"
-        title="Activity actions"
-      >
-        <i class="pe-7s-more"></i>
-      </button>
-
-      <div
-        tabindex="-1"
-        role="menu"
-        aria-hidden="true"
-        class="dropdown-menu"
-      >
+      <div class="dropleft btn-group">
         <button
           type="button"
-          id="add-hours"
-          data-required-role="admin"
-          class="dropdown-item add-hours"
+          class="p-0 btn border-0"
+          data-bs-toggle="dropdown"
+          aria-haspopup="true"
+          aria-expanded="false"
+          title="Activity actions"
         >
-          <i class="pe-7s-plus me-2 text-primary"></i>
-          Add Hours
+          <i class="pe-7s-more"></i>
         </button>
 
-        ${
-          canEdit
-            ? `
-              <button
-                type="button"
-                data-required-role="admin"
-                id="edit-today-hours"
-                class="dropdown-item edit-today-hours"
-              >
-                <i class="pe-7s-note me-2 text-primary"></i>
-                Edit Today's Hours
-              </button>
-            `
-            : ""
-        }
-
-        <button
-          type="button"
-          id="view-hour-history"
-          class="dropdown-item view-hour-history"
+        <div
+          tabindex="-1"
+          role="menu"
+          aria-hidden="true"
+          class="dropdown-menu"
         >
-          <i class="pe-7s-look me-2 text-success"></i>
-          View Recent
-        </button>
+          <button
+            type="button"
+            id="add-hours"
+            data-required-role="admin"
+            class="dropdown-item add-hours"
+          >
+            <i class="pe-7s-plus me-2 text-primary"></i>
+            Add Hours
+          </button>
 
-        <button
-          type="button"
-          id="edit-client-sheet"
-          data-required-capability="clients.edit" 
-          class="dropdown-item edit-client-sheet"
-        >
-          <i class="pe-7s-note2 me-2 text-info"></i>
-          View Sheet
-        </button>
+          ${
+            canEdit
+              ? `
+                <button
+                  type="button"
+                  data-required-role="admin"
+                  id="edit-today-hours"
+                  class="dropdown-item edit-today-hours"
+                >
+                  <i class="pe-7s-note me-2 text-primary"></i>
+                  Edit Today's Hours
+                </button>
+              `
+              : ""
+          }
+
+          <button
+            type="button"
+            id="view-hour-history"
+            class="dropdown-item view-hour-history"
+          >
+            <i class="pe-7s-look me-2 text-success"></i>
+            View Recent
+          </button>
+
+          <button
+            type="button"
+            id="edit-client-sheet"
+            data-required-capability="clients.edit" 
+            class="dropdown-item edit-client-sheet"
+          >
+            <i class="pe-7s-note2 me-2 text-info"></i>
+            View Sheet
+          </button>
+        </div>
       </div>
-    </div>
-  `);
+    `);
   }
 
   /* ---------------------------------------------------------
@@ -721,7 +782,7 @@ const ActivityToday = (() => {
     isRefreshing = true;
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getDailyActivityData",
@@ -751,9 +812,13 @@ const ActivityToday = (() => {
     } catch (error) {
       isRefreshing = false;
 
-      console.error("Activity Today authentication failed:", error);
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
 
-      AppUtils.showError(error);
+      AppUtils.showError(
+        error?.message || "Unable to refresh activities today.",
+      );
 
       callback?.();
     }
@@ -844,6 +909,8 @@ const ActivityToday = (() => {
   }
 
   return {
+    resetableCacheKeyForUpdatingHours,
+
     setupFilters,
     setupTaskForm,
     setupSheetViewButton,
@@ -851,6 +918,10 @@ const ActivityToday = (() => {
     startRefresh,
     stopRefresh,
     updateActivityTable,
+    handleTaskSaveSuccess,
+    clearClientCaches,
+    resetYearlyChartCaches,
+    refreshActivityTable,
   };
 })();
 

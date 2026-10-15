@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -84,7 +87,7 @@ const billingPaidHoursPage = (() => {
     DataTableModule.showLoader(TABLE_ID);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
@@ -111,10 +114,11 @@ const billingPaidHoursPage = (() => {
         forceRefresh,
       );
     } catch (error) {
-      DataTableModule.showError(
-        TABLE_ID,
-        error?.message || "Authentication required.",
-      );
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      DataTableModule.showError(TABLE_ID, "Unable to load paid hours.");
     }
   }
 
@@ -393,7 +397,7 @@ const billingPaidHoursPage = (() => {
     const loading = AppUtils.setButtonLoading($button, false, true);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "syncBillingRecords",
@@ -429,7 +433,11 @@ const billingPaidHoursPage = (() => {
     } catch (error) {
       loading.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to sync Billing Records.");
     }
   }
 

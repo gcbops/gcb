@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { DataTableModule } from "../tables/data-table";
 import { AppUtils } from "../utils";
 
@@ -89,53 +92,68 @@ const billingInvoiceStatusPage = (() => {
 
   async function loadInvoiceStatus(forceRefresh = false) {
     DataTableModule.showLoader(INVOICED_TABLE_ID);
-
     DataTableModule.showLoader(UNTRACKED_TABLE_ID);
 
-    const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+    try {
+      const [sessionId, signature] = await getAuthArgs();
 
-    AppUtils.cachedGScriptCall(
-      CACHE_KEY,
-      "getInvoiceStatus",
-      [sessionId, signature],
-      (data) => {
-        if (!data || typeof data !== "object") {
-          renderInvoiceSummary({});
+      AppUtils.cachedGScriptCall(
+        CACHE_KEY,
+        "getInvoiceStatus",
+        [sessionId, signature],
+        (data) => {
+          if (!data || typeof data !== "object") {
+            renderInvoiceSummary({});
 
-          DataTableModule.showError(
-            INVOICED_TABLE_ID,
-            "Unable to load invoice status.",
-          );
+            DataTableModule.showError(
+              INVOICED_TABLE_ID,
+              "Unable to load invoice status.",
+            );
 
-          DataTableModule.showError(
-            UNTRACKED_TABLE_ID,
-            "Unable to load hours without status.",
-          );
+            DataTableModule.showError(
+              UNTRACKED_TABLE_ID,
+              "Unable to load hours without status.",
+            );
 
-          return;
-        }
+            return;
+          }
 
-        invoiceData = {
-          invoicedRecords: Array.isArray(data.invoicedRecords)
-            ? data.invoicedRecords
-            : [],
+          invoiceData = {
+            invoicedRecords: Array.isArray(data.invoicedRecords)
+              ? data.invoicedRecords
+              : [],
+            untrackedRecords: Array.isArray(data.untrackedRecords)
+              ? data.untrackedRecords
+              : [],
+            summary: data.summary || {},
+          };
 
-          untrackedRecords: Array.isArray(data.untrackedRecords)
-            ? data.untrackedRecords
-            : [],
+          renderInvoiceSummary(invoiceData.summary);
+          populateYearFilter();
+          applyFilters();
+        },
+        false,
+        forceRefresh,
+      );
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
 
-          summary: data.summary || {},
-        };
+      console.error("[BillingInvoiceStatus] Failed to load:", error);
 
-        renderInvoiceSummary(invoiceData.summary);
+      renderInvoiceSummary({});
 
-        populateYearFilter();
+      DataTableModule.showError(
+        INVOICED_TABLE_ID,
+        "Unable to load invoice status.",
+      );
 
-        applyFilters();
-      },
-      false,
-      forceRefresh,
-    );
+      DataTableModule.showError(
+        UNTRACKED_TABLE_ID,
+        "Unable to load hours without status.",
+      );
+    }
   }
 
   function renderInvoiceSummary(summary) {
@@ -383,7 +401,16 @@ const billingInvoiceStatusPage = (() => {
 
     DataTableModule.renderRows(UNTRACKED_TABLE_ID, data, createUntrackedRow);
 
-    DataTableModule.init(UNTRACKED_TABLE_TITLE, UNTRACKED_TABLE_ID, false);
+    DataTableModule.init(UNTRACKED_TABLE_TITLE, UNTRACKED_TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
   }
 
   function createInvoiceRow(row) {
@@ -458,7 +485,7 @@ const billingInvoiceStatusPage = (() => {
     DataTableModule.showLoader(UNTRACKED_TABLE_ID);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "syncBillingRecords",
@@ -495,7 +522,11 @@ const billingInvoiceStatusPage = (() => {
     } catch (error) {
       loading.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to sync Billing Records.");
     }
   }
 

@@ -122,7 +122,16 @@ const billingOverviewPage = (() => {
 
     DataTableModule.renderRows(TABLE_ID, data, createBillingAnalyticsRow);
 
-    DataTableModule.init(TABLE_TITLE, TABLE_ID, false);
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
 
     if (typeof log === "function") {
       log("[BillingOverview] Rendered", data.length, "monthly records");

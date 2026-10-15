@@ -81,7 +81,7 @@ const LoaderModule = (() => {
 
   function createPhraseSvg(phrase, yOffset) {
     const text = createSVG("text", {
-      fill: "#008B8B",  /* for theme */
+      fill: "#343a40" /* for theme */,
       x: 50,
       y: yOffset,
       "font-size": 18,
@@ -98,20 +98,20 @@ const LoaderModule = (() => {
       points:
         "21.661,7.643 13.396,19.328 9.429,15.361 7.075,17.714 13.745,24.384 24.345,9.708",
       // fill: "rgba(255,255,255,1)",
-      fill: "#fff" /* for theme */,
+      fill: "#343a40" /* for theme */,
       id: checkmarkIdPrefix + index,
     });
 
     const circleOutline = createSVG("path", {
       d: "M16,0C7.163,0,0,7.163,0,16s7.163,16,16,16s16-7.163,16-16S24.837,0,16,0z M16,30C8.28,30,2,23.72,2,16C2,8.28,8.28,2,16,2 c7.72,0,14,6.28,14,14C30,23.72,23.72,30,16,30z",
-      fill: "#008B8B" /* for theme */,
+      fill: "#343a40" /* for theme */,
       // fill: "white",
     });
 
     const circle = createSVG("circle", {
       id: checkmarkCircleIdPrefix + index,
       // fill: "rgba(255,255,255,0)", /* for theme */,
-      fill: "#008B8B",
+      fill: "#008B8B", /* for theme */
       cx: 16,
       cy: 16,
       r: 15,

@@ -73,6 +73,11 @@ const AuthorizationUIModule = (() => {
       capability: "settings.manage",
       role: "admin",
     },
+
+    // Manage Users — admin only
+    manageUsers: {
+      role: "admin",
+    },
   };
 
   function canAccessRoute(pageName) {

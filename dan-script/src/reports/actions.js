@@ -2,7 +2,10 @@ import { ReportService } from "./service";
 import { AppUtils } from "../utils";
 import { ReportGenerator } from "./generator";
 import { ValidationModule } from "../validations";
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const ReportActions = (() => {
   function downloadLatestPDF(btn, loading, reportType) {
@@ -59,7 +62,7 @@ const ReportActions = (() => {
     }
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: config.reportMethod,
@@ -83,6 +86,10 @@ const ReportActions = (() => {
         },
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       handleReportFailure(
         config.btn,
         error,
@@ -127,7 +134,7 @@ const ReportActions = (() => {
         : "sendRequestedEmailReport";
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: serverFunction,
@@ -138,7 +145,11 @@ const ReportActions = (() => {
         onError: (err) => AppUtils.showError(err),
       });
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to send report on email.");
     }
   };
 
@@ -157,7 +168,7 @@ const ReportActions = (() => {
         : "sendRequestedDiscordReport";
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: serverFunction,
@@ -168,7 +179,11 @@ const ReportActions = (() => {
         onError: (err) => AppUtils.showError(err),
       });
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to send report on discord.");
     }
   };
 
@@ -200,7 +215,7 @@ const ReportActions = (() => {
     );
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "validateCustomYearlyReport",
@@ -232,10 +247,14 @@ const ReportActions = (() => {
     } catch (error) {
       ReportGenerator.setGenerateState(type, false, loading);
 
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error(error);
 
       AppUtils.showDashboardToast(
-        error?.message || "Authentication required.",
+        error?.message || "Unable to validate custom yearly report.",
         "error",
       );
     }
@@ -283,7 +302,7 @@ const ReportActions = (() => {
     );
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "validateCustomMonthlyReport",
@@ -317,8 +336,12 @@ const ReportActions = (() => {
 
       console.error(error);
 
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       AppUtils.showDashboardToast(
-        error?.message || "Authentication required.",
+        error?.message || "Unable to validate custom monthly report.",
         "error",
       );
     }

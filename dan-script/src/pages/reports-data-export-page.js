@@ -3,7 +3,10 @@ import { DataTableModule } from "../tables/data-table.js";
 import { ReportsOverview } from "../reports/overview.js";
 import { ReportActions } from "../reports/actions.js";
 import { TableFilterService } from "../tables/table-filter-service.js";
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const reportsDataExportPage = (() => {
   let bound = false;
@@ -186,7 +189,7 @@ const reportsDataExportPage = (() => {
     DataTableModule.showLoader(BILLING_TABLE_ID);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getBillingRecordsForExport",
@@ -205,9 +208,13 @@ const reportsDataExportPage = (() => {
         },
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       DataTableModule.showError(
         BILLING_TABLE_ID,
-        error?.message || "Authentication required.",
+        error?.message || "Failed to load Billing Records.",
       );
     }
   };
@@ -244,6 +251,8 @@ const reportsDataExportPage = (() => {
     if (!tbody) {
       return;
     }
+
+    DataTableModule.hideTableOverlay(BILLING_TABLE_ID);
 
     DataTableModule.destroy(BILLING_TABLE_ID);
 
@@ -306,7 +315,16 @@ const reportsDataExportPage = (() => {
       tbody.appendChild(tr);
     });
 
-    DataTableModule.init(BILLING_TABLE_TITLE, BILLING_TABLE_ID, false);
+    DataTableModule.init(BILLING_TABLE_TITLE, BILLING_TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
   };
 
   const handleGenerateBillingRecordsCSV = async () => {
@@ -333,7 +351,7 @@ const reportsDataExportPage = (() => {
     const loading = AppUtils.setButtonLoading(button, "Generating");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "saveBillingRecordsCSV",
@@ -383,13 +401,17 @@ const reportsDataExportPage = (() => {
     } catch (error) {
       loading?.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to generated billing records.");
     }
   };
 
   const loadBillingCSVExportCount = async () => {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getBillingRecordsCSVExportCount",
@@ -407,7 +429,13 @@ const reportsDataExportPage = (() => {
         },
       });
     } catch (error) {
-      console.warn("[ReportsDataExport] Authentication required:", error);
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(
+        error?.message || "Failed to load CSV export count.",
+      );
     }
   };
 

@@ -52,6 +52,8 @@ const ReportsOverview = (() => {
       return;
     }
 
+    DataTableModule.hideTableOverlay(TABLE_ID);
+
     if (!Array.isArray(logs) || !logs.length) {
       DataTableModule.showEmpty(TABLE_ID, "No reports generated yet.");
 
@@ -66,7 +68,16 @@ const ReportsOverview = (() => {
       $tbody.append(createReportLogRow(log, index));
     });
 
-    DataTableModule.init(TABLE_TITLE, TABLE_ID);
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
 
     if (document.getElementById("reportHistoryTypeFilter")) {
       TableFilterService.init(

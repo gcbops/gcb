@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { AuthorizationUIModule } from "../auth/authorization-ui";
 import { RouterModule } from "../routers";
 import { TableModule } from "../tables/tables";
@@ -94,8 +97,8 @@ const ProfilePopoverModule = (() => {
     const $drawer = $taskForm.parents(".drawer-content");
     const $firstGroup = $taskForm.find(".form-group").first();
     if (!$drawer.hasClass("drawer-grid-5")) {
-        $drawer.addClass("drawer-grid-5").removeClass("drawer-grid-4");
-        $firstGroup.removeClass("element-hidden");
+      $drawer.addClass("drawer-grid-5").removeClass("drawer-grid-4");
+      $firstGroup.removeClass("element-hidden");
     }
 
     TableModule.addClientHours(clientName);
@@ -120,7 +123,7 @@ const ProfilePopoverModule = (() => {
     AppUtils.showDashboardToast("Redirecting to sheet!", "info");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "goToPresentClient",
@@ -144,9 +147,11 @@ const ProfilePopoverModule = (() => {
         },
       });
     } catch (error) {
-      console.error("[ProfilePopover] Authentication required:", error);
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      AppUtils.showError(error?.message || "Unable to redirect to sheet.");
     }
   }
 

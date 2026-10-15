@@ -322,7 +322,7 @@ function normalizeProjectNames(projects) {
  * in the main spreadsheet.
  */
 function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
-  const ss = getSpreadsheet();
+  const ss = SpreadsheetApp.openById();
 
   let sheet = getSheetSafe("External Sheets");
 
@@ -352,7 +352,7 @@ function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
 }
 
 function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
-  const ss = getSpreadsheet();
+  const ss = SpreadsheetApp.openById();
   const clientNamesSheet = getSheetSafe("Client Names");
 
   if (!clientNamesSheet) {
@@ -639,7 +639,7 @@ function createExternalClientSheet(clientName, externalSpreadsheetId) {
     throw new Error("Client name and external spreadsheet ID are required.");
   }
 
-  const ss = getSpreadsheet();
+  const ss = SpreadsheetApp.openById();
 
   const blankSheet = getSheetSafe("BLANK");
 

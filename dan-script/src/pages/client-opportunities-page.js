@@ -2,7 +2,10 @@ import { AppUtils } from "../utils.js";
 import { DataTableModule } from "../tables/data-table.js";
 import { ChartModule } from "../charts.js";
 import { ValidationModule } from "../validations.js";
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const clientOpportunitiesPage = (() => {
   let bound = false;
@@ -22,6 +25,7 @@ const clientOpportunitiesPage = (() => {
   const HOURLY_MODAL_NS = ".clientOpportunitiesHourly";
 
   const LEGACY_CLIENTS_CACHE_KEY = "legacyClients";
+  const LEGACY_TABLE_ID = "#opportunitiesLegacyTable";
 
   function init() {
     if (bound) {
@@ -126,7 +130,7 @@ const clientOpportunitiesPage = (() => {
     const loading = AppUtils.setButtonLoading(btn, "Redirecting");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getClientSheetUrl",
@@ -153,7 +157,11 @@ const clientOpportunitiesPage = (() => {
     } catch (error) {
       loading.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to open the sheet.");
     }
   }
 
@@ -171,7 +179,7 @@ const clientOpportunitiesPage = (() => {
 
   async function loadUpsellSummary(forceRefresh = false) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         UPSELL_SUMMARY_CACHE_KEY,
@@ -184,7 +192,11 @@ const clientOpportunitiesPage = (() => {
         forceRefresh,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to load upsell summary.");
     }
   }
 
@@ -224,7 +236,7 @@ const clientOpportunitiesPage = (() => {
     }
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         UPSELL_RECORDS_CACHE_KEY,
@@ -237,9 +249,13 @@ const clientOpportunitiesPage = (() => {
         forceRefresh,
       );
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       DataTableModule.showError(
         UPSELL_TABLE_ID,
-        error?.message || "Authentication required.",
+        "Unable to load upsell records.",
       );
     }
   }
@@ -250,6 +266,8 @@ const clientOpportunitiesPage = (() => {
     if (!tbody) {
       return;
     }
+
+    DataTableModule.hideTableOverlay(UPSELL_TABLE_ID);
 
     if (!Array.isArray(tableData) || tableData.length === 0) {
       DataTableModule.destroy(UPSELL_TABLE_ID);
@@ -267,7 +285,10 @@ const clientOpportunitiesPage = (() => {
       tbody.appendChild(createUpsellRow(row));
     });
 
-    DataTableModule.init("Upsell Opportunities", UPSELL_TABLE_ID);
+    DataTableModule.init("Upsell Opportunities", UPSELL_TABLE_ID, false, {
+      hideAllControls: true,
+      scrollY: "450px",
+    });
   }
 
   function createUpsellRow(row) {
@@ -616,8 +637,12 @@ const clientOpportunitiesPage = (() => {
   // ----------------------------------------------------------
 
   async function loadLegacyClients(forceRefresh = false) {
+    if (forceRefresh || !AppUtils.cacheGet(LEGACY_CLIENTS_CACHE_KEY)) {
+      DataTableModule.showLoader("#opportunitiesLegacyTable");
+    }
+    
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         LEGACY_CLIENTS_CACHE_KEY,
@@ -638,7 +663,11 @@ const clientOpportunitiesPage = (() => {
         forceRefresh,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to load legacy clients.");
     }
   }
 
@@ -659,6 +688,8 @@ const clientOpportunitiesPage = (() => {
       return;
     }
 
+    DataTableModule.hideTableOverlay(LEGACY_TABLE_ID);
+
     if (!Array.isArray(clients) || clients.length === 0) {
       DataTableModule.showEmpty(
         "#opportunitiesLegacyTable",
@@ -666,6 +697,8 @@ const clientOpportunitiesPage = (() => {
       );
       return;
     }
+
+    DataTableModule.destroy(LEGACY_TABLE_ID);
 
     tbody.innerHTML = "";
 
@@ -685,7 +718,16 @@ const clientOpportunitiesPage = (() => {
       tbody.appendChild(tr);
     });
 
-    DataTableModule.init("Legacy Clients", "#opportunitiesLegacyTable");
+    DataTableModule.init("Legacy Clients", LEGACY_TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
   }
 
   // ----------------------------------------------------------

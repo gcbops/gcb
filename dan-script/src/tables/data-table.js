@@ -1,4 +1,5 @@
 import { AuthorizationUIModule } from "../auth/authorization-ui.js";
+import { manageUsersPage } from "../manage-users.js";
 import { AppUtils } from "../utils.js";
 import { ActivityToday } from "./activity-today.js";
 
@@ -14,8 +15,8 @@ const DataTableModule = (() => {
     title,
     tableId,
     debug = false,
+    options = {},
     callback = null,
-    simple = false,
   ) {
     const log = (...args) => debug && console.log(...args);
     const error = (...args) => debug && console.error(...args);
@@ -28,7 +29,6 @@ const DataTableModule = (() => {
       title,
       tableId,
       cleanTitle,
-      simple,
     });
 
     const $table = $(tableId);
@@ -72,18 +72,12 @@ const DataTableModule = (() => {
         bottomEnd: ["paging"],
       },
 
-      // paging: true,
-      paging: false,
-
-      scrollCollapse: true,
-
-      scrollY: "400px",
-
-      pageLength: 5,
+      paging: true,
+      pageLength: 10,
 
       lengthMenu: [
-        [5, 10, 25],
-        [5, 10, 25],
+        [10, 25, 50, 100],
+        [10, 25, 50, 100],
       ],
 
       // Add data-row (optional) and data-col to cells
@@ -122,29 +116,15 @@ const DataTableModule = (() => {
           }
         }
 
+        applyColumnHeaderAlignments($table, options.columnAlignments);
+
         if (typeof callback === "function") {
           callback(this.api());
         }
       },
     };
 
-    if (simple) {
-      Object.assign(tableOptions, {
-        responsive: false,
-        lengthChange: false,
-        info: false,
-        paging: false,
-        scrollY: "400px",
-        scrollCollapse: true,
-
-        layout: {
-          topStart: null,
-          topEnd: null,
-          bottomStart: null,
-          bottomEnd: null,
-        },
-      });
-    }
+    applyDataTableOptions(tableOptions, options);
 
     /*
      * Priority columns for responsive behavior.
@@ -161,7 +141,8 @@ const DataTableModule = (() => {
       "invoiced hours": [0, 3],
       "hours without status": [0, 3],
       "yearly performance": [0, 1, 5],
-      "billing records export": [4, 5, -1]
+      "billing records export": [4, 5, -1],
+      "backup history": [0, -1],
     };
 
     const priorityColumns = priorityMap[cleanTitle] || [];
@@ -176,25 +157,7 @@ const DataTableModule = (() => {
       );
     }
 
-    // 2) Numeric sorting
-    // if (NUMERIC_SORT_TABLES.has(cleanTitle)) {
-    //   tableOptions.columnDefs.push({
-    //     targets: [1, 2],
-    //     type: "num-fmt",
-    //   });
-    // }
-
-    // if (
-    //   cleanTitle === "yearly performance" ||
-    //   cleanTitle === "billing records export" ||
-    //   cleanTitle === "reports overview"
-    // ) {
-    //   log("Initializing Client Directory");
-
-    //   tableOptions.paging = false;
-    //   tableOptions.scrollCollapse = true;
-    //   tableOptions.scrollY = "400px";
-    // }
+    applyColumnAlignments(tableOptions, options.columnAlignments);
 
     if (cleanTitle === "activity today") {
       log("Initializing Activity Today");
@@ -233,11 +196,6 @@ const DataTableModule = (() => {
       ActivityToday.startRefresh(instance);
     }
 
-    /*
-     * Apply optional table-specific behavior.
-     */
-    // applyTableSpecificLogic(title, instance, tableId, debug);
-
     log("DataTable initialized:", tableId);
 
     return instance;
@@ -252,14 +210,22 @@ const DataTableModule = (() => {
       return;
     }
 
-    const instance = instances[tableId];
-    const $table = $(tableId);
+    const normalizedId = normalizeTableId(tableId);
+
+    hideTableOverlay(normalizedId);
+
+    const instance = instances[normalizedId];
+    const $table = $(normalizedId);
 
     /*
      * Stop page-specific refresh logic.
      */
-    if (tableId === "#activity-today") {
+    if (normalizedId === "#activity-today") {
       ActivityToday.stopRefresh();
+    }
+
+    if (normalizedId === "#manage-users-table") {
+      manageUsersPage.stopRefresh();
     }
 
     /*
@@ -269,7 +235,7 @@ const DataTableModule = (() => {
      * call from attempting to destroy the same instance
      * again.
      */
-    delete instances[tableId];
+    delete instances[normalizedId];
 
     /*
      * Table no longer exists in the current DOM.
@@ -316,7 +282,7 @@ const DataTableModule = (() => {
        * navigation, so there is nothing useful left
        * for us to restore.
        */
-      console.warn("DataTable cleanup skipped:", tableId, err);
+      console.warn("DataTable cleanup skipped:", normalizedId, err);
     }
   }
 
@@ -326,6 +292,7 @@ const DataTableModule = (() => {
     });
 
     ActivityToday.stopRefresh();
+    manageUsersPage.stopRefresh();
   }
 
   function withResponsivePriorities(
@@ -353,6 +320,245 @@ const DataTableModule = (() => {
     return columnDefs;
   }
 
+  function applyDataTableOptions(tableOptions, options = {}) {
+    /*
+     * Layout customization
+     */
+    if (options.layout) {
+      tableOptions.layout = {
+        ...tableOptions.layout,
+        ...options.layout,
+      };
+    }
+
+    /*
+     * Feature visibility
+     */
+    if (options.hideSearch) {
+      tableOptions.layout.topEnd = null;
+    }
+
+    if (options.hideLengthMenu) {
+      tableOptions.layout.topStart = null;
+      tableOptions.lengthChange = false;
+    }
+
+    if (options.hideInfo) {
+      tableOptions.layout.bottomStart = null;
+    }
+
+    if (options.hidePagination) {
+      tableOptions.layout.bottomEnd = null;
+      tableOptions.paging = false;
+    }
+
+    if (options.hideAllControls) {
+      tableOptions.layout = {
+        topStart: null,
+        topEnd: null,
+        bottomStart: null,
+        bottomEnd: null,
+      };
+
+      tableOptions.paging = false;
+      tableOptions.lengthChange = false;
+      tableOptions.info = false;
+    }
+
+    /*
+     * Behavior overrides
+     */
+    if (typeof options.responsive === "boolean") {
+      tableOptions.responsive = options.responsive;
+    }
+
+    if (typeof options.paging === "boolean") {
+      tableOptions.paging = options.paging;
+
+      if (!options.paging) {
+        tableOptions.layout.bottomEnd = removeLayoutFeature(
+          tableOptions.layout.bottomEnd,
+          "paging",
+        );
+      }
+    }
+
+    if (typeof options.info === "boolean") {
+      tableOptions.info = options.info;
+
+      if (!options.info) {
+        tableOptions.layout.bottomStart = null;
+      }
+    }
+
+    if (typeof options.lengthChange === "boolean") {
+      tableOptions.lengthChange = options.lengthChange;
+
+      if (!options.lengthChange) {
+        tableOptions.layout.topStart = null;
+      }
+    }
+
+    if (options.pageLength) {
+      tableOptions.pageLength = options.pageLength;
+    }
+
+    if (options.lengthMenu) {
+      tableOptions.lengthMenu = options.lengthMenu;
+    }
+
+    if (options.scrollY) {
+      tableOptions.scrollY = options.scrollY;
+
+      tableOptions.scrollCollapse = options.scrollCollapse !== false;
+    }
+
+    if (typeof options.scrollCollapse === "boolean") {
+      tableOptions.scrollCollapse = options.scrollCollapse;
+    }
+
+    if (options.order) {
+      tableOptions.order = options.order;
+    }
+  }
+
+  function applyColumnAlignments(tableOptions, alignments = {}) {
+    const mergedAlignments = {
+      first: "left",
+      ...alignments,
+    };
+
+    const alignmentClasses = {
+      left: "dt-align-left",
+      center: "dt-align-center",
+      right: "dt-align-right",
+    };
+
+    Object.entries(mergedAlignments).forEach(([target, alignment]) => {
+      const className = alignmentClasses[alignment];
+
+      if (!className) {
+        return;
+      }
+
+      tableOptions.columnDefs.push({
+        targets: normalizeColumnTarget(target),
+        className,
+      });
+    });
+  }
+
+  function normalizeColumnTarget(target) {
+    if (target === "first") {
+      return 0;
+    }
+
+    if (target === "last") {
+      return -1;
+    }
+
+    if (target === "_all") {
+      return "_all";
+    }
+
+    if (Array.isArray(target)) {
+      return target.map((item) => normalizeColumnTarget(item));
+    }
+
+    const numeric = Number(target);
+
+    return Number.isNaN(numeric) ? target : numeric;
+  }
+
+  function applyColumnHeaderAlignments($table, alignments = {}) {
+    const mergedAlignments = {
+      first: "left",
+      ...alignments,
+    };
+
+    const $headers = $table.find("thead th");
+
+    Object.entries(mergedAlignments).forEach(([target, alignment]) => {
+      const normalizedTarget = normalizeColumnTarget(target);
+
+      const $header = resolveColumnTargets($headers, normalizedTarget);
+
+      if (!$header.length) {
+        return;
+      }
+
+      $header.removeClass("text-start text-center text-end");
+
+      if (alignment === "left") {
+        $header.addClass("text-start");
+      }
+
+      if (alignment === "center") {
+        $header.addClass("text-center");
+      }
+
+      if (alignment === "right") {
+        $header.addClass("text-end");
+      }
+    });
+  }
+
+  function removeLayoutFeature(layoutValue, featureName) {
+    if (!layoutValue) {
+      return null;
+    }
+
+    if (Array.isArray(layoutValue)) {
+      const filtered = layoutValue.filter((feature) => {
+        const name =
+          typeof feature === "string" ? feature : Object.keys(feature)[0];
+
+        return name !== featureName;
+      });
+
+      return filtered.length ? filtered : null;
+    }
+
+    if (
+      typeof layoutValue === "object" &&
+      Object.keys(layoutValue)[0] === featureName
+    ) {
+      return null;
+    }
+
+    return layoutValue;
+  }
+
+  function resolveColumnTargets($headers, target) {
+    if (target === "_all") {
+      return $headers;
+    }
+
+    if (target === -1) {
+      return $headers.last();
+    }
+
+    if (typeof target === "number") {
+      return $headers.eq(target);
+    }
+
+    if (Array.isArray(target)) {
+      const $matched = $();
+
+      target.forEach((item) => {
+        const $item = resolveColumnTargets($headers, item);
+
+        if ($item.length) {
+          $matched.push($item[0]);
+        }
+      });
+
+      return $matched;
+    }
+
+    return $();
+  }
+
   function getColumnCount(tableId) {
     const $table = $(tableId);
 
@@ -363,20 +569,56 @@ const DataTableModule = (() => {
     return $table.find("thead th").length || 1;
   }
 
+  function normalizeTableId(tableId) {
+    if (!tableId) {
+      return tableId;
+    }
+
+    const value = String(tableId).trim();
+
+    return value.startsWith("#") ? value : `#${value}`;
+  }
+
+  function hasTableRows(tableId) {
+    const $table = $(normalizeTableId(tableId));
+
+    if (!$table.length) {
+      return false;
+    }
+
+    return $table.find("tbody tr:not(.dt-loader-row)").length > 0;
+  }
+
   function showLoader(tableId) {
-    const $table = $(tableId);
+    const normalizedId = normalizeTableId(tableId);
+
+    const $table = $(normalizedId);
 
     if (!$table.length) {
       return;
     }
-
-    const colCount = getColumnCount(tableId);
 
     const $tbody = $table.find("tbody");
 
     if (!$tbody.length) {
       return;
     }
+
+    /*
+     * Table already has records:
+     * show a centered overlay instead of
+     * replacing the existing rows.
+     */
+    if (hasTableRows(normalizedId)) {
+      showTableOverlay(normalizedId);
+      return;
+    }
+
+    /*
+     * No rows yet:
+     * use the existing bar-loader row.
+     */
+    const colCount = getColumnCount(normalizedId);
 
     $tbody.html(`
     <tr class="dt-loader-row">
@@ -393,6 +635,61 @@ const DataTableModule = (() => {
       </td>
     </tr>
   `);
+  }
+
+  function showTableOverlay(tableId) {
+    const normalizedId = normalizeTableId(tableId);
+
+    const $table = $(normalizedId);
+
+    if (!$table.length) {
+      return;
+    }
+
+    hideTableOverlay(normalizedId);
+
+    const $wrapper = $table.closest(
+      ".dataTables_wrapper, .dataTable-wrapper, div",
+    );
+
+    const $overlay = $(`
+    <div class="dt-table-overlay">
+      <div class="dt-table-overlay-content">
+        <div class="bar-loader">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <div class="dt-table-overlay-text">
+          Syncing...
+        </div>
+      </div>
+    </div>
+  `);
+
+    if ($wrapper.length) {
+      $wrapper.addClass("position-relative");
+      $wrapper.append($overlay);
+    } else {
+      $table.addClass("position-relative");
+      $table.after($overlay);
+    }
+  }
+
+  function hideTableOverlay(tableId) {
+    const normalizedId = normalizeTableId(tableId);
+
+    const $table = $(normalizedId);
+
+    if (!$table.length) {
+      return;
+    }
+
+    $table
+      .closest(".dataTables_wrapper, .dataTable-wrapper, div")
+      .find(".dt-table-overlay")
+      .remove();
   }
 
   function showError(tableId, message = "Unable to load data.") {
@@ -448,6 +745,8 @@ const DataTableModule = (() => {
       return;
     }
 
+    hideTableOverlay(tableId);
+
     if (!Array.isArray(data)) {
       showError(tableId, "Invalid table data.");
 
@@ -483,6 +782,7 @@ const DataTableModule = (() => {
     getInstance,
     destroy,
     destroyAll,
+    hideTableOverlay,
 
     showLoader,
     getColumnCount,

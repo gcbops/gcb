@@ -146,6 +146,27 @@ const GcbLoginModule = (() => {
     button.addEventListener("click", login);
   }
 
+  function bindHelpEvents() {
+    const toggle = document.getElementById("gcb-login-help-toggle");
+    const content = document.getElementById("gcb-login-help-content");
+
+    if (!toggle || !content) {
+      return;
+    }
+
+    toggle.addEventListener("click", () => {
+      const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+
+      toggle.setAttribute("aria-expanded", String(!isExpanded));
+      content.classList.toggle("d-none", isExpanded);
+
+      const icon = toggle.querySelector("i");
+
+      icon?.classList.toggle("fa-chevron-down", isExpanded);
+      icon?.classList.toggle("fa-chevron-up", !isExpanded);
+    });
+  }
+
   function init() {
     if (initialized) {
       return;
@@ -154,6 +175,7 @@ const GcbLoginModule = (() => {
     initialized = true;
 
     bindEvents();
+    bindHelpEvents();
   }
 
   return {

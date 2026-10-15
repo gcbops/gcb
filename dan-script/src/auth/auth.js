@@ -1,10 +1,14 @@
 import { AppUtils } from "../utils";
+import {
+  setInvalidSessionHandler,
+  setGetAuthArgsHandler,
+  showInvalidSessionUI,
+} from "./auth-error-handler.js";
 
 const GcbAuthModule = (() => {
   const SESSION_ID_KEY = "gcb_session_id";
   const SESSION_SIGNATURE_KEY = "gcb_session_signature";
   const SESSION_TIME_KEY = "gcb_session_time";
-  const SESSION_EXPIRY = 24 * 60 * 60 * 1000;
 
   let initialized = false;
   let initializing = null;
@@ -20,38 +24,24 @@ const GcbAuthModule = (() => {
   }
 
   function hasSession() {
-    if (!getSessionId() || !getSessionSignature()) {
-      return false;
-    }
-
-    if (sessionExpired()) {
-      clearSession();
-      return false;
-    }
-
-    return true;
+    // Presence is only a local hint.
+    // The backend determines whether the session is valid.
+    return Boolean(getSessionId() && getSessionSignature());
   }
 
   function saveSession(result) {
-    if (!result?.sessionId || !result?.signature) {
+    if (
+      !result?.sessionId ||
+      !result?.signature ||
+      !Number.isFinite(result.createdAt) ||
+      !Number.isFinite(result.expiresAt)
+    ) {
       throw new Error("Invalid GCB session response.");
     }
 
     localStorage.setItem(SESSION_ID_KEY, result.sessionId);
-
     localStorage.setItem(SESSION_SIGNATURE_KEY, result.signature);
-
-    localStorage.setItem(SESSION_TIME_KEY, String(Date.now()));
-  }
-
-  function sessionExpired() {
-    const sessionTime = Number(localStorage.getItem(SESSION_TIME_KEY) || 0);
-
-    if (!sessionTime) {
-      return true;
-    }
-
-    return Date.now() - sessionTime > SESSION_EXPIRY;
+    localStorage.setItem(SESSION_TIME_KEY, String(result.createdAt));
   }
 
   function clearSession() {
@@ -190,10 +180,13 @@ const GcbAuthModule = (() => {
         }
 
         if (!window.GCB_AUTH_TICKET) {
-          console.error(
-            "[GCB Auth] Authentication ticket not detected"
-          );
-          return;
+          // console.error(
+          //   "[GCB Auth] Authentication ticket not detected"
+          // );
+          clearSession();
+          initialized = false;
+
+          return false;
         }
 
         // console.log(
@@ -227,7 +220,10 @@ const GcbAuthModule = (() => {
 
         return true;
       } catch (error) {
-        console.error("[GCB Auth] Initialization failed:", error);
+        console.warn(
+          "[GCB Auth] Session validation or initialization failed.",
+          error?.message || error,
+        );
 
         clearSession();
 
@@ -264,22 +260,25 @@ const GcbAuthModule = (() => {
       google.script.run
         .withSuccessHandler((user) => {
           try {
-            if (!user) {
-              throw new Error(
-                "Authenticated user information was not returned.",
-              );
+            if (
+              !user ||
+              !Number.isFinite(user.createdAt) ||
+              !Number.isFinite(user.expiresAt) ||
+              Date.now() >= user.expiresAt
+            ) {
+              throw new Error("The backend session is invalid or expired.");
             }
 
-            setAuthorizationState(user);
+            // Synchronize frontend metadata with backend-issued timestamps.
+            localStorage.setItem(SESSION_TIME_KEY, String(user.createdAt));
 
+            setAuthorizationState(user);
             resolve(user);
           } catch (error) {
             reject(error);
           }
         })
-        .withFailureHandler((error) => {
-          reject(error);
-        })
+        .withFailureHandler(reject)
         .getCurrentGcbUser(sessionId, signature);
     });
   }
@@ -314,6 +313,16 @@ const GcbAuthModule = (() => {
     return true;
   }
 
+  function handleInvalidSession() {
+    clearSession();
+    window.GCB_AUTH_TICKET = "";
+    initialized = false;
+
+    AppUtils.clearAppCache();
+
+    showInvalidSessionUI();
+  }
+
   return {
     init,
     getSessionId,
@@ -322,6 +331,7 @@ const GcbAuthModule = (() => {
     clearSession,
     getAuthArgs,
     logout,
+    handleInvalidSession,
 
     getRole,
     getCapabilities,
@@ -330,5 +340,11 @@ const GcbAuthModule = (() => {
     hasAllCapabilities,
   };
 })();
+
+setInvalidSessionHandler(() => {
+  GcbAuthModule.handleInvalidSession();
+});
+
+setGetAuthArgsHandler(() => GcbAuthModule.getAuthArgs());
 
 export { GcbAuthModule };

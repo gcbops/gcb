@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { AppUtils } from "../utils";
 
 const clientRankings = (() => {
@@ -22,7 +25,7 @@ const clientRankings = (() => {
 
   async function load(reset = false) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
@@ -41,7 +44,11 @@ const clientRankings = (() => {
         reset,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load client rankings.");
     }
   }
 
@@ -153,7 +160,7 @@ const clientRankings = (() => {
 
   async function renderLegacyRanking(listSelector, rankingKey, config) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
@@ -185,7 +192,11 @@ const clientRankings = (() => {
         },
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load client ranking.");
     }
   }
 
@@ -332,7 +343,7 @@ const clientRankings = (() => {
     refresh,
 
     // Legacy widgets still used by existing pages
-    renderTopPaidClients
+    renderTopPaidClients,
   };
 })();
 

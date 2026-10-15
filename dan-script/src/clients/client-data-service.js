@@ -3,7 +3,10 @@ import { TableModule } from "../tables/tables";
 import { DataTableModule } from "../tables/data-table";
 import { ChartModule } from "../charts";
 import { TableFilterService } from "../tables/table-filter-service";
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const ClientDataService = (() => {
   const ACTIVE_CLIENTS_TABLE_ID = "#active-clients";
@@ -30,7 +33,7 @@ const ClientDataService = (() => {
     DataTableModule.showLoader(CLIENT_DATA_TABLE_ID);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -42,7 +45,11 @@ const ClientDataService = (() => {
         debug,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load client data.");
     }
   }
 
@@ -85,7 +92,7 @@ const ClientDataService = (() => {
     DataTableModule.showLoader(tableId);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -105,7 +112,11 @@ const ClientDataService = (() => {
         reset,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load paid and owed active clients data.");
     }
   }
 
@@ -115,6 +126,8 @@ const ClientDataService = (() => {
     if (!tbody) {
       return;
     }
+
+    DataTableModule.hideTableOverlay(ACTIVE_CLIENTS_TABLE_ID);
 
     tbody.classList.add("simple");
 
@@ -136,16 +149,10 @@ const ClientDataService = (() => {
       tbody.appendChild(createPaidOwedRow(row, index));
     });
 
-    /*
-     * Initialize DataTable after rows have been rendered.
-     */
-    DataTableModule.init(
-      ACTIVE_CLIENTS_TITLE,
-      ACTIVE_CLIENTS_TABLE_ID,
-      false,
-      null,
-      isSimple,
-    );
+    DataTableModule.init(ACTIVE_CLIENTS_TITLE, ACTIVE_CLIENTS_TABLE_ID, false, {
+      hideAllControls: true,
+      scrollY: "450px",
+    });
 
     /*
      * Initialize category filter only when the filter exists.
@@ -167,7 +174,7 @@ const ClientDataService = (() => {
     const cacheKey = "paidOwedClients";
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -187,7 +194,11 @@ const ClientDataService = (() => {
         reset,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load active clients data.");
     }
   }
 

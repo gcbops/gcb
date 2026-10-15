@@ -91,7 +91,16 @@ const ProjectDirectory = (() => {
 
     DataTableModule.renderRows(TABLE_ID, data, createProjectDirectoryRow);
 
-    DataTableModule.init(TABLE_TITLE, TABLE_ID, false);
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
 
     if (typeof log === "function") {
       log("[ProjectDirectory] Rendered", data.length, "projects");
@@ -224,7 +233,7 @@ const ProjectDirectory = (() => {
   }
 
   function handleAddProjectClick() {
-    AppUtils.openDrawer("#drawerManualAdd", {
+    AppUtils.toggleDrawer("#drawerManualAdd", {
       contentClass: "drawer-grid-5",
     });
 

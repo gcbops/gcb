@@ -3,6 +3,13 @@ import { ActionRouterModule } from "./action-router.js";
 import { GcbAuthModule } from "./auth/auth.js";
 import { GcbLoginModule } from "./auth/login.js";
 import { AuthorizationUIModule } from "./auth/authorization-ui.js";
+import { setInvalidSessionUIHandler } from "./auth/auth-error-handler.js";
+import { RequestWidget } from "./requests/request-widget.js";
+import "./requests/request-handlers.js";
+
+setInvalidSessionUIHandler(() => {
+  GcbLoginModule.show();
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
   GcbLoginModule.init();
@@ -18,6 +25,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   GcbLoginModule.hide();
   AuthorizationUIModule.applyNavigationPermissions();
+
+  RequestWidget.init();
 
   RouterModule.init();
 

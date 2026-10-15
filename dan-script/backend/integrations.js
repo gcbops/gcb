@@ -1,3 +1,37 @@
+const STATUS_PROPERTY_IDS = [
+  "NOTIFICATION_EMAIL",
+  "DISCORD_WEBHOOK_URL",
+  "SPREADSHEET_ID",
+  "EXTERNAL_SHEET_TEMPLATE_ID",
+  "REPORT_FOLDER_ID",
+  "BACKUP_FOLDER_ID",
+  "MAIN_SHEETS_FOLDER_ID",
+];
+
+function getPropertyStatus(sessionId, signature, propertyId) {
+  requireRole(sessionId, signature, "admin");
+
+  const allowedPropertyId = Validation.enumValue(
+    propertyId,
+    "propertyId",
+    STATUS_PROPERTY_IDS,
+  );
+
+  const value =
+    PropertiesService.getScriptProperties().getProperty(allowedPropertyId);
+
+  return {
+    success: true,
+    propertyId: allowedPropertyId,
+    configured: Boolean(value),
+    masked: value ? maskSecret(value) : null,
+  };
+}
+
+// function getBackupDestinationStatus(sessionId, signature) {
+//   return getPropertyStatus(sessionId, signature, "BACKUP_FOLDER_ID");
+// }
+
 function getIntegrationStatus(sessionId, signature) {
   requireRole(sessionId, signature, "admin");
 
@@ -253,7 +287,7 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
       }
 
       try {
-        const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+        const spreadsheet = getSpreadsheet(spreadsheetId);
 
         return {
           authorized: true,
@@ -300,10 +334,7 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
   }
 }
 
-function getIntegrationAuthorizationMessage(
-  integration,
-  authorized,
-) {
+function getIntegrationAuthorizationMessage(integration, authorized) {
   if (authorized) {
     switch (integration) {
       case "gmail":
@@ -403,7 +434,7 @@ function verifySpreadsheetAccess(spreadsheetId, label) {
   Validation.spreadsheetId(spreadsheetId, label);
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const spreadsheet = getSpreadsheet(spreadsheetId);
 
     return {
       id: spreadsheetId,

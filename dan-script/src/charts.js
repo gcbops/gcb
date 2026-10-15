@@ -1,9 +1,12 @@
-import { GcbAuthModule } from "./auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "./auth/auth-error-handler.js";
 import { AppUtils } from "./utils.js";
 
 const ChartModule = (() => {
   Chart.defaults.font.family = "Inter";
-  
+
   const CHART_CONFIG = {
     daily: {
       serverFunction: "getDailyChartData",
@@ -165,7 +168,7 @@ const ChartModule = (() => {
     });
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -211,9 +214,13 @@ const ChartModule = (() => {
         refresh,
       );
     } catch (error) {
-      logMessage("Chart authentication failed:", error);
+      logMessage("Chart loading failed:", error);
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load chart data.");
     }
   }
 
@@ -242,7 +249,7 @@ const ChartModule = (() => {
     const args = chartType === "yearly" ? ["all"] : [];
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -251,7 +258,11 @@ const ChartModule = (() => {
         callback,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load chart data.");
     }
   }
 
@@ -1997,7 +2008,7 @@ const ChartModule = (() => {
       0,
     );
   }
-  
+
   function createGradient(ctx, startColor, endColor) {
     if (!startColor || !endColor) {
       console.warn("Invalid gradient colors:", {

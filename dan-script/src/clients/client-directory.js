@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { ProfilePopoverModule } from "../profile/profile-popover";
 import { TableClientSelector } from "../tables/client-selector";
 import { DataTableModule } from "../tables/data-table";
@@ -21,9 +24,7 @@ const ClientDirectory = (() => {
     initialized = true;
 
     ProfilePopoverModule.init();
-    ProfilePopoverModule.setProfileBuilder(
-      getClientProfilePopoverOptions,
-    );
+    ProfilePopoverModule.setProfileBuilder(getClientProfilePopoverOptions);
 
     loadClientDirectory(source);
     TableClientSelector.init();
@@ -63,7 +64,7 @@ const ClientDirectory = (() => {
 
   async function fetchClientDirectory(source, callback = null) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         source,
@@ -83,7 +84,11 @@ const ClientDirectory = (() => {
         },
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load client directory.");
     }
   }
 
@@ -92,10 +97,14 @@ const ClientDirectory = (() => {
    *
    * This is used by the manual Sync/Refresh action.
    */
-  async function refreshClientDirectory(source = CACHE_KEY, callback = null) {
+  async function refreshClientDirectory(
+    button = false, 
+    source = CACHE_KEY,
+    callback = null,
+  ) {
     DataTableModule.showLoader(TABLE_ID);
 
-    $("#sync-clients-list i").addClass("fa-spin");
+    const loading = AppUtils.setButtonLoading(button, false, true);
 
     /*
      * Clear the client cache so the next request
@@ -104,14 +113,14 @@ const ClientDirectory = (() => {
     AppUtils.cacheClear(source);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         source,
         SERVER_FUNCTION,
         [sessionId, signature],
         (data) => {
-          $("#sync-clients-list i").removeClass("fa-spin");
+          loading.restore();
 
           if (!Array.isArray(data)) {
             AppUtils.showDashboardToast(
@@ -126,15 +135,21 @@ const ClientDirectory = (() => {
             if (typeof callback === "function") {
               callback();
             }
-          });
+          }, loading);
         },
         false,
         true,
       );
     } catch (error) {
-      $("#sync-clients-list i").removeClass("fa-spin");
+      loading.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(
+        error?.message || "Failed to refresh client directory.",
+      );
     }
   }
 
@@ -146,7 +161,7 @@ const ClientDirectory = (() => {
    */
   async function refreshClientDirectoryInBackground(source, cached) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         source,
@@ -171,14 +186,15 @@ const ClientDirectory = (() => {
         true,
       );
     } catch (error) {
-      console.error(
-        "[ClientDirectory] Background refresh authentication failed:",
-        error,
-      );
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      console.error("[ClientDirectory] Background refresh failed:", error);
     }
   }
 
-  function renderClientDirectory(data, callback = null) {
+  function renderClientDirectory(data, callback = null, loading = false) {
     ProfilePopoverModule.setClientData(data);
 
     const tbody = document.getElementById(TABLE_BODY_ID);
@@ -186,6 +202,8 @@ const ClientDirectory = (() => {
     if (!tbody) {
       return;
     }
+
+    DataTableModule.hideTableOverlay(TABLE_ID);
 
     renderSummary(data);
 
@@ -207,7 +225,20 @@ const ClientDirectory = (() => {
       tbody.appendChild(createClientDirectoryRow(client));
     });
 
-    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, callback);
+    DataTableModule.init(TABLE_TITLE, TABLE_ID, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
+    
+    if(loading) {
+      loading.restore();
+    }
   }
 
   function renderSummary(data) {

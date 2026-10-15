@@ -1,4 +1,40 @@
 function cleanupOldReports() {
+  const startedAt = Date.now();
+
+  try {
+    const result = cleanupOldReportsInternal();
+
+    recordGcbOperationLog_({
+      category: "REPORT",
+      operation: "CLEANUP_OLD_REPORTS",
+      status: result.missing > 0 ? "PARTIAL" : "SUCCESS",
+      trigger: "SCHEDULED_OR_MANUAL",
+      durationMs: Date.now() - startedAt,
+      processed: result.processed,
+      succeeded: result.deleted + result.kept,
+      failed: result.missing,
+      message:
+        `Deleted ${result.deleted}; kept ${result.kept}; ` +
+        `missing or inaccessible ${result.missing}.`,
+    });
+
+    return result;
+  } catch (error) {
+    recordGcbOperationLog_({
+      category: "REPORT",
+      operation: "CLEANUP_OLD_REPORTS",
+      status: "FAILED",
+      trigger: "SCHEDULED_OR_MANUAL",
+      durationMs: Date.now() - startedAt,
+      message: "Old report cleanup failed.",
+      error: String(error?.message || error),
+    });
+
+    throw error;
+  }
+}
+
+function cleanupOldReportsInternal() {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - 3);
 
@@ -59,6 +95,46 @@ function getReportFolder() {
 }
 
 function saveReportPDF(config) {
+  const startedAt = Date.now();
+  const reportType = String(config?.reportType || "UNKNOWN")
+    .trim()
+    .toUpperCase();
+
+  try {
+    const fileUrl = saveReportPDFInternal(config);
+
+    recordGcbOperationLog_({
+      category: "REPORT",
+      operation: "GENERATE_PDF",
+      status: "SUCCESS",
+      trigger: "MANUAL_OR_SCHEDULED",
+      durationMs: Date.now() - startedAt,
+      processed: 1,
+      succeeded: 1,
+      target: reportType,
+      message: "Report PDF generated successfully.",
+    });
+
+    return fileUrl;
+  } catch (error) {
+    recordGcbOperationLog_({
+      category: "REPORT",
+      operation: "GENERATE_PDF",
+      status: "FAILED",
+      trigger: "MANUAL_OR_SCHEDULED",
+      durationMs: Date.now() - startedAt,
+      processed: 1,
+      failed: 1,
+      target: reportType,
+      message: "Report PDF generation failed.",
+      error: String(error?.message || error),
+    });
+
+    throw error;
+  }
+}
+
+function saveReportPDFInternal(config) {
   Validation.requireObject(config, "Report configuration");
 
   const reportType = String(config.reportType || "")
@@ -538,36 +614,79 @@ function sendReport(config) {
 
   // Discord
   if (webhookUrl) {
-    sendDiscordMessage(webhookUrl, embed);
+    try {
+      sendDiscordMessage(webhookUrl, embed);
+
+      recordGcbOperationLog_({
+        category: "DISCORD",
+        operation: "SEND_REPORT_NOTIFICATION",
+        status: "SUCCESS",
+        trigger: "REPORT_WORKFLOW",
+        processed: 1,
+        succeeded: 1,
+        target: config.reportType,
+        message: "Report notification sent to Discord.",
+      });
+    } catch (error) {
+      recordGcbOperationLog_({
+        category: "DISCORD",
+        operation: "SEND_REPORT_NOTIFICATION",
+        status: "FAILED",
+        trigger: "REPORT_WORKFLOW",
+        processed: 1,
+        failed: 1,
+        target: config.reportType,
+        message: "Discord report notification failed.",
+        error: String(error?.message || error),
+      });
+
+      logResponse("Discord report notification failed.");
+    }
   } else {
-    logResponse("⚠️ No Discord webhook configured.");
+    logResponse("No Discord webhook configured.");
   }
 
   // Email
   if (emailTo) {
-    MailApp.sendEmail({
-      to: emailTo,
-      subject: `${config.reportType} Report - ${formatted}`,
-      htmlBody: `
+    try {
+      MailApp.sendEmail({
+        to: emailTo,
+        subject: `${config.reportType} Report - ${formatted}`,
+        htmlBody: `
         <p>Hey 👋,</p>
-
         <p>Your latest <b>${config.reportType}</b> report is ready.</p>
-
-        <p>
-          <a href="${reportLink}">
-            📄 View ${config.reportType} Report
-          </a>
-        </p>
-
+        <p><a href="${reportLink}">View ${config.reportType} Report</a></p>
         <p>Generated on ${formatted}</p>
-
-        <br>
       `,
-    });
+      });
 
-    logResponse(`✅ ${config.reportType} report emailed.`);
+      recordGcbOperationLog_({
+        category: "EMAIL",
+        operation: "SEND_REPORT_NOTIFICATION",
+        status: "SUCCESS",
+        trigger: "REPORT_WORKFLOW",
+        processed: 1,
+        succeeded: 1,
+        target: config.reportType,
+        message: "Report email accepted by MailApp.",
+      });
+    } catch (error) {
+      recordGcbOperationLog_({
+        category: "EMAIL",
+        operation: "SEND_REPORT_NOTIFICATION",
+        status: "FAILED",
+        trigger: "REPORT_WORKFLOW",
+        processed: 1,
+        failed: 1,
+        target: config.reportType,
+        message: "Report email sending failed.",
+        error: String(error?.message || error),
+      });
+
+      logResponse("Report email sending failed.");
+    }
   } else {
-    logResponse("⚠️ No notification email configured.");
+    logResponse("No notification email configured.");
   }
 }
 
@@ -897,4 +1016,3 @@ function getReportsOverview(sessionId, signature) {
     ),
   };
 }
-

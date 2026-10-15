@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { ChartModule } from "../charts.js";
 import { RouterModule } from "../routers.js";
 import { DataTableModule } from "../tables/data-table.js";
@@ -53,7 +56,9 @@ const clientDetailsPage = (() => {
   }
 
   function destroy() {
-    if (!bound) {return;}
+    if (!bound) {
+      return;
+    }
 
     bound = false;
 
@@ -65,7 +70,12 @@ const clientDetailsPage = (() => {
     DataTableModule.destroy?.("#client-projects");
     DataTableModule.destroy?.("#client-activity");
 
-    $(document).off("change.clientDetails", "#client-hours-year", "[data-client-action]", ".edit-info");
+    $(document).off(
+      "change.clientDetails",
+      "#client-hours-year",
+      "[data-client-action]",
+      ".edit-info",
+    );
 
     clientDetailsData = null;
     selectedHoursYear = null;
@@ -76,7 +86,7 @@ const clientDetailsPage = (() => {
     const cacheKey = `${CACHE_KEY_PREFIX}${clientName}`;
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -87,7 +97,11 @@ const clientDetailsPage = (() => {
         reset,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load client details");
     }
   }
 
@@ -158,7 +172,9 @@ const clientDetailsPage = (() => {
   function renderYearOptions(data) {
     const select = document.getElementById("client-hours-year");
 
-    if (!select) {return;}
+    if (!select) {
+      return;
+    }
 
     const years = [
       ...new Set((data || []).map((item) => Number(item.year)).filter(Boolean)),
@@ -189,7 +205,9 @@ const clientDetailsPage = (() => {
   function renderProjects(data) {
     const table = document.querySelector("#client-projects tbody");
 
-    if (!table) {return;}
+    if (!table) {
+      return;
+    }
 
     table.innerHTML = (data || [])
       .map(
@@ -205,14 +223,21 @@ const clientDetailsPage = (() => {
       )
       .join("");
 
-    DataTableModule.init("Projects", "#client-projects", false);
-    
+    DataTableModule.init("Projects", "#client-projects", false, {
+      hideAllControls: true,
+      scrollY: "450px",
+      columnAlignments: {
+        1: "center",
+      },
+    });
   }
 
   function renderPaidOwedHistory(data) {
     const table = document.querySelector("#client-paid-owed-history tbody");
 
-    if (!table) {return;}
+    if (!table) {
+      return;
+    }
 
     table.innerHTML = (data || [])
       .map(
@@ -231,13 +256,22 @@ const clientDetailsPage = (() => {
       "Billing History",
       "#client-paid-owed-history",
       false,
+      {
+        hideAllControls: true,
+        scrollY: "450px",
+        columnAlignments: {
+          0: "left",
+        },
+      },
     );
   }
 
   function renderActivity(data) {
     const table = document.querySelector("#client-activity tbody");
 
-    if (!table) {return;}
+    if (!table) {
+      return;
+    }
 
     table.innerHTML = (data || [])
       .map(
@@ -352,7 +386,7 @@ const clientDetailsPage = (() => {
 
   async function openClientSheet() {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getClientSheetUrl",
@@ -370,7 +404,11 @@ const clientDetailsPage = (() => {
         },
       });
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to open client sheet");
     }
   }
 
@@ -559,7 +597,7 @@ const clientDetailsPage = (() => {
     }
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "updateClientInformation",
@@ -597,7 +635,13 @@ const clientDetailsPage = (() => {
 
       saveButton.innerHTML = '<i class="fa-solid fa-check"></i>';
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(
+        error?.message || "Unable to update client information.",
+      );
     }
   }
 

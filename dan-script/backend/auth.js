@@ -1,3 +1,6 @@
+const GCB_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const GCB_SESSION_PROPERTY_PREFIX = "GCB_SESSION_RECORD_";
+
 function handleGcbOAuthCallback(e) {
   const state = String(e?.parameter?.state || "").trim();
 
@@ -33,8 +36,7 @@ function handleGcbOAuthCallback(e) {
         title: "Access denied",
         message:
           "Your Google account is not authorized to access Go Crayons GS.",
-        note:
-          "Please contact your GCB administrator if you believe you should have access.",
+        note: "Please contact your GCB administrator if you believe you should have access.",
       });
     }
 
@@ -42,30 +44,25 @@ function handleGcbOAuthCallback(e) {
       return buildGcbAuthResultPage({
         type: "error",
         title: "Account disabled",
-        message:
-          "Your GCB account is currently disabled.",
-        note:
-          "Please contact your GCB administrator for assistance.",
+        message: "Your GCB account is currently disabled.",
+        note: "Please contact your GCB administrator for assistance.",
       });
     }
 
     const gcbSession = createGcbSession(authorizedUser);
 
-    const handoffTicket =
-      createGcbSessionHandoff(gcbSession);
+    const handoffTicket = createGcbSessionHandoff(gcbSession);
 
-    const githubUrl =
-      "https://gcbops.github.io/gcb/";
+    const githubUrl = "https://gcbops.github.io/gcb/";
 
-    const redirectUrl =
-      `${githubUrl}?gcb_auth_ticket=${encodeURIComponent(
-        handoffTicket,
-      )}`;
+    const redirectUrl = `${githubUrl}?gcb_auth_ticket=${encodeURIComponent(
+      handoffTicket,
+    )}`;
 
-    console.log(
-      "[GCB Auth] Redirect URL:",
-      redirectUrl,
-    );
+    // console.log(
+    //   "[GCB Auth] Redirect URL:",
+    //   redirectUrl,
+    // );
 
     return buildGcbAuthResultPage({
       type: "success",
@@ -79,15 +76,14 @@ function handleGcbOAuthCallback(e) {
   } catch (error) {
     console.error(
       "[GCB Auth] OAuth callback failed:",
-      error,
+      error?.message || "Unknown error",
     );
 
     return buildGcbAuthResultPage({
       type: "error",
       title: "Authentication failed",
       message:
-        error?.message ||
-        "An unexpected error occurred while completing authentication.",
+        "We couldn't complete sign-in. Please try again. If the problem persists, contact your GCB administrator.",
     });
   }
 }
@@ -140,7 +136,7 @@ function buildGcbAuthResultPage({
 
       <meta
         name="viewport"
-        content="width=device-width, initial-scale=1"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no"
       >
 
       <title>Go Crayons GS</title>
@@ -407,8 +403,7 @@ function buildGcbAuthResultPage({
 }
 
 function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
-  const sheet =
-    getSpreadsheet().getSheetByName("AUTHORIZED_USERS");
+  const sheet = getAuthorizedUsersSheet();
 
   if (!sheet) {
     throw new Error("AUTHORIZED_USERS sheet was not found.");
@@ -476,19 +471,20 @@ function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
       return null;
     }
 
-    // First successful login:
-    // automatically save the Google Sub.
-    if (!rowSub) {
+    const enabled =
+      String(row[enabledIndex] || "")
+        .trim()
+        .toLowerCase() === "true";
+
+    // Only enabled accounts can establish a first-login binding.
+    if (!rowSub && enabled) {
       sheet.getRange(i + 1, subIndex + 1).setValue(normalizedSub);
     }
 
     return {
       email: rowEmail,
       googleSub: normalizedSub,
-      enabled:
-        String(row[enabledIndex] || "")
-          .trim()
-          .toLowerCase() === "true",
+      enabled,
       role: String(row[roleIndex] || "").trim(),
       capabilities: String(row[capabilitiesIndex] || "").trim(),
       notes: notesIndex !== -1 ? String(row[notesIndex] || "").trim() : "",
@@ -499,8 +495,7 @@ function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
 }
 
 function getAuthorizedUserByGoogleSub(googleSub) {
-  const sheet =
-    getSpreadsheet().getSheetByName("AUTHORIZED_USERS");
+  const sheet = getAuthorizedUsersSheet();
 
   if (!sheet) {
     throw new Error("AUTHORIZED_USERS sheet was not found.");
@@ -520,6 +515,16 @@ function getAuthorizedUserByGoogleSub(googleSub) {
   const roleIndex = headers.indexOf("Role");
   const capabilitiesIndex = headers.indexOf("Capabilities");
   const notesIndex = headers.indexOf("Notes");
+
+  if (
+    emailIndex === -1 ||
+    subIndex === -1 ||
+    enabledIndex === -1 ||
+    roleIndex === -1 ||
+    capabilitiesIndex === -1
+  ) {
+    throw new Error("AUTHORIZED_USERS is missing required columns.");
+  }
 
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
@@ -546,6 +551,24 @@ function getAuthorizedUserByGoogleSub(googleSub) {
   return null;
 }
 
+function getAuthorizedUsersSheet() {
+  const spreadsheetId =
+    PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
+
+  if (!spreadsheetId) {
+    throw new Error("SPREADSHEET_ID is not configured.");
+  }
+
+  const sheet =
+    SpreadsheetApp.openById(spreadsheetId).getSheetByName("AUTHORIZED_USERS");
+
+  if (!sheet) {
+    throw new Error("AUTHORIZED_USERS sheet was not found.");
+  }
+
+  return sheet;
+}
+
 function getSessionCapabilities(session) {
   if (!session) {
     return [];
@@ -568,11 +591,111 @@ function getCurrentGcbUser(sessionId, signature) {
     email: session.email,
     role: session.role,
     capabilities: getSessionCapabilities(session),
+    createdAt: session.createdAt,
+    expiresAt: session.expiresAt,
   };
 }
 
 function createGcbSession(authorizedUser) {
+  if (!authorizedUser?.googleSub || !authorizedUser?.email) {
+    throw new Error("A valid authorized user is required.");
+  }
+
   const props = PropertiesService.getScriptProperties();
+  const sessionSecret = props.getProperty("GCB_SESSION_SECRET");
+
+  if (!sessionSecret) {
+    throw new Error("GCB_SESSION_SECRET is not configured.");
+  }
+
+  // Remove a limited number of expired records before creating a session.
+  cleanupExpiredGcbSessions(20);
+
+  const createdAt = Date.now();
+
+  const sessionPayload = {
+    sessionId: Utilities.getUuid() + "-" + Utilities.getUuid(),
+    googleSub: authorizedUser.googleSub,
+    email: authorizedUser.email,
+    role: authorizedUser.role,
+    capabilities: authorizedUser.capabilities,
+    createdAt,
+    expiresAt: createdAt + GCB_SESSION_LIFETIME_MS,
+  };
+
+  const signature = Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(
+      JSON.stringify(sessionPayload),
+      sessionSecret,
+    ),
+  );
+
+  const session = {
+    ...sessionPayload,
+    signature,
+  };
+
+  props.setProperty(
+    `${GCB_SESSION_PROPERTY_PREFIX}${session.sessionId}`,
+    JSON.stringify(session),
+  );
+
+  return session;
+}
+
+function validateGcbSession(sessionId, signature) {
+  if (
+    typeof sessionId !== "string" ||
+    !sessionId ||
+    typeof signature !== "string" ||
+    !signature
+  ) {
+    return null;
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const propertyKey = `${GCB_SESSION_PROPERTY_PREFIX}${sessionId}`;
+  const storedSession = props.getProperty(propertyKey);
+
+  if (!storedSession) {
+    return null;
+  }
+
+  let session;
+
+  try {
+    session = JSON.parse(storedSession);
+  } catch (error) {
+    console.warn("[Auth] Invalid stored session record.");
+    props.deleteProperty(propertyKey);
+    return null;
+  }
+
+  if (
+    !session ||
+    session.sessionId !== sessionId ||
+    typeof session.googleSub !== "string" ||
+    !session.googleSub ||
+    typeof session.email !== "string" ||
+    !session.email ||
+    typeof session.signature !== "string" ||
+    !session.signature ||
+    !Number.isFinite(session.createdAt) ||
+    !Number.isFinite(session.expiresAt)
+  ) {
+    return null;
+  }
+
+  const now = Date.now();
+
+  if (
+    session.createdAt > now ||
+    session.expiresAt !== session.createdAt + GCB_SESSION_LIFETIME_MS ||
+    now >= session.expiresAt
+  ) {
+    props.deleteProperty(propertyKey);
+    return null;
+  }
 
   const sessionSecret = props.getProperty("GCB_SESSION_SECRET");
 
@@ -580,38 +703,84 @@ function createGcbSession(authorizedUser) {
     throw new Error("GCB_SESSION_SECRET is not configured.");
   }
 
-  const sessionId = Utilities.getUuid() + "-" + Utilities.getUuid();
-
-  const createdAt = Date.now();
-
   const sessionPayload = {
-    sessionId,
-    googleSub: authorizedUser.googleSub,
+    sessionId: session.sessionId,
+    googleSub: session.googleSub,
+    email: session.email,
+    role: session.role,
+    capabilities: session.capabilities,
+    createdAt: session.createdAt,
+    expiresAt: session.expiresAt,
+  };
+
+  const expectedSignature = Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(
+      JSON.stringify(sessionPayload),
+      sessionSecret,
+    ),
+  );
+
+  if (
+    signature !== expectedSignature ||
+    session.signature !== expectedSignature
+  ) {
+    console.warn("[Auth] Session signature validation failed.");
+    return null;
+  }
+
+  const authorizedUser = getAuthorizedUserByGoogleSub(session.googleSub);
+
+  if (!authorizedUser || !authorizedUser.enabled) {
+    return null;
+  }
+
+  return {
+    sessionId: session.sessionId,
+    googleSub: session.googleSub,
     email: authorizedUser.email,
     role: authorizedUser.role,
     capabilities: authorizedUser.capabilities,
-    createdAt,
+    createdAt: session.createdAt,
+    expiresAt: session.expiresAt,
   };
+}
 
-  const signatureBytes = Utilities.computeHmacSha256Signature(
-    JSON.stringify(sessionPayload),
-    sessionSecret,
-  );
+function cleanupExpiredGcbSessions(maxDeletes = 20) {
+  const props = PropertiesService.getScriptProperties();
+  const allProperties = props.getProperties();
+  const now = Date.now();
 
-  const signature = Utilities.base64EncodeWebSafe(signatureBytes);
+  let deleted = 0;
 
-  const session = {
-    ...sessionPayload,
-    signature,
-  };
+  for (const [key, value] of Object.entries(allProperties)) {
+    if (deleted >= maxDeletes || !key.startsWith(GCB_SESSION_PROPERTY_PREFIX)) {
+      continue;
+    }
 
-  CacheService.getScriptCache().put(
-    `gcb_session_${sessionId}`,
-    JSON.stringify(session),
-    86400, // GCB session lifetime = 1 day
-  );
+    let session;
 
-  return session;
+    try {
+      session = JSON.parse(value);
+    } catch (error) {
+      props.deleteProperty(key);
+      deleted++;
+      continue;
+    }
+
+    if (
+      !session ||
+      !Number.isFinite(session.createdAt) ||
+      !Number.isFinite(session.expiresAt) ||
+      session.createdAt > now ||
+      session.expiresAt !== session.createdAt + GCB_SESSION_LIFETIME_MS ||
+      now >= session.expiresAt
+    ) {
+      props.deleteProperty(key);
+      deleted++;
+    }
+  }
+
+  return deleted;
 }
 
 function createGcbOAuthState() {
@@ -663,7 +832,7 @@ function createGcbLoginUrl() {
 
   const url = `https://accounts.google.com/o/oauth2/v2/auth?${query}`;
 
-  Logger.log("[GCB Auth] Login URL: %s", url);
+  // Logger.log("[GCB Auth] Login URL: %s", url);
 
   return url;
 }
@@ -779,140 +948,57 @@ function requireAllCapabilities(sessionId, signature, requiredCapabilities) {
   return session;
 }
 
-function validateGcbSession(sessionId, signature) {
-  if (!sessionId || !signature) {
-    return null;
-  }
-
-  const sessionCacheKey = `gcb_session_${sessionId}`;
-
-  const cachedSession = CacheService.getScriptCache().get(sessionCacheKey);
-
-  if (!cachedSession) {
-    console.error("[Auth] Session not found in ScriptCache:", sessionCacheKey);
-
-    return null;
-  }
-
-  let session;
-
-  try {
-    session = JSON.parse(cachedSession);
-  } catch (error) {
-    console.error("[Auth] Invalid cached session data.", error);
-
-    return null;
-  }
-
-  if (!session || session.sessionId !== sessionId || !session.signature) {
-    return null;
-  }
-
-  const props = PropertiesService.getScriptProperties();
-
-  const sessionSecret = props.getProperty("GCB_SESSION_SECRET");
-
-  if (!sessionSecret) {
-    throw new Error("GCB_SESSION_SECRET is not configured.");
-  }
-
-  const sessionPayload = {
-    sessionId: session.sessionId,
-    googleSub: session.googleSub,
-    email: session.email,
-    role: session.role,
-    capabilities: session.capabilities,
-    createdAt: session.createdAt,
-  };
-
-  const signatureBytes = Utilities.computeHmacSha256Signature(
-    JSON.stringify(sessionPayload),
-    sessionSecret,
-  );
-
-  const expectedSignature = Utilities.base64EncodeWebSafe(signatureBytes);
-
-  if (signature !== expectedSignature) {
-    console.error("[Auth] Session signature mismatch.");
-
-    return null;
-  }
-
-  const SESSION_LIFETIME = 24 * 60 * 60 * 1000;
-
-  if (
-    !Number.isFinite(session.createdAt) ||
-    Date.now() - session.createdAt > SESSION_LIFETIME
-  ) {
-    console.error("[Auth] Session expired.");
-
-    return null;
-  }
-
-  const authorizedUser = getAuthorizedUserByGoogleSub(session.googleSub);
-
-  if (!authorizedUser) {
-    console.error("[Auth] Authorized user not found for session.");
-
-    return null;
-  }
-
-  if (!authorizedUser.enabled) {
-    console.error("[Auth] Authorized user is disabled.");
-
-    return null;
-  }
-
-  return {
-    sessionId: session.sessionId,
-    googleSub: session.googleSub,
-    email: session.email,
-    role: authorizedUser.role,
-    capabilities: authorizedUser.capabilities,
-    createdAt: session.createdAt,
-  };
-}
-
 function validateGcbOAuthState(state) {
   if (!state) {
     return false;
   }
 
-  const cache = CacheService.getScriptCache();
+  const lock = LockService.getScriptLock();
 
-  const cacheKey = `gcb_oauth_state_${state}`;
-
-  const cachedState = cache.get(cacheKey);
-
-  if (!cachedState) {
+  if (!lock.tryLock(5000)) {
     return false;
   }
-
-  let data;
 
   try {
-    data = JSON.parse(cachedState);
-  } catch (error) {
-    return false;
+    const cache = CacheService.getScriptCache();
+
+    const cacheKey = `gcb_oauth_state_${state}`;
+
+    const cachedState = cache.get(cacheKey);
+
+    if (!cachedState) {
+      return false;
+    }
+
+    let data;
+
+    try {
+      data = JSON.parse(cachedState);
+    } catch (error) {
+      cache.remove(cacheKey);
+      return false;
+    }
+
+    if (!data || data.state !== state || !Number.isFinite(data.createdAt)) {
+      cache.remove(cacheKey);
+      return false;
+    }
+
+    const STATE_LIFETIME = 10 * 60 * 1000;
+    const age = Date.now() - data.createdAt;
+
+    if (age < 0 || age > STATE_LIFETIME) {
+      cache.remove(cacheKey);
+      return false;
+    }
+
+    // Consume the state so it cannot be reused.
+    cache.remove(cacheKey);
+
+    return true;
+  } finally {
+    lock.releaseLock();
   }
-
-  if (!data || data.state !== state) {
-    return false;
-  }
-
-  const STATE_LIFETIME = 10 * 60 * 1000;
-
-  if (
-    !Number.isFinite(data.createdAt) ||
-    Date.now() - data.createdAt > STATE_LIFETIME
-  ) {
-    return false;
-  }
-
-  // Consume the state so it cannot be reused.
-  cache.remove(cacheKey);
-
-  return true;
 }
 
 function authenticateGcbGoogleCode(code) {
@@ -1029,6 +1115,10 @@ function authenticateGcbGoogleCode(code) {
     throw new Error("Google ID token email is missing.");
   }
 
+  if (String(identity.email_verified).toLowerCase() !== "true") {
+    throw new Error("Google email verification is required.");
+  }
+
   return identity;
 }
 
@@ -1039,51 +1129,61 @@ function exchangeGcbSessionHandoff(ticket) {
     throw new Error("Authentication handoff ticket is required.");
   }
 
-  const cache = CacheService.getScriptCache();
-
-  const cacheKey = `gcb_handoff_${normalizedTicket}`;
-
-  const cached = cache.get(cacheKey);
-
-  if (!cached) {
-    throw new Error("Authentication handoff ticket is invalid or expired.");
-  }
-
   let handoff;
 
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(5000)) {
+    throw new Error("Authentication service is busy. Please try again.");
+  }
+
   try {
-    handoff = JSON.parse(cached);
-  } catch (error) {
-    cache.remove(cacheKey);
+    const cache = CacheService.getScriptCache();
+    const cacheKey = `gcb_handoff_${normalizedTicket}`;
+    const cached = cache.get(cacheKey);
 
-    throw new Error("Authentication handoff data is invalid.");
+    if (!cached) {
+      throw new Error("Authentication handoff ticket is invalid or expired.");
+    }
+
+    try {
+      handoff = JSON.parse(cached);
+    } catch (error) {
+      cache.remove(cacheKey);
+      throw new Error("Authentication handoff data is invalid.");
+    }
+
+    if (
+      !handoff ||
+      handoff.ticket !== normalizedTicket ||
+      typeof handoff.sessionId !== "string" ||
+      !handoff.sessionId ||
+      typeof handoff.signature !== "string" ||
+      !handoff.signature
+    ) {
+      cache.remove(cacheKey);
+      throw new Error("Authentication handoff ticket is invalid.");
+    }
+
+    const HANDOFF_LIFETIME = 2 * 60 * 1000;
+    const age = Date.now() - handoff.createdAt;
+
+    if (
+      !Number.isFinite(handoff.createdAt) ||
+      age < 0 ||
+      age > HANDOFF_LIFETIME
+    ) {
+      cache.remove(cacheKey);
+      throw new Error("Authentication handoff ticket has expired.");
+    }
+
+    // Consume the ticket while holding the lock.
+    cache.remove(cacheKey);
+  } finally {
+    lock.releaseLock();
   }
 
-  if (
-    !handoff ||
-    handoff.ticket !== normalizedTicket ||
-    !handoff.sessionId ||
-    !handoff.signature
-  ) {
-    cache.remove(cacheKey);
-
-    throw new Error("Authentication handoff ticket is invalid.");
-  }
-
-  const HANDOFF_LIFETIME = 2 * 60 * 1000;
-
-  if (
-    !Number.isFinite(handoff.createdAt) ||
-    Date.now() - handoff.createdAt > HANDOFF_LIFETIME
-  ) {
-    cache.remove(cacheKey);
-
-    throw new Error("Authentication handoff ticket has expired.");
-  }
-
-  // One-time use.
-  cache.remove(cacheKey);
-
+  // Validate the session after releasing the lock.
   const session = requireAuthenticatedUser(
     handoff.sessionId,
     handoff.signature,
@@ -1092,13 +1192,17 @@ function exchangeGcbSessionHandoff(ticket) {
   return {
     sessionId: session.sessionId,
     signature: handoff.signature,
+    createdAt: session.createdAt,
+    expiresAt: session.expiresAt,
   };
 }
 
 function logoutGcbSession(sessionId, signature) {
   const session = requireAuthenticatedUser(sessionId, signature);
 
-  CacheService.getScriptCache().remove(`gcb_session_${session.sessionId}`);
+  PropertiesService.getScriptProperties().deleteProperty(
+    `${GCB_SESSION_PROPERTY_PREFIX}${session.sessionId}`,
+  );
 
   return true;
 }
@@ -1110,4 +1214,15 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// testDriveAuthorization: Do not delete for now
+function testDriveAuthorization() {
+  const folder = DriveApp.getFolderById(
+    PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID"),
+  );
+
+  Logger.log("Drive authorization successful.");
+  Logger.log("Backup folder: " + folder.getName());
+  Logger.log("Folder URL: " + folder.getUrl());
 }

@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { HourTargetProgress } from "../hours/hour-target-progress.js";
 import { AppUtils } from "../utils.js";
 import { ValidationModule } from "../validations.js";
@@ -41,7 +44,7 @@ const performanceTargetPage = (() => {
 
   async function loadTargetProgress(reset = false) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         "targetProgress",
@@ -63,9 +66,13 @@ const performanceTargetPage = (() => {
         reset,
       );
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error("getCurrentTargetProgress failed:", error);
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      AppUtils.showError(error?.message || "Unable to load target data.");
     }
   }
 
@@ -317,7 +324,7 @@ const performanceTargetPage = (() => {
       : null;
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "updatePerformanceTarget",
@@ -359,7 +366,11 @@ const performanceTargetPage = (() => {
     } catch (error) {
       loading?.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to update performance target.");
     }
   }
 

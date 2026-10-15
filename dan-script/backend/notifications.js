@@ -2,57 +2,80 @@ function dailyNotification() {
   const day = new Date().getDay();
 
   if (day >= 1 && day <= 5) {
-    logNotification();
-    sendDailyReport();
+    return runGcbLoggedOperation_(
+      {
+        category: "NOTIFICATION",
+        operation: "DAILY_NOTIFICATION_WORKFLOW",
+        trigger: "SCHEDULED",
+        successMessage: "Daily notification workflow completed.",
+        failureMessage: "Daily notification workflow failed.",
+      },
+      () => {
+        logNotification();
+        sendDailyReport();
+      },
+    );
   }
 }
 
 function monthlyNotification() {
   const today = new Date();
-
   const tomorrow = new Date(today);
+
   tomorrow.setDate(today.getDate() + 1);
 
-  if (tomorrow.getDate() !== 1) {
-    return;
-  }
+  if (tomorrow.getDate() !== 1) return;
 
-  try {
-    const fileUrl = saveMonthlyReportPDF();
+  return runGcbLoggedOperation_(
+    {
+      category: "REPORT",
+      operation: "MONTHLY_REPORT_WORKFLOW",
+      trigger: "SCHEDULED",
+      target: "Monthly",
+      successMessage: "Monthly report workflow completed.",
+      failureMessage: "Monthly report workflow failed.",
+    },
+    () => {
+      const fileUrl = saveMonthlyReportPDF();
 
-    sendMonthlyReport();
+      sendMonthlyReport();
 
-    logResponse(`✅ Monthly scheduled report completed: ${fileUrl}`);
-  } catch (err) {
-    logResponse(`❌ Monthly scheduled report failed: ${err?.message || err}`);
+      logResponse(`Monthly scheduled report completed: ${fileUrl}`);
 
-    throw err;
-  }
+      return fileUrl;
+    },
+  );
 }
 
 function yearlyNotification() {
   const today = new Date();
-
   const tomorrow = new Date(today);
+
   tomorrow.setDate(today.getDate() + 1);
 
   const isLastDayOfYear = tomorrow.getMonth() === 0 && tomorrow.getDate() === 1;
 
-  if (!isLastDayOfYear) {
-    return;
-  }
+  if (!isLastDayOfYear) return;
 
-  try {
-    const fileUrl = saveYearlyReportPDF();
+  return runGcbLoggedOperation_(
+    {
+      category: "REPORT",
+      operation: "YEARLY_REPORT_WORKFLOW",
+      trigger: "SCHEDULED",
+      target: "Yearly",
+      successMessage: "Yearly report workflow completed.",
+      failureMessage: "Yearly report workflow failed.",
+    },
+    () => {
+      const fileUrl = saveYearlyReportPDF();
 
-    sendYearlyReport();
+      sendYearlyReport();
 
-    logResponse(`✅ Yearly scheduled report completed: ${fileUrl}`);
-  } catch (err) {
-    logResponse(`❌ Yearly scheduled report failed: ${err?.message || err}`);
+      logResponse(`Yearly scheduled report completed: ${fileUrl}`);
 
-    throw err;
-  }
+      return fileUrl;
+    },
+  );
 }
 
 function logNotification() {
@@ -150,7 +173,25 @@ function sendDailyReport() {
     timestamp: now.toISOString(),
   };
 
-  sendDiscordMessage(webhookUrl, embed);
+  const sent = sendDiscordMessage(webhookUrl, embed);
+
+  recordGcbOperationLog_({
+    category: "DISCORD",
+    operation: "SEND_DAILY_REPORT",
+    status: sent ? "SUCCESS" : "FAILED",
+    trigger: "SCHEDULED",
+    processed: 1,
+    succeeded: sent ? 1 : 0,
+    failed: sent ? 0 : 1,
+    target: "Daily report",
+    message: sent
+      ? "Daily Discord report sent."
+      : "Daily Discord report failed after retries.",
+  });
+
+  if (!sent) {
+    throw new Error("Failed sending daily Discord report after retries.");
+  }
 }
 
 function sendDiscordMessage(webhookUrl, embed, retries = 2) {
@@ -347,7 +388,25 @@ function sendOwedReport() {
     timestamp: now.toISOString(),
   };
 
-  sendDiscordMessage(webhookUrl, embed);
+  const sent = sendDiscordMessage(webhookUrl, embed);
+
+  recordGcbOperationLog_({
+    category: "DISCORD",
+    operation: "SEND_OWED_REPORT",
+    status: sent ? "SUCCESS" : "FAILED",
+    trigger: "SCHEDULED",
+    processed: 1,
+    succeeded: sent ? 1 : 0,
+    failed: sent ? 0 : 1,
+    target: "Owed report",
+    message: sent
+      ? "Owed report sent to Discord."
+      : "Owed report failed after retries.",
+  });
+
+  if (!sent) {
+    throw new Error("Failed sending owed report after retries.");
+  }
 
   const countCell = logSheet.getRange("B1");
   let count = Number(countCell.getValue()) || 0;

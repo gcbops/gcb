@@ -58,6 +58,8 @@ const ReportHistory = (() => {
       return;
     }
 
+    DataTableModule.hideTableOverlay(tableId);
+
     const table = tbody.closest("table");
 
     if (!table?.id) {
@@ -80,7 +82,16 @@ const ReportHistory = (() => {
       tbody.appendChild(createReportHistoryRow(log, index));
     });
 
-    DataTableModule.init(TABLE_TITLE, resolvedTableId);
+    DataTableModule.init(TABLE_TITLE, resolvedTableId, false, {
+      paging: false,
+      scrollY: "420px",
+      layout: {
+        topStart: null,
+        topEnd: null,
+        bottomStart: ["info"],
+        bottomEnd: ["search"],
+      },
+    });
   }
 
   function createReportHistoryRow(log, index) {

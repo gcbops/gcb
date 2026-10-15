@@ -10,10 +10,41 @@
             <span>Integrations</span>
         </a>
     </li>
+    <li class="nav-item" data-required-role="admin" role="presentation">
+        <a
+            role="tab"
+            class="nav-link"
+            id="backups-tab"
+            data-bs-toggle="tab"
+            href="#backups-tab-content"
+            aria-selected="false"
+            tabindex="-1"
+        >
+            <span>Backups</span>
+        </a>
+    </li>
+    <li class="nav-item" data-required-role="admin" role="presentation">
+        <a
+            role="tab"
+            class="nav-link"
+            id="logs-tab"
+            data-bs-toggle="tab"
+            href="#logs-tab-content"
+            aria-selected="false"
+            tabindex="-1"
+        >
+            <span>Logs</span>
+        </a>
+    </li>
 </ul>
 
 <div class="tab-content">
-    <div class="tab-pane tabs-animation fade active show" id="main-tab-content" role="tabpanel" aria-labelledby="tab-1">
+    <div 
+        class="tab-pane tabs-animation fade active show" 
+        id="main-tab-content" 
+        role="tabpanel" 
+        aria-labelledby="main-tab"
+    >
 
         <div class="card no-shadow border-0 bg-white mb-4 loaded">
             <div class="card-body p-0">
@@ -393,7 +424,13 @@
         </div>
 
     </div>
-    <div class="tab-pane tabs-animation fade" data-required-role="admin" id="integration-tab-content" role="tabpanel" aria-labelledby="tab-2">
+    <div 
+        class="tab-pane tabs-animation fade" 
+        id="integration-tab-content" 
+        role="tabpanel" 
+        aria-labelledby="integrations-tab"
+        data-required-role="admin" 
+    >
 
         <div class="py-4">
             <!-- List-style integrations -->
@@ -528,5 +565,278 @@
             </div>
         </div>
 
+    </div>
+    <div
+        class="tab-pane tabs-animation fade"
+        id="backups-tab-content"
+        role="tabpanel"
+        aria-labelledby="backups-tab"
+        data-required-role="admin"
+    >
+        <div class="card card-shadow-sm border-0 bg-white mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                    <div>
+                        <h5 class="mb-1">Backup Management</h5>
+                        <p class="text-muted font-size-sm mb-0">
+                            Create and review backups of registered Google Sheets.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-4">
+                        <div class="card card-shadow-sm border-0 bg-light">
+                            <div class="card-body">
+                                <div class="text-muted font-size-xs">
+                                    Available Backups
+                                </div>
+                                <div class="h4 mb-0" id="backup-total-count">—</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <div class="card card-shadow-sm border-0 bg-light">
+                            <div class="card-body">
+                                <div class="text-muted font-size-xs">
+                                    Latest Backup
+                                </div>
+                                <div class="font-weight-bold" id="backup-latest-date">
+                                    —
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <div class="card card-shadow-sm border-0 bg-light">
+                            <div class="card-body">
+                                <div class="text-muted font-size-xs">
+                                    Backup Destination
+                                </div>
+                                <div class="font-weight-bold" id="backup-destination-status">
+                                    —
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <h6 class="mb-0">Backup History</h6>
+
+                    <div class="ms-auto d-flex justify-content-end">
+
+                        <!-- DESKTOP CONTROLS -->
+                        <div class="responsive-desktop-actions d-flex">
+
+                            <button
+                                type="button"
+                                class="btn btn-gc me-2"
+                                data-required-role="admin"
+                                data-settings-action="create-manual-backup"
+                            >
+                                <i class="fa fa-cloud-upload me-1"></i>
+                                Create Backup
+                            </button>
+                            
+                            <button
+                                type="button"
+                                class="btn border-0 p-0"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Backup options"
+                                title="Backup options"
+                            >
+                                <i class="fa fa-ellipsis-v fs-5"></i>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-settings-action="sync-backup-history"
+                                    >
+                                        <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                                        Refresh
+                                    </button>
+                                </li>
+
+                            </ul>
+
+                        </div>
+
+
+                        <!-- MOBILE CONTROLS -->
+                        <div class="responsive-mobile-actions dropdown mb-2">
+
+                            <button
+                                type="button"
+                                class="btn btn-light"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Backup options"
+                                title="Backup options"
+                            >
+                                <i class="fa fa-ellipsis-v"></i>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+
+                                <li>
+                                    <h6 class="dropdown-header">
+                                        Backup Actions
+                                    </h6>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-required-role="admin"
+                                        data-settings-action="create-manual-backup"
+                                    >
+                                        <i class="pe-7s-cloud-upload text-primary me-2"></i>
+                                        Create Backup
+                                    </button>
+                                </li>
+
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="dropdown-item"
+                                        data-settings-action="sync-backup-history"
+                                    >
+                                        <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                                        Refresh
+                                    </button>
+                                </li>
+
+                            </ul>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <div id="backup-history-message"
+                    class="text-muted font-size-sm mb-3">
+                    Loading backup history...
+                </div>
+
+                <div class="table-responsive">
+                    <table 
+                        class="table table-hovered scrollbar-hover nowrap w-100"
+                        id="backup-history-table"
+                    >
+                        <thead>
+                            <tr>
+                                <th>Backup Date</th>
+                                <th>Backup Name</th>
+                                <th>Files</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backup-history-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div
+        class="tab-pane tabs-animation fade"
+        id="logs-tab-content"
+        role="tabpanel"
+        aria-labelledby="logs-tab"
+        data-required-role="admin"
+        >
+        <div class="card card-shadow-sm border-0 bg-white mb-4">
+            <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <div>
+                    <h5 class="mb-1">Operation Logs</h5>
+                    <p class="text-muted font-size-sm mb-0">
+                        Review failed operations, partial failures, and activity history.
+                    </p>
+                </div>
+                <div class="ms-auto d-flex justify-content-end">
+
+                    <button
+                        type="button"
+                        class="btn border-0 p-0"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        aria-label="Backup options"
+                        title="Backup options"
+                    >
+                        <i class="fa fa-ellipsis-v fs-5"></i>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end">
+
+                        <li>
+                            <button
+                                type="button"
+                                class="dropdown-item"
+                                id="btnRefreshOperationLogs"
+                            >
+                                <i class="pe-7s-refresh-2 text-warning me-2"></i>
+                                Refresh
+                            </button>
+                        </li>
+
+                    </ul>
+
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3 dt-table-filters">
+                <div class="col-12 col-md-4">
+                    <select id="operation-log-category" class="custom-select js-select2">
+                        <option value="">All categories</option>
+                        <option value="BACKUP">Backup</option>
+                        <option value="REPORT">Reports</option>
+                        <option value="EMAIL">Email</option>
+                        <option value="DISCORD">Discord</option>
+                        <option value="HOURS">Hours</option>
+                        <option value="NOTIFICATION">Authentication</option>
+                        <option value="AUTH">Authentication</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <select id="operation-log-status" class="custom-select js-select2">
+                        <option value="">All statuses</option>
+                        <option value="FAILED">Failed</option>
+                        <option value="PARTIAL">Partial</option>
+                        <option value="SUCCESS">Success</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="operation-log-message" class="text-muted font-size-sm mb-3">
+                Select Logs to load operation history.
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hovered scrollbar-hover nowrap w-100" id="operation-logs-table">
+                <thead>
+                    <tr>
+                    <th>Timestamp</th>
+                    <th>Category</th>
+                    <th>Operation</th>
+                    <th>Status</th>
+                    <th>Target</th>
+                    <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="operation-logs-body"></tbody>
+                </table>
+            </div>
+            </div>
+        </div>
     </div>
 </div>

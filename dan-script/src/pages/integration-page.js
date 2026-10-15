@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { AppUtils } from "../utils";
 
 const integrationsConfigurationPage = (() => {
@@ -175,7 +178,7 @@ const integrationsConfigurationPage = (() => {
 
   const loadData = async () => {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
       AppUtils.gScriptRun({
         gscriptFunc: "getIntegrationStatus",
         args: [sessionId, signature],
@@ -192,10 +195,14 @@ const integrationsConfigurationPage = (() => {
         },
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error("Authentication required for integration status:", error);
 
       AppUtils.showDashboardToast(
-        error?.message || "Authentication required.",
+        error?.message || "Failed to load integration status.",
         "error",
       );
     }
@@ -228,7 +235,7 @@ const integrationsConfigurationPage = (() => {
     }
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getIntegrationAuthorizationStatus",
@@ -274,20 +281,25 @@ const integrationsConfigurationPage = (() => {
         },
       });
     } catch (error) {
+      $message.text(error?.message || "Authentication required.");
+      
+      updateIntegrationSaveState($modal, false);
+
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error(
         "Authentication required for integration authorization:",
         error,
       );
 
-      $message.text(error?.message || "Authentication required.");
-
-      updateIntegrationSaveState($modal, false);
     }
   }
 
   async function authorizeIntegration(integration, $modal) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getIntegrationAuthorizationUrl",
@@ -347,6 +359,10 @@ const integrationsConfigurationPage = (() => {
         },
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error("Authentication required for Google authorization:", error);
 
       AppUtils.showDashboardToast(
@@ -677,7 +693,7 @@ const integrationsConfigurationPage = (() => {
     const fields = config.fields || [];
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "getIntegrationConfigStatus",
@@ -739,6 +755,10 @@ const integrationsConfigurationPage = (() => {
         },
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error(
         "Authentication required for integration config status:",
         error,
@@ -796,7 +816,7 @@ const integrationsConfigurationPage = (() => {
     const loading = AppUtils.setButtonLoading($btn[0], "Saving");
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "saveIntegration",
@@ -840,6 +860,12 @@ const integrationsConfigurationPage = (() => {
         },
       });
     } catch (error) {
+      loading.restore();
+
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       console.error("Authentication required for saveIntegration:", error);
 
       AppUtils.showDashboardToast(
@@ -847,7 +873,6 @@ const integrationsConfigurationPage = (() => {
         "error",
       );
 
-      loading.restore();
     }
   }
 

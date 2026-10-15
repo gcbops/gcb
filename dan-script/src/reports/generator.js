@@ -3,7 +3,10 @@ import { ReportHistory } from "./history";
 import { TableModule } from "../tables/tables";
 import { reportsMonthlyReportPage } from "../pages/reports-monthly-report-page";
 import { reportsAnnualReportPage } from "../pages/reports-annual-report-page";
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const ReportGenerator = (() => {
 
@@ -58,7 +61,7 @@ const ReportGenerator = (() => {
     const reportName = cfg.reportName(params);
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
       AppUtils.gScriptRun({
         gscriptFunc: "checkExistingReport",
         args: [sessionId, signature, type, reportName],
@@ -80,7 +83,12 @@ const ReportGenerator = (() => {
       });
     } catch (error) {
       setGenerateState(type, false, loading);
-      AppUtils.showError(error?.message || "Authentication required.");
+
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to generate report.");
     }
   }
 
@@ -147,7 +155,7 @@ const ReportGenerator = (() => {
 
   async function requestReportGeneration(cfg, type, btn, params, loading) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
       AppUtils.gScriptRun({
         gscriptFunc: "updateCustomReportPDF",
         args: [sessionId, signature, type, ...cfg.updateArgs(params)],
@@ -157,10 +165,14 @@ const ReportGenerator = (() => {
         onSuccess: () => checkReportReady(cfg, type, btn, "", loading),
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       handleGenerateError(
         type,
         btn,
-        error?.message || "Authentication required.",
+        error?.message || "Unable to request report.",
         loading,
       );
     }
@@ -196,7 +208,7 @@ const ReportGenerator = (() => {
 
   async function saveReport(type, btn, cfg, loading) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
       AppUtils.gScriptRun({
         gscriptFunc: "saveCustomReportPDF",
         args: [sessionId, signature, type],
@@ -226,10 +238,14 @@ const ReportGenerator = (() => {
         },
       });
     } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       handleGenerateError(
         type,
         btn,
-        error?.message || "Authentication required.",
+        error?.message || "Unable to save the report.",
         loading,
       );
     }

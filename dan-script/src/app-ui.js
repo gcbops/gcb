@@ -214,7 +214,7 @@ const AppUI = (() => {
         () => {
           card.classList.add("loaded");
           // Optionally remove 'skeleton' class after animation if you want
-          // setTimeout(() => card.classList.remove("skeleton"), 400);
+          setTimeout(() => card.classList.remove("skeleton"), 400);
         },
         100 + index * stagger,
       );

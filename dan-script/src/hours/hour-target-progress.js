@@ -1,4 +1,7 @@
-import { GcbAuthModule } from "../auth/auth";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 import { ChartModule } from "../charts";
 import { AppUtils } from "../utils";
 
@@ -48,7 +51,7 @@ const HourTargetProgress = (() => {
     reset = false,
   ) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -70,7 +73,13 @@ const HourTargetProgress = (() => {
         reset,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(
+        error?.message || "Failed to load target chart progress.",
+      );
     }
   }
 
@@ -218,7 +227,7 @@ const HourTargetProgress = (() => {
     reset = false,
   ) {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         cacheKey,
@@ -240,7 +249,11 @@ const HourTargetProgress = (() => {
         reset,
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to load target chart data.");
     }
   }
 

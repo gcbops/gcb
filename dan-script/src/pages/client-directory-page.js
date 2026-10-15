@@ -2,7 +2,10 @@ import { AppUtils } from "../utils.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { TableClientSelector } from "../tables/client-selector.js";
 import { ValidationModule } from "../validations.js";
-import { GcbAuthModule } from "../auth/auth.js";
+import {
+  getAuthArgs,
+  handleInvalidSessionError,
+} from "../auth/auth-error-handler.js";
 
 const clientDirectoryPage = (() => {
   let bound = false;
@@ -56,7 +59,9 @@ const clientDirectoryPage = (() => {
           "Synchronize Client Directory?",
           "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
           () => {
-            ClientDirectory.refreshClientDirectory("clientDirectoryData", () => {
+            const button = this;
+
+            ClientDirectory.refreshClientDirectory(button, "clientDirectoryData", () => {
               AppUtils.showDashboardToast(
                 "Clients refreshed successfully.",
                 "success",
@@ -249,7 +254,7 @@ const clientDirectoryPage = (() => {
     );
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "createClientSheet",
@@ -292,7 +297,11 @@ const clientDirectoryPage = (() => {
     } catch (error) {
       loading.restore();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to create client sheet.");
     }
   }
 
@@ -507,7 +516,7 @@ const clientDirectoryPage = (() => {
     );
 
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "createExternalSheet",
@@ -557,8 +566,12 @@ const clientDirectoryPage = (() => {
     } catch (error) {
       loading.restore();
 
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
       AppUtils.showDashboardToast(
-        error?.message || "Authentication required.",
+        error?.message || "Failed to create external sheet.",
         "error",
       );
     }
@@ -566,7 +579,7 @@ const clientDirectoryPage = (() => {
 
   async function syncClientSheetList() {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
         gscriptFunc: "syncClientSheetList",
@@ -582,6 +595,7 @@ const clientDirectoryPage = (() => {
               AppUtils.cacheClear("clientDirectoryData");
 
               ClientDirectory.refreshClientDirectory(
+                false,
                 "clientDirectoryData",
                 () => {
                   AppUtils.showDashboardToast(
@@ -599,10 +613,11 @@ const clientDirectoryPage = (() => {
         },
       });
     } catch (error) {
-      console.error(
-        "[clientDirectory] Authentication required for syncClientSheetList:",
-        error,
-      );
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Unable to sync client sheet list.");
     }
   }
 

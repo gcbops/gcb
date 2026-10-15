@@ -29,6 +29,7 @@ import { performanceOverviewPage } from "./pages/performance-overview.js";
 import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
 import { clientDetailsPage } from "./pages/client-details-page.js";
 import { LoaderModule } from "./loader.js";
+import { manageUsersPage } from "./manage-users.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -89,6 +90,7 @@ const RouterModule = (() => {
 
     settingsConfiguration: settingsConfigurationPage,
     integrationsConfiguration: integrationsConfigurationPage,
+    manageUsers: manageUsersPage,
   };
 
   const getPageToken = () => pageToken;

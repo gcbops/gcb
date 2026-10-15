@@ -1,5 +1,5 @@
-import { GcbAuthModule } from "../auth/auth.js";
 import { AppUtils } from "../utils.js";
+import { getAuthArgs, handleInvalidSessionError } from "../auth/auth-error-handler.js";
 
 const ClientActivityTrends = (() => {
   const CONTAINER_ID = "client-activity-trends";
@@ -58,7 +58,7 @@ const ClientActivityTrends = (() => {
 
   async function load() {
     try {
-      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+      const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.cachedGScriptCall(
         CACHE_KEY,
@@ -74,11 +74,17 @@ const ClientActivityTrends = (() => {
         },
       );
     } catch (error) {
-      console.error("[ClientActivityTrends] Authentication failed:", error);
-
       renderEmpty();
 
-      AppUtils.showError(error?.message || "Authentication required.");
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      console.error("[ClientActivityTrends] Failed to load:", error);
+
+      AppUtils.showError(
+        error?.message || "Failed to load client activity trends.",
+      );
     }
   }
 

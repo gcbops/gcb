@@ -1,4 +1,5 @@
 import { AppUtils } from "../utils";
+import { DataTableModule } from "./data-table";
 
 const TableRenderer = (() => {
   const STATUS_COLUMN_INDEX = 3;
@@ -119,6 +120,10 @@ const TableRenderer = (() => {
      * directly from the table header.
      */
     const $table = $tbody.closest("table");
+    const tableId = $table.attr("id");
+
+    DataTableModule.hideTableOverlay(tableId);
+    
     const columnCount = $table.find("thead tr:first th").length;
 
     if (!columnCount) {

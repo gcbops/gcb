@@ -1,0 +1,91 @@
+
+<div id="manage-users-page" class="container-fluid px-0">
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small">Total Users</div>
+            <div id="manage-users-total" class="h4 mb-0">—</div>
+          </div>
+          <i class="pe-7s-users fs-3 text-primary"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small">Enabled</div>
+            <div id="manage-users-enabled" class="h4 mb-0">—</div>
+          </div>
+          <i class="pe-7s-check fs-3 text-success"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small">Disabled</div>
+            <div id="manage-users-disabled" class="h4 mb-0">—</div>
+          </div>
+          <i class="pe-7s-lock fs-3 text-warning"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="card card-shadow-sm border-0 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small">Online Sessions</div>
+            <div id="manage-users-online" class="h4 mb-0">—</div>
+          </div>
+          <i class="pe-7s-signal fs-3 text-info"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-shadow-sm border-0 bg-white">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+          <h5 class="mb-1">User Access</h5>
+          <p class="text-muted small mb-0">
+            Manage account status, roles, capabilities, and notes.
+          </p>
+        </div>
+      </div>
+
+      <div id="manage-users-message" class="mb-3" role="status" aria-live="polite"></div>
+
+      <div class="table-responsive">
+        <table
+          id="manage-users-table"
+          class="table table-hovered scrollbar-hover nowrap w-100"
+        >
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Email</th>
+              <th>Enabled</th>
+              <th>Role</th>
+              <th>Capabilities</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="manage-users-table-body"></tbody>
+        </table>
+      </div>
+
+      <p class="text-muted small mt-2 mb-0">
+        Online indicates an unexpired server-side session, not necessarily current activity.
+      </p>
+    </div>
+  </div>
+</div>
