@@ -5,7 +5,7 @@ import {
 import { AppUtils } from "../utils";
 
 const HourSummary = (() => {
-  async function loadHoursSummary(containerSelector) {
+  async function loadHoursSummary(containerSelector, callback) {
     try {
       const [sessionId, signature] = await getAuthArgs();
 
@@ -19,7 +19,7 @@ const HourSummary = (() => {
             return;
           }
 
-          renderHoursSummary(containerSelector, data);
+          renderHoursSummary(containerSelector, data, callback);
         },
       );
     } catch (error) {
@@ -31,7 +31,7 @@ const HourSummary = (() => {
     }
   }
 
-  function renderHoursSummary(containerSelector, data) {
+  function renderHoursSummary(containerSelector, data, callback) {
     const $container = $(containerSelector);
 
     if (!$container.length || !data) {
@@ -95,6 +95,10 @@ const HourSummary = (() => {
       $container.find('[data-metric="net-hours"]'),
       data.netHours,
     );
+
+    if (typeof callback === "function") {
+      callback();
+    }
   }
 
   async function loadDailyOverviewSummary() {

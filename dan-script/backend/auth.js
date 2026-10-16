@@ -2,9 +2,17 @@ const GCB_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const GCB_SESSION_PROPERTY_PREFIX = "GCB_SESSION_RECORD_";
 
 function handleGcbOAuthCallback(e) {
+  const startedAt = Date.now();
   const state = String(e?.parameter?.state || "").trim();
 
   if (!validateGcbOAuthState(state)) {
+    logGcbAuthEvent_({
+      operation: "LOGIN",
+      status: "FAILED",
+      startedAt,
+      message: "OAuth state validation failed.",
+    });
+
     return buildGcbAuthResultPage({
       type: "error",
       title: "Authentication failed",
@@ -15,6 +23,12 @@ function handleGcbOAuthCallback(e) {
   const code = String(e?.parameter?.code || "").trim();
 
   if (!code) {
+    logGcbAuthEvent_({
+      operation: "LOGIN",
+      status: "FAILED",
+      startedAt,
+      message: "OAuth authorization code was missing.",
+    });
     return buildGcbAuthResultPage({
       type: "error",
       title: "Authentication failed",
@@ -31,6 +45,14 @@ function handleGcbOAuthCallback(e) {
     );
 
     if (!authorizedUser) {
+      logGcbAuthEvent_({
+        operation: "LOGIN",
+        status: "DENIED",
+        email: identity.email,
+        startedAt,
+        message: "Google identity is not authorized for GCB access.",
+      });
+
       return buildGcbAuthResultPage({
         type: "error",
         title: "Access denied",
@@ -41,6 +63,14 @@ function handleGcbOAuthCallback(e) {
     }
 
     if (!authorizedUser.enabled) {
+      logGcbAuthEvent_({
+        operation: "LOGIN",
+        status: "DENIED",
+        email: authorizedUser.email,
+        startedAt,
+        message: "GCB account is disabled.",
+      });
+
       return buildGcbAuthResultPage({
         type: "error",
         title: "Account disabled",
@@ -52,6 +82,14 @@ function handleGcbOAuthCallback(e) {
     const gcbSession = createGcbSession(authorizedUser);
 
     const handoffTicket = createGcbSessionHandoff(gcbSession);
+
+    logGcbAuthEvent_({
+      operation: "LOGIN",
+      status: "SUCCESS",
+      email: authorizedUser.email,
+      startedAt,
+      message: "GCB session created successfully.",
+    });
 
     const githubUrl = "https://gcbops.github.io/gcb/";
 
@@ -78,6 +116,14 @@ function handleGcbOAuthCallback(e) {
       "[GCB Auth] OAuth callback failed:",
       error?.message || "Unknown error",
     );
+
+    logGcbAuthEvent_({
+      operation: "LOGIN",
+      status: "FAILED",
+      startedAt,
+      message: "OAuth callback failed.",
+      error: error?.message || "Unknown authentication error",
+    });
 
     return buildGcbAuthResultPage({
       type: "error",
@@ -1198,13 +1244,36 @@ function exchangeGcbSessionHandoff(ticket) {
 }
 
 function logoutGcbSession(sessionId, signature) {
+  const startedAt = Date.now();
+
   const session = requireAuthenticatedUser(sessionId, signature);
 
-  PropertiesService.getScriptProperties().deleteProperty(
-    `${GCB_SESSION_PROPERTY_PREFIX}${session.sessionId}`,
-  );
+  try {
+    PropertiesService.getScriptProperties().deleteProperty(
+      `${GCB_SESSION_PROPERTY_PREFIX}${session.sessionId}`,
+    );
 
-  return true;
+    logGcbAuthEvent_({
+      operation: "LOGOUT",
+      status: "SUCCESS",
+      email: session.email,
+      startedAt,
+      message: "GCB session invalidated successfully.",
+    });
+
+    return true;
+  } catch (error) {
+    logGcbAuthEvent_({
+      operation: "LOGOUT",
+      status: "FAILED",
+      email: session.email,
+      startedAt,
+      message: "Failed to invalidate GCB session.",
+      error: error?.message || "Unknown logout error",
+    });
+
+    throw error;
+  }
 }
 
 function escapeHtml(value) {
@@ -1214,6 +1283,35 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+
+function logGcbAuthEvent_({
+  operation,
+  status,
+  email = "",
+  startedAt = Date.now(),
+  message = "",
+  error = "",
+} = {}) {
+  try {
+    recordGcbOperationLog_({
+      category: "AUTH",
+      operation,
+      status,
+      trigger: "OAUTH",
+      durationMs: Math.max(0, Date.now() - startedAt),
+      target: email || "Unknown user",
+      message,
+      error: String(error || "").slice(0, 500),
+    });
+  } catch (logError) {
+    // Authentication must not fail because logging failed.
+    console.error(
+      "[GCB Auth] Failed to record authentication event:",
+      logError?.message || "Unknown logging error",
+    );
+  }
 }
 
 // testDriveAuthorization: Do not delete for now

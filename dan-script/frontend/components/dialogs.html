@@ -137,14 +137,8 @@
 
     <!-- Body content -->
     <div class="drawer-body">
-      <div class="main-card card shadow-none">
+      <div class="main-card card shadow-none pt-0 pb-2">
         <div class="card-body pt-0 pb-0">
-          <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom: 10px;">
-            <!-- Optional: hide duplicate title if you want -->
-            <h5 class="card-title" style="display:none;">ADD HOURS</h5>
-            <div style="flex:1"></div>
-            <button id="submit-new-hours" type="submit" class="btn btn-gc">Add</button>
-          </div>
           <form id="taskForm" class="form-inline">
             <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group element-hidden">
               <label for="client" class="mr-sm-2">Client</label>
@@ -165,6 +159,9 @@
             <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
               <label for="hour" class="mr-sm-2">Hour</label>
               <input type="number" step="0.5" name="hour" id="hour" placeholder="#" class="form-control" required="" />
+            </div>
+            <div class="mt-2 mr-sm-2 mb-sm-0 position-relative form-group">
+              <button id="submit-new-hours" type="submit" class="btn btn-lg btn-gc"><i class="fa-regular fa-clock me-1"></i> Log Hours</button>
             </div>
           </form>
         </div>

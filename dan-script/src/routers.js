@@ -28,7 +28,6 @@ import { billingInvoiceStatusPage } from "./pages/billing-invoice-status-page.js
 import { performanceOverviewPage } from "./pages/performance-overview.js";
 import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
 import { clientDetailsPage } from "./pages/client-details-page.js";
-import { LoaderModule } from "./loader.js";
 import { manageUsersPage } from "./manage-users.js";
 
 const RouterModule = (() => {
@@ -215,7 +214,6 @@ const RouterModule = (() => {
          * 2. Initialize shared UI
          * ------------------------------------------------
          */
-        LoaderModule.start("loading");
         AppUI.init();
 
         window.addEventListener("popstate", handlePopState);

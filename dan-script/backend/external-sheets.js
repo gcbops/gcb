@@ -740,9 +740,15 @@ function combineExternalSheetData(spreadsheetId) {
   dest.getRange("E3:I").clearContent();
 
   let destRow = 3;
-
+  
   ss.getSheets().forEach((sheet) => {
-    if (sheet.getName() === "Projects") {
+    const sheetName = sheet.getName();
+    
+    if (
+      sheetName === "Projects" ||
+      sheetName === "BLANK" ||
+      sheetName === GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName
+    ) {
       return;
     }
 

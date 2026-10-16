@@ -131,11 +131,7 @@ const ClientDirectory = (() => {
             return;
           }
 
-          renderClientDirectory(data, () => {
-            if (typeof callback === "function") {
-              callback();
-            }
-          }, loading);
+          renderClientDirectory(data, callback, loading);
         },
         false,
         true,
@@ -235,6 +231,10 @@ const ClientDirectory = (() => {
         bottomEnd: ["search"],
       },
     });
+
+    if (typeof callback === "function") {
+      callback();
+    }
     
     if(loading) {
       loading.restore();

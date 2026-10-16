@@ -217,6 +217,17 @@ const GCB_HOURS_REQUEST_LEDGER_CONFIG = {
   ],
 };
 
+const GCB_TODAY_HOURS_OPERATION_LEDGER = {
+  sheetName: "__GCB_TODAY_HOURS_OPS",
+  headers: [
+    "Request ID",
+    "Payload Fingerprint",
+    "Client",
+    "Result JSON",
+    "Applied At",
+  ],
+};
+
 function withHoursSaveLock_(callback) {
   const lock = LockService.getScriptLock();
 
@@ -337,6 +348,37 @@ function makeCellValue_(value) {
   };
 }
 
+function normalizeHoursRecordDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), "M/d/yyyy");
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const text = value.trim();
+    const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+    if (match) {
+      return `${Number(match[1])}/${Number(match[2])}/${match[3]}`;
+    }
+  }
+
+  return "";
+}
+
+function toSheetsDateSerial_(date) {
+  const dateOnly = new Date(date);
+  dateOnly.setHours(0, 0, 0, 0);
+
+  const utcDate = Date.UTC(
+    dateOnly.getFullYear(),
+    dateOnly.getMonth(),
+    dateOnly.getDate(),
+  );
+
+  // Google Sheets date serial epoch: December 30, 1899.
+  return utcDate / 86400000 + 25569;
+}
+
 /**
  * Applies one hours entry and its ledger record atomically.
  *
@@ -378,7 +420,7 @@ function recordClientHoursToSheetIdempotent_(
 
     const sameType = normalizeText(existingType) === normalizeText(type);
     const sameTask = normalizeText(existingTask) === normalizeText(task);
-    const sameDate = formatDateSafe(entryDate, "M/d/yyyy") === today;
+    const sameDate = normalizeHoursRecordDate_(entryDate) === today;
 
     if (sameType && sameTask && sameDate) {
       targetRow = startRow + i;
@@ -433,7 +475,17 @@ function recordClientHoursToSheetIdempotent_(
                 makeCellValue_(type),
                 makeCellValue_(task),
                 makeCellValue_(hours),
-                makeCellValue_(today),
+                {
+                  userEnteredValue: {
+                    numberValue: toSheetsDateSerial_(new Date()),
+                  },
+                  userEnteredFormat: {
+                    numberFormat: {
+                      type: "DATE",
+                      pattern: "M/d/yyyy",
+                    },
+                  },
+                },
               ],
             },
           ],
@@ -877,163 +929,6 @@ function recordExternalClientHoursBatchFromForm_(formData) {
   };
 }
 
-function getTaskOptions(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "hours.view");
-
-  if (!clientName) {
-    return [];
-  }
-
-  try {
-    const sheet = getSheetSafe(clientName.trim());
-
-    if (!sheet) {
-      logResponse(`❌ No sheet found for client: ${clientName}`);
-      return [];
-    }
-
-    SpreadsheetApp.flush();
-
-    const tasks = sheet
-      .getRange("F3:F")
-      .getValues()
-      .flat()
-      .filter((task) => task && String(task).trim() !== "");
-
-    return [...new Set(tasks)].sort();
-  } catch (err) {
-    logResponse(`⚠️ getTaskOptions error: ${err}`);
-    return [];
-  }
-}
-
-function getRecentRecordsForManualForm(clientSheetName, limit = 3) {
-  requireCapability(sessionId, signature, "hours.view");
-
-  if (!isNonEmptyString(clientSheetName)) {
-    return [];
-  }
-
-  const sheet = getSheetSafe(clientSheetName);
-
-  if (!sheet) {
-    return [];
-  }
-
-  const lastRow = sheet.getLastRow();
-
-  if (lastRow < 3) {
-    return [];
-  }
-
-  const startRow = 3;
-  const numRows = lastRow - startRow + 1;
-
-  const [dateCol, hourCol, typeCol, taskCol] = [8, 7, 5, 6].map((col) =>
-    sheet.getRange(startRow, col, numRows).getValues(),
-  );
-
-  const rows = [];
-
-  for (let i = 0; i < numRows; i++) {
-    const date = dateCol[i][0];
-    const hours = hourCol[i][0];
-    const type = typeCol[i][0];
-    const task = taskCol[i][0];
-
-    if (
-      ![date, hours, type, task].some((value) => value !== "" && value != null)
-    ) {
-      continue;
-    }
-
-    let dateTimestamp = 0;
-    let dateString = "";
-
-    if (date instanceof Date && !isNaN(date)) {
-      dateTimestamp = date.getTime();
-      dateString = formatDateSafe(date, "yyyy-MM-dd");
-    } else if (date) {
-      const parsed = new Date(String(date));
-
-      if (!isNaN(parsed)) {
-        dateTimestamp = parsed.getTime();
-        dateString = formatDateSafe(parsed, "yyyy-MM-dd");
-      } else {
-        dateString = String(date);
-      }
-    }
-
-    rows.push({
-      dateTimestamp,
-      row: [dateString, hours, type, task],
-    });
-  }
-
-  return rows
-    .sort((a, b) => b.dateTimestamp - a.dateTimestamp)
-    .slice(0, limit)
-    .map((item) => item.row);
-}
-
-function getDailyActivityData(sessionId, signature) {
-  requireCapability(sessionId, signature, "hours.view");
-
-  const sheet = getSheetSafe("Client Tracker - Today");
-
-  return sheet
-    ? sheet
-        .getRange("B2:G")
-        .getValues()
-        .filter((row) => row.some(Boolean))
-    : [];
-}
-
-function getHoursSummary(sessionId, signature) {
-  requireCapability(sessionId, signature, "hours.view");
-
-  const sheet = getSheetSafe("Other Analytics");
-
-  if (!sheet) {
-    return {};
-  }
-
-  const values = sheet.getRange("A2:I2").getValues()[0];
-
-  return {
-    totalHours: values[1] ?? 0,
-    totalPaid: values[2] ?? 0,
-    owedHours: values[3] ?? 0,
-    netHours: values[4] ?? 0,
-
-    lifetimePercent: values[5] ?? 0,
-    collectionRate: values[6] ?? 0,
-    debtExposureRate: values[7] ?? 0,
-    netHoursYield: values[8] ?? 0,
-  };
-}
-
-function getClientHoursForOverview(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "hours.view");
-
-  if (!isNonEmptyString(clientName)) {
-    return { error: "INVALID_CLIENT" };
-  }
-
-  const sheet = getSheetSafe(clientName);
-
-  if (!sheet) {
-    return { error: "NOT_FOUND" };
-  }
-
-  return {
-    totalHrs: sheet.getRange("B8").getValue(),
-    weekHrs: sheet.getRange("N18").getValue(),
-    monthHrs: sheet.getRange("N19").getValue(),
-    yearHrs: sheet.getRange("N20").getValue(),
-  };
-}
-
 function getTodayClientHours(sessionId, signature, clientName) {
   requireCapability(sessionId, signature, "hours.view");
 
@@ -1275,6 +1170,493 @@ function getTodayClientHours(sessionId, signature, clientName) {
   }
 }
 
+// function saveEditedTodayClientHours(sessionId, signature, formData) {
+//   requireRole(sessionId, signature, "admin");
+
+//   return withHoursSaveLock_(() => saveEditedTodayClientHours_(formData));
+// }
+
+// function saveEditedTodayClientHours_(formData) {
+//   try {
+//     Validation.requireObject(formData, "Form data");
+
+//     const clientName = Validation.requiredString(formData.client, "Client", {
+//       maxLength: Validation.MAX_CLIENT_NAME_LENGTH,
+//     });
+
+//     const records = ActivityValidation.todayHoursRecords(formData.records);
+
+//     if (!records.length) {
+//       return {
+//         success: true,
+//         message: "No changes to save.",
+//       };
+//     }
+
+//     const startRow = 3;
+//     const today = formatDateSafe(new Date(), "M/d/yyyy");
+
+//     /*
+//      * --------------------------------------------------
+//      * 1. DETERMINE CLIENT TYPE
+//      * --------------------------------------------------
+//      */
+
+//     const registrySheet = getSheetSafe("External Sheets");
+
+//     let externalSpreadsheetId = null;
+
+//     if (registrySheet && registrySheet.getLastRow() >= 2) {
+//       const registryValues = registrySheet
+//         .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
+//         .getValues();
+
+//       const normalizedClient = normalizeText(clientName);
+
+//       const externalRow = registryValues.find(
+//         (row) =>
+//           normalizeText(String(row[1] || "")) === normalizedClient &&
+//           String(row[0] || "").trim() !== "",
+//       );
+
+//       if (externalRow) {
+//         externalSpreadsheetId = String(externalRow[0] || "").trim();
+//       }
+//     }
+
+//     const isExternal = Boolean(externalSpreadsheetId);
+
+//     /*
+//      * ==================================================
+//      * INTERNAL CLIENT
+//      * ==================================================
+//      *
+//      * Existing behavior remains unchanged.
+//      */
+
+//     if (!isExternal) {
+//       const clientSheet = getSheetSafe(clientName);
+
+//       if (!clientSheet) {
+//         throw new Error(`Sheet "${clientName}" not found.`);
+//       }
+
+//       const lastRow = clientSheet.getLastRow();
+
+//       if (lastRow < startRow) {
+//         throw new Error("No records found.");
+//       }
+
+//       /*
+//        * ------------------------------------------------
+//        * Validate requested rows.
+//        * ------------------------------------------------
+//        */
+
+//       const requestedRows = new Set();
+
+//       records.forEach((record) => {
+//         const rowNumber = Number(record.row);
+
+//         if (!Number.isInteger(rowNumber)) {
+//           throw new Error("Invalid row number.");
+//         }
+
+//         if (rowNumber < startRow || rowNumber > lastRow) {
+//           throw new Error(`Row ${rowNumber} is no longer valid.`);
+//         }
+
+//         if (requestedRows.has(rowNumber)) {
+//           throw new Error(`Duplicate row submitted: ${rowNumber}`);
+//         }
+
+//         requestedRows.add(rowNumber);
+//       });
+
+//       /*
+//        * Read E:H.
+//        */
+//       const rowCount = lastRow - startRow + 1;
+
+//       const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
+
+//       /*
+//        * Build map of actual sheet rows.
+//        */
+//       const sheetRows = new Map();
+
+//       data.forEach((row, index) => {
+//         const rowNumber = startRow + index;
+
+//         sheetRows.set(rowNumber, {
+//           row: rowNumber,
+//           type: row[0] || "",
+//           task: row[1] || "",
+//           hours: Number(row[2]) || 0,
+//           date: row[3],
+//           dateFormatted: formatDateSafe(row[3], "M/d/yyyy"),
+//         });
+//       });
+
+//       /*
+//        * Verify row + date.
+//        */
+//       records.forEach((record) => {
+//         const rowNumber = Number(record.row);
+
+//         const actual = sheetRows.get(rowNumber);
+
+//         if (!actual) {
+//           throw new Error(`Row ${rowNumber} could not be found.`);
+//         }
+
+//         if (actual.dateFormatted !== today) {
+//           throw new Error(`Row ${rowNumber} is no longer a record from today.`);
+//         }
+
+//         assertTodayHoursRecordUnchanged_(record, actual, `Row ${rowNumber}`);
+//       });
+
+//       /*
+//        * Validate submitted values.
+//        */
+//       records.forEach((record) => {
+//         if (record.action !== "delete" && record.action !== "update") {
+//           throw new Error(`Invalid action for row ${record.row}.`);
+//         }
+
+//         if (record.action === "update") {
+//           const type = String(record.type || "").trim();
+
+//           const task = String(record.task || "").trim();
+
+//           if (!type) {
+//             throw new Error(`Type is required for row ${record.row}.`);
+//           }
+
+//           if (!task) {
+//             throw new Error(`Task is required for row ${record.row}.`);
+//           }
+
+//           if (task.toLowerCase() === "loading...") {
+//             throw new Error(`Invalid task for row ${record.row}.`);
+//           }
+
+//           const hours = Number(record.hours);
+
+//           if (!Number.isFinite(hours) || hours < 0) {
+//             throw new Error(`Invalid hours for row ${record.row}.`);
+//           }
+//         }
+//       });
+
+//       /*
+//        * Apply internal updates.
+//        */
+//       records
+//         .filter((record) => record.action === "update")
+//         .forEach((record) => {
+//           const rowNumber = Number(record.row);
+
+//           clientSheet
+//             .getRange(rowNumber, 5, 1, 3)
+//             .setValues([
+//               [
+//                 String(record.type).trim(),
+
+//                 String(record.task).trim(),
+
+//                 Number(record.hours),
+//               ],
+//             ]);
+//         });
+
+//       /*
+//        * Delete internal records.
+//        */
+//       const deleteRows = records
+//         .filter((record) => record.action === "delete")
+//         .map((record) => Number(record.row));
+
+//       if (deleteRows.length) {
+//         deleteTodayRowsAndCompact(clientSheet, deleteRows, today, startRow);
+//       }
+
+//       return {
+//         success: true,
+//         message: "Today's records have been updated.",
+//       };
+//     }
+
+//     /*
+//      * ==================================================
+//      * EXTERNAL CLIENT
+//      * ==================================================
+//      */
+
+//     let externalSS;
+
+//     try {
+//       externalSS = SpreadsheetApp.openById(externalSpreadsheetId);
+//     } catch (err) {
+//       throw new Error(
+//         `Unable to access the external spreadsheet for "${clientName}".`,
+//       );
+//     }
+
+//     /*
+//      * --------------------------------------------------
+//      * 2. VALIDATE AND RESOLVE SOURCE LOCATIONS
+//      * --------------------------------------------------
+//      *
+//      * Each external record MUST contain:
+//      *
+//      *   sourceSheet
+//      *   sourceRow
+//      *
+//      * These identify the actual project tab and row.
+//      */
+
+//     const resolvedRecords = [];
+
+//     const requestedSources = new Set();
+
+//     records.forEach((record) => {
+//       if (record.action !== "delete" && record.action !== "update") {
+//         throw new Error(`Invalid action for row ${record.row}.`);
+//       }
+
+//       const sourceSheetName = String(record.sourceSheet || "").trim();
+
+//       const sourceRow = Number(record.sourceRow);
+
+//       if (!sourceSheetName) {
+//         throw new Error(
+//           `Missing source sheet for external record ${record.row}.`,
+//         );
+//       }
+
+//       if (!Number.isInteger(sourceRow) || sourceRow < startRow) {
+//         throw new Error(
+//           `Invalid source row for external record ${record.row}.`,
+//         );
+//       }
+
+//       /*
+//        * Prevent the same physical external row from
+//        * being submitted twice.
+//        */
+//       const sourceKey = `${sourceSheetName}::${sourceRow}`;
+
+//       if (requestedSources.has(sourceKey)) {
+//         throw new Error(
+//           `Duplicate external record submitted: ${sourceSheetName} row ${sourceRow}.`,
+//         );
+//       }
+
+//       requestedSources.add(sourceKey);
+
+//       /*
+//        * Resolve the exact project tab.
+//        */
+//       const projectSheet = externalSS.getSheetByName(sourceSheetName);
+
+//       if (!projectSheet) {
+//         throw new Error(
+//           `Project sheet "${sourceSheetName}" was not found in the external spreadsheet.`,
+//         );
+//       }
+
+//       /*
+//        * Never allow system tabs as source tabs.
+//        */
+//       if (
+//         projectSheet.getName() === "Projects" ||
+//         projectSheet.getName() === "BLANK"
+//       ) {
+//         throw new Error(`Invalid external source sheet "${sourceSheetName}".`);
+//       }
+
+//       const lastRow = projectSheet.getLastRow();
+
+//       if (sourceRow > lastRow) {
+//         throw new Error(
+//           `External row ${sourceRow} no longer exists in "${sourceSheetName}".`,
+//         );
+//       }
+
+//       /*
+//        * Read the actual source record.
+//        */
+//       const actual = projectSheet.getRange(sourceRow, 5, 1, 4).getValues()[0];
+
+//       const [actualType, actualTask, actualHours, actualDate] = actual;
+
+//       const actualDateFormatted = formatDateSafe(actualDate, "M/d/yyyy");
+
+//       /*
+//        * The source record must still exist
+//        * and still belong to today.
+//        */
+//       if (actualDateFormatted !== today) {
+//         throw new Error(
+//           `External record "${sourceSheetName}" row ${sourceRow} is no longer a record from today.`,
+//         );
+//       }
+
+//       /*
+//        * Ignore completely empty source rows.
+//        */
+//       if (
+//         !actualType &&
+//         !actualTask &&
+//         (actualHours === "" ||
+//           actualHours === null ||
+//           actualHours === undefined) &&
+//         !actualDate
+//       ) {
+//         throw new Error(
+//           `External record "${sourceSheetName}" row ${sourceRow} no longer exists.`,
+//         );
+//       }
+
+//       /*
+//        * Validate submitted values.
+//        */
+//       if (record.action === "update") {
+//         const type = String(record.type || "").trim();
+
+//         const task = String(record.task || "").trim();
+
+//         if (!type) {
+//           throw new Error(`Type is required for external record ${sourceRow}.`);
+//         }
+
+//         if (!task) {
+//           throw new Error(`Task is required for external record ${sourceRow}.`);
+//         }
+
+//         if (task.toLowerCase() === "loading...") {
+//           throw new Error(`Invalid task for external record ${sourceRow}.`);
+//         }
+
+//         const hours = Number(record.hours);
+
+//         if (!Number.isFinite(hours) || hours < 0) {
+//           throw new Error(`Invalid hours for external record ${sourceRow}.`);
+//         }
+//       }
+
+//       assertTodayHoursRecordUnchanged_(
+//         record,
+//         {
+//           type: actualType,
+//           task: actualTask,
+//           hours: actualHours,
+//           dateFormatted: actualDateFormatted,
+//         },
+//         `External record "${sourceSheetName}" row ${sourceRow}`,
+//       );
+
+//       resolvedRecords.push({
+//         record,
+//         sheet: projectSheet,
+//         sourceRow,
+//         actual: {
+//           type: actualType || "",
+//           task: actualTask || "",
+//           hours: Number(actualHours) || 0,
+//           date: actualDate,
+//           dateFormatted: actualDateFormatted,
+//         },
+//       });
+//     });
+
+//     /*
+//      * --------------------------------------------------
+//      * 3. APPLY EXTERNAL UPDATES
+//      * --------------------------------------------------
+//      */
+
+//     resolvedRecords
+//       .filter(({ record }) => record.action === "update")
+//       .forEach(({ record, sheet, sourceRow }) => {
+//         /*
+//          * IMPORTANT:
+//          *
+//          * We write directly to the exact source
+//          * project tab + exact source row.
+//          *
+//          * The frontend's "row" value is NOT used here.
+//          */
+//         sheet
+//           .getRange(sourceRow, 5, 1, 3)
+//           .setValues([
+//             [
+//               String(record.type).trim(),
+
+//               String(record.task).trim(),
+
+//               Number(record.hours),
+//             ],
+//           ]);
+//       });
+
+//     /*
+//      * --------------------------------------------------
+//      * 4. GROUP EXTERNAL DELETIONS
+//      * --------------------------------------------------
+//      */
+
+//     const deleteGroups = new Map();
+
+//     resolvedRecords
+//       .filter(({ record }) => record.action === "delete")
+//       .forEach(({ sheet, sourceRow }) => {
+//         const sheetId = sheet.getSheetId();
+
+//         if (!deleteGroups.has(sheetId)) {
+//           deleteGroups.set(sheetId, {
+//             sheet,
+//             rows: [],
+//           });
+//         }
+
+//         deleteGroups.get(sheetId).rows.push(sourceRow);
+//       });
+
+//     /*
+//      * Delete/compact independently per
+//      * actual external project tab.
+//      */
+//     deleteGroups.forEach(({ sheet, rows }) => {
+//       deleteTodayRowsAndCompact(sheet, rows, today, startRow);
+//     });
+
+//     /*
+//      * --------------------------------------------------
+//      * 5. REFRESH MAIN IMPORTED VIEW
+//      * --------------------------------------------------
+//      *
+//      * The main client sheet is only an imported/
+//      * aggregated representation.
+//      *
+//      * The actual external project sheets are the
+//      * source of truth.
+//      */
+
+//     combineExternalSheetData(externalSpreadsheetId);
+
+//     return {
+//       success: true,
+//       message: "Today's external client records have been updated.",
+//     };
+//   } catch (err) {
+//     throw new Error(err.message || String(err));
+//   }
+// }
+
+
 function saveEditedTodayClientHours(sessionId, signature, formData) {
   requireRole(sessionId, signature, "admin");
 
@@ -1282,255 +1664,167 @@ function saveEditedTodayClientHours(sessionId, signature, formData) {
 }
 
 function saveEditedTodayClientHours_(formData) {
-  try {
-    Validation.requireObject(formData, "Form data");
+  Validation.requireObject(formData, "Form data");
 
-    const clientName = Validation.requiredString(formData.client, "Client", {
-      maxLength: Validation.MAX_CLIENT_NAME_LENGTH,
-    });
+  const requestId = Validation.requiredString(
+    formData.requestId,
+    "Request ID",
+    { maxLength: 200 },
+  );
 
-    const records = ActivityValidation.todayHoursRecords(formData.records);
+  const clientName = Validation.requiredString(formData.client, "Client", {
+    maxLength: Validation.MAX_CLIENT_NAME_LENGTH,
+  });
 
-    if (!records.length) {
-      return {
-        success: true,
-        message: "No changes to save.",
-      };
+  const records = ActivityValidation.todayHoursRecords(formData.records);
+
+  if (!records.length) {
+    return {
+      success: true,
+      message: "No changes to save.",
+      requestId,
+      duplicatePrevented: false,
+    };
+  }
+
+  validateTodayHoursOperationRecords_(records);
+
+  const fingerprint = fingerprintTodayHoursOperation_(clientName, records);
+
+  /*
+   * Resolve whether the client is internal or external.
+   */
+  const registrySheet = getSheetSafe("External Sheets");
+  let externalSpreadsheetId = null;
+
+  if (registrySheet && registrySheet.getLastRow() >= 2) {
+    const registryValues = registrySheet
+      .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
+      .getValues();
+
+    const normalizedClient = normalizeText(clientName);
+
+    const externalRow = registryValues.find(
+      (row) =>
+        normalizeText(String(row[1] || "")) === normalizedClient &&
+        String(row[0] || "").trim() !== "",
+    );
+
+    if (externalRow) {
+      externalSpreadsheetId = String(externalRow[0]).trim();
     }
+  }
 
-    const startRow = 3;
-    const today = formatDateSafe(new Date(), "M/d/yyyy");
+  const isExternal = Boolean(externalSpreadsheetId);
+  let destinationSS;
+  let clientSheet = null;
 
-    /*
-     * --------------------------------------------------
-     * 1. DETERMINE CLIENT TYPE
-     * --------------------------------------------------
-     */
-
-    const registrySheet = getSheetSafe("External Sheets");
-
-    let externalSpreadsheetId = null;
-
-    if (registrySheet && registrySheet.getLastRow() >= 2) {
-      const registryValues = registrySheet
-        .getRange(2, 1, registrySheet.getLastRow() - 1, 5)
-        .getValues();
-
-      const normalizedClient = normalizeText(clientName);
-
-      const externalRow = registryValues.find(
-        (row) =>
-          normalizeText(String(row[1] || "")) === normalizedClient &&
-          String(row[0] || "").trim() !== "",
-      );
-
-      if (externalRow) {
-        externalSpreadsheetId = String(externalRow[0] || "").trim();
-      }
-    }
-
-    const isExternal = Boolean(externalSpreadsheetId);
-
-    /*
-     * ==================================================
-     * INTERNAL CLIENT
-     * ==================================================
-     *
-     * Existing behavior remains unchanged.
-     */
-
-    if (!isExternal) {
-      const clientSheet = getSheetSafe(clientName);
-
-      if (!clientSheet) {
-        throw new Error(`Sheet "${clientName}" not found.`);
-      }
-
-      const lastRow = clientSheet.getLastRow();
-
-      if (lastRow < startRow) {
-        throw new Error("No records found.");
-      }
-
-      /*
-       * ------------------------------------------------
-       * Validate requested rows.
-       * ------------------------------------------------
-       */
-
-      const requestedRows = new Set();
-
-      records.forEach((record) => {
-        const rowNumber = Number(record.row);
-
-        if (!Number.isInteger(rowNumber)) {
-          throw new Error("Invalid row number.");
-        }
-
-        if (rowNumber < startRow || rowNumber > lastRow) {
-          throw new Error(`Row ${rowNumber} is no longer valid.`);
-        }
-
-        if (requestedRows.has(rowNumber)) {
-          throw new Error(`Duplicate row submitted: ${rowNumber}`);
-        }
-
-        requestedRows.add(rowNumber);
-      });
-
-      /*
-       * Read E:H.
-       */
-      const rowCount = lastRow - startRow + 1;
-
-      const data = clientSheet.getRange(startRow, 5, rowCount, 4).getValues();
-
-      /*
-       * Build map of actual sheet rows.
-       */
-      const sheetRows = new Map();
-
-      data.forEach((row, index) => {
-        const rowNumber = startRow + index;
-
-        sheetRows.set(rowNumber, {
-          row: rowNumber,
-          type: row[0] || "",
-          task: row[1] || "",
-          hours: Number(row[2]) || 0,
-          date: row[3],
-          dateFormatted: formatDateSafe(row[3], "M/d/yyyy"),
-        });
-      });
-
-      /*
-       * Verify row + date.
-       */
-      records.forEach((record) => {
-        const rowNumber = Number(record.row);
-
-        const actual = sheetRows.get(rowNumber);
-
-        if (!actual) {
-          throw new Error(`Row ${rowNumber} could not be found.`);
-        }
-
-        if (actual.dateFormatted !== today) {
-          throw new Error(`Row ${rowNumber} is no longer a record from today.`);
-        }
-
-        assertTodayHoursRecordUnchanged_(record, actual, `Row ${rowNumber}`);
-      });
-
-      /*
-       * Validate submitted values.
-       */
-      records.forEach((record) => {
-        if (record.action !== "delete" && record.action !== "update") {
-          throw new Error(`Invalid action for row ${record.row}.`);
-        }
-
-        if (record.action === "update") {
-          const type = String(record.type || "").trim();
-
-          const task = String(record.task || "").trim();
-
-          if (!type) {
-            throw new Error(`Type is required for row ${record.row}.`);
-          }
-
-          if (!task) {
-            throw new Error(`Task is required for row ${record.row}.`);
-          }
-
-          if (task.toLowerCase() === "loading...") {
-            throw new Error(`Invalid task for row ${record.row}.`);
-          }
-
-          const hours = Number(record.hours);
-
-          if (!Number.isFinite(hours) || hours < 0) {
-            throw new Error(`Invalid hours for row ${record.row}.`);
-          }
-        }
-      });
-
-      /*
-       * Apply internal updates.
-       */
-      records
-        .filter((record) => record.action === "update")
-        .forEach((record) => {
-          const rowNumber = Number(record.row);
-
-          clientSheet
-            .getRange(rowNumber, 5, 1, 3)
-            .setValues([
-              [
-                String(record.type).trim(),
-
-                String(record.task).trim(),
-
-                Number(record.hours),
-              ],
-            ]);
-        });
-
-      /*
-       * Delete internal records.
-       */
-      const deleteRows = records
-        .filter((record) => record.action === "delete")
-        .map((record) => Number(record.row));
-
-      if (deleteRows.length) {
-        deleteTodayRowsAndCompact(clientSheet, deleteRows, today, startRow);
-      }
-
-      return {
-        success: true,
-        message: "Today's records have been updated.",
-      };
-    }
-
-    /*
-     * ==================================================
-     * EXTERNAL CLIENT
-     * ==================================================
-     */
-
-    let externalSS;
-
+  if (isExternal) {
     try {
-      externalSS = SpreadsheetApp.openById(externalSpreadsheetId);
-    } catch (err) {
+      destinationSS = SpreadsheetApp.openById(externalSpreadsheetId);
+    } catch (error) {
       throw new Error(
         `Unable to access the external spreadsheet for "${clientName}".`,
       );
     }
+  } else {
+    clientSheet = getSheetSafe(clientName);
+
+    if (!clientSheet) {
+      throw new Error(`Sheet "${clientName}" not found.`);
+    }
+
+    destinationSS = clientSheet.getParent();
+  }
+
+  /*
+   * The ledger is in the same spreadsheet as the source records.
+   * An existing operation is checked BEFORE snapshot validation.
+   */
+  const ledgerSheet = getTodayHoursOperationLedger_(destinationSS);
+
+  const previousOperation = findTodayHoursOperation_(ledgerSheet, requestId);
+
+  if (previousOperation) {
+    if (previousOperation.fingerprint !== fingerprint) {
+      throw new Error(
+        "HOURS_CONFLICT: This request ID was already used for a different operation. Reload today's hours before trying again.",
+      );
+    }
+
+    const previousResult = previousOperation.result;
+
+    if (!previousResult || previousResult.success !== true) {
+      throw new Error(
+        "The saved result for this request could not be verified. No changes were reapplied.",
+      );
+    }
 
     /*
-     * --------------------------------------------------
-     * 2. VALIDATE AND RESOLVE SOURCE LOCATIONS
-     * --------------------------------------------------
-     *
-     * Each external record MUST contain:
-     *
-     *   sourceSheet
-     *   sourceRow
-     *
-     * These identify the actual project tab and row.
+     * Source changes already committed. For external clients,
+     * retry the aggregate refresh without repeating those changes.
      */
+    if (isExternal) {
+      combineExternalSheetData(externalSpreadsheetId);
+    }
 
-    const resolvedRecords = [];
+    return {
+      ...previousResult,
+      requestId,
+      duplicatePrevented: true,
+    };
+  }
 
+  const startRow = 3;
+  const today = formatDateSafe(new Date(), "M/d/yyyy");
+  const timeZone = destinationSS.getSpreadsheetTimeZone();
+
+  /*
+   * Resolve records and construct all source mutation requests
+   * without writing to any source tab.
+   */
+  const sheetGroups = new Map();
+
+  if (!isExternal) {
+    const lastRow = clientSheet.getLastRow();
+
+    if (lastRow < startRow) {
+      throw new Error("No records found.");
+    }
+
+    const requestedRows = new Set();
+
+    records.forEach((record) => {
+      const rowNumber = Number(record.row);
+
+      if (!Number.isInteger(rowNumber)) {
+        throw new Error("Invalid row number.");
+      }
+
+      if (rowNumber < startRow || rowNumber > lastRow) {
+        throw new Error(
+          `HOURS_CONFLICT: Row ${rowNumber} is no longer valid. Reload today's hours and try again.`,
+        );
+      }
+
+      if (requestedRows.has(rowNumber)) {
+        throw new Error(`Duplicate row submitted: ${rowNumber}`);
+      }
+
+      requestedRows.add(rowNumber);
+    });
+
+    sheetGroups.set(clientSheet.getSheetId(), {
+      sheet: clientSheet,
+      entries: records.map((record) => ({
+        record,
+        rowNumber: Number(record.row),
+      })),
+    });
+  } else {
     const requestedSources = new Set();
 
     records.forEach((record) => {
-      if (record.action !== "delete" && record.action !== "update") {
-        throw new Error(`Invalid action for row ${record.row}.`);
-      }
-
       const sourceSheetName = String(record.sourceSheet || "").trim();
 
       const sourceRow = Number(record.sourceRow);
@@ -1547,10 +1841,6 @@ function saveEditedTodayClientHours_(formData) {
         );
       }
 
-      /*
-       * Prevent the same physical external row from
-       * being submitted twice.
-       */
       const sourceKey = `${sourceSheetName}::${sourceRow}`;
 
       if (requestedSources.has(sourceKey)) {
@@ -1561,20 +1851,14 @@ function saveEditedTodayClientHours_(formData) {
 
       requestedSources.add(sourceKey);
 
-      /*
-       * Resolve the exact project tab.
-       */
-      const projectSheet = externalSS.getSheetByName(sourceSheetName);
+      const projectSheet = destinationSS.getSheetByName(sourceSheetName);
 
       if (!projectSheet) {
         throw new Error(
-          `Project sheet "${sourceSheetName}" was not found in the external spreadsheet.`,
+          `HOURS_CONFLICT: Project sheet "${sourceSheetName}" no longer exists. Reload today's hours and try again.`,
         );
       }
 
-      /*
-       * Never allow system tabs as source tabs.
-       */
       if (
         projectSheet.getName() === "Projects" ||
         projectSheet.getName() === "BLANK"
@@ -1582,184 +1866,566 @@ function saveEditedTodayClientHours_(formData) {
         throw new Error(`Invalid external source sheet "${sourceSheetName}".`);
       }
 
-      const lastRow = projectSheet.getLastRow();
-
-      if (sourceRow > lastRow) {
+      if (sourceRow > projectSheet.getLastRow()) {
         throw new Error(
-          `External row ${sourceRow} no longer exists in "${sourceSheetName}".`,
+          `HOURS_CONFLICT: External row ${sourceRow} no longer exists in "${sourceSheetName}". Reload today's hours and try again.`,
         );
       }
 
-      /*
-       * Read the actual source record.
-       */
-      const actual = projectSheet.getRange(sourceRow, 5, 1, 4).getValues()[0];
+      const sheetId = projectSheet.getSheetId();
 
-      const [actualType, actualTask, actualHours, actualDate] = actual;
-
-      const actualDateFormatted = formatDateSafe(actualDate, "M/d/yyyy");
-
-      /*
-       * The source record must still exist
-       * and still belong to today.
-       */
-      if (actualDateFormatted !== today) {
-        throw new Error(
-          `External record "${sourceSheetName}" row ${sourceRow} is no longer a record from today.`,
-        );
+      if (!sheetGroups.has(sheetId)) {
+        sheetGroups.set(sheetId, {
+          sheet: projectSheet,
+          entries: [],
+        });
       }
 
-      /*
-       * Ignore completely empty source rows.
-       */
-      if (
-        !actualType &&
-        !actualTask &&
-        (actualHours === "" ||
-          actualHours === null ||
-          actualHours === undefined) &&
-        !actualDate
-      ) {
-        throw new Error(
-          `External record "${sourceSheetName}" row ${sourceRow} no longer exists.`,
-        );
-      }
-
-      /*
-       * Validate submitted values.
-       */
-      if (record.action === "update") {
-        const type = String(record.type || "").trim();
-
-        const task = String(record.task || "").trim();
-
-        if (!type) {
-          throw new Error(`Type is required for external record ${sourceRow}.`);
-        }
-
-        if (!task) {
-          throw new Error(`Task is required for external record ${sourceRow}.`);
-        }
-
-        if (task.toLowerCase() === "loading...") {
-          throw new Error(`Invalid task for external record ${sourceRow}.`);
-        }
-
-        const hours = Number(record.hours);
-
-        if (!Number.isFinite(hours) || hours < 0) {
-          throw new Error(`Invalid hours for external record ${sourceRow}.`);
-        }
-      }
-
-      assertTodayHoursRecordUnchanged_(
+      sheetGroups.get(sheetId).entries.push({
         record,
+        rowNumber: sourceRow,
+      });
+    });
+  }
+
+  /*
+   * Build changes for every affected tab.
+   * This performs reads and validation only; it does not write.
+   */
+  const mutationRequests = [];
+
+  sheetGroups.forEach(({ sheet, entries }) => {
+    mutationRequests.push(
+      ...planTodayHoursSheetMutation_(
+        sheet,
+        entries,
+        today,
+        startRow,
+        timeZone,
+      ),
+    );
+  });
+
+  const result = {
+    success: true,
+    message: isExternal
+      ? "Today's external client records have been updated."
+      : "Today's records have been updated.",
+    client: clientName,
+    requestId,
+    duplicatePrevented: false,
+  };
+
+  /*
+   * Append the operation ledger entry in the SAME batch as
+   * the source edits/deletions/compaction.
+   */
+  const ledgerRowIndex = ledgerSheet.getLastRow();
+
+  mutationRequests.push({
+    updateCells: {
+      range: {
+        sheetId: ledgerSheet.getSheetId(),
+        startRowIndex: ledgerRowIndex,
+        startColumnIndex: 0,
+      },
+      rows: [
         {
-          type: actualType,
-          task: actualTask,
-          hours: actualHours,
-          dateFormatted: actualDateFormatted,
+          values: [
+            { userEnteredValue: { stringValue: requestId } },
+            { userEnteredValue: { stringValue: fingerprint } },
+            { userEnteredValue: { stringValue: clientName } },
+            {
+              userEnteredValue: {
+                stringValue: JSON.stringify(result),
+              },
+            },
+            {
+              userEnteredValue: {
+                stringValue: new Date().toISOString(),
+              },
+            },
+          ],
         },
-        `External record "${sourceSheetName}" row ${sourceRow}`,
-      );
+      ],
+      fields: "userEnteredValue",
+    },
+  });
 
-      resolvedRecords.push({
-        record,
-        sheet: projectSheet,
-        sourceRow,
-        actual: {
-          type: actualType || "",
-          task: actualTask || "",
-          hours: Number(actualHours) || 0,
-          date: actualDate,
-          dateFormatted: actualDateFormatted,
-        },
-      });
-    });
+  /*
+   * Atomic per destination spreadsheet:
+   * either all source mutations + ledger entry commit, or none do.
+   */
+  Sheets.Spreadsheets.batchUpdate(
+    { requests: mutationRequests },
+    destinationSS.getId(),
+  );
 
-    /*
-     * --------------------------------------------------
-     * 3. APPLY EXTERNAL UPDATES
-     * --------------------------------------------------
-     */
-
-    resolvedRecords
-      .filter(({ record }) => record.action === "update")
-      .forEach(({ record, sheet, sourceRow }) => {
-        /*
-         * IMPORTANT:
-         *
-         * We write directly to the exact source
-         * project tab + exact source row.
-         *
-         * The frontend's "row" value is NOT used here.
-         */
-        sheet
-          .getRange(sourceRow, 5, 1, 3)
-          .setValues([
-            [
-              String(record.type).trim(),
-
-              String(record.task).trim(),
-
-              Number(record.hours),
-            ],
-          ]);
-      });
-
-    /*
-     * --------------------------------------------------
-     * 4. GROUP EXTERNAL DELETIONS
-     * --------------------------------------------------
-     */
-
-    const deleteGroups = new Map();
-
-    resolvedRecords
-      .filter(({ record }) => record.action === "delete")
-      .forEach(({ sheet, sourceRow }) => {
-        const sheetId = sheet.getSheetId();
-
-        if (!deleteGroups.has(sheetId)) {
-          deleteGroups.set(sheetId, {
-            sheet,
-            rows: [],
-          });
-        }
-
-        deleteGroups.get(sheetId).rows.push(sourceRow);
-      });
-
-    /*
-     * Delete/compact independently per
-     * actual external project tab.
-     */
-    deleteGroups.forEach(({ sheet, rows }) => {
-      deleteTodayRowsAndCompact(sheet, rows, today, startRow);
-    });
-
-    /*
-     * --------------------------------------------------
-     * 5. REFRESH MAIN IMPORTED VIEW
-     * --------------------------------------------------
-     *
-     * The main client sheet is only an imported/
-     * aggregated representation.
-     *
-     * The actual external project sheets are the
-     * source of truth.
-     */
-
+  /*
+   * This refresh is intentionally after the source batch.
+   * If it fails, the retry finds the ledger and refreshes again
+   * without applying the source changes twice.
+   */
+  if (isExternal) {
     combineExternalSheetData(externalSpreadsheetId);
+  }
+
+  return result;
+}
+
+function getTodayHoursOperationLedger_(spreadsheet) {
+  let sheet = spreadsheet.getSheetByName(
+    GCB_TODAY_HOURS_OPERATION_LEDGER.sheetName,
+  );
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(GCB_TODAY_HOURS_OPERATION_LEDGER.sheetName);
+
+    sheet
+      .getRange(1, 1, 1, GCB_TODAY_HOURS_OPERATION_LEDGER.headers.length)
+      .setValues([GCB_TODAY_HOURS_OPERATION_LEDGER.headers]);
+
+    try {
+      sheet.hideSheet();
+    } catch (error) {
+      console.warn("[TodayHoursLedger] Unable to hide ledger sheet:", error);
+    }
+
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet
+      .getRange(1, 1, 1, GCB_TODAY_HOURS_OPERATION_LEDGER.headers.length)
+      .setValues([GCB_TODAY_HOURS_OPERATION_LEDGER.headers]);
+
+    return sheet;
+  }
+
+  const headers = sheet
+    .getRange(1, 1, 1, GCB_TODAY_HOURS_OPERATION_LEDGER.headers.length)
+    .getValues()[0];
+
+  const headersMatch =
+    JSON.stringify(headers) ===
+    JSON.stringify(GCB_TODAY_HOURS_OPERATION_LEDGER.headers);
+
+  if (!headersMatch) {
+    throw new Error(
+      "The today's-hours operation ledger has unexpected headers. No changes were applied.",
+    );
+  }
+
+  return sheet;
+}
+
+function findTodayHoursOperation_(ledgerSheet, requestId) {
+  const lastRow = ledgerSheet.getLastRow();
+
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const values = ledgerSheet.getRange(2, 1, lastRow - 1, 5).getValues();
+
+  for (let index = 0; index < values.length; index++) {
+    const row = values[index];
+
+    if (String(row[0] || "") !== requestId) {
+      continue;
+    }
+
+    let result;
+
+    try {
+      result = JSON.parse(String(row[3] || ""));
+    } catch (error) {
+      throw new Error(
+        "The saved result for this request ID is unreadable. No changes were reapplied.",
+      );
+    }
 
     return {
-      success: true,
-      message: "Today's external client records have been updated.",
+      fingerprint: String(row[1] || ""),
+      result,
     };
-  } catch (err) {
-    throw new Error(err.message || String(err));
   }
+
+  return null;
 }
+
+function fingerprintTodayHoursOperation_(clientName, records) {
+  /*
+   * Explicit property order produces a stable canonical payload.
+   * Do not include transient UI state or updatedAt timestamps.
+   */
+  const canonicalPayload = {
+    client: String(clientName),
+    records: records.map((record) => ({
+      row: Number(record.row),
+      action: String(record.action || ""),
+      sourceSheet: String(record.sourceSheet || ""),
+      sourceRow:
+        record.sourceRow === undefined ||
+        record.sourceRow === null ||
+        record.sourceRow === ""
+          ? null
+          : Number(record.sourceRow),
+      originalType: String(record.originalType ?? ""),
+      originalTask: String(record.originalTask ?? ""),
+      originalHours: Number(record.originalHours),
+      originalDate: String(record.originalDate ?? ""),
+      type:
+        record.type === undefined || record.type === null
+          ? null
+          : String(record.type),
+      task:
+        record.task === undefined || record.task === null
+          ? null
+          : String(record.task),
+      hours:
+        record.hours === undefined || record.hours === null
+          ? null
+          : Number(record.hours),
+    })),
+  };
+
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    JSON.stringify(canonicalPayload),
+    Utilities.Charset.UTF_8,
+  );
+
+  return Utilities.base64Encode(digest);
+}
+
+function validateTodayHoursOperationRecords_(records) {
+  const seen = new Set();
+
+  records.forEach((record) => {
+    if (record.action !== "update" && record.action !== "delete") {
+      throw new Error(`Invalid action for row ${record.row}.`);
+    }
+
+    if (record.action === "update") {
+      const type = String(record.type || "").trim();
+      const task = String(record.task || "").trim();
+      const hours = Number(record.hours);
+
+      if (!type) {
+        throw new Error(`Type is required for row ${record.row}.`);
+      }
+
+      if (!task) {
+        throw new Error(`Task is required for row ${record.row}.`);
+      }
+
+      if (task.toLowerCase() === "loading...") {
+        throw new Error(`Invalid task for row ${record.row}.`);
+      }
+
+      if (!Number.isFinite(hours) || hours < 0) {
+        throw new Error(`Invalid hours for row ${record.row}.`);
+      }
+    }
+
+    /*
+     * Validate snapshots before fingerprinting can conceal
+     * malformed input behind JSON's treatment of NaN.
+     */
+    const originalHours = Number(record.originalHours);
+    const originalDate = String(record.originalDate ?? "").trim();
+
+    if (!Number.isFinite(originalHours) || originalHours < 0 || !originalDate) {
+      throw new Error(
+        `Original record snapshot is invalid for row ${record.row}.`,
+      );
+    }
+
+    const sourceSheet = String(record.sourceSheet || "").trim();
+    const sourceRow = Number(record.sourceRow);
+
+    const locationKey = sourceSheet
+      ? `${sourceSheet}::${sourceRow}`
+      : `internal::${Number(record.row)}`;
+
+    if (seen.has(locationKey)) {
+      throw new Error(`Duplicate record submitted: ${locationKey}.`);
+    }
+
+    seen.add(locationKey);
+  });
+}
+
+function planTodayHoursSheetMutation_(
+  sheet,
+  entries,
+  today,
+  startRow,
+  timeZone,
+) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < startRow) {
+    throw new Error(
+      "HOURS_CONFLICT: The requested records no longer exist. Reload today's hours and try again.",
+    );
+  }
+
+  const rowCount = lastRow - startRow + 1;
+  const data = sheet.getRange(startRow, 5, rowCount, 4).getValues();
+
+  const workingData = data.map((row) => row.slice());
+
+  /*
+   * Validate every snapshot against the original data before
+   * planning any mutations.
+   */
+  entries.forEach(({ record, rowNumber }) => {
+    if (
+      !Number.isInteger(rowNumber) ||
+      rowNumber < startRow ||
+      rowNumber > lastRow
+    ) {
+      throw new Error(
+        `HOURS_CONFLICT: Row ${rowNumber} is no longer valid. Reload today's hours and try again.`,
+      );
+    }
+
+    const index = rowNumber - startRow;
+    const actualRow = data[index];
+
+    if (!actualRow) {
+      throw new Error(
+        `HOURS_CONFLICT: Row ${rowNumber} could not be found. Reload today's hours and try again.`,
+      );
+    }
+
+    const actual = {
+      type: actualRow[0] || "",
+      task: actualRow[1] || "",
+      hours: Number(actualRow[2]) || 0,
+      date: actualRow[3],
+      dateFormatted: formatDateSafe(actualRow[3], "M/d/yyyy"),
+    };
+
+    if (actual.dateFormatted !== today) {
+      throw new Error(
+        `HOURS_CONFLICT: Row ${rowNumber} is no longer a record from today. Reload today's hours and try again.`,
+      );
+    }
+
+    assertTodayHoursRecordUnchanged_(record, actual, `Row ${rowNumber}`);
+  });
+
+  const deleteRows = new Set(
+    entries
+      .filter(({ record }) => record.action === "delete")
+      .map(({ rowNumber }) => rowNumber),
+  );
+
+  /*
+   * Apply updates to the in-memory copy. Nothing is written yet.
+   */
+  entries.forEach(({ record, rowNumber }) => {
+    if (record.action !== "update") {
+      return;
+    }
+
+    const index = rowNumber - startRow;
+
+    workingData[index] = [
+      String(record.type).trim(),
+      String(record.task).trim(),
+      Number(record.hours),
+      workingData[index][3],
+    ];
+  });
+
+  const requests = [];
+
+  if (deleteRows.size > 0) {
+    /*
+     * Preserve the existing compaction behavior:
+     * only today's occupied row positions are compacted.
+     */
+    const todayIndexes = [];
+
+    data.forEach((row, index) => {
+      if (formatDateSafe(row[3], "M/d/yyyy") === today) {
+        todayIndexes.push(index);
+      }
+    });
+
+    const todayRowNumbers = new Set(
+      todayIndexes.map((index) => startRow + index),
+    );
+
+    deleteRows.forEach((rowNumber) => {
+      if (!todayRowNumbers.has(rowNumber)) {
+        throw new Error(
+          `HOURS_CONFLICT: Row ${rowNumber} is no longer valid for deletion. Reload today's hours and try again.`,
+        );
+      }
+    });
+
+    const remainingRows = todayIndexes
+      .filter((index) => !deleteRows.has(startRow + index))
+      .map((index) => workingData[index].slice());
+
+    /*
+     * Write the remaining records to the original today's-row
+     * positions, then clear the unused positions.
+     */
+    todayIndexes.forEach((targetIndex, index) => {
+      const values = remainingRows[index] || ["", "", "", ""];
+
+      requests.push(
+        makeTodayHoursUpdateCellsRequest_(
+          sheet.getSheetId(),
+          startRow + targetIndex,
+          5,
+          values,
+          timeZone,
+        ),
+      );
+    });
+
+    return requests;
+  }
+
+  /*
+   * No deletion on this tab: update only the requested E:G cells.
+   * The date in column H remains untouched.
+   */
+  entries.forEach(({ record, rowNumber }) => {
+    if (record.action !== "update") {
+      return;
+    }
+
+    const index = rowNumber - startRow;
+
+    requests.push(
+      makeTodayHoursUpdateCellsRequest_(
+        sheet.getSheetId(),
+        rowNumber,
+        5,
+        [
+          String(record.type).trim(),
+          String(record.task).trim(),
+          Number(record.hours),
+        ],
+        timeZone,
+      ),
+    );
+  });
+
+  return requests;
+}
+
+function makeTodayHoursUpdateCellsRequest_(
+  sheetId,
+  rowNumber,
+  columnNumber,
+  values,
+  timeZone,
+) {
+  return {
+    updateCells: {
+      range: {
+        sheetId: sheetId,
+        startRowIndex: rowNumber - 1,
+        startColumnIndex: columnNumber - 1,
+        endRowIndex: rowNumber,
+        endColumnIndex: columnNumber - 1 + values.length,
+      },
+      rows: [
+        {
+          values: values.map((value) =>
+            makeTodayHoursCellData_(value, timeZone),
+          ),
+        },
+      ],
+      fields: "userEnteredValue",
+    },
+  };
+}
+
+function makeTodayHoursCellData_(value, timeZone) {
+  if (value === "" || value === null || value === undefined) {
+    /*
+     * With fields=userEnteredValue, an empty cell object clears
+     * the existing value while preserving formatting.
+     */
+    return {};
+  }
+
+  if (value instanceof Date) {
+    const dateText = Utilities.formatDate(value, timeZone, "yyyy-MM-dd");
+
+    const [year, month, day] = dateText.split("-").map(Number);
+
+    const serial = Date.UTC(year, month - 1, day) / 86400000 + 25569;
+
+    return {
+      userEnteredValue: {
+        numberValue: serial,
+      },
+    };
+  }
+
+  if (typeof value === "number") {
+    return {
+      userEnteredValue: {
+        numberValue: value,
+      },
+    };
+  }
+
+  if (typeof value === "boolean") {
+    return {
+      userEnteredValue: {
+        boolValue: value,
+      },
+    };
+  }
+
+  return {
+    userEnteredValue: {
+      stringValue: String(value),
+    },
+  };
+}
+
+// function assertTodayHoursRecordUnchanged_(record, actual, label) {
+//   const originalType = String(record.originalType ?? "");
+//   const originalTask = String(record.originalTask ?? "");
+//   const originalHours = Number(record.originalHours);
+//   const originalDate = String(record.originalDate ?? "").trim();
+
+//   if (!Number.isFinite(originalHours) || originalHours < 0 || !originalDate) {
+//     throw new Error(`Original record snapshot is invalid for ${label}.`);
+//   }
+
+//   const actualType = String(actual.type ?? "");
+//   const actualTask = String(actual.task ?? "");
+//   const actualHours = Number(actual.hours);
+//   const actualDate = String(actual.dateFormatted ?? "").trim();
+
+//   const unchanged =
+//     actualType === originalType &&
+//     actualTask === originalTask &&
+//     Number.isFinite(actualHours) &&
+//     actualHours === originalHours &&
+//     actualDate === originalDate;
+
+//   if (!unchanged) {
+//     throw new Error(
+//       `${label} has changed since it was loaded. Reload today's hours and try again.`,
+//     );
+//   }
+// }
+
 
 function assertTodayHoursRecordUnchanged_(record, actual, label) {
   const originalType = String(record.originalType ?? "");
@@ -1768,7 +2434,7 @@ function assertTodayHoursRecordUnchanged_(record, actual, label) {
   const originalDate = String(record.originalDate ?? "").trim();
 
   if (!Number.isFinite(originalHours) || originalHours < 0 || !originalDate) {
-    throw new Error(`Original record snapshot is invalid for ${label}.`);
+    throw new Error(`Invalid original record snapshot for ${label}.`);
   }
 
   const actualType = String(actual.type ?? "");
@@ -1785,7 +2451,7 @@ function assertTodayHoursRecordUnchanged_(record, actual, label) {
 
   if (!unchanged) {
     throw new Error(
-      `${label} has changed since it was loaded. Reload today's hours and try again.`,
+      `HOURS_CONFLICT: ${label} has changed since it was loaded. Reload today's hours and try again.`,
     );
   }
 }
@@ -1890,6 +2556,163 @@ function deleteTodayRowsAndCompact(sheet, deleteRows, today, startRow) {
   rowsToClear.forEach((rowNumber) => {
     sheet.getRange(rowNumber, 5, 1, 4).clearContent();
   });
+}
+
+function getTaskOptions(sessionId, signature, clientName) {
+  requireCapability(sessionId, signature, "hours.view");
+
+  if (!clientName) {
+    return [];
+  }
+
+  try {
+    const sheet = getSheetSafe(clientName.trim());
+
+    if (!sheet) {
+      logResponse(`❌ No sheet found for client: ${clientName}`);
+      return [];
+    }
+
+    SpreadsheetApp.flush();
+
+    const tasks = sheet
+      .getRange("F3:F")
+      .getValues()
+      .flat()
+      .filter((task) => task && String(task).trim() !== "");
+
+    return [...new Set(tasks)].sort();
+  } catch (err) {
+    logResponse(`⚠️ getTaskOptions error: ${err}`);
+    return [];
+  }
+}
+
+function getRecentRecordsForManualForm(clientSheetName, limit = 3) {
+  requireCapability(sessionId, signature, "hours.view");
+
+  if (!isNonEmptyString(clientSheetName)) {
+    return [];
+  }
+
+  const sheet = getSheetSafe(clientSheetName);
+
+  if (!sheet) {
+    return [];
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 3) {
+    return [];
+  }
+
+  const startRow = 3;
+  const numRows = lastRow - startRow + 1;
+
+  const [dateCol, hourCol, typeCol, taskCol] = [8, 7, 5, 6].map((col) =>
+    sheet.getRange(startRow, col, numRows).getValues(),
+  );
+
+  const rows = [];
+
+  for (let i = 0; i < numRows; i++) {
+    const date = dateCol[i][0];
+    const hours = hourCol[i][0];
+    const type = typeCol[i][0];
+    const task = taskCol[i][0];
+
+    if (
+      ![date, hours, type, task].some((value) => value !== "" && value != null)
+    ) {
+      continue;
+    }
+
+    let dateTimestamp = 0;
+    let dateString = "";
+
+    if (date instanceof Date && !isNaN(date)) {
+      dateTimestamp = date.getTime();
+      dateString = formatDateSafe(date, "yyyy-MM-dd");
+    } else if (date) {
+      const parsed = new Date(String(date));
+
+      if (!isNaN(parsed)) {
+        dateTimestamp = parsed.getTime();
+        dateString = formatDateSafe(parsed, "yyyy-MM-dd");
+      } else {
+        dateString = String(date);
+      }
+    }
+
+    rows.push({
+      dateTimestamp,
+      row: [dateString, hours, type, task],
+    });
+  }
+
+  return rows
+    .sort((a, b) => b.dateTimestamp - a.dateTimestamp)
+    .slice(0, limit)
+    .map((item) => item.row);
+}
+
+function getDailyActivityData(sessionId, signature) {
+  requireCapability(sessionId, signature, "hours.view");
+
+  const sheet = getSheetSafe("Client Tracker - Today");
+
+  return sheet
+    ? sheet
+        .getRange("B2:G")
+        .getValues()
+        .filter((row) => row.some(Boolean))
+    : [];
+}
+
+function getHoursSummary(sessionId, signature) {
+  requireCapability(sessionId, signature, "hours.view");
+
+  const sheet = getSheetSafe("Other Analytics");
+
+  if (!sheet) {
+    return {};
+  }
+
+  const values = sheet.getRange("A2:I2").getValues()[0];
+
+  return {
+    totalHours: values[1] ?? 0,
+    totalPaid: values[2] ?? 0,
+    owedHours: values[3] ?? 0,
+    netHours: values[4] ?? 0,
+
+    lifetimePercent: values[5] ?? 0,
+    collectionRate: values[6] ?? 0,
+    debtExposureRate: values[7] ?? 0,
+    netHoursYield: values[8] ?? 0,
+  };
+}
+
+function getClientHoursForOverview(sessionId, signature, clientName) {
+  requireCapability(sessionId, signature, "hours.view");
+
+  if (!isNonEmptyString(clientName)) {
+    return { error: "INVALID_CLIENT" };
+  }
+
+  const sheet = getSheetSafe(clientName);
+
+  if (!sheet) {
+    return { error: "NOT_FOUND" };
+  }
+
+  return {
+    totalHrs: sheet.getRange("B8").getValue(),
+    weekHrs: sheet.getRange("N18").getValue(),
+    monthHrs: sheet.getRange("N19").getValue(),
+    yearHrs: sheet.getRange("N20").getValue(),
+  };
 }
 
 function getYearHoursSummary(sessionId, signature, year) {

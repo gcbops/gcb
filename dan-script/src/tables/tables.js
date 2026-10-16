@@ -80,6 +80,7 @@ const TableModule = (() => {
     manual = false,
     isForProject = false,
   ) {
+
     if (!clientName) {
       return;
     }
@@ -215,6 +216,7 @@ const TableModule = (() => {
     clientName,
     $submitBtn = $("#submit-new-hours"),
   ) {
+
     if (!clientName && !$submitBtn) {
       return;
     }
@@ -251,6 +253,7 @@ const TableModule = (() => {
               .val("")
               .trigger("change");
 
+            $submitBtn.prop("disabled", false);
             return;
           }
 
@@ -264,6 +267,7 @@ const TableModule = (() => {
                 : task;
 
             if (!value && !text) {
+              $submitBtn.prop("disabled", false);
               return;
             }
 
@@ -569,7 +573,6 @@ const TableModule = (() => {
   }
 
   return {
-    loadClientTasks,
     renderClientData,
     highlightLatestRow,
     bindTableActions,

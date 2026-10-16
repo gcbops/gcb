@@ -278,6 +278,10 @@ const AppUtils = (() => {
             }
 
             if (handleInvalidSessionError(error)) {
+              if (typeof onError === "function") {
+                onError(error);
+              }
+
               return;
             }
 
@@ -823,9 +827,75 @@ const AppUtils = (() => {
       .removeClass("pe-7s-angle-up")
       .addClass("pe-7s-angle-down");
 
+    /*
+     * Reset / empty all form elements inside the drawer.
+     */
+    resetDrawerForms($drawerElement);
+
     if (typeof onClose === "function") {
       onClose($drawerElement, $contentElement);
     }
+  }
+
+  /*
+   * Helper: reset all form controls inside a drawer.
+   */
+  function resetDrawerForms($drawerElement) {
+    if (!$drawerElement || !$drawerElement.length) {
+      return;
+    }
+
+    const $forms = $drawerElement.find("form");
+
+    if ($forms.length) {
+      // Native reset for standard forms
+      $forms.each(function () {
+        if (typeof this.reset === "function") {
+          this.reset();
+        }
+      });
+    }
+
+    // Explicitly clear values (covers cases where reset() is not enough)
+    $drawerElement
+      .find(
+        "input[type='text'], input[type='email'], input[type='number'], input[type='search'], input[type='url'], input[type='tel'], input[type='password'], input[type='date'], input[type='time'], input[type='datetime-local']",
+      )
+      .val("")
+      .trigger("change");
+
+    $drawerElement.find("textarea").val("").trigger("change");
+
+    // Single selects: reset to first option
+    $drawerElement.find("select:not([multiple])").each(function () {
+      const $select = $(this);
+      if ($select.find("option").length) {
+        $select.prop("selectedIndex", 0);
+      } else {
+        $select.val("");
+      }
+      $select.trigger("change");
+    });
+
+    // Multiple selects: clear all
+    $drawerElement.find("select[multiple]").val([]).trigger("change");
+
+    // Checkboxes and radios
+    $drawerElement
+      .find("input[type='checkbox'], input[type='radio']")
+      .prop("checked", false)
+      .trigger("change");
+
+    // Select2: clear and refresh
+    $drawerElement.find("select.select2-hidden-accessible").each(function () {
+      const $select = $(this);
+      if ($select.hasClass("select2-hidden-accessible")) {
+        $select.val(null).trigger("change");
+      }
+    });
+
+    // If you use a custom Select2 init, you may also want:
+    // $drawerElement.find(".select2").select2("val", "");
   }
 
   function toggleDrawer(drawerSelector, options = {}) {

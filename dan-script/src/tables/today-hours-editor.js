@@ -49,7 +49,7 @@ const TodayHoursEditor = (() => {
           Cancel
         </button>
 
-        <button type="button" class="btn btn-primary btn-save">
+        <button type="button" class="btn btn-gc btn-save">
           Save Changes
         </button>
       `,

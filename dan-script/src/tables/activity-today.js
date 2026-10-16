@@ -314,119 +314,6 @@ const ActivityToday = (() => {
     AppUtils.openDrawer("#drawerManualAdd");
   }
 
-  // function handleTaskSubmit(event) {
-  //   event.preventDefault();
-
-  //   const $form = $(this);
-
-  //   let $submitBtn = $form.find('button[type="submit"]');
-
-  //   if (!$submitBtn.length) {
-  //     $submitBtn = $("#submit-new-hours");
-  //   }
-
-  //   const formData = {
-  //     client: String($("#client").val() || "").trim(),
-  //     hour: String($("#hour").val() || "").trim(),
-  //     type: String($("#type").val() || "").trim(),
-  //     task: String($("#task").val() || "").trim(),
-  //   };
-
-  //   const validation = clientActivityForm(formData);
-
-  //   if (!validation.valid) {
-  //     AppUtils.showDashboardToast(validation.message, "error");
-  //     return;
-  //   }
-
-  //   const validatedData = validation.value;
-
-  //   const loading = AppUtils.setButtonLoading($submitBtn, "Saving");
-
-  //   $("#taskForm").find("select, input.form-control").prop("disabled", true);
-
-  //   (async () => {
-  //     try {
-  //       const [sessionId, signature] = await getAuthArgs();
-
-  //       AppUtils.gScriptRun({
-  //         gscriptFunc: "isExternalClient",
-  //         args: [sessionId, signature, validatedData.client],
-
-  //         onSuccess: (isExternal) => {
-  //           submitHours(isExternal === true);
-  //         },
-
-  //         onError: (err) => {
-  //           console.error("isExternalClient failed:", err);
-
-  //           $("#taskForm")
-  //             .find("select, input.form-control")
-  //             .prop("disabled", false);
-
-  //           loading.restore();
-
-  //           AppUtils.showDashboardToast(
-  //             "Unable to determine client type.",
-  //             "error",
-  //           );
-  //         },
-  //       });
-  //     } catch (error) {
-  //       $("#taskForm")
-  //       .find("select, input.form-control")
-  //       .prop("disabled", false);
-        
-  //       loading.restore();
-
-  //       if (handleInvalidSessionError(error)) {
-  //         return;
-  //       }
-
-  //       console.error("[ActivityToday] Authentication failed:", error);
-
-  //       AppUtils.showDashboardToast(
-  //         error?.message || "Unable to determine client type.",
-  //         "error",
-  //       );
-  //     }
-  //   })();
-
-  //   function submitHours(isExternal) {
-  //     const gscriptFunc = isExternal
-  //       ? "recordExternalClientHoursFromForm"
-  //       : "recordManualClientHoursFromForm";
-
-  //     AppUtils.submitForm({
-  //       gscriptFunc,
-  //       data: validatedData,
-  //       $btn: null,
-  //       loadingText: "Saving",
-
-  //       onSuccess: () => {
-  //         $("#taskForm")
-  //           .find("select, input.form-control")
-  //           .prop("disabled", false);
-
-  //         loading.restore();
-
-  //         handleTaskSaveSuccess(formData);
-  //       },
-
-  //       onError: (error) => {
-  //         $("#taskForm")
-  //           .find("select, input.form-control")
-  //           .prop("disabled", false);
-
-  //         loading.restore();
-
-  //         console.error("[ActivityToday] Failed to record hours:", error);
-
-  //         AppUtils.showDashboardToast("Something went wrong!", "error");
-  //       },
-  //     });
-  //   }
-  // }
 
   function handleTaskSubmit(event) {
     event.preventDefault();
@@ -485,7 +372,6 @@ const ActivityToday = (() => {
       refreshActivityTable(activityTable);
     }
 
-    // const task = $("#task").val();
     const task = formData.task;
     const client = formData.client;
 

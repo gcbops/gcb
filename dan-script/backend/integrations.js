@@ -452,6 +452,9 @@ function verifySpreadsheetAccess(spreadsheetId, label) {
 function saveIntegration(sessionId, signature, integration, value) {
   requireRole(sessionId, signature, "admin");
 
+  const startedAt = Date.now();
+  const updatedSettings = [];
+
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",
     "discord",
@@ -504,10 +507,12 @@ function saveIntegration(sessionId, signature, integration, value) {
 
     if (validated.reportFolderId) {
       properties.setProperty("REPORT_FOLDER_ID", validated.reportFolderId.id);
+      updatedSettings.push("REPORT_FOLDER_ID");
     }
 
     if (validated.backupFolderId) {
       properties.setProperty("BACKUP_FOLDER_ID", validated.backupFolderId.id);
+      updatedSettings.push("BACKUP_FOLDER_ID");
     }
 
     if (validated.mainSheetsFolderId) {
@@ -515,9 +520,12 @@ function saveIntegration(sessionId, signature, integration, value) {
         "MAIN_SHEETS_FOLDER_ID",
         validated.mainSheetsFolderId.id,
       );
+      updatedSettings.push("MAIN_SHEETS_FOLDER_ID");
     }
 
     reconcileScheduledTriggersInternal();
+
+    logIntegrationSave_(integrationType, updatedSettings, startedAt);
 
     return {
       success: true,
@@ -556,6 +564,7 @@ function saveIntegration(sessionId, signature, integration, value) {
 
     if (validated.spreadsheetId) {
       properties.setProperty("SPREADSHEET_ID", validated.spreadsheetId.id);
+      updatedSettings.push("SPREADSHEET_ID");
     }
 
     if (validated.externalSheetTemplateId) {
@@ -563,9 +572,12 @@ function saveIntegration(sessionId, signature, integration, value) {
         "EXTERNAL_SHEET_TEMPLATE_ID",
         validated.externalSheetTemplateId.id,
       );
+      updatedSettings.push("EXTERNAL_SHEET_TEMPLATE_ID");
     }
 
     reconcileScheduledTriggersInternal();
+
+    logIntegrationSave_(integrationType, updatedSettings, startedAt);
 
     return {
       success: true,
@@ -582,19 +594,42 @@ function saveIntegration(sessionId, signature, integration, value) {
       Validation.email(cleanValue, "Notification email");
 
       properties.setProperty("NOTIFICATION_EMAIL", cleanValue);
+      updatedSettings.push("NOTIFICATION_EMAIL");
       break;
 
     case "discord":
       Validation.discordWebhook(cleanValue, "Discord webhook");
 
       properties.setProperty("DISCORD_WEBHOOK_URL", cleanValue);
+      updatedSettings.push("DISCORD_WEBHOOK_URL");
       break;
   }
 
   reconcileScheduledTriggersInternal();
 
+  logIntegrationSave_(integrationType, updatedSettings, startedAt);
+
   return {
     success: true,
     integration: integrationType,
   };
+}
+
+function logIntegrationSave_(integration, updatedSettings, startedAt) {
+  recordGcbOperationLog_({
+    timestamp: new Date(),
+    category: "INTEGRATION",
+    operation: "SAVE_INTEGRATION",
+    status: "SUCCESS",
+    trigger: "MANUAL",
+    durationMs: Date.now() - startedAt,
+    processed: updatedSettings.length,
+    succeeded: updatedSettings.length,
+    failed: 0,
+    target: integration,
+    message: updatedSettings.length
+      ? `Updated settings: ${updatedSettings.join(", ")}.`
+      : "Integration save completed; no settings were changed.",
+    error: "",
+  });
 }

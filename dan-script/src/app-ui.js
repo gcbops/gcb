@@ -184,7 +184,7 @@ const AppUI = (() => {
       return;
     }
 
-    root.querySelectorAll(".card").forEach((card) => {
+    root.querySelectorAll(".skeleton-target").forEach((card) => {
       card.classList.remove("loaded");
       card.classList.add("skeleton");
     });
@@ -206,7 +206,7 @@ const AppUI = (() => {
       containerEl.classList.remove("opacity-0");
     }
 
-    const cards = root.querySelectorAll(".card.skeleton");
+    const cards = root.querySelectorAll(".skeleton-target.skeleton");
     const stagger = 350; // ms between each card
 
     cards.forEach((card, index) => {

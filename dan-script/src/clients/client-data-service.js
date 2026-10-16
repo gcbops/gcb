@@ -78,9 +78,9 @@ const ClientDataService = (() => {
    * Paid & Owed Log!O:S
    */
   async function renderActivePaidOwedClients(
-    isSimple = false,
     debug = false,
     reset = false,
+    callback
   ) {
     const log = (...args) => debug && console.log(...args);
 
@@ -106,7 +106,7 @@ const ClientDataService = (() => {
             return;
           }
 
-          renderPaidOwedTable(data, isSimple);
+          renderPaidOwedTable(data, callback);
         },
         debug,
         reset,
@@ -120,7 +120,7 @@ const ClientDataService = (() => {
     }
   }
 
-  function renderPaidOwedTable(data, isSimple) {
+  function renderPaidOwedTable(data, callback) {
     const tbody = document.querySelector(`${ACTIVE_CLIENTS_TABLE_ID} tbody`);
 
     if (!tbody) {
@@ -149,10 +149,27 @@ const ClientDataService = (() => {
       tbody.appendChild(createPaidOwedRow(row, index));
     });
 
-    DataTableModule.init(ACTIVE_CLIENTS_TITLE, ACTIVE_CLIENTS_TABLE_ID, false, {
-      hideAllControls: true,
-      scrollY: "450px",
-    });
+    DataTableModule.init(
+      ACTIVE_CLIENTS_TITLE,
+      ACTIVE_CLIENTS_TABLE_ID,
+      false,
+      {
+        responsive: false,
+        lengthChange: false,
+        info: false,
+        paging: false,
+        scrollY: "450px",
+        scrollCollapse: true,
+
+        layout: {
+          topStart: null,
+          topEnd: null,
+          bottomStart: null,
+          bottomEnd: null,
+        },
+      },
+      callback,
+    );
 
     /*
      * Initialize category filter only when the filter exists.

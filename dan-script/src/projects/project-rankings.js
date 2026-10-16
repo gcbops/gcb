@@ -89,8 +89,8 @@ const ProjectRankings = (() => {
     $("#project-new-year-count").text(summary.newYear ?? 0);
   }
 
-  async function renderTopProjects(projects) {
-    if (projects === undefined) {
+  async function renderTopProjects(projects, callback) {
+    if (projects === undefined || projects === null) {
       try {
         const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
@@ -154,6 +154,10 @@ const ProjectRankings = (() => {
 
       $container[0].appendChild(item);
     });
+
+    if (typeof callback === "function") {
+      callback();
+    }
   }
 
   function renderRecentProjects(projects) {

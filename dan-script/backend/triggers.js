@@ -108,44 +108,78 @@ function reconcileScheduledTriggers(sessionId, signature) {
 }
 
 function reconcileScheduledTriggersInternal() {
-
   const results = [];
 
   for (const [name, config] of Object.entries(SCHEDULED_TRIGGERS)) {
-    let required = false;
+    let required;
 
     try {
       required = Boolean(config.required());
-    } catch (err) {
-      console.error(`Trigger requirement check failed: ${name}`, err);
+    } catch (error) {
+      console.error(
+        `[Triggers] Requirement check failed for "${name}":`,
+        error,
+      );
 
-      required = false;
+      results.push({
+        name,
+        action: "error",
+        message: "Requirement check failed; existing triggers were preserved.",
+        error: String(error?.message || error).slice(0, 300),
+      });
+
+      // Do not delete a trigger when its requirement is unknown.
+      continue;
     }
 
-    const triggers = ScriptApp.getProjectTriggers().filter(
-      (trigger) => trigger.getHandlerFunction() === config.functionName,
-    );
+    try {
+      const triggers = ScriptApp.getProjectTriggers().filter(
+        (trigger) => trigger.getHandlerFunction() === config.functionName,
+      );
 
-    if (required) {
-      if (triggers.length === 0) {
-        config.create();
+      if (required) {
+        if (triggers.length === 0) {
+          config.create();
+
+          results.push({
+            name,
+            action: "created",
+          });
+
+          continue;
+        }
+
+        if (triggers.length > 1) {
+          triggers.slice(1).forEach((trigger) => {
+            ScriptApp.deleteTrigger(trigger);
+          });
+
+          results.push({
+            name,
+            action: "duplicates removed",
+            removed: triggers.length - 1,
+          });
+
+          continue;
+        }
 
         results.push({
           name,
-          action: "created",
+          action: "unchanged",
         });
 
         continue;
       }
 
-      if (triggers.length > 1) {
-        triggers.slice(1).forEach((trigger) => {
+      if (triggers.length > 0) {
+        triggers.forEach((trigger) => {
           ScriptApp.deleteTrigger(trigger);
         });
 
         results.push({
           name,
-          action: "duplicates removed",
+          action: "deleted",
+          removed: triggers.length,
         });
 
         continue;
@@ -153,29 +187,17 @@ function reconcileScheduledTriggersInternal() {
 
       results.push({
         name,
-        action: "unchanged",
+        action: "inactive",
       });
-
-      continue;
-    }
-
-    if (triggers.length > 0) {
-      triggers.forEach((trigger) => {
-        ScriptApp.deleteTrigger(trigger);
-      });
+    } catch (error) {
+      console.error(`[Triggers] Reconciliation failed for "${name}":`, error);
 
       results.push({
         name,
-        action: "deleted",
+        action: "error",
+        error: String(error?.message || error).slice(0, 300),
       });
-
-      continue;
     }
-
-    results.push({
-      name,
-      action: "inactive",
-    });
   }
 
   return results;

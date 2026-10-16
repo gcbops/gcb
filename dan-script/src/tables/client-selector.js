@@ -103,7 +103,7 @@ const TableClientSelector = (() => {
     $select
       .off("change.clientSelector")
       .on("change.clientSelector", function () {
-        const selectedName = $(this).val();
+        const selectedName = $select.val();
 
         if (!selectedName) {
           return;

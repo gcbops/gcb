@@ -68,21 +68,21 @@ const AppShellModule = (() => {
       try {
         const appContainer = await waitForElement("#app-container");
 
-        /*
-         * ------------------------------------------------
-         * Loader
-         * ------------------------------------------------
-         */
+        // /*
+        //  * ------------------------------------------------
+        //  * Loader
+        //  * ------------------------------------------------
+        //  */
 
-        try {
-          const loaderHtml = await loadComponent("app-loader", "loader");
+        // try {
+        //   const loaderHtml = await loadComponent("app-loader", "loader");
 
-          if (loaderHtml) {
-            document.body.insertAdjacentHTML("afterbegin", loaderHtml);
-          }
-        } catch (error) {
-          console.warn("[AppShell] Loader failed:", error);
-        }
+        //   if (loaderHtml) {
+        //     document.body.insertAdjacentHTML("afterbegin", loaderHtml);
+        //   }
+        // } catch (error) {
+        //   console.warn("[AppShell] Loader failed:", error);
+        // }
 
         /*
          * ------------------------------------------------

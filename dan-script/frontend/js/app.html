@@ -561,6 +561,9 @@
               return;
             }
             if (handleInvalidSessionError(error)) {
+              if (typeof onError === "function") {
+                onError(error);
+              }
               return;
             }
             if (log) {
@@ -914,9 +917,44 @@
       }
       $drawerElement.removeClass("drawer-open drawer-minimized");
       $drawerElement.find(".drawer-minimize i").removeClass("pe-7s-angle-up").addClass("pe-7s-angle-down");
+      resetDrawerForms($drawerElement);
       if (typeof onClose === "function") {
         onClose($drawerElement, $contentElement);
       }
+    }
+    function resetDrawerForms($drawerElement) {
+      if (!$drawerElement || !$drawerElement.length) {
+        return;
+      }
+      const $forms = $drawerElement.find("form");
+      if ($forms.length) {
+        $forms.each(function() {
+          if (typeof this.reset === "function") {
+            this.reset();
+          }
+        });
+      }
+      $drawerElement.find(
+        "input[type='text'], input[type='email'], input[type='number'], input[type='search'], input[type='url'], input[type='tel'], input[type='password'], input[type='date'], input[type='time'], input[type='datetime-local']"
+      ).val("").trigger("change");
+      $drawerElement.find("textarea").val("").trigger("change");
+      $drawerElement.find("select:not([multiple])").each(function() {
+        const $select = $(this);
+        if ($select.find("option").length) {
+          $select.prop("selectedIndex", 0);
+        } else {
+          $select.val("");
+        }
+        $select.trigger("change");
+      });
+      $drawerElement.find("select[multiple]").val([]).trigger("change");
+      $drawerElement.find("input[type='checkbox'], input[type='radio']").prop("checked", false).trigger("change");
+      $drawerElement.find("select.select2-hidden-accessible").each(function() {
+        const $select = $(this);
+        if ($select.hasClass("select2-hidden-accessible")) {
+          $select.val(null).trigger("change");
+        }
+      });
     }
     function toggleDrawer(drawerSelector, options = {}) {
       const $drawer = drawerSelector instanceof jQuery ? drawerSelector : $(drawerSelector);
@@ -1991,7 +2029,7 @@
 
   // src/hours/hour-summary.js
   var HourSummary = /* @__PURE__ */ (() => {
-    async function loadHoursSummary(containerSelector) {
+    async function loadHoursSummary(containerSelector, callback) {
       try {
         const [sessionId, signature] = await getAuthArgs();
         AppUtils.cachedGScriptCall(
@@ -2003,7 +2041,7 @@
               AppUtils.showError("No metrics found");
               return;
             }
-            renderHoursSummary(containerSelector, data);
+            renderHoursSummary(containerSelector, data, callback);
           }
         );
       } catch (error) {
@@ -2013,7 +2051,7 @@
         AppUtils.showError(error?.message || "Failed to load hours summary.");
       }
     }
-    function renderHoursSummary(containerSelector, data) {
+    function renderHoursSummary(containerSelector, data, callback) {
       const $container = $(containerSelector);
       if (!$container.length || !data) {
         return;
@@ -2045,6 +2083,9 @@
         $container.find('[data-metric="net-hours"]'),
         data.netHours
       );
+      if (typeof callback === "function") {
+        callback();
+      }
     }
     async function loadDailyOverviewSummary() {
       try {
@@ -2635,7 +2676,7 @@
         const normalizedPayload = normalizeHoursPayload(payload);
         const normalizedClient = normalizeText(normalizedPayload.client);
         const existing = state.queue.find(
-          (request2) => request2.type === "record-hours" && request2.status === "pending" && normalizeText(request2.payload?.client) === normalizedClient
+          (request2) => request2.type === "record-hours" && ["pending", "paused"].includes(request2.status) && normalizeText(request2.payload?.client) === normalizedClient
         );
         if (existing) {
           existing.payload = mergeHoursPayload(
@@ -2739,7 +2780,7 @@
       const byClient = {};
       let total = 0;
       state.queue.forEach((request) => {
-        if (request.type !== "record-hours" || !["pending", "running"].includes(request.status)) {
+        if (request.type !== "record-hours" || !["pending", "paused", "running"].includes(request.status)) {
           return;
         }
         let records;
@@ -2797,6 +2838,21 @@
       processQueue();
       return true;
     }
+    function getRetryableRequests() {
+      return [...state.queue, ...state.history].filter(
+        (request) => ["interrupted", "failed"].includes(request.status) && handlers.has(request.type)
+      );
+    }
+    function retryRequests(ids) {
+      const idsToRetry = [...new Set(ids)];
+      let retriedCount = 0;
+      idsToRetry.forEach((id) => {
+        if (retryRequest(id)) {
+          retriedCount++;
+        }
+      });
+      return retriedCount;
+    }
     function dismissRequest(id) {
       const index = state.queue.findIndex((item) => item.id === id);
       if (index === -1) {
@@ -2810,8 +2866,103 @@
       notify();
       return true;
     }
+    function cancelRequest(id) {
+      const index = state.queue.findIndex((item) => item.id === id);
+      if (index === -1) {
+        return false;
+      }
+      const request = state.queue[index];
+      if (!["pending", "paused"].includes(request.status)) {
+        return false;
+      }
+      state.queue.splice(index, 1);
+      state.history.unshift({
+        ...request,
+        status: "cancelled",
+        message: "Cancelled by user",
+        updatedAt: Date.now()
+      });
+      state.history = state.history.slice(0, MAX_HISTORY);
+      const hasPendingRequests = state.queue.some(
+        (item) => ["pending", "paused"].includes(item.status)
+      );
+      if (!hasPendingRequests && processTimer !== null) {
+        clearTimeout(processTimer);
+        processTimer = null;
+      } else if (hasPendingRequests && processTimer === null && !processing) {
+        scheduleProcessQueue();
+      }
+      notify();
+      return true;
+    }
+    function pauseRequest(id) {
+      const request = state.queue.find((item) => item.id === id);
+      if (!request || request.status !== "pending") {
+        return false;
+      }
+      updateRequest(id, {
+        status: "paused",
+        message: "Paused by user"
+      });
+      return true;
+    }
+    function resumeRequest(id) {
+      const request = state.queue.find((item) => item.id === id);
+      if (!request || request.status !== "paused") {
+        return false;
+      }
+      updateRequest(id, {
+        status: "pending",
+        message: "Resumed. Waiting to start"
+      });
+      scheduleProcessQueue();
+      return true;
+    }
+    function updatePendingRequests(ids, action) {
+      const idsToUpdate = new Set(ids);
+      let updatedCount = 0;
+      state.queue.forEach((request) => {
+        if (!idsToUpdate.has(request.id)) {
+          return;
+        }
+        if (action === "pause" && request.status === "pending") {
+          request.status = "paused";
+          request.message = "Paused by user";
+          request.updatedAt = Date.now();
+          updatedCount++;
+        } else if (action === "resume" && request.status === "paused") {
+          request.status = "pending";
+          request.message = "Resumed. Waiting to start";
+          request.updatedAt = Date.now();
+          updatedCount++;
+        }
+      });
+      if (updatedCount > 0) {
+        notify();
+        if (action === "resume") {
+          scheduleProcessQueue();
+        }
+      }
+      return updatedCount;
+    }
+    function pauseRequests(ids) {
+      return updatePendingRequests(ids, "pause");
+    }
+    function resumeRequests(ids) {
+      return updatePendingRequests(ids, "resume");
+    }
     function archiveHistory() {
       state.history = [];
+      notify();
+    }
+    function archiveHistoryByIds(ids) {
+      const idsToRemove = new Set(ids);
+      if (!idsToRemove.size) {
+        return;
+      }
+      state.history = state.history.filter(
+        (request) => !idsToRemove.has(request.id)
+      );
       notify();
     }
     function dismissHistoryItem(id) {
@@ -2830,8 +2981,16 @@
       getState,
       getProjectedHours,
       retryRequest,
+      getRetryableRequests,
+      retryRequests,
       dismissRequest,
+      cancelRequest,
+      pauseRequest,
+      resumeRequest,
+      pauseRequests,
+      resumeRequests,
       archiveHistory,
+      archiveHistoryByIds,
       dismissHistoryItem
     };
   })();
@@ -4309,7 +4468,7 @@
           Cancel
         </button>
 
-        <button type="button" class="btn btn-primary btn-save">
+        <button type="button" class="btn btn-gc btn-save">
           Save Changes
         </button>
       `,
@@ -4848,12 +5007,14 @@
             $taskSelect.empty();
             if (!tasks.length) {
               $taskSelect.append(new Option("No tasks found", "")).val("").trigger("change");
+              $submitBtn.prop("disabled", false);
               return;
             }
             tasks.forEach((task) => {
               const value = typeof task === "object" ? task.value || task.id || "" : task;
               const text = typeof task === "object" ? task.label || task.name || value : task;
               if (!value && !text) {
+                $submitBtn.prop("disabled", false);
                 return;
               }
               $taskSelect.append(new Option(text, value));
@@ -5063,7 +5224,6 @@
       }, 2e4);
     }
     return {
-      loadClientTasks,
       renderClientData,
       highlightLatestRow,
       bindTableActions,
@@ -5495,7 +5655,7 @@
     }
     function bindClientChange($select, isForProject) {
       $select.off("change.clientSelector").on("change.clientSelector", function() {
-        const selectedName = $(this).val();
+        const selectedName = $select.val();
         if (!selectedName) {
           return;
         }
@@ -5586,11 +5746,7 @@
               );
               return;
             }
-            renderClientDirectory(data, () => {
-              if (typeof callback === "function") {
-                callback();
-              }
-            }, loading);
+            renderClientDirectory(data, callback, loading);
           },
           false,
           true
@@ -5659,6 +5815,9 @@
           bottomEnd: ["search"]
         }
       });
+      if (typeof callback === "function") {
+        callback();
+      }
       if (loading) {
         loading.restore();
       }
@@ -9316,10 +9475,7 @@
               chartType,
               rows: data.length
             });
-            drawChart(chartType, data, false, animated, chartOpts);
-            if (typeof onComplete === "function") {
-              onComplete();
-            }
+            drawChart(chartType, data, false, animated, chartOpts, onComplete);
           },
           log,
           refresh
@@ -9402,7 +9558,7 @@
         log
       );
     }
-    function drawChart(type, data, debug = false, animated = false, chartOpts = {}) {
+    function drawChart(type, data, debug = false, animated = false, chartOpts = {}, onComplete) {
       const chartDiv = document.getElementById(`chart-${type}`);
       if (!chartDiv) {
         return AppUtils.showError(`chart-${type} not found`);
@@ -9418,34 +9574,26 @@
       }
       switch (type) {
         case "yearly":
-          return drawYearlyChart(ctx, type, data, true);
+          return drawYearlyChart(ctx, type, data, true, onComplete);
         case "hourly":
-          return drawHourlyChart(ctx, type, data, true);
+          return drawHourlyChart(ctx, type, data, true, onComplete);
         case "monthly-prev-merged":
-          return drawMonthlyComparisonChart(ctx, type, data, true);
+          return drawMonthlyComparisonChart(ctx, type, data, true, onComplete);
         case "current_month_log":
         case "yearly_monthly_hours":
         case "daily":
         case "monthly":
-          return drawLineChart(ctx, type, data, animated, chartOpts);
+          return drawLineChart(ctx, type, data, animated, chartOpts, onComplete);
         case "monthly_hours_by_year":
-          return drawMonthlyHoursByYearChart(ctx, type, data, animated);
+          return drawMonthlyHoursByYearChart(ctx, type, data, animated, onComplete);
         case "daily_overview":
-          return drawDailyOverviewChart(ctx, type, data, animated);
-        // case "client_paid_owed_history":
-        //   return drawClientPaidOwedHistoryChart(
-        //     ctx,
-        //     type,
-        //     data,
-        //     animated,
-        //     chartOpts,
-        //   );
+          return drawDailyOverviewChart(ctx, type, data, animated, onComplete);
         case "client_hours_month":
-          return drawClientMonthlyHoursChart(ctx, type, data, animated);
+          return drawClientMonthlyHoursChart(ctx, type, data, animated, onComplete);
         case "client_daily_hours":
-          return drawClientDailyHoursChart(ctx, type, data, animated);
+          return drawClientDailyHoursChart(ctx, type, data, animated, onComplete);
         case "client_paid_owed":
-          return drawClientPaidOwedHistoryChart(ctx, type, data, animated);
+          return drawClientPaidOwedHistoryChart(ctx, type, data, animated, onComplete);
         default:
           return AppUtils.showError(`Unknown chart type: ${type}`);
       }
@@ -9496,7 +9644,7 @@
       }
       chart._waveAnimation = requestAnimationFrame(wave);
     }
-    function drawYearlyChart(ctx, type, data, animated = false) {
+    function drawYearlyChart(ctx, type, data, animated = false, onComplete) {
       const labels = data.map((row) => row?.[0] ?? "");
       const paid = data.map((row) => Number(row?.[2]) || 0);
       const owed = data.map((row) => Number(row?.[3]) || 0);
@@ -9648,8 +9796,11 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawHourlyChart(ctx, type, data, animated = false) {
+    function drawHourlyChart(ctx, type, data, animated = false, onComplete) {
       const labels = data.map((row) => String(row?.[0] || ""));
       const values = data.map((row) => Number(row?.[1]) || 0);
       const peakIndex = getPeakIndex(values);
@@ -9778,8 +9929,11 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawMonthlyComparisonChart(ctx, type, data, animated = false) {
+    function drawMonthlyComparisonChart(ctx, type, data, animated = false, onComplete) {
       const prev = fillMonthlyData(data?.prevYear || []);
       const current = fillMonthlyData(data?.currentYear || []);
       const prevPeakIndex = getPeakIndex(prev);
@@ -9911,8 +10065,11 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawMonthlyHoursByYearChart(ctx, type, data, animated = false) {
+    function drawMonthlyHoursByYearChart(ctx, type, data, animated = false, onComplete) {
       const yearColors = [
         {
           base: "rgba(14, 165, 233, 0.85)",
@@ -10050,8 +10207,11 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawDailyOverviewChart(ctx, type, data, animated = false) {
+    function drawDailyOverviewChart(ctx, type, data, animated = false, onComplete) {
       const labels = data.map(([client]) => client);
       const values = data.map(([, hours]) => Number(hours) || 0);
       const peakIndex = getPeakIndex(values);
@@ -10149,6 +10309,9 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
     function fillMonthlyData(data) {
       const values = Array(12).fill(0);
@@ -10165,7 +10328,7 @@
       });
       return values;
     }
-    function drawLineChart(ctx, type, data, animated = false, chartOpts = {}) {
+    function drawLineChart(ctx, type, data, animated = false, chartOpts = {}, onComplete) {
       const {
         showLabel = true,
         showPoints = true,
@@ -10329,8 +10492,11 @@
           animated ? 1200 : 0
         );
       }
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawClientPaidOwedHistoryChart(ctx, type, yearlyData, animated = false, chartOpts = {}) {
+    function drawClientPaidOwedHistoryChart(ctx, type, yearlyData, animated = false, chartOpts = {}, onComplete) {
       const {
         showLabel = true,
         showTooltip = true,
@@ -10479,11 +10645,17 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawMonthlyTargetChart(ctx, chartId, data) {
+    function drawMonthlyTargetChart(ctx, chartId, data, onComplete) {
       const existing = Chart.getChart(ctx);
       if (existing) {
         existing.destroy();
+      }
+      if (typeof onComplete === "function") {
+        onComplete();
       }
       return new Chart(ctx, {
         type: "bar",
@@ -10547,7 +10719,7 @@
         }
       });
     }
-    function drawClientMonthlyHoursChart(ctx, type, data, animated = false) {
+    function drawClientMonthlyHoursChart(ctx, type, data, animated = false, onComplete) {
       const years = Object.keys(data || {});
       const year = years[0];
       const rows = data?.[year] || [];
@@ -10591,8 +10763,11 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
-    function drawClientDailyHoursChart(ctx, type, data, animated = false) {
+    function drawClientDailyHoursChart(ctx, type, data, animated = false, onComplete) {
       const labels = data.map((row) => String(row[0]));
       const values = data.map((row) => Number(row[1]) || 0);
       destroyChart(type);
@@ -10630,6 +10805,9 @@
           }
         }
       });
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
     }
     function getPeakIndex(values) {
       if (!values?.length) {
@@ -10939,7 +11117,7 @@
     function getCacheKey(category) {
       return `cache_${category.replace(/\s+/g, "")}`;
     }
-    async function renderActivePaidOwedClients(isSimple = false, debug = false, reset = false) {
+    async function renderActivePaidOwedClients(debug = false, reset = false, callback) {
       const log = (...args) => debug && console.log(...args);
       const cacheKey = "paidOwedClients";
       const tableId = "#active-clients";
@@ -10957,7 +11135,7 @@
               AppUtils.showError("\u26A0\uFE0F Invalid paid & owed data.");
               return;
             }
-            renderPaidOwedTable(data, isSimple);
+            renderPaidOwedTable(data, callback);
           },
           debug,
           reset
@@ -10969,7 +11147,7 @@
         AppUtils.showError(error?.message || "Failed to load paid and owed active clients data.");
       }
     }
-    function renderPaidOwedTable(data, isSimple) {
+    function renderPaidOwedTable(data, callback) {
       const tbody = document.querySelector(`${ACTIVE_CLIENTS_TABLE_ID} tbody`);
       if (!tbody) {
         return;
@@ -10987,10 +11165,26 @@
       data.forEach((row, index) => {
         tbody.appendChild(createPaidOwedRow(row, index));
       });
-      DataTableModule.init(ACTIVE_CLIENTS_TITLE, ACTIVE_CLIENTS_TABLE_ID, false, {
-        hideAllControls: true,
-        scrollY: "450px"
-      });
+      DataTableModule.init(
+        ACTIVE_CLIENTS_TITLE,
+        ACTIVE_CLIENTS_TABLE_ID,
+        false,
+        {
+          responsive: false,
+          lengthChange: false,
+          info: false,
+          paging: false,
+          scrollY: "450px",
+          scrollCollapse: true,
+          layout: {
+            topStart: null,
+            topEnd: null,
+            bottomStart: null,
+            bottomEnd: null
+          }
+        },
+        callback
+      );
       if (document.getElementById("categoryDtFilter")) {
         TableFilterService.init(
           "categoryDtFilter",
@@ -12790,8 +12984,8 @@
       $("#project-active-month-count").text(summary.activeMonth ?? 0);
       $("#project-new-year-count").text(summary.newYear ?? 0);
     }
-    async function renderTopProjects(projects) {
-      if (projects === void 0) {
+    async function renderTopProjects(projects, callback) {
+      if (projects === void 0 || projects === null) {
         try {
           const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
           AppUtils.cachedGScriptCall(
@@ -12844,6 +13038,9 @@
       `;
         $container[0].appendChild(item);
       });
+      if (typeof callback === "function") {
+        callback();
+      }
     }
     function renderRecentProjects(projects) {
       const $container = $("#recent-projects");
@@ -14025,7 +14222,61 @@
         "Updating interface",
         "Applying preferences",
         "Almost ready",
-        "Finishing up"
+        "Finishing up",
+        "Initializing application",
+        "Loading workspace modules",
+        "Preparing dashboard components",
+        "Checking available services",
+        "Fetching the latest records",
+        "Processing workspace data",
+        "Refreshing cached information",
+        "Preparing client directory",
+        "Loading performance metrics",
+        "Updating activity status",
+        "Preparing billing and hours",
+        "Gathering summary information",
+        "Synchronizing dashboard data",
+        "Checking application settings",
+        "Preparing page components",
+        "Organizing workspace information",
+        "Loading client activity",
+        "Refreshing performance summaries",
+        "Preparing analytics data",
+        "Updating dashboard metrics",
+        "Finalizing workspace setup",
+        "Making everything ready"
+      ],
+      login: [
+        "Signing you in",
+        "Verifying your account",
+        "Checking your access",
+        "Validating your session",
+        "Loading your permissions",
+        "Preparing your workspace",
+        "Retrieving your settings",
+        "Loading your dashboard",
+        "Almost ready",
+        "Checking your Google account",
+        "Confirming your identity",
+        "Verifying your sign-in",
+        "Establishing a secure session",
+        "Checking your account status",
+        "Validating your access rights",
+        "Loading your role and capabilities",
+        "Preparing your account profile",
+        "Retrieving your workspace settings",
+        "Applying your access permissions",
+        "Checking available pages",
+        "Preparing your navigation",
+        "Initializing your session",
+        "Securing your connection",
+        "Loading your personalized settings",
+        "Preparing your dashboard modules",
+        "Confirming your workspace access",
+        "Finalizing account verification",
+        "Completing secure sign-in",
+        "Getting your workspace ready",
+        "Finishing your login"
       ],
       logout: [
         "Preparing to sign out",
@@ -14052,30 +14303,49 @@
         "Returning to the login screen",
         "Your session is being closed",
         "Preparing a fresh login session",
-        "You\u2019re almost signed out",
+        "You're almost signed out",
         "Finishing up",
-        "Goodbye"
+        "Goodbye",
+        "Ending your authenticated session",
+        "Clearing temporary session state",
+        "Removing session-related cache",
+        "Cleaning up application resources",
+        "Securing your account information",
+        "Closing your workspace session",
+        "Finalizing session cleanup",
+        "Wrapping up your current session",
+        "Completing account sign-out",
+        "Preparing to end your connection",
+        "Finishing account cleanup",
+        "Making sure your session is closed",
+        "Returning control to the login screen",
+        "Your workspace is being secured",
+        "Completing the logout process",
+        "Closing your secure connection",
+        "Your sign-out is being finalized",
+        "All done, signing out"
       ]
     };
+    let animationFrameId = null;
+    let animationRunId = 0;
     function shuffleArray(array) {
-      for (let i = array.length - 1; i > 0; i--) {
+      const shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      return array;
+      return shuffled;
     }
     function createSVG(tag, properties, children = []) {
-      const newElement = document.createElementNS(
+      const element = document.createElementNS(
         "http://www.w3.org/2000/svg",
         tag
       );
-      Object.entries(properties).forEach(([prop, value]) => {
-        newElement.setAttribute(prop, value);
+      Object.entries(properties).forEach(([property, value]) => {
+        element.setAttribute(property, value);
       });
-      children.forEach((child) => {
-        newElement.appendChild(child);
-      });
-      return newElement;
+      children.forEach((child) => element.appendChild(child));
+      return element;
     }
     function createPhraseSvg(phrase, yOffset) {
       const text = createSVG("text", {
@@ -14085,26 +14355,22 @@
         "font-size": 18,
         "font-family": "Arial"
       });
-      text.appendChild(document.createTextNode(`${phrase}...`));
+      text.textContent = `${phrase}...`;
       return text;
     }
     function createCheckSvg(yOffset, index) {
       const check = createSVG("polygon", {
         points: "21.661,7.643 13.396,19.328 9.429,15.361 7.075,17.714 13.745,24.384 24.345,9.708",
-        // fill: "rgba(255,255,255,1)",
         fill: "#343a40",
         id: checkmarkIdPrefix + index
       });
       const circleOutline = createSVG("path", {
         d: "M16,0C7.163,0,0,7.163,0,16s7.163,16,16,16s16-7.163,16-16S24.837,0,16,0z M16,30C8.28,30,2,23.72,2,16C2,8.28,8.28,2,16,2 c7.72,0,14,6.28,14,14C30,23.72,23.72,30,16,30z",
         fill: "#343a40"
-        // fill: "white",
       });
       const circle = createSVG("circle", {
         id: checkmarkCircleIdPrefix + index,
-        // fill: "rgba(255,255,255,0)", /* for theme */,
         fill: "#008B8B",
-        /* for theme */
         cx: 16,
         cy: 16,
         r: 15
@@ -14117,92 +14383,86 @@
         [circle, check, circleOutline]
       );
     }
-    function addPhrasesToDocument(phrases, phrasesContainer) {
-      if (!phrasesContainer) {
+    function addPhrasesToDocument(phrases, container) {
+      if (!container) {
         console.warn("[Loader] #phrases was not found.");
         return null;
       }
-      phrasesContainer.innerHTML = "";
+      container.replaceChildren();
       phrases.forEach((phrase, index) => {
         const yOffset = 30 + verticalSpacing * index;
-        phrasesContainer.appendChild(createPhraseSvg(phrase, yOffset));
-        phrasesContainer.appendChild(createCheckSvg(yOffset, index));
+        container.appendChild(createPhraseSvg(phrase, yOffset));
+        container.appendChild(createCheckSvg(yOffset, index));
       });
-      return phrasesContainer;
+      return container;
     }
-    function easeInOut(t) {
+    function easeInOut(timestamp) {
       const period = 200;
-      return (Math.sin(t / period + 100) + 1) / 2;
+      return (Math.sin(timestamp / period + 100) + 1) / 2;
     }
-    function waitForElement(selector, callback) {
-      const element = document.querySelector(selector);
-      if (element) {
-        callback(element);
-        return;
+    function stopAnimation() {
+      animationRunId++;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
       }
-      const observer = new MutationObserver(() => {
-        const foundElement = document.querySelector(selector);
-        if (foundElement) {
-          observer.disconnect();
-          callback(foundElement);
-        }
-      });
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
     }
     function start(type = "loading") {
+      const container = document.getElementById("phrases");
+      if (!container) {
+        console.warn("[Loader] #phrases was not found.");
+        return;
+      }
       const phrases = shuffleArray([...phraseSets[type] || phraseSets.loading]);
-      waitForElement("#phrases", (phrasesContainer) => {
-        const container = addPhrasesToDocument(phrases, phrasesContainer);
-        if (!container) {
+      stopAnimation();
+      const runId = animationRunId;
+      if (!addPhrasesToDocument(phrases, container)) {
+        return;
+      }
+      let currentY = 0;
+      let previousTimestamp = null;
+      const checks = phrases.map((_, index) => ({
+        check: document.getElementById(checkmarkIdPrefix + index),
+        circle: document.getElementById(checkmarkCircleIdPrefix + index)
+      }));
+      const scrollDistance = phrases.length * verticalSpacing + 10;
+      function animateLoading(timestamp) {
+        if (runId !== animationRunId) {
           return;
         }
-        container.currentY = 0;
-        const checks = phrases.map((_, index) => ({
-          check: document.getElementById(checkmarkIdPrefix + index),
-          circle: document.getElementById(checkmarkCircleIdPrefix + index)
-        }));
-        function animateLoading() {
-          const now = Date.now();
-          container.setAttribute(
-            "transform",
-            `translate(0 ${container.currentY})`
-          );
-          container.currentY -= 1.35 * easeInOut(now);
-          checks.forEach((check, index) => {
-            if (!check?.check || !check?.circle) {
-              return;
-            }
-            const colorChangeBoundary = -index * verticalSpacing + verticalSpacing + 15;
-            if (container.currentY < colorChangeBoundary) {
-              const alpha = Math.max(
-                Math.min(
-                  1 - (container.currentY - colorChangeBoundary + 15) / 30,
-                  1
-                ),
-                0
-              );
-              check.circle.setAttribute("fill", `rgba(255, 255, 255, 1)`);
-              const checkColor = [
-                Math.round(255 * (1 - alpha) + 120 * alpha),
-                Math.round(255 * (1 - alpha) + 154 * alpha)
-              ];
-              check.check.setAttribute(
-                "fill",
-                `rgba(255, ${checkColor[0]}, ${checkColor[1]}, 1)`
-              );
-            }
-          });
-          if (container.currentY > -710) {
-            requestAnimationFrame(animateLoading);
+        if (previousTimestamp === null) {
+          previousTimestamp = timestamp;
+        }
+        const delta = Math.min(timestamp - previousTimestamp, 50);
+        previousTimestamp = timestamp;
+        container.setAttribute("transform", `translate(0 ${currentY})`);
+        currentY -= 1.35 * easeInOut(timestamp) * (delta / 16.67);
+        checks.forEach(({ check, circle }, index) => {
+          if (!check || !circle) {
             return;
           }
+          const boundary = -index * verticalSpacing + verticalSpacing + 15;
+          if (currentY < boundary) {
+            const alpha = Math.max(
+              0,
+              Math.min(1, 1 - (currentY - boundary + 15) / 30)
+            );
+            circle.setAttribute("fill", "rgba(255, 255, 255, 1)");
+            const green = Math.round(255 * (1 - alpha) + 120 * alpha);
+            const blue = Math.round(255 * (1 - alpha) + 154 * alpha);
+            check.setAttribute("fill", `rgba(255, ${green}, ${blue}, 1)`);
+          }
+        });
+        if (currentY > -scrollDistance) {
+          animationFrameId = requestAnimationFrame(animateLoading);
+          return;
+        }
+        if (runId === animationRunId) {
+          animationFrameId = null;
           start(type);
         }
-        animateLoading();
-      });
+      }
+      animationFrameId = requestAnimationFrame(animateLoading);
     }
     function show(type = "loading") {
       document.body.classList.remove("loaded");
@@ -14210,6 +14470,7 @@
     }
     function hide() {
       document.body.classList.add("loaded");
+      stopAnimation();
     }
     return {
       start,
@@ -14333,7 +14594,7 @@
       if (!root) {
         return;
       }
-      root.querySelectorAll(".card").forEach((card) => {
+      root.querySelectorAll(".skeleton-target").forEach((card) => {
         card.classList.remove("loaded");
         card.classList.add("skeleton");
       });
@@ -14347,7 +14608,7 @@
       if (containerEl) {
         containerEl.classList.remove("opacity-0");
       }
-      const cards = root.querySelectorAll(".card.skeleton");
+      const cards = root.querySelectorAll(".skeleton-target.skeleton");
       const stagger = 350;
       cards.forEach((card, index) => {
         setTimeout(
@@ -14629,14 +14890,6 @@
       initializing = (async () => {
         try {
           const appContainer = await waitForElement("#app-container");
-          try {
-            const loaderHtml = await loadComponent("app-loader", "loader");
-            if (loaderHtml) {
-              document.body.insertAdjacentHTML("afterbegin", loaderHtml);
-            }
-          } catch (error) {
-            console.warn("[AppShell] Loader failed:", error);
-          }
           try {
             const dialogsHtml = await loadComponent("app-dialogs", "dialogs");
             if (dialogsHtml) {
@@ -18007,7 +18260,6 @@
           if (!shellReady) {
             throw new Error("AppShellModule failed to initialize.");
           }
-          LoaderModule.start("loading");
           AppUI.init();
           window.addEventListener("popstate", handlePopState);
           const restoredPage = getInitialPage();
@@ -18305,6 +18557,9 @@
   var RequestWidget = /* @__PURE__ */ (() => {
     let unsubscribe = null;
     let expanded = false;
+    let activeCategory = "all";
+    let latestState = null;
+    const expandedDetails = /* @__PURE__ */ new Set();
     function init() {
       if (document.getElementById("gcb-request-widget")) {
         return;
@@ -18319,7 +18574,7 @@
         aria-expanded="false"
         aria-controls="gcb-request-panel"
       >
-        <span class="gcb-request-icon">\u21BB</span>
+        <span class="gcb-request-icon"><i class="fa fa-puzzle-piece"></i></span>
         <span>Requests</span>
         <span id="gcb-request-count" class="gcb-request-count">0</span>
       </button>
@@ -18341,19 +18596,67 @@
             <div class="gcb-request-header-actions">
                 <button
                 type="button"
-                id="gcb-request-archive-all"
-                title="Clear completed request history"
-                >Clear history</button>
-
-                <button
-                type="button"
                 id="gcb-request-close"
                 aria-label="Close request manager"
                 >\xD7</button>
             </div>
         </header>
 
-        <div id="gcb-request-projection" class="gcb-request-projection"></div>
+        <nav
+          id="gcb-request-tabs"
+          class="gcb-request-tabs"
+          aria-label="Filter requests by category"
+        >
+          <button
+            type="button"
+            class="gcb-request-tab"
+            data-request-category="all"
+            aria-pressed="true"
+          >
+            <i class="pe-7s-layers" aria-hidden="true"></i>
+            <span>All</span>
+          </button>
+
+          <button
+            type="button"
+            class="gcb-request-tab"
+            data-request-category="hours"
+            aria-pressed="false"
+          >
+            <i class="pe-7s-clock" aria-hidden="true"></i>
+            <span>Hours</span>
+          </button>
+
+          <button
+            type="button"
+            class="gcb-request-tab"
+            data-request-category="reports"
+            aria-pressed="false"
+          >
+            <i class="pe-7s-note2" aria-hidden="true"></i>
+            <span>Reports</span>
+          </button>
+
+          <button
+            type="button"
+            class="gcb-request-tab"
+            data-request-category="other"
+            aria-pressed="false"
+          >
+            <span>Other</span>
+          </button>
+        </nav>
+
+        <div
+          id="gcb-request-projection"
+          class="gcb-request-projection"
+        ></div>
+
+        <div
+          id="gcb-request-category-actions"
+          class="gcb-request-category-actions"
+        ></div>
+
         <div id="gcb-request-list" class="gcb-request-list"></div>
       </section>
     `;
@@ -18367,18 +18670,173 @@
           setExpanded(false);
           return;
         }
-        if (event.target.closest("#gcb-request-archive-all")) {
-          RequestManager.archiveHistory();
+        const clearHistoryButton = event.target.closest(
+          "[data-request-clear-history]"
+        );
+        if (clearHistoryButton) {
+          if (!latestState) {
+            return;
+          }
+          const category = clearHistoryButton.dataset.requestClearHistory;
+          const historyIds = latestState.history.filter(
+            (request) => category === "all" || getRequestCategory(request) === category
+          ).map((request) => request.id);
+          if (historyIds.length) {
+            RequestManager.archiveHistoryByIds(historyIds);
+          }
+          return;
+        }
+        const pauseAllButton = event.target.closest("[data-request-pause-all]");
+        if (pauseAllButton) {
+          const category = pauseAllButton.dataset.requestPauseAll;
+          const requestIds = (latestState?.queue || []).filter(
+            (request) => request.status === "pending" && (category === "all" || getRequestCategory(request) === category)
+          ).map((request) => request.id);
+          const pausedCount = RequestManager.pauseRequests(requestIds);
+          if (pausedCount > 0) {
+            AppUtils.showDashboardToast?.(
+              `${pausedCount} pending request(s) paused.`
+            );
+          }
+          return;
+        }
+        const resumeAllButton = event.target.closest("[data-request-resume-all]");
+        if (resumeAllButton) {
+          const category = resumeAllButton.dataset.requestResumeAll;
+          const requestIds = (latestState?.queue || []).filter(
+            (request) => request.status === "paused" && (category === "all" || getRequestCategory(request) === category)
+          ).map((request) => request.id);
+          const resumedCount = RequestManager.resumeRequests(requestIds);
+          if (resumedCount > 0) {
+            AppUtils.showDashboardToast?.(
+              `${resumedCount} pending request(s) resumed.`
+            );
+          }
+          return;
+        }
+        const pauseButton = event.target.closest("[data-request-pause]");
+        if (pauseButton) {
+          RequestManager.pauseRequest(pauseButton.dataset.requestPause);
+          return;
+        }
+        const resumeButton = event.target.closest("[data-request-resume]");
+        if (resumeButton) {
+          RequestManager.resumeRequest(resumeButton.dataset.requestResume);
+          return;
+        }
+        const retryAllButton = event.target.closest("[data-request-retry-all]");
+        if (retryAllButton) {
+          const category = retryAllButton.dataset.requestRetryAll;
+          const retryableRequests = RequestManager.getRetryableRequests().filter(
+            (request) => category === "all" || getRequestCategory(request) === category
+          );
+          if (!retryableRequests.length) {
+            return;
+          }
+          const requestIds = retryableRequests.map((request) => request.id);
+          const hasInterrupted = retryableRequests.some(
+            (request) => request.status === "interrupted"
+          );
+          AppUtils.openConfirmationModal({
+            ns: "retryAllRequests",
+            title: `Retry ${requestIds.length} Requests?`,
+            message: `
+            <p>
+              You are about to retry <strong>${requestIds.length}</strong>
+              failed or interrupted request(s).
+            </p>
+            <p>
+              Some requests may already have been saved by the server.
+              Verify their results before retrying to avoid duplicate operations.
+            </p>
+            ${hasInterrupted ? `<p class="mb-0">
+                    <strong>Warning:</strong> Some requests were interrupted
+                    while processing. Their final server-side result may be unknown.
+                  </p>` : ""}
+          `,
+            onProceed: () => {
+              AppUtils.closeModal("#app-modal");
+              const retriedCount = RequestManager.retryRequests(requestIds);
+              AppUtils.showDashboardToast?.(
+                `${retriedCount} request(s) queued for retry.`
+              );
+            },
+            onBack: () => {
+              AppUtils.closeModal("#app-modal");
+            }
+          });
+          return;
+        }
+        const categoryButton = event.target.closest("[data-request-category]");
+        if (categoryButton) {
+          activeCategory = categoryButton.dataset.requestCategory;
+          if (latestState) {
+            render(latestState);
+          }
+          return;
+        }
+        const detailsButton = event.target.closest("[data-request-details]");
+        if (detailsButton) {
+          const requestId = detailsButton.dataset.requestDetails;
+          const details = root.querySelector(
+            `[data-request-details-panel="${CSS.escape(requestId)}"]`
+          );
+          if (details) {
+            const isExpanded = !expandedDetails.has(requestId);
+            if (isExpanded) {
+              expandedDetails.add(requestId);
+            } else {
+              expandedDetails.delete(requestId);
+            }
+            details.hidden = !isExpanded;
+            detailsButton.setAttribute("aria-expanded", String(isExpanded));
+            detailsButton.textContent = isExpanded ? "Hide details" : "Show details";
+          }
+          return;
+        }
+        const cancelButton = event.target.closest("[data-request-cancel]");
+        if (cancelButton) {
+          const requestId = cancelButton.dataset.requestCancel;
+          AppUtils.openConfirmationModal({
+            ns: "cancelRequest",
+            title: "Cancel Pending Request?",
+            message: `
+      <p>This request has not started processing yet.</p>
+      <p class="mb-0">Cancel it and remove its hours from the projected queue?</p>
+    `,
+            onProceed: () => {
+              AppUtils.closeModal("#app-modal");
+              RequestManager.cancelRequest(requestId);
+            },
+            onBack: () => {
+              AppUtils.closeModal("#app-modal");
+            }
+          });
           return;
         }
         const retryButton = event.target.closest("[data-request-retry]");
         if (retryButton) {
-          const confirmed = window.confirm(
-            "This request may already have been saved. Verify the server record before retrying to avoid duplicate hours. Retry anyway?"
-          );
-          if (confirmed) {
-            RequestManager.retryRequest(retryButton.dataset.requestRetry);
-          }
+          const requestId = retryButton.dataset.requestRetry;
+          AppUtils.openConfirmationModal({
+            ns: "retryRequest",
+            title: "Retry This Request?",
+            message: `
+            <p>
+              This request may already have been saved by the server.
+            </p>
+            <p class="mb-0">
+              Verify the server record before retrying to avoid duplicate hours.
+              Do you want to retry anyway?
+            </p>
+          `,
+            onProceed: ($modal, $btn) => {
+              AppUtils.closeModal("#app-modal");
+              RequestManager.retryRequest(requestId);
+            },
+            onBack: () => {
+              AppUtils.closeModal("#app-modal");
+            }
+          });
           return;
         }
         const dismissButton = event.target.closest("[data-request-dismiss]");
@@ -18418,7 +18876,18 @@
         })[character]
       );
     }
+    function getRequestCategory(request) {
+      const type = String(request.type || "").toLowerCase();
+      if (type === "record-hours" || type === "edit-today-hours" || /hour|hrstracking/.test(type)) {
+        return "hours";
+      }
+      if (/report|billing|monthly|yearly|csv|pdf/.test(type)) {
+        return "reports";
+      }
+      return "other";
+    }
     function render(state) {
+      latestState = state;
       const list = document.getElementById("gcb-request-list");
       const count = document.getElementById("gcb-request-count");
       const projection = document.getElementById("gcb-request-projection");
@@ -18427,36 +18896,152 @@
       }
       count.textContent = String(state.queue.length);
       const projected = RequestManager.getProjectedHours();
-      const clientLines = Object.entries(projected.byClient).map(
-        ([client, hours]) => `
-      <div class="gcb-request-projection-row">
-        <span>${escapeHTML(client)}</span>
-        <strong>+${hours.toFixed(2)} h</strong>
-      </div>
-    `
-      ).join("");
-      projection.innerHTML = `
-    <div class="gcb-request-projection-total">
-      <span>Projected queued hours</span>
-      <strong>+${projected.total.toFixed(2)} h</strong>
-    </div>
-    ${clientLines}
-    <div class="gcb-request-projection-note">
-      Not yet confirmed by the server
-    </div>
-  `;
-      const requests = [...state.queue, ...state.history.slice(0, 10)];
+      projection.hidden = activeCategory !== "hours";
+      if (activeCategory === "hours") {
+        const clientLines = Object.entries(projected.byClient).map(
+          ([client, hours]) => `
+            <div class="gcb-request-projection-row">
+              <span>${escapeHTML(client)}</span>
+              <strong>+${hours.toFixed(2)} h</strong>
+            </div>
+          `
+        ).join("");
+        projection.innerHTML = `
+        <div class="gcb-request-projection-total">
+          <span>Projected queued hours</span>
+          <strong>+${projected.total.toFixed(2)} h</strong>
+        </div>
+        ${clientLines}
+      `;
+      } else {
+        projection.innerHTML = "";
+      }
+      const allRequests = [...state.queue, ...state.history.slice(0, 10)];
+      document.querySelectorAll("#gcb-request-tabs [data-request-category]").forEach((button) => {
+        const isActive = button.dataset.requestCategory === activeCategory;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+      });
+      const categoryActions = document.getElementById(
+        "gcb-request-category-actions"
+      );
+      if (categoryActions) {
+        const categoryLabels = {
+          all: "Clear all history",
+          hours: "Clear hours history",
+          reports: "Clear reports history",
+          other: "Clear other history"
+        };
+        const hasHistory = state.history.some(
+          (request) => activeCategory === "all" || getRequestCategory(request) === activeCategory
+        );
+        const retryableRequests = RequestManager.getRetryableRequests().filter(
+          (request) => activeCategory === "all" || getRequestCategory(request) === activeCategory
+        );
+        const pendingRequests = state.queue.filter(
+          (request) => request.status === "pending" && (activeCategory === "all" || getRequestCategory(request) === activeCategory)
+        );
+        const pausedRequests = state.queue.filter(
+          (request) => request.status === "paused" && (activeCategory === "all" || getRequestCategory(request) === activeCategory)
+        );
+        categoryActions.innerHTML = `
+        <button
+          type="button"
+          class="gcb-request-pause-all"
+          data-request-pause-all="${activeCategory}"
+          ${pendingRequests.length ? "" : "disabled"}
+        >
+          <i class="pe-7s-pause" aria-hidden="true"></i>
+          <span>Pause all (${pendingRequests.length})</span>
+        </button>
+
+        <button
+          type="button"
+          class="gcb-request-resume-all"
+          data-request-resume-all="${activeCategory}"
+          ${pausedRequests.length ? "" : "disabled"}
+        >
+          <i class="pe-7s-play" aria-hidden="true"></i>
+          <span>Resume all (${pausedRequests.length})</span>
+        </button>
+
+        <button
+          type="button"
+          class="gcb-request-retry-all"
+          data-request-retry-all="${activeCategory}"
+          ${retryableRequests.length ? "" : "disabled"}
+        >
+          <i class="pe-7s-refresh-2" aria-hidden="true"></i>
+          <span>Retry all (${retryableRequests.length})</span>
+        </button>
+
+        <button
+          type="button"
+          class="gcb-request-clear-history"
+          data-request-clear-history="${activeCategory}"
+          ${hasHistory ? "" : "disabled"}
+        >
+          <i class="pe-7s-trash" aria-hidden="true"></i>
+          <span>${categoryLabels[activeCategory]}</span>
+        </button>
+      `;
+      }
+      const requests = activeCategory === "all" ? allRequests : allRequests.filter(
+        (request) => getRequestCategory(request) === activeCategory
+      );
       if (!requests.length) {
+        const hasAnyRequests = allRequests.length > 0;
         list.innerHTML = `
-      <div class="gcb-request-empty">No requests yet.</div>
-    `;
+        <div class="gcb-request-empty">
+          ${hasAnyRequests ? `No ${escapeHTML(activeCategory)} requests yet.` : "No requests yet."}
+        </div>
+      `;
         return;
       }
       list.innerHTML = requests.map((request) => {
         const isRetryable = ["interrupted", "failed"].includes(request.status);
         const isHistory = state.history.some((item) => item.id === request.id);
+        const isPending = request.status === "pending";
+        const isPaused = request.status === "paused";
+        const isRecordHours = request.type === "record-hours";
+        const isEditHours = request.type === "edit-today-hours";
+        const isDeleteHours = /delete|remove/i.test(request.type);
+        const hasHourDetails = isRecordHours || isEditHours || isDeleteHours;
+        const rawRecords = Array.isArray(request.payload?.records) ? request.payload.records : request.payload && (request.payload.task || request.payload.project || request.payload.type || request.payload.hour != null || request.payload.hours != null) ? [request.payload] : [];
+        const records = rawRecords.filter((record) => {
+          if (!record || typeof record !== "object") {
+            return false;
+          }
+          return Boolean(
+            record.task || record.project || record.type || record.hour != null || record.hours != null || record.action === "delete" || record.originalTask || record.originalType || record.originalHours != null
+          );
+        });
+        const allDeleted = records.length > 0 && records.every((record) => record.action === "delete");
+        const hasDeletions = records.some(
+          (record) => record.action === "delete"
+        );
+        const actionLabel = isRecordHours ? "Add hours" : isDeleteHours || isEditHours && allDeleted ? "Delete hours" : isEditHours && hasDeletions ? "Update / delete hours" : isEditHours ? "Edit hours" : "Request";
         let actions = "";
-        if (isRetryable) {
+        if (isPending || isPaused) {
+          actions = `
+            ${isPaused ? `
+                  <button
+                    type="button"
+                    data-request-resume="${escapeHTML(request.id)}"
+                  >Resume</button>
+                ` : `
+                  <button
+                    type="button"
+                    data-request-pause="${escapeHTML(request.id)}"
+                  >Pause</button>
+                `}
+
+            <button
+              type="button"
+              data-request-cancel="${escapeHTML(request.id)}"
+            >Cancel</button>
+          `;
+        } else if (isRetryable) {
           actions = `
             <button
               type="button"
@@ -18482,6 +19067,61 @@
             >Remove</button>
           `;
         }
+        const detailsHTML = hasHourDetails ? `
+            <button
+              type="button"
+              class="gcb-request-details-toggle"
+              data-request-details="${escapeHTML(request.id)}"
+              aria-expanded="${expandedDetails.has(request.id)}"
+            >${expandedDetails.has(request.id) ? "Hide details" : "Show details"}</button>
+
+            <div
+              class="gcb-request-details"
+              data-request-details-panel="${escapeHTML(request.id)}"
+              ${expandedDetails.has(request.id) ? "" : "hidden"}
+            >
+
+              <div class="gcb-request-detail-client">
+                Action:
+                <strong>${escapeHTML(actionLabel)}</strong>
+              </div>
+
+              ${records.map((record) => {
+          const isDeleted = record.action === "delete";
+          const task = record.task || record.project || record.originalTask || "Unknown project";
+          const type = record.type || record.originalType || "Unknown type";
+          const previousHours = record.originalHours ?? record.previousHours ?? record.oldHours ?? record.existingHours;
+          const currentHours = isDeleted ? previousHours : record.updatedHours ?? record.newHours ?? record.hours ?? record.hour;
+          const hoursClass = isDeleted ? "gcb-request-hours-delete" : isRecordHours ? "gcb-request-hours-add" : "gcb-request-hours-edit";
+          let hoursDisplay = "\u2014";
+          if (currentHours != null && currentHours !== "") {
+            if (isEditHours && !isDeleted && previousHours != null && previousHours !== "") {
+              hoursDisplay = `
+                        <span class="gcb-request-hours-edit">
+                          ${escapeHTML(previousHours)} \u2192 ${escapeHTML(currentHours)} h
+                        </span>
+                      `;
+            } else {
+              const prefix = isDeleted ? "\u2212" : isRecordHours ? "+" : "";
+              hoursDisplay = `
+                        <span class="${hoursClass}">
+                          ${prefix}${escapeHTML(currentHours)} h
+                        </span>
+                      `;
+            }
+          }
+          return `
+                    <div class="gcb-request-detail-row">
+                      <div>
+                        <strong>${escapeHTML(task)}</strong>
+                        <span>${escapeHTML(type)}</span>
+                      </div>
+                      <strong>${hoursDisplay}</strong>
+                    </div>
+                  `;
+        }).join("")}
+              </div>
+            ` : "";
         return `
           <article class="gcb-request-item">
             <div class="gcb-request-item-top">
@@ -18494,6 +19134,8 @@
             <div class="gcb-request-message">
               ${escapeHTML(request.message)}
             </div>
+
+            ${detailsHTML}
 
             <div class="gcb-request-time">
               ${escapeHTML(new Date(request.createdAt).toLocaleTimeString())}
@@ -18513,7 +19155,6 @@
   })();
 
   // src/requests/request-handlers.js
-  var TODAY_HOURS_CACHE_PREFIX = "todayManualHours_";
   function callGScriptAsync(gscriptFunc, args) {
     return new Promise((resolve, reject) => {
       AppUtils.gScriptRun({
@@ -18525,11 +19166,29 @@
       });
     });
   }
-  function invalidateClientHoursCaches(clientName) {
-    AppUtils.cacheClear(`${TODAY_HOURS_CACHE_PREFIX}${clientName}`);
+  function syncClientProjectsInBackground(cacheKey) {
+    (async () => {
+      try {
+        const [sessionId, signature] = await getAuthArgs();
+        await callGScriptAsync("syncClientProjects", [sessionId, signature]);
+        AppUtils.cacheClear(cacheKey);
+      } catch (error) {
+        if (!handleInvalidSessionError(error)) {
+          console.warn(
+            "[RequestHandlers] Failed to sync client projects:",
+            error
+          );
+        }
+      }
+    })();
+  }
+  function invalidateClientHoursCaches(clientName, clearTaskOptions = true) {
+    AppUtils.cacheClear(`todayManualHours_${clientName}`);
     AppUtils.cacheClear(`getClientHourLogData_${clientName}`);
     AppUtils.cacheClear(`getClientHours_${clientName}`);
-    AppUtils.cacheClear(`gcb_getTaskOptions_${clientName}`);
+    if (clearTaskOptions) {
+      AppUtils.cacheClear(`gcb_getTaskOptions_${clientName}`);
+    }
   }
   function refreshConfirmedHours() {
     try {
@@ -18550,32 +19209,57 @@
   }
   RequestManager.registerHandler(
     "edit-today-hours",
-    async (formData, { updateProgress }) => {
+    async (formData, { requestId, updateProgress }) => {
+      if (!requestId) {
+        throw new Error(
+          "Missing request ID. Cannot safely retry today's changes."
+        );
+      }
       const [sessionId, signature] = await getAuthArgs();
       updateProgress("Saving today's changes");
-      const response = await callGScriptAsync("saveEditedTodayClientHours", [
-        sessionId,
-        signature,
-        formData
-      ]);
-      if (!response?.success) {
-        throw new Error(response?.message || "Unable to update today's hours.");
+      try {
+        const response = await callGScriptAsync("saveEditedTodayClientHours", [
+          sessionId,
+          signature,
+          {
+            ...formData,
+            requestId
+          }
+        ]);
+        if (!response?.success) {
+          throw new Error(response?.message || "Unable to update today's hours.");
+        }
+        const clientName = formData.client;
+        invalidateClientHoursCaches(clientName);
+        refreshConfirmedHours();
+        notifyHoursRecorded({
+          ...formData,
+          action: "edit"
+        });
+        AppUtils.showDashboardToast(
+          response.message || "Today's hours updated successfully!",
+          "success"
+        );
+        return {
+          client: clientName,
+          requestId,
+          updatedRecords: Array.isArray(formData.records) ? formData.records.length : 0,
+          duplicatePrevented: response.duplicatePrevented === true
+        };
+      } catch (error) {
+        const message = String(
+          error?.message || "Unable to update today's hours."
+        );
+        if (/HOURS_CONFLICT:|has changed since it was loaded|no longer a record|no longer exists|no longer valid/i.test(
+          message
+        )) {
+          AppUtils.showDashboardToast(
+            message.replace(/^.*?HOURS_CONFLICT:\s*/i, ""),
+            "error"
+          );
+        }
+        throw error;
       }
-      const clientName = formData.client;
-      invalidateClientHoursCaches(clientName);
-      refreshConfirmedHours();
-      notifyHoursRecorded({
-        ...formData,
-        action: "edit"
-      });
-      AppUtils.showDashboardToast(
-        response.message || "Today's hours updated successfully!",
-        "success"
-      );
-      return {
-        client: clientName,
-        updatedRecords: Array.isArray(formData.records) ? formData.records.length : 0
-      };
     }
   );
   RequestManager.registerHandler(
@@ -18599,10 +19283,32 @@
       };
       const cacheKey = `gcb_getTaskOptions_${clientName}`;
       const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
-      const needsProjectSync = records.some(
-        (record) => !cachedTasks.includes(record.task)
-      );
+      const normalizeProjectName = (value) => String(value || "").split(" - ")[0].trim().toLowerCase();
       const [sessionId, signature] = await getAuthArgs();
+      let existingTasks = null;
+      if (Array.isArray(cachedTasks) && cachedTasks.length > 0) {
+        existingTasks = new Set(cachedTasks.map(normalizeProjectName));
+      } else {
+        try {
+          const projects = await callGScriptAsync("getProjects", [
+            sessionId,
+            signature
+          ]);
+          existingTasks = new Set(
+            (Array.isArray(projects) ? projects : []).map(
+              (project) => normalizeProjectName(project[0])
+            )
+          );
+        } catch (error) {
+          console.warn(
+            "[RequestHandlers] Unable to check existing projects:",
+            error
+          );
+        }
+      }
+      const needsProjectSync = existingTasks === null || records.some(
+        (record) => !existingTasks.has(normalizeProjectName(record.task))
+      );
       updateProgress("Checking client type");
       const isExternal = await callGScriptAsync("isExternalClient", [
         sessionId,
@@ -18621,23 +19327,11 @@
       if (!response?.success) {
         throw new Error(response?.message || "Unable to record the hours.");
       }
-      invalidateClientHoursCaches(clientName);
+      invalidateClientHoursCaches(clientName, false);
       refreshConfirmedHours();
       if (needsProjectSync) {
-        try {
-          const [syncSessionId, syncSignature] = await getAuthArgs();
-          await callGScriptAsync("syncClientProjects", [
-            syncSessionId,
-            syncSignature
-          ]);
-        } catch (error) {
-          if (!handleInvalidSessionError(error)) {
-            console.warn(
-              "[RequestHandlers] Failed to sync client projects:",
-              error
-            );
-          }
-        }
+        updateProgress("Hours saved; updating projects in background");
+        syncClientProjectsInBackground(cacheKey);
       }
       notifyHoursRecorded({
         client: clientName,
@@ -18667,14 +19361,17 @@
     GcbLoginModule.show();
   });
   document.addEventListener("DOMContentLoaded", async () => {
+    LoaderModule.start("login");
     GcbLoginModule.init();
     const authenticated = await GcbAuthModule.init();
     if (!authenticated) {
       console.warn("[GCB Auth] Authentication required.");
+      LoaderModule.hide();
       GcbLoginModule.show();
       return;
     }
     GcbLoginModule.hide();
+    LoaderModule.start("loading");
     AuthorizationUIModule.applyNavigationPermissions();
     RequestWidget.init();
     RouterModule.init();

@@ -201,7 +201,7 @@ const RequestManager = (() => {
       const existing = state.queue.find(
         (request) =>
           request.type === "record-hours" &&
-          request.status === "pending" &&
+          ["pending", "paused"].includes(request.status) &&
           normalizeText(request.payload?.client) === normalizedClient,
       );
 
@@ -345,7 +345,7 @@ const RequestManager = (() => {
     state.queue.forEach((request) => {
       if (
         request.type !== "record-hours" ||
-        !["pending", "running"].includes(request.status)
+        !["pending", "paused", "running"].includes(request.status)
       ) {
         return;
       }
@@ -426,6 +426,27 @@ const RequestManager = (() => {
     return true;
   }
 
+  function getRetryableRequests() {
+    return [...state.queue, ...state.history].filter(
+      (request) =>
+        ["interrupted", "failed"].includes(request.status) &&
+        handlers.has(request.type),
+    );
+  }
+
+  function retryRequests(ids) {
+    const idsToRetry = [...new Set(ids)];
+    let retriedCount = 0;
+
+    idsToRetry.forEach((id) => {
+      if (retryRequest(id)) {
+        retriedCount++;
+      }
+    });
+
+    return retriedCount;
+  }
+
   function dismissRequest(id) {
     const index = state.queue.findIndex((item) => item.id === id);
 
@@ -445,8 +466,138 @@ const RequestManager = (() => {
     return true;
   }
 
+  function cancelRequest(id) {
+    const index = state.queue.findIndex((item) => item.id === id);
+
+    if (index === -1) {
+      return false;
+    }
+
+    const request = state.queue[index];
+
+    // Only pending requests can be cancelled.
+    if (!["pending", "paused"].includes(request.status)) {
+      return false;
+    }
+
+    state.queue.splice(index, 1);
+
+    state.history.unshift({
+      ...request,
+      status: "cancelled",
+      message: "Cancelled by user",
+      updatedAt: Date.now(),
+    });
+
+    state.history = state.history.slice(0, MAX_HISTORY);
+
+    // Keep the scheduled timer if another request is still pending.
+    const hasPendingRequests = state.queue.some((item) =>
+      ["pending", "paused"].includes(item.status),
+    );
+
+    if (!hasPendingRequests && processTimer !== null) {
+      clearTimeout(processTimer);
+      processTimer = null;
+    } else if (hasPendingRequests && processTimer === null && !processing) {
+      scheduleProcessQueue();
+    }
+
+    notify();
+
+    return true;
+  }
+
+  function pauseRequest(id) {
+    const request = state.queue.find((item) => item.id === id);
+
+    // Only requests that have not started can be paused.
+    if (!request || request.status !== "pending") {
+      return false;
+    }
+
+    updateRequest(id, {
+      status: "paused",
+      message: "Paused by user",
+    });
+
+    return true;
+  }
+
+  function resumeRequest(id) {
+    const request = state.queue.find((item) => item.id === id);
+
+    if (!request || request.status !== "paused") {
+      return false;
+    }
+
+    updateRequest(id, {
+      status: "pending",
+      message: "Resumed. Waiting to start",
+    });
+
+    scheduleProcessQueue();
+
+    return true;
+  }
+
+  function updatePendingRequests(ids, action) {
+    const idsToUpdate = new Set(ids);
+    let updatedCount = 0;
+
+    state.queue.forEach((request) => {
+      if (!idsToUpdate.has(request.id)) {
+        return;
+      }
+
+      if (action === "pause" && request.status === "pending") {
+        request.status = "paused";
+        request.message = "Paused by user";
+        request.updatedAt = Date.now();
+        updatedCount++;
+      } else if (action === "resume" && request.status === "paused") {
+        request.status = "pending";
+        request.message = "Resumed. Waiting to start";
+        request.updatedAt = Date.now();
+        updatedCount++;
+      }
+    });
+
+    if (updatedCount > 0) {
+      notify();
+
+      if (action === "resume") {
+        scheduleProcessQueue();
+      }
+    }
+
+    return updatedCount;
+  }
+
+  function pauseRequests(ids) {
+    return updatePendingRequests(ids, "pause");
+  }
+
+  function resumeRequests(ids) {
+    return updatePendingRequests(ids, "resume");
+  }
+
   function archiveHistory() {
     state.history = [];
+    notify();
+  }
+
+  function archiveHistoryByIds(ids) {
+    const idsToRemove = new Set(ids);
+
+    if (!idsToRemove.size) {
+      return;
+    }
+
+    state.history = state.history.filter(
+      (request) => !idsToRemove.has(request.id),
+    );
+
     notify();
   }
 
@@ -470,8 +621,16 @@ const RequestManager = (() => {
     getState,
     getProjectedHours,
     retryRequest,
+    getRetryableRequests,
+    retryRequests,
     dismissRequest,
+    cancelRequest,
+    pauseRequest,
+    resumeRequest,
+    pauseRequests,
+    resumeRequests,
     archiveHistory,
+    archiveHistoryByIds,
     dismissHistoryItem,
   };
 })();

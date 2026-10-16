@@ -204,11 +204,7 @@ const ChartModule = (() => {
             rows: data.length,
           });
 
-          drawChart(chartType, data, false, animated, chartOpts);
-
-          if (typeof onComplete === "function") {
-            onComplete();
-          }
+          drawChart(chartType, data, false, animated, chartOpts, onComplete);
         },
         log,
         refresh,
@@ -322,6 +318,7 @@ const ChartModule = (() => {
     debug = false,
     animated = false,
     chartOpts = {},
+    onComplete
   ) {
     const chartDiv = document.getElementById(`chart-${type}`);
 
@@ -344,43 +341,34 @@ const ChartModule = (() => {
 
     switch (type) {
       case "yearly":
-        return drawYearlyChart(ctx, type, data, true);
+        return drawYearlyChart(ctx, type, data, true, onComplete);
 
       case "hourly":
-        return drawHourlyChart(ctx, type, data, true);
+        return drawHourlyChart(ctx, type, data, true, onComplete);
 
       case "monthly-prev-merged":
-        return drawMonthlyComparisonChart(ctx, type, data, true);
+        return drawMonthlyComparisonChart(ctx, type, data, true, onComplete);
 
       case "current_month_log":
       case "yearly_monthly_hours":
       case "daily":
       case "monthly":
-        return drawLineChart(ctx, type, data, animated, chartOpts);
+        return drawLineChart(ctx, type, data, animated, chartOpts, onComplete);
 
       case "monthly_hours_by_year":
-        return drawMonthlyHoursByYearChart(ctx, type, data, animated);
+        return drawMonthlyHoursByYearChart(ctx, type, data, animated, onComplete);
 
       case "daily_overview":
-        return drawDailyOverviewChart(ctx, type, data, animated);
-
-      // case "client_paid_owed_history":
-      //   return drawClientPaidOwedHistoryChart(
-      //     ctx,
-      //     type,
-      //     data,
-      //     animated,
-      //     chartOpts,
-      //   );
+        return drawDailyOverviewChart(ctx, type, data, animated, onComplete);
 
       case "client_hours_month":
-        return drawClientMonthlyHoursChart(ctx, type, data, animated);
+        return drawClientMonthlyHoursChart(ctx, type, data, animated, onComplete);
 
       case "client_daily_hours":
-        return drawClientDailyHoursChart(ctx, type, data, animated);
+        return drawClientDailyHoursChart(ctx, type, data, animated, onComplete);
 
       case "client_paid_owed":
-        return drawClientPaidOwedHistoryChart(ctx, type, data, animated);
+        return drawClientPaidOwedHistoryChart(ctx, type, data, animated, onComplete);
 
       default:
         return AppUtils.showError(`Unknown chart type: ${type}`);
@@ -458,7 +446,7 @@ const ChartModule = (() => {
   // YEARLY
   // --------------------------------------------------
 
-  function drawYearlyChart(ctx, type, data, animated = false) {
+  function drawYearlyChart(ctx, type, data, animated = false, onComplete) {
     const labels = data.map((row) => row?.[0] ?? "");
 
     const paid = data.map((row) => Number(row?.[2]) || 0);
@@ -661,13 +649,17 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
   // --------------------------------------------------
   // HOURLY
   // --------------------------------------------------
 
-  function drawHourlyChart(ctx, type, data, animated = false) {
+  function drawHourlyChart(ctx, type, data, animated = false, onComplete) {
     const labels = data.map((row) => String(row?.[0] || ""));
     const values = data.map((row) => Number(row?.[1]) || 0);
     const peakIndex = getPeakIndex(values);
@@ -836,13 +828,17 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
   // --------------------------------------------------
   // MONTHLY COMPARISON
   // --------------------------------------------------
 
-  function drawMonthlyComparisonChart(ctx, type, data, animated = false) {
+  function drawMonthlyComparisonChart(ctx, type, data, animated = false, onComplete) {
     const prev = fillMonthlyData(data?.prevYear || []);
     const current = fillMonthlyData(data?.currentYear || []);
     const prevPeakIndex = getPeakIndex(prev);
@@ -1013,9 +1009,13 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
-  function drawMonthlyHoursByYearChart(ctx, type, data, animated = false) {
+  function drawMonthlyHoursByYearChart(ctx, type, data, animated = false, onComplete) {
     const yearColors = [
       {
         base: "rgba(14, 165, 233, 0.85)",
@@ -1194,9 +1194,13 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
-  function drawDailyOverviewChart(ctx, type, data, animated = false) {
+  function drawDailyOverviewChart(ctx, type, data, animated = false, onComplete) {
     const labels = data.map(([client]) => client);
 
     const values = data.map(([, hours]) => Number(hours) || 0);
@@ -1328,6 +1332,10 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
   function fillMonthlyData(data) {
@@ -1355,7 +1363,7 @@ const ChartModule = (() => {
   // DAILY / MONTHLY LINE
   // --------------------------------------------------
 
-  function drawLineChart(ctx, type, data, animated = false, chartOpts = {}) {
+  function drawLineChart(ctx, type, data, animated = false, chartOpts = {}, onComplete) {
     const {
       showLabel = true,
       showPoints = true,
@@ -1590,6 +1598,10 @@ const ChartModule = (() => {
         animated ? 1200 : 0,
       );
     }
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
   function drawClientPaidOwedHistoryChart(
@@ -1598,6 +1610,7 @@ const ChartModule = (() => {
     yearlyData,
     animated = false,
     chartOpts = {},
+    onComplete
   ) {
     const {
       showLabel = true,
@@ -1794,13 +1807,21 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
-  function drawMonthlyTargetChart(ctx, chartId, data) {
+  function drawMonthlyTargetChart(ctx, chartId, data, onComplete) {
     const existing = Chart.getChart(ctx);
 
     if (existing) {
       existing.destroy();
+    }
+
+    if (typeof onComplete === "function") {
+      onComplete();
     }
 
     return new Chart(ctx, {
@@ -1885,7 +1906,7 @@ const ChartModule = (() => {
     });
   }
 
-  function drawClientMonthlyHoursChart(ctx, type, data, animated = false) {
+  function drawClientMonthlyHoursChart(ctx, type, data, animated = false, onComplete) {
     const years = Object.keys(data || {});
 
     const year = years[0];
@@ -1942,9 +1963,13 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
-  function drawClientDailyHoursChart(ctx, type, data, animated = false) {
+  function drawClientDailyHoursChart(ctx, type, data, animated = false, onComplete) {
     const labels = data.map((row) => String(row[0]));
     const values = data.map((row) => Number(row[1]) || 0);
 
@@ -1991,6 +2016,10 @@ const ChartModule = (() => {
         },
       },
     });
+
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
   }
 
   // --------------------------------------------------
