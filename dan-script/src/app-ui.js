@@ -1,10 +1,13 @@
-import { LoaderModule } from "./loader";
+import { LoaderModule } from "./components/loader";
+import { AppPopoverModule } from "./components/app-popover";
+import { AppUtils } from "./utils/utils";
 
 const AppUI = (() => {
   function init() {
     initPerfectScrollbars();
     initLoadingState();
     initScrollBehavior();
+    initFooterQuickAccess();
   }
 
   function initLoadingState() {
@@ -36,15 +39,9 @@ const AppUI = (() => {
        */
       if (window.innerWidth <= 768) {
         handleMobileFooterScroll(currentScrollY, lastScrollY);
-      }
 
-      /*
-       * Add future scroll behaviors here.
-       *
-       * Example:
-       * handleMobileHeaderScroll(currentScrollY, lastScrollY);
-       * handleScrollProgress(currentScrollY);
-       */
+        handleHeaderScroll(currentScrollY, lastScrollY);
+      }
 
       lastScrollY = currentScrollY;
       ticking = false;
@@ -70,8 +67,26 @@ const AppUI = (() => {
         const footer = document.querySelector(".app-wrapper-footer");
 
         footer?.classList.remove("footer-hidden");
+
+        const header = document.querySelector(".app-header");
+
+        header?.classList.remove("app-header-hidden");
       }
     });
+  }
+
+  function initPageSelect2() {
+    const $scope = "#app-main__inner";
+    
+    const $select2Fields = $($scope).find(
+      "select.js-select2, select.js-select2-dynamic",
+    );
+
+    if (!$select2Fields.length) {
+      return;
+    }
+
+    AppUtils.initSelect2($scope);
   }
 
   function activateNavigation(pageName) {
@@ -104,6 +119,204 @@ const AppUI = (() => {
         element._perfectScrollbar = new PerfectScrollbar(element);
       } catch (error) {
         console.warn("[AppUI] PerfectScrollbar failed:", element, error);
+      }
+    });
+  }
+
+  function initFooterQuickAccess() {
+    const footer = document.querySelector(".app-wrapper-footer");
+
+    if (!footer || footer.dataset.quickAccessInitialized === "true") {
+      return;
+    }
+
+    footer.dataset.quickAccessInitialized = "true";
+
+    registerFooterPopovers();
+    bindFooterActions(footer);
+  }
+
+  function registerFooterPopovers() {
+    AppPopoverModule.register("gcb-notifications", {
+      title: "Notifications & System",
+      icon: '<i class="pe-7s-bell"></i>',
+      width: 380,
+      tabs: [
+        {
+          id: "schedule",
+          label: "Schedules",
+          content: `
+          <div class="app-popover-section">
+            <h6>Scheduled Triggers</h6>
+            <p>View scheduled triggers and daily update status.</p>
+            <span class="badge bg-secondary">Not connected</span>
+          </div>
+        `,
+        },
+        {
+          id: "reports",
+          label: "Reports",
+          content: `
+          <div class="app-popover-section">
+            <h6>Scheduled Reports</h6>
+            <p>Review report schedules and their latest status.</p>
+            <span class="badge bg-secondary">Not connected</span>
+          </div>
+        `,
+        },
+        {
+          id: "logs",
+          label: "System Logs",
+          content: `
+          <div class="app-popover-section">
+            <h6>System Errors</h6>
+            <p>View application errors and recent system activity.</p>
+            <span class="badge bg-secondary">Not connected</span>
+          </div>
+        `,
+        },
+      ],
+    });
+
+    AppPopoverModule.register("gcb-hours-summary", {
+      title: "Hours Summary",
+      icon: '<i class="pe-7s-clock"></i>',
+      width: 360,
+      tabs: [
+        {
+          id: "today",
+          label: "Today",
+          content: createHoursPlaceholder("Today's Hours"),
+        },
+        {
+          id: "week",
+          label: "Week",
+          content: createHoursPlaceholder("This Week"),
+        },
+        {
+          id: "month",
+          label: "Month",
+          content: createHoursPlaceholder("This Month"),
+        },
+      ],
+    });
+
+    AppPopoverModule.register("gcb-user-menu", {
+      title: "Account",
+      icon: '<i class="pe-7s-user"></i>',
+      width: 300,
+      content: `
+      <div class="app-popover-account">
+        <div class="app-popover-account__identity">
+          <strong>GCB User</strong>
+          <small>Account information</small>
+        </div>
+
+        <div class="list-group list-group-flush">
+          <button
+            type="button"
+            class="list-group-item list-group-item-action"
+            data-footer-action="profile"
+          >
+            <i class="pe-7s-user me-2"></i>
+            Profile
+          </button>
+
+          <button
+            type="button"
+            class="list-group-item list-group-item-action"
+            data-footer-action="settings"
+          >
+            <i class="pe-7s-config me-2"></i>
+            Settings
+          </button>
+
+          <button
+            type="button"
+            class="list-group-item list-group-item-action text-danger"
+            data-footer-action="logout"
+          >
+            <i class="pe-7s-power me-2"></i>
+            Sign out
+          </button>
+        </div>
+      </div>
+    `,
+    });
+  }
+
+  function createHoursPlaceholder(title) {
+    return `
+    <div class="app-popover-section">
+      <h6>${title}</h6>
+      <div class="app-popover-metric">—</div>
+      <p>Hours data will appear here when connected.</p>
+    </div>
+  `;
+  }
+
+  function handleHeaderScroll(currentScrollY, lastScrollY) {
+    const header = document.querySelector(".app-header");
+
+    if (!header) {
+      return;
+    }
+
+    const showThreshold = 80;
+    const scrollDifference = 5;
+
+    const isScrollingDown = currentScrollY > lastScrollY;
+
+    const isScrollingUp = currentScrollY < lastScrollY;
+
+    const scrollDelta = Math.abs(currentScrollY - lastScrollY);
+
+    /*
+     * At or near the top → always show the header.
+     */
+    if (currentScrollY <= showThreshold) {
+      header.classList.remove("app-header-hidden");
+
+      return;
+    }
+
+    /*
+     * Scrolling up → hide the header.
+     */
+    if (isScrollingUp && scrollDelta > scrollDifference) {
+      header.classList.add("app-header-hidden");
+
+      return;
+    }
+
+    /*
+     * Scrolling down → keep the header visible/sticky.
+     */
+    if (isScrollingDown && scrollDelta > scrollDifference) {
+      header.classList.remove("app-header-hidden");
+    }
+  }
+
+  function bindFooterActions(footer) {
+    footer.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-footer-action]");
+
+      if (!action || !footer.contains(action)) {
+        return;
+      }
+
+      switch (action.dataset.footerAction) {
+        case "profile":
+          // Connect to the existing profile/settings navigation.
+          break;
+
+        case "settings":
+          // Connect to the existing settings page or modal.
+          break;
+
+        case "logout":
+          // Connect to the real authentication/session logout flow.
+          break;
       }
     });
   }
@@ -227,7 +440,8 @@ const AppUI = (() => {
     setupStaggerCards,
     playStaggerReveal,
     setupSkeletonCards,
-    playSkeletonReveal
+    playSkeletonReveal,
+    initPageSelect2,
   };
 })();
 

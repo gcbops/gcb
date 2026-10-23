@@ -1,5 +1,6 @@
 /* eslint-disable eqeqeq */
-import { AppUtils } from "../utils.js";
+import { RouterModule } from "../routers.js";
+import { AppUtils } from "../utils/utils.js";
 import { RequestManager } from "./request-manager.js";
 
 const RequestWidget = (() => {
@@ -7,6 +8,12 @@ const RequestWidget = (() => {
   let expanded = false;
   let activeCategory = "all";
   let latestState = null;
+
+  const AUTO_SHOW_DELAY = 10_000;
+
+  let knownQueuedIds = null;
+  let inactivityTimer = null;
+  let mediaQuery = null;
 
   const expandedDetails = new Set();
 
@@ -115,6 +122,8 @@ const RequestWidget = (() => {
 
     document.body.appendChild(root);
 
+    initAutoVisibility(root);
+
     root.addEventListener("click", (event) => {
       if (event.target.closest("#gcb-request-toggle")) {
         setExpanded(!expanded);
@@ -146,6 +155,23 @@ const RequestWidget = (() => {
 
         if (historyIds.length) {
           RequestManager.archiveHistoryByIds(historyIds);
+        }
+
+        return;
+      }
+
+      const moveButton = event.target.closest("[data-request-move]");
+
+      if (moveButton) {
+        const requestId = moveButton.dataset.requestId;
+        const direction = moveButton.dataset.requestMove;
+
+        const moved = RequestManager.movePendingRequest(requestId, direction);
+
+        if (!moved) {
+          AppUtils.showDashboardToast?.(
+            "This request can no longer be reordered.",
+          );
         }
 
         return;
@@ -233,27 +259,61 @@ const RequestWidget = (() => {
           (request) => request.status === "interrupted",
         );
 
+        const hasReportGeneration = retryableRequests.some((request) =>
+          ["generate-report", "generate-billing-csv"].includes(request.type),
+        );
+
+        const hasDelivery = retryableRequests.some((request) =>
+          /email|discord/i.test(request.type || ""),
+        );
+
+        const warnings = [
+          hasInterrupted
+            ? `
+              <p>
+                <strong>Interrupted requests:</strong>
+                The server may have completed these operations even though
+                the browser did not receive confirmation.
+              </p>
+            `
+                    : "",
+                  hasReportGeneration
+                    ? `
+              <p>
+                <strong>Report generation:</strong>
+                A PDF or CSV may already exist. Retrying could create another file.
+              </p>
+            `
+                    : "",
+                  hasDelivery
+                    ? `
+              <p class="mb-0">
+                <strong>Message delivery:</strong>
+                An email or Discord message may already have been sent.
+                Retrying could send it again.
+              </p>
+            `
+            : "",
+          ]
+          .filter(Boolean)
+          .join("");
+
+        const message = `
+          <p>
+            You are about to retry
+            <strong>${requestIds.length}</strong>
+            failed or interrupted request(s).
+          </p>
+          ${warnings}
+          <p class="mb-0">
+            Continue only after reviewing the affected operations.
+          </p>
+        `;
+
         AppUtils.openConfirmationModal({
           ns: "retryAllRequests",
           title: `Retry ${requestIds.length} Requests?`,
-          message: `
-            <p>
-              You are about to retry <strong>${requestIds.length}</strong>
-              failed or interrupted request(s).
-            </p>
-            <p>
-              Some requests may already have been saved by the server.
-              Verify their results before retrying to avoid duplicate operations.
-            </p>
-            ${
-              hasInterrupted
-                ? `<p class="mb-0">
-                    <strong>Warning:</strong> Some requests were interrupted
-                    while processing. Their final server-side result may be unknown.
-                  </p>`
-                : ""
-            }
-          `,
+          message: message,
           onProceed: () => {
             AppUtils.closeModal("#app-modal");
 
@@ -279,6 +339,34 @@ const RequestWidget = (() => {
         if (latestState) {
           render(latestState);
         }
+
+        return;
+      }
+
+      const clientDetailsButton = event.target.closest(
+        "[data-request-client-details]",
+      );
+
+      if (clientDetailsButton) {
+        const requestId = clientDetailsButton.dataset.requestClientDetails;
+
+        const request = [
+          ...(latestState?.queue || []),
+          ...(latestState?.history || []),
+        ].find((item) => item.id === requestId);
+
+        const clientName = RequestManager.getRequestClientName(request);
+
+        if (!clientName) {
+          AppUtils.showError(
+            "The client name is unavailable for this request.",
+          );
+          return;
+        }
+
+        RouterModule.go("clientDetails", true, {
+          client: clientName,
+        });
 
         return;
       }
@@ -335,27 +423,142 @@ const RequestWidget = (() => {
       }
 
       const retryButton = event.target.closest("[data-request-retry]");
+
       if (retryButton) {
         const requestId = retryButton.dataset.requestRetry;
 
+        const request = [
+          ...(latestState?.queue || []),
+          ...(latestState?.history || []),
+        ].find((item) => item.id === requestId);
+
+        if (!request) {
+          AppUtils.showError(
+            "The request could not be found. Please refresh and try again.",
+          );
+          return;
+        }
+
+        const isInterrupted = request.status === "interrupted";
+
+        const retryMessages = {
+          hours: {
+            title: "Retry Hour Request?",
+            message: `
+        <p>This hour request did not finish normally.</p>
+        <p class="mb-0">
+          ${
+            isInterrupted
+              ? "The server may already have recorded these hours before the connection was interrupted."
+              : "Confirm that the original hour operation was not saved before retrying."
+          }
+          Verify the relevant sheet records first to avoid duplicate hours.
+          Do you want to retry anyway?
+        </p>
+      `,
+          },
+
+          report: {
+            title: "Retry Report Generation?",
+            message: `
+        <p>The report generation request did not finish normally.</p>
+        <p class="mb-0">
+          ${
+            isInterrupted
+              ? "The PDF may already have been generated or saved in Google Drive."
+              : "Check the report history and Google Drive before retrying."
+          }
+          Retrying may generate another report or overwrite existing report state.
+          Verify the outcome first.
+        </p>
+      `,
+          },
+
+          csv: {
+            title: "Retry CSV Export?",
+            message: `
+        <p>The Billing Records CSV export did not finish normally.</p>
+        <p class="mb-0">
+          ${
+            isInterrupted
+              ? "The CSV may already have been created in Google Drive."
+              : "Check Google Drive for the CSV generated for this date range."
+          }
+          Retrying may create a duplicate file. Verify the outcome before proceeding.
+        </p>
+      `,
+          },
+
+          email: {
+            title: "Retry Email Delivery?",
+            message: `
+        <p>The email delivery request did not finish normally.</p>
+        <p class="mb-0">
+          ${
+            isInterrupted
+              ? "The email may already have been sent even though confirmation was not received."
+              : "Check the delivery result and available operation logs before retrying."
+          }
+          Retrying may send a duplicate email.
+        </p>
+      `,
+          },
+
+          discord: {
+            title: "Retry Discord Delivery?",
+            message: `
+        <p>The Discord delivery request did not finish normally.</p>
+        <p class="mb-0">
+          ${
+            isInterrupted
+              ? "Discord may already have received the message before the connection was interrupted."
+              : "Check the delivery result and available operation logs before retrying."
+          }
+          Retrying may post a duplicate notification.
+        </p>
+      `,
+          },
+
+          other: {
+            title: "Retry This Request?",
+            message: `
+        <p>This request did not finish normally.</p>
+        <p class="mb-0">
+          Verify whether the original operation succeeded before retrying,
+          to avoid unintended duplicate actions.
+        </p>
+      `,
+          },
+        };
+
+        const type = String(request.type || "").toLowerCase();
+
+        let category = "other";
+
+        if (
+          ["record-hours", "edit-today-hours"].includes(type) ||
+          /hour|hours/i.test(type)
+        ) {
+          category = "hours";
+        } else if (type === "generate-report") {
+          category = "report";
+        } else if (type === "generate-billing-csv") {
+          category = "csv";
+        } else if (/email/i.test(type)) {
+          category = "email";
+        } else if (/discord/i.test(type)) {
+          category = "discord";
+        }
+
+        const { title, message } = retryMessages[category];
+
         AppUtils.openConfirmationModal({
           ns: "retryRequest",
-
-          title: "Retry This Request?",
-
-          message: `
-            <p>
-              This request may already have been saved by the server.
-            </p>
-            <p class="mb-0">
-              Verify the server record before retrying to avoid duplicate hours.
-              Do you want to retry anyway?
-            </p>
-          `,
+          title,
+          message,
 
           onProceed: ($modal, $btn) => {
             AppUtils.closeModal("#app-modal");
-
             RequestManager.retryRequest(requestId);
           },
 
@@ -363,6 +566,123 @@ const RequestWidget = (() => {
             AppUtils.closeModal("#app-modal");
           },
         });
+
+        return;
+      }
+
+      const pdfEmailButton = event.target.closest("[data-request-pdf-email]");
+      const pdfDiscordButton = event.target.closest(
+        "[data-request-pdf-discord]",
+      );
+
+      if (pdfEmailButton) {
+        event.preventDefault();
+
+        const reportId = pdfEmailButton.dataset.requestPdfEmail;
+
+        RequestManager.enqueue(
+          "send-report-email",
+          {
+            reportId,
+            reportType: "PDF Report",
+            isDataExport: false,
+          },
+          "Email PDF report",
+        );
+
+        return;
+      }
+
+      if (pdfDiscordButton) {
+        event.preventDefault();
+
+        const reportId = pdfDiscordButton.dataset.requestPdfDiscord;
+
+        RequestManager.enqueue(
+          "send-report-discord",
+          {
+            reportId,
+            reportType: "PDF Report",
+            isDataExport: false,
+          },
+          "Send PDF report to Discord",
+        );
+
+        return;
+      }
+  
+      const reportDownloadButton = event.target.closest(
+        "[data-request-report-download]",
+      );
+
+      const reportViewButton = event.target.closest(
+        "[data-request-report-view]",
+      );
+
+      if (reportDownloadButton || reportViewButton) {
+        const requestId =
+          (reportDownloadButton || reportViewButton).dataset
+            .requestReportDownload ||
+          (reportDownloadButton || reportViewButton).dataset.requestReportView;
+
+        const reportRequest = latestState?.history.find(
+          (request) =>
+            request.id === requestId &&
+            ["generate-report", "generate-billing-csv"].includes(
+              request.type,
+            ) &&
+            request.status === "completed",
+        );
+
+        const reportUrl =
+          reportRequest?.result?.reportUrl || reportRequest?.result?.url;
+
+        if (!reportUrl) {
+          AppUtils.showError("The saved report link is unavailable.");
+          return;
+        }
+
+        let url;
+
+        try {
+          url = new URL(reportUrl);
+
+          if (
+            url.protocol !== "https:" ||
+            !["drive.google.com", "docs.google.com"].includes(
+              url.hostname.toLowerCase(),
+            ) ||
+            url.username ||
+            url.password
+          ) {
+            throw new Error("Invalid report URL");
+          }
+        } catch {
+          AppUtils.showError("The saved report link is invalid.");
+          return;
+        }
+
+        if (reportDownloadButton) {
+          const fileId =
+            url.pathname.match(
+              /\/(?:file|document|spreadsheets|presentation)\/d\/([^/]+)/,
+            )?.[1] || url.searchParams.get("id");
+
+          if (!fileId) {
+            AppUtils.showError(
+              "Unable to determine the report file ID for downloading.",
+            );
+            return;
+          }
+
+          const downloadUrl = new URL("https://drive.google.com/uc");
+          downloadUrl.searchParams.set("export", "download");
+          downloadUrl.searchParams.set("id", fileId);
+
+          window.open(downloadUrl.href, "_blank", "noopener,noreferrer");
+        } else {
+          window.open(url.href, "_blank", "noopener,noreferrer");
+        }
 
         return;
       }
@@ -382,6 +702,8 @@ const RequestWidget = (() => {
           dismissHistoryButton.dataset.requestDismissHistory,
         );
       }
+
+
     });
 
     unsubscribe = RequestManager.subscribe(render);
@@ -392,12 +714,21 @@ const RequestWidget = (() => {
 
     const panel = document.getElementById("gcb-request-panel");
     const toggle = document.getElementById("gcb-request-toggle");
+    const root = document.getElementById("gcb-request-widget");
 
     if (panel) {
       panel.hidden = !expanded;
     }
 
     toggle?.setAttribute("aria-expanded", String(expanded));
+
+    if (expanded) {
+      clearInactivityTimer();
+      setAutoHidden(root, false);
+    } else if (isMobile()) {
+      // Start a fresh 10-second inactivity period after closing.
+      scheduleAutoShow(root);
+    }
   }
 
   function escapeHTML(value) {
@@ -433,7 +764,20 @@ const RequestWidget = (() => {
   }
 
   function render(state) {
+    const queuedIds = new Set(state.queue.map((request) => request.id));
+
+    const hasNewRequest =
+      knownQueuedIds !== null &&
+      [...queuedIds].some((id) => !knownQueuedIds.has(id));
+
+    knownQueuedIds = queuedIds;
     latestState = state;
+
+    const root = document.getElementById("gcb-request-widget");
+
+    if (hasNewRequest) {
+      showRequestWidget(root, true);
+    }
 
     const list = document.getElementById("gcb-request-list");
     const count = document.getElementById("gcb-request-count");
@@ -472,7 +816,35 @@ const RequestWidget = (() => {
       projection.innerHTML = "";
     }
 
-    const allRequests = [...state.queue, ...state.history.slice(0, 10)];
+    const historyByCategory = {
+      hours: [],
+      reports: [],
+      other: [],
+    };
+
+    Object.keys(historyByCategory).forEach((category) => {
+      historyByCategory[category] = state.history
+        .filter((request) => getRequestCategory(request) === category)
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt || b.createdAt).getTime() -
+            new Date(a.updatedAt || a.createdAt).getTime(),
+        )
+        .slice(0, 10);
+    });
+
+    const recentHistory =
+      activeCategory === "all"
+        ? Object.values(historyByCategory)
+            .flat()
+            .sort(
+              (a, b) =>
+                new Date(b.updatedAt || b.createdAt).getTime() -
+                new Date(a.updatedAt || a.createdAt).getTime(),
+            )
+        : historyByCategory[activeCategory] || [];
+
+    const allRequests = [...state.queue, ...recentHistory];
 
     document
       .querySelectorAll("#gcb-request-tabs [data-request-category]")
@@ -490,9 +862,9 @@ const RequestWidget = (() => {
     if (categoryActions) {
       const categoryLabels = {
         all: "Clear all history",
-        hours: "Clear hours history",
-        reports: "Clear reports history",
-        other: "Clear other history",
+        hours: "Clear history",
+        reports: "Clear history",
+        other: "Clear history",
       };
 
       const hasHistory = state.history.some(
@@ -528,8 +900,8 @@ const RequestWidget = (() => {
           data-request-pause-all="${activeCategory}"
           ${pendingRequests.length ? "" : "disabled"}
         >
-          <i class="pe-7s-pause" aria-hidden="true"></i>
-          <span>Pause all (${pendingRequests.length})</span>
+          <i class="fa fa-pause" aria-hidden="true"></i>
+          <span>Pause(${pendingRequests.length})</span>
         </button>
 
         <button
@@ -538,8 +910,8 @@ const RequestWidget = (() => {
           data-request-resume-all="${activeCategory}"
           ${pausedRequests.length ? "" : "disabled"}
         >
-          <i class="pe-7s-play" aria-hidden="true"></i>
-          <span>Resume all (${pausedRequests.length})</span>
+          <i class="fa fa-play" aria-hidden="true"></i>
+          <span>Resume(${pausedRequests.length})</span>
         </button>
 
         <button
@@ -548,8 +920,8 @@ const RequestWidget = (() => {
           data-request-retry-all="${activeCategory}"
           ${retryableRequests.length ? "" : "disabled"}
         >
-          <i class="pe-7s-refresh-2" aria-hidden="true"></i>
-          <span>Retry all (${retryableRequests.length})</span>
+          <i class="fa fa-refresh" aria-hidden="true"></i>
+          <span>Retry(${retryableRequests.length})</span>
         </button>
 
         <button
@@ -558,7 +930,7 @@ const RequestWidget = (() => {
           data-request-clear-history="${activeCategory}"
           ${hasHistory ? "" : "disabled"}
         >
-          <i class="pe-7s-trash" aria-hidden="true"></i>
+          <i class="fa fa-trash" aria-hidden="true"></i>
           <span>${categoryLabels[activeCategory]}</span>
         </button>
       `;
@@ -591,7 +963,23 @@ const RequestWidget = (() => {
       .map((request) => {
         const isRetryable = ["interrupted", "failed"].includes(request.status);
         const isHistory = state.history.some((item) => item.id === request.id);
+        const isCompletedReport =
+          isHistory &&
+          ["generate-report", "generate-billing-csv"].includes(request.type) &&
+          request.status === "completed" &&
+          Boolean(request.result?.reportUrl || request.result?.url);
+        const isCompletedCsv =
+          isHistory &&
+          request.type === "generate-billing-csv" &&
+          request.status === "completed" &&
+          Boolean(request.result?.fileId);
+        const isCompletedPdf =
+          isHistory &&
+          request.type === "generate-report" &&
+          request.status === "completed" &&
+          Boolean(request.result?.reportId);
         const isPending = request.status === "pending";
+        const clientName = RequestManager.getRequestClientName(request);
         const isPaused = request.status === "paused";
 
         const isRecordHours = request.type === "record-hours";
@@ -695,7 +1083,82 @@ const RequestWidget = (() => {
             }
           `;
         } else if (isHistory) {
+          const hasReportActions = isCompletedReport;
+          const hasDeliveryActions = isCompletedCsv || isCompletedPdf;
+
           actions = `
+            ${
+              hasReportActions
+                ? `
+                  <button
+                    type="button"
+                    data-request-report-download="${escapeHTML(request.id)}"
+                  >Download</button>
+
+                  <button
+                    type="button"
+                    data-request-report-view="${escapeHTML(request.id)}"
+                  >View</button>
+                `
+                : ""
+            }
+
+            ${
+              hasDeliveryActions
+                ? `
+                  <div class="dropdown d-inline-block">
+                    <button
+                      type="button"
+                      class="dropdown-toggle"
+                      data-bs-toggle="dropdown"
+                      aria-expanded="false"
+                      aria-label="More report actions"
+                    >
+                      More
+                    </button>
+
+                    <div class="dropdown-menu dropright">
+                      ${
+                        isCompletedCsv
+                          ? `
+                            <button
+                              type="button"
+                              class="dropdown-item"
+                              data-request-csv-email="${escapeHTML(request.id)}"
+                            >Email CSV</button>
+
+                            <button
+                              type="button"
+                              class="dropdown-item"
+                              data-request-csv-discord="${escapeHTML(request.id)}"
+                            >Send CSV to Discord</button>
+                          `
+                          : ""
+                      }
+
+                      ${
+                        isCompletedPdf
+                          ? `
+                            <button
+                              type="button"
+                              class="dropdown-item"
+                              data-request-pdf-email="${escapeHTML(request.result.reportId)}"
+                            >Email PDF</button>
+
+                            <button
+                              type="button"
+                              class="dropdown-item"
+                              data-request-pdf-discord="${escapeHTML(request.result.reportId)}"
+                            >Send PDF to Discord</button>
+                          `
+                          : ""
+                      }
+                    </div>
+                  </div>
+                `
+                : ""
+            }
+
             <button
               type="button"
               data-request-dismiss-history="${escapeHTML(request.id)}"
@@ -788,13 +1251,87 @@ const RequestWidget = (() => {
             `
           : "";
 
+        const clientDetailsHTML = clientName
+          ? `
+              <button
+                type="button"
+                class="gcb-request-client-details"
+                data-request-client-details="${escapeHTML(request.id)}"
+              >Details</button>
+            `
+          : "";
+
+        const pendingRequests = state.queue.filter(
+          (item) => item.status === "pending",
+        );
+
+        const pendingIndex = pendingRequests.findIndex(
+          (item) => item.id === request.id,
+        );
+
+        const priorityActions =
+          isPending && pendingIndex !== -1
+            ? `
+              <div class="gcb-request-priority-actions">
+                <button
+                  type="button"
+                  data-request-id="${escapeHTML(request.id)}"
+                  data-request-move="top"
+                  aria-label="Move request to top"
+                  title="Move to top"
+                  ${pendingIndex === 0 ? "disabled" : ""}
+                >
+                  <i class="fa fa-angle-double-up" aria-hidden="true"></i>
+                </button>
+
+                <button
+                  type="button"
+                  data-request-id="${escapeHTML(request.id)}"
+                  data-request-move="up"
+                  aria-label="Move request up"
+                  title="Move up"
+                  ${pendingIndex === 0 ? "disabled" : ""}
+                >
+                  <i class="fa fa-angle-up" aria-hidden="true"></i>
+                </button>
+
+                <button
+                  type="button"
+                  data-request-id="${escapeHTML(request.id)}"
+                  data-request-move="down"
+                  aria-label="Move request down"
+                  title="Move down"
+                  ${pendingIndex === pendingRequests.length - 1 ? "disabled" : ""}
+                >
+                  <i class="fa fa-angle-down" aria-hidden="true"></i>
+                </button>
+
+                <button
+                  type="button"
+                  data-request-id="${escapeHTML(request.id)}"
+                  data-request-move="bottom"
+                  aria-label="Move request to bottom"
+                  title="Move to bottom"
+                  ${pendingIndex === pendingRequests.length - 1 ? "disabled" : ""}
+                >
+                  <i class="fa fa-angle-double-down" aria-hidden="true"></i>
+                </button>
+              </div>
+            `
+          : "";
+
         return `
           <article class="gcb-request-item">
             <div class="gcb-request-item-top">
               <strong>${escapeHTML(request.title)}</strong>
-              <span class="gcb-request-status status-${escapeHTML(request.status)}">
-                ${escapeHTML(request.status)}
-              </span>
+
+              <div class="gcb-request-item-header-actions">
+                ${priorityActions}
+
+                <span class="gcb-request-status status-${escapeHTML(request.status)}">
+                  ${escapeHTML(request.status)}
+                </span>
+              </div>
             </div>
 
             <div class="gcb-request-message">
@@ -807,7 +1344,16 @@ const RequestWidget = (() => {
               ${escapeHTML(new Date(request.createdAt).toLocaleTimeString())}
             </div>
 
-            ${actions ? `<div class="gcb-request-actions">${actions}</div>` : ""}
+            ${
+              actions || clientDetailsHTML
+                ? `
+                    <div class="gcb-request-actions">
+                      ${clientDetailsHTML}
+                      ${actions}
+                    </div>
+                  `
+                : ""
+            }
           </article>
         `;
       })
@@ -819,6 +1365,110 @@ const RequestWidget = (() => {
     unsubscribe = null;
 
     document.getElementById("gcb-request-widget")?.remove();
+  }
+
+  function isMobile() {
+    return mediaQuery?.matches ?? window.innerWidth <= 768;
+  }
+
+  function setAutoHidden(root, hidden) {
+    if (!root) {return;}
+
+    root.classList.toggle("gcb-request-auto-hidden", Boolean(hidden));
+  }
+
+  function clearInactivityTimer() {
+    if (inactivityTimer !== null) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
+  }
+
+  function showRequestWidget(root, pulse = false) {
+    if (!root) {return;}
+
+    clearInactivityTimer();
+    setAutoHidden(root, false);
+
+    if (pulse) {
+      pulseRequestToggle(root);
+    }
+  }
+
+  function pulseRequestToggle(root) {
+    const toggle = root?.querySelector("#gcb-request-toggle");
+
+    if (!toggle || root.classList.contains("gcb-request-auto-hidden")) {
+      return;
+    }
+
+    toggle.classList.remove("gcb-request-pulse");
+
+    // Restart the animation when multiple requests arrive quickly.
+    void toggle.offsetWidth;
+
+    toggle.classList.add("gcb-request-pulse");
+  }
+
+  function scheduleAutoShow(root) {
+    clearInactivityTimer();
+
+    inactivityTimer = setTimeout(() => {
+      inactivityTimer = null;
+
+      if (!isMobile() || expanded) {return;}
+
+      setAutoHidden(root, false);
+    }, AUTO_SHOW_DELAY);
+  }
+
+  function handleUserActivity(event, root) {
+    if (!isMobile()) {
+      setAutoHidden(root, false);
+      clearInactivityTimer();
+      return;
+    }
+
+    // Keep the Request Manager visible while the user interacts with it.
+    if (event?.target instanceof Node && root?.contains(event.target)) {
+      clearInactivityTimer();
+      setAutoHidden(root, false);
+      return;
+    }
+
+    if (expanded) {
+      setAutoHidden(root, false);
+      clearInactivityTimer();
+      return;
+    }
+
+    // Outside interaction: hide now and show again after inactivity.
+    setAutoHidden(root, true);
+    scheduleAutoShow(root);
+  }
+
+  function initAutoVisibility(root) {
+    mediaQuery = window.matchMedia("(max-width: 768px)");
+
+    const onActivity = (event) => handleUserActivity(event, root);
+
+    document.addEventListener("pointerdown", onActivity, { passive: true });
+    document.addEventListener("touchstart", onActivity, { passive: true });
+    document.addEventListener("keydown", onActivity);
+    document.addEventListener("wheel", onActivity, { passive: true });
+    document.addEventListener("scroll", onActivity, { passive: true });
+
+    mediaQuery.addEventListener("change", (event) => {
+      clearInactivityTimer();
+
+      if (!event.matches) {
+        setAutoHidden(root, false);
+      } else if (!expanded) {
+        scheduleAutoShow(root);
+      }
+    });
+
+    setAutoHidden(root, false);
   }
 
   return { init, destroy };

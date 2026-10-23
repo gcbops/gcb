@@ -1,6 +1,6 @@
 import { GcbAuthModule } from "../auth/auth.js";
-import { ChartModule } from "../charts.js";
-import { AppUtils } from "../utils.js";
+import { ChartModule } from "../components/charts.js";
+import { AppUtils } from "../utils/utils.js";
 
 const growthComparisonOverviewPage = (() => {
   const CACHE_KEY = "growthComparison";
@@ -15,12 +15,6 @@ const growthComparisonOverviewPage = (() => {
 
   function destroy() {
     $(document).off(".monthlyHoursByYear");
-
-    const $year = $("#monthlyHoursYearFilter");
-
-    if ($year.hasClass("select2-hidden-accessible")) {
-      $year.select2("destroy");
-    }
 
     hideMonthlyHoursChartLoading();
 
@@ -41,10 +35,10 @@ const growthComparisonOverviewPage = (() => {
     // Default: previous year + current year
     $year.val([currentYear - 1, currentYear].filter((year) => year >= 2024));
 
-    AppUtils.initSelect2($year, {
-      closeOnSelect: false,
-      placeholder: "Select years",
-    });
+    // AppUtils.initSelect2($year, {
+    //   closeOnSelect: false,
+    //   placeholder: "Select years",
+    // });
   }
 
   function bindMonthlyHoursFilters() {

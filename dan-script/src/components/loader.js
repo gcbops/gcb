@@ -19,114 +19,121 @@ const LoaderModule = (() => {
       "Applying preferences",
       "Almost ready",
       "Finishing up",
-      "Initializing application",
-      "Loading workspace modules",
-      "Preparing dashboard components",
-      "Checking available services",
-      "Fetching the latest records",
-      "Processing workspace data",
-      "Refreshing cached information",
-      "Preparing client directory",
-      "Loading performance metrics",
-      "Updating activity status",
-      "Preparing billing and hours",
-      "Gathering summary information",
-      "Synchronizing dashboard data",
-      "Checking application settings",
-      "Preparing page components",
-      "Organizing workspace information",
-      "Loading client activity",
-      "Refreshing performance summaries",
-      "Preparing analytics data",
-      "Updating dashboard metrics",
-      "Finalizing workspace setup",
-      "Making everything ready",
+      "Initializing app",
+      "Loading modules",
+      "Preparing components",
+      "Checking services",
+      "Fetching records",
+      "Processing data",
+      "Refreshing cache",
+      "Preparing clients",
+      "Loading metrics",
+      "Updating activity",
+      "Preparing hours",
+      "Gathering summaries",
+      "Syncing dashboard",
+      "Checking settings",
+      "Preparing pages",
+      "Organizing data",
+      "Loading activity",
+      "Refreshing metrics",
+      "Preparing analytics",
+      "Updating metrics",
+      "Finalizing setup",
+      "Making things ready",
+      "Loading preferences",
+      "Preparing activity",
     ],
 
     login: [
       "Signing you in",
-      "Verifying your account",
-      "Checking your access",
-      "Validating your session",
-      "Loading your permissions",
-      "Preparing your workspace",
-      "Retrieving your settings",
-      "Loading your dashboard",
+      "Verifying account",
+      "Checking access",
+      "Validating session",
+      "Loading permissions",
+      "Preparing workspace",
+      "Retrieving settings",
+      "Loading dashboard",
       "Almost ready",
-      "Checking your Google account",
-      "Confirming your identity",
-      "Verifying your sign-in",
-      "Establishing a secure session",
-      "Checking your account status",
-      "Validating your access rights",
-      "Loading your role and capabilities",
-      "Preparing your account profile",
-      "Retrieving your workspace settings",
-      "Applying your access permissions",
-      "Checking available pages",
-      "Preparing your navigation",
-      "Initializing your session",
-      "Securing your connection",
-      "Loading your personalized settings",
-      "Preparing your dashboard modules",
-      "Confirming your workspace access",
-      "Finalizing account verification",
-      "Completing secure sign-in",
-      "Getting your workspace ready",
-      "Finishing your login",
+      "Checking Google account",
+      "Confirming identity",
+      "Verifying sign-in",
+      "Securing session",
+      "Checking account status",
+      "Validating access",
+      "Loading capabilities",
+      "Preparing profile",
+      "Retrieving settings",
+      "Applying permissions",
+      "Checking pages",
+      "Preparing navigation",
+      "Initializing session",
+      "Securing connection",
+      "Loading preferences",
+      "Preparing modules",
+      "Confirming access",
+      "Finalizing verification",
+      "Completing sign-in",
+      "Preparing workspace",
+      "Finishing login",
+      "Loading pages",
+      "Preparing dashboard",
     ],
 
     logout: [
       "Preparing to sign out",
-      "Saving your session",
-      "Checking active connections",
-      "Securing your workspace",
-      "Preparing your account for logout",
-      "Clearing temporary application data",
-      "Removing cached session details",
-      "Releasing temporary resources",
-      "Closing active application tasks",
-      "Stopping background processes",
-      "Cleaning up workspace data",
-      "Updating session security",
-      "Clearing login information",
-      "Ending your active session",
-      "Disconnecting from the server",
-      "Confirming secure sign-out",
-      "Finalizing account logout",
+      "Saving session",
+      "Checking connections",
+      "Securing workspace",
+      "Preparing logout",
+      "Clearing temp data",
+      "Removing session data",
+      "Releasing resources",
+      "Closing tasks",
+      "Stopping processes",
+      "Cleaning up data",
+      "Updating security",
+      "Clearing login data",
+      "Ending session",
+      "Disconnecting",
+      "Confirming sign-out",
+      "Finalizing logout",
       "Almost finished",
-      "Signing you out securely",
-      "Logout is nearly complete",
-      "Completing the sign-out process",
-      "Returning to the login screen",
-      "Your session is being closed",
-      "Preparing a fresh login session",
-      "You're almost signed out",
+      "Signing out securely",
+      "Almost signed out",
+      "Completing sign-out",
+      "Returning to login",
+      "Closing session",
+      "Preparing login",
+      "Almost signed out",
       "Finishing up",
       "Goodbye",
-      "Ending your authenticated session",
-      "Clearing temporary session state",
-      "Removing session-related cache",
-      "Cleaning up application resources",
-      "Securing your account information",
-      "Closing your workspace session",
-      "Finalizing session cleanup",
-      "Wrapping up your current session",
-      "Completing account sign-out",
-      "Preparing to end your connection",
-      "Finishing account cleanup",
-      "Making sure your session is closed",
-      "Returning control to the login screen",
-      "Your workspace is being secured",
-      "Completing the logout process",
-      "Closing your secure connection",
-      "Your sign-out is being finalized",
+      "Ending session",
+      "Clearing session state",
+      "Removing cache",
+      "Cleaning resources",
+      "Securing account",
+      "Closing workspace",
+      "Finalizing cleanup",
+      "Wrapping up session",
+      "Completing sign-out",
+      "Ending connection",
+      "Finishing cleanup",
+      "Closing session",
+      "Returning to login",
+      "Securing workspace",
+      "Completing logout",
+      "Closing connection",
+      "Finalizing sign-out",
       "All done, signing out",
+      "Saving preferences",
+      "Preparing login page",
     ],
   };
 
   let animationFrameId = null;
   let animationRunId = 0;
+  let activeType = null;
 
   function shuffleArray(array) {
     const shuffled = [...array];
@@ -232,6 +239,13 @@ const LoaderModule = (() => {
   }
 
   function start(type = "loading") {
+    /*
+     * Prevent duplicate starts for the same loader type.
+     */
+    if (activeType === type && animationFrameId !== null) {
+      return;
+    }
+
     const container = document.getElementById("phrases");
 
     if (!container) {
@@ -242,6 +256,8 @@ const LoaderModule = (() => {
     const phrases = shuffleArray([...(phraseSets[type] || phraseSets.loading)]);
 
     stopAnimation();
+
+    activeType = type;
 
     const runId = animationRunId;
 
@@ -257,7 +273,6 @@ const LoaderModule = (() => {
       circle: document.getElementById(checkmarkCircleIdPrefix + index),
     }));
 
-    // Scroll through the entire phrase list before restarting.
     const scrollDistance = phrases.length * verticalSpacing + 10;
 
     function animateLoading(timestamp) {
@@ -270,6 +285,7 @@ const LoaderModule = (() => {
       }
 
       const delta = Math.min(timestamp - previousTimestamp, 50);
+
       previousTimestamp = timestamp;
 
       container.setAttribute("transform", `translate(0 ${currentY})`);
@@ -277,7 +293,9 @@ const LoaderModule = (() => {
       currentY -= 1.35 * easeInOut(timestamp) * (delta / 16.67);
 
       checks.forEach(({ check, circle }, index) => {
-        if (!check || !circle) {return;}
+        if (!check || !circle) {
+          return;
+        }
 
         const boundary = -index * verticalSpacing + verticalSpacing + 15;
 
@@ -290,6 +308,7 @@ const LoaderModule = (() => {
           circle.setAttribute("fill", "rgba(255, 255, 255, 1)");
 
           const green = Math.round(255 * (1 - alpha) + 120 * alpha);
+
           const blue = Math.round(255 * (1 - alpha) + 154 * alpha);
 
           check.setAttribute("fill", `rgba(255, ${green}, ${blue}, 1)`);
@@ -298,14 +317,24 @@ const LoaderModule = (() => {
 
       if (currentY > -scrollDistance) {
         animationFrameId = requestAnimationFrame(animateLoading);
+
         return;
       }
 
-      // Finish this cycle and begin a new one.
-      if (runId === animationRunId) {
-        animationFrameId = null;
-        start(type);
-      }
+      // Reset and loop through the phrases again.
+      currentY = 0;
+      previousTimestamp = timestamp;
+
+      checks.forEach(({ check, circle }) => {
+        if (!check || !circle) {
+          return;
+        }
+
+        circle.setAttribute("fill", "#008B8B");
+        check.setAttribute("fill", "#343a40");
+      });
+
+      animationFrameId = requestAnimationFrame(animateLoading);
     }
 
     animationFrameId = requestAnimationFrame(animateLoading);
@@ -318,13 +347,25 @@ const LoaderModule = (() => {
 
   function hide() {
     document.body.classList.add("loaded");
+
     stopAnimation();
+
+    activeType = null;
+  }
+
+  function restart(type = "loading") {
+    stopAnimation();
+
+    activeType = null;
+
+    start(type);
   }
 
   return {
     start,
     show,
     hide,
+    restart,
   };
 })();
 

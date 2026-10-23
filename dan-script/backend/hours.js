@@ -2662,12 +2662,22 @@ function getDailyActivityData(sessionId, signature) {
 
   const sheet = getSheetSafe("Client Tracker - Today");
 
-  return sheet
-    ? sheet
-        .getRange("B2:G")
-        .getValues()
-        .filter((row) => row.some(Boolean))
-    : [];
+  if (!sheet) {
+    return [];
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  // Read only rows that contain data, rather than the entire grid.
+  const values = sheet.getRange(2, 2, lastRow - 1, 6).getValues();
+
+  return values.filter((row) =>
+    row.some((value) => value !== "" && value != null),
+  );
 }
 
 function getHoursSummary(sessionId, signature) {

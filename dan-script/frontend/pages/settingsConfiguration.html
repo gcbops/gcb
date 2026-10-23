@@ -795,21 +795,23 @@
 
             <div class="row g-3 mb-3 dt-table-filters">
                 <div class="col-12 col-md-4">
-                    <select id="operation-log-category" class="custom-select js-select2">
-                        <option value="">All categories</option>
+                    <select id="operation-log-category" class="custom-select js-select2" data-placeholder="All categories">
+                        <option value="ALL">All categories</option>
                         <option value="BACKUP">Backup</option>
                         <option value="REPORT">Reports</option>
                         <option value="EMAIL">Email</option>
                         <option value="DISCORD">Discord</option>
                         <option value="HOURS">Hours</option>
-                        <option value="NOTIFICATION">Authentication</option>
+                        <option value="NOTIFICATION">Notification</option>
+                        <option value="CLIENT">Client</option>
+                        <option value="SECURITY">Security</option>
                         <option value="AUTH">Authentication</option>
                     </select>
                 </div>
 
                 <div class="col-12 col-md-4">
-                    <select id="operation-log-status" class="custom-select js-select2">
-                        <option value="">All statuses</option>
+                    <select id="operation-log-status" class="custom-select js-select2" data-placeholder="All statuses">
+                        <option value="ALL">All statuses</option>
                         <option value="FAILED">Failed</option>
                         <option value="PARTIAL">Partial</option>
                         <option value="SUCCESS">Success</option>

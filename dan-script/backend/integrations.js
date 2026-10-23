@@ -28,10 +28,6 @@ function getPropertyStatus(sessionId, signature, propertyId) {
   };
 }
 
-// function getBackupDestinationStatus(sessionId, signature) {
-//   return getPropertyStatus(sessionId, signature, "BACKUP_FOLDER_ID");
-// }
-
 function getIntegrationStatus(sessionId, signature) {
   requireRole(sessionId, signature, "admin");
 

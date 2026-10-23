@@ -1,6 +1,6 @@
-import { ChartModule } from "../charts.js";
+import { ChartModule } from "../components/charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 
 const monthlyOverviewPage = (() => {
   function init() {
@@ -37,7 +37,7 @@ const monthlyOverviewPage = (() => {
       showCurrentMonthLogChartLoading();
     }
 
-    AppUtils.initSelect2(".chart-filters");
+    // AppUtils.initSelect2(".chart-filters");
 
     ChartModule.loadChart(
       "current_month_log",

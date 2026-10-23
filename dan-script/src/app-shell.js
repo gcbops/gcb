@@ -1,4 +1,4 @@
-import { AppUtils } from "./utils";
+import { AppUtils } from "./utils/utils";
 
 const AppShellModule = (() => {
   let initialized = false;

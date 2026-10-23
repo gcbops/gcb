@@ -1,3 +1,141 @@
+const CLIENT_CREATION_JOURNAL = "ClientCreation_Operations";
+const CLIENT_CREATION_RETENTION_DAYS = 30;
+
+function getClientCreationJournal_() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(CLIENT_CREATION_JOURNAL);
+
+  const headers = [
+    "Created At",
+    "Operation Key",
+    "Request ID",
+    "Status",
+    "Client Name",
+    "Sheet ID",
+    "Updated At",
+    "Error / Reconciliation Note",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet(CLIENT_CREATION_JOURNAL);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    // Validate the existing schema rather than silently overwriting it.
+    const existingHeaders = sheet
+      .getRange(1, 1, 1, headers.length)
+      .getDisplayValues()[0];
+
+    if (
+      existingHeaders[1] !== "Operation Key" ||
+      existingHeaders[3] !== "Status" ||
+      existingHeaders[5] !== "Sheet ID"
+    ) {
+      throw new Error(
+        `The "${CLIENT_CREATION_JOURNAL}" schema is invalid. ` +
+          "Verify its headers before continuing.",
+      );
+    }
+  }
+
+  return sheet;
+}
+
+function findClientCreationOperation_(sheet, operationKey) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) return null;
+
+  const keys = sheet
+    .getRange(2, 2, lastRow - 1, 1)
+    .getDisplayValues()
+    .flat();
+
+  // Search newest-first in case a journal was manually repaired.
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (String(keys[i]).trim() === operationKey) {
+      const row = i + 2;
+      const values = sheet.getRange(row, 1, 1, 8).getValues()[0];
+
+      return {
+        row,
+        createdAt: values[0],
+        operationKey: String(values[1]),
+        requestId: String(values[2]),
+        status: String(values[3]).trim().toUpperCase(),
+        clientName: String(values[4]),
+        sheetId: String(values[5] || ""),
+        updatedAt: values[6],
+        note: String(values[7] || ""),
+      };
+    }
+  }
+
+  return null;
+}
+
+function writeClientCreationOperation_(sheet, row, operation) {
+  const now = new Date();
+
+  const values = [
+    operation.createdAt || now,
+    operation.operationKey,
+    operation.requestId,
+    operation.status,
+    operation.clientName,
+    operation.sheetId || "",
+    now,
+    operation.note || "",
+  ];
+
+  sheet.getRange(row, 1, 1, values.length).setValues([values]);
+  SpreadsheetApp.flush();
+}
+
+/**
+ * Remove only old COMPLETED records.
+ *
+ * PROCESSING and reconciliation records are intentionally retained.
+ * Call while holding the script lock.
+ */
+function cleanupClientCreationJournal_(sheet) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) return;
+
+  const cutoff =
+    Date.now() - CLIENT_CREATION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  const rowsToDelete = [];
+
+  rows.forEach((row, index) => {
+    const createdAt = row[0];
+    const status = String(row[3] || "")
+      .trim()
+      .toUpperCase();
+
+    if (
+      status === "COMPLETED" &&
+      createdAt instanceof Date &&
+      createdAt.getTime() < cutoff
+    ) {
+      rowsToDelete.push(index + 2);
+    }
+  });
+
+  // Delete bottom-up so row indices remain valid.
+  rowsToDelete.reverse().forEach((row) => sheet.deleteRow(row));
+}
+
+function clientSheetExists(sessionId, signature, clientName) {
+  requireCapability(sessionId, signature, "clients.view");
+
+  const name = Validation.sheetName(clientName, "Client name");
+  const ss = getSpreadsheet();
+
+  return ss.getSheetByName(name) !== null;
+}
+
 function getClientSheetsList() {
   return getSpreadsheet()
     .getSheets()
@@ -217,40 +355,282 @@ function getClientSheetUrl(sessionId, signature, name) {
   return `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
 }
 
-function createClientSheet(sessionId, signature, input) {
-  requireCapability(sessionId, signature, "clients.create");
+function createClientSheet(sessionId, signature, input, requestId) {
+  const startedAt = Date.now();
+  let sheetName = "Unknown client";
+  let result;
 
-  enforceUserRateLimit("client_sheet_creation", sessionId, 5, 60);
+  try {
+    requireCapability(sessionId, signature, "clients.create");
+    enforceUserRateLimit("client_sheet_creation", sessionId, 5, 60);
+    enforceGlobalRateLimit("client_sheet_creation", 15, 60);
 
-  enforceGlobalRateLimit("client_sheet_creation", 15, 60);
+    Validation.requireObject(input, "Client data");
+    sheetName = Validation.sheetName(input.name, "Client name");
 
-  Validation.requireObject(input, "Client data");
+    requestId = Validation.requiredString(requestId, "Request ID", {
+      maxLength: 200,
+    });
 
-  const sheetName = Validation.sheetName(input.name, "Client name");
+    const ss = getSpreadsheet();
+    const operationKey = `${sessionId}:${requestId}`;
 
-  if (sheetExists(sheetName)) {
-    throw new Error(`Sheet "${sheetName}" already exists.`);
+    const requestHash = Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, operationKey),
+    ).replace(/=+$/, "");
+
+    const temporaryName = `__GCB_CREATE_${requestHash.slice(0, 20)}`;
+    const recoveryMarker = `GCB_CLIENT_CREATE:${requestHash}`;
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      const journal = getClientCreationJournal_();
+
+      cleanupClientCreationJournal_(journal);
+
+      let operation = findClientCreationOperation_(journal, operationKey);
+
+      if (operation && operation.clientName !== sheetName) {
+        throw new Error(
+          "This request ID was already used for a different client name.",
+        );
+      }
+
+      if (operation?.status === "COMPLETED") {
+        const existingSheet = operation.sheetId
+          ? ss
+              .getSheets()
+              .find(
+                (sheet) =>
+                  String(sheet.getSheetId()) === String(operation.sheetId),
+              )
+          : null;
+
+        if (existingSheet && existingSheet.getName() === sheetName) {
+          result = {
+            success: true,
+            alreadyCompleted: true,
+            sheetName,
+          };
+        } else {
+          throw new Error(
+            "The original client sheet could not be verified. " +
+              "Reconcile the client creation journal before retrying.",
+          );
+        }
+      } else if (operation?.status === "PROCESSING") {
+        const markedSheets = ss.getSheets().filter((sheet) => {
+          return (
+            sheet.getName() !== sheetName &&
+            String(sheet.getRange("L1").getDisplayValue()).trim() ===
+              recoveryMarker
+          );
+        });
+
+        if (markedSheets.length > 1) {
+          throw new Error(
+            "Multiple sheets contain this request's recovery marker. " +
+              "Reconcile the client creation journal before continuing.",
+          );
+        }
+
+        const temporarySheet = markedSheets[0] || null;
+
+        if (temporarySheet) {
+          if (ss.getSheetByName(sheetName)) {
+            throw new Error(
+              `Sheet "${sheetName}" already exists alongside the recovery sheet. ` +
+                "Reconcile this operation before continuing.",
+            );
+          }
+
+          temporarySheet.setName(sheetName);
+          temporarySheet.showSheet();
+          temporarySheet.getRange("E1").setValue(sheetName);
+          temporarySheet.getRange("L1").clearContent();
+
+          ss.setActiveSheet(temporarySheet);
+          ss.moveActiveSheet(1);
+          SpreadsheetApp.flush();
+
+          writeClientCreationOperation_(journal, operation.row, {
+            ...operation,
+            status: "COMPLETED",
+            sheetId: String(temporarySheet.getSheetId()),
+            note: "Recovered using the request-specific L1 marker.",
+          });
+
+          result = {
+            success: true,
+            recovered: true,
+            sheetName,
+          };
+        } else {
+          throw new Error(
+            "This request is still marked PROCESSING, but no matching recovery " +
+              "marker was found. Check the spreadsheet for an interrupted copy " +
+              "before retrying.",
+          );
+        }
+      } else if (operation && operation.status !== "FAILED") {
+        throw new Error(
+          `The client creation request has status "${operation.status || "UNKNOWN"}". ` +
+            "Reconcile the journal before retrying.",
+        );
+      } else {
+        // An existing FAILED record can be retried only if neither the
+        // intended name nor this request's temporary name is present.
+        if (ss.getSheetByName(sheetName) || ss.getSheetByName(temporaryName)) {
+          throw new Error(
+            "A sheet associated with this client name or request already exists. " +
+              "Reconcile it before retrying.",
+          );
+        }
+
+        const template = getSheetSafe("BLANK");
+
+        if (!template) {
+          throw new Error('Template sheet "BLANK" not found.');
+        }
+
+        if (!operation) {
+          const row = journal.getLastRow() + 1;
+
+          operation = {
+            row,
+            operationKey,
+            requestId,
+            clientName: sheetName,
+            status: "PROCESSING",
+            sheetId: "",
+            createdAt: new Date(),
+            note: "",
+          };
+        } else {
+          operation.status = "PROCESSING";
+          operation.sheetId = "";
+          operation.note = "";
+        }
+
+        // Persist the intent before attempting the side effect.
+        writeClientCreationOperation_(journal, operation.row, operation);
+
+        let newSheet;
+
+        try {
+          newSheet = template.copyTo(ss);
+
+          // Write the request-specific marker before renaming the copy.
+          newSheet.getRange("L1").setValue(recoveryMarker);
+          SpreadsheetApp.flush();
+
+          // Rename only after the marker has been saved.
+          newSheet.setName(temporaryName);
+          SpreadsheetApp.flush();
+
+          newSheet.setName(sheetName);
+          newSheet.showSheet();
+          newSheet.getRange("E1").setValue(sheetName);
+
+          // Clear the marker after the sheet has its intended name and client value.
+          newSheet.getRange("L1").clearContent();
+
+          ss.setActiveSheet(newSheet);
+          ss.moveActiveSheet(1);
+          SpreadsheetApp.flush();
+
+          writeClientCreationOperation_(journal, operation.row, {
+            ...operation,
+            status: "COMPLETED",
+            sheetId: String(newSheet.getSheetId()),
+            note: "",
+          });
+
+          result = {
+            success: true,
+            sheetName,
+          };
+        } catch (error) {
+          // Leave PROCESSING once copyTo() has been attempted.
+          // An exception does not prove that the copy was not created.
+          try {
+            writeClientCreationOperation_(journal, operation.row, {
+              ...operation,
+              status: "PROCESSING",
+              sheetId: newSheet ? String(newSheet.getSheetId()) : "",
+              note:
+                "Outcome uncertain. Reconcile before retrying. " +
+                String(error?.message || error).slice(0, 500),
+            });
+          } catch (journalError) {
+            console.error(
+              "[Client Creation] Could not update recovery journal:",
+              journalError?.message || journalError,
+            );
+          }
+
+          throw error;
+        }
+      }
+    } finally {
+      lock.releaseLock();
+    }
+
+    logClientSheetCreation_("SUCCESS", {
+      startedAt,
+      sheetName,
+      message: result?.alreadyCompleted
+        ? "Previously completed client creation request reused."
+        : result?.recovered
+          ? "Client sheet creation recovered successfully."
+          : "Client sheet created successfully.",
+    });
+
+    return result;
+  } catch (error) {
+    logClientSheetCreation_("FAILED", {
+      startedAt,
+      sheetName,
+      message: "Client sheet creation failed or requires reconciliation.",
+      error,
+    });
+
+    throw error;
   }
+}
 
-  const template = getSheetSafe("BLANK");
+function logClientSheetCreation_(
+  status,
+  { startedAt, sheetName = "Unknown client", message, error = null } = {},
+) {
+  try {
+    const logged = recordGcbOperationLog_({
+      category: "CLIENT",
+      operation: "CREATE_CLIENT_SHEET",
+      status,
+      trigger: "MANUAL",
+      durationMs: Date.now() - startedAt,
+      processed: 1,
+      succeeded: status === "SUCCESS" ? 1 : 0,
+      failed: status === "FAILED" ? 1 : 0,
+      target: sheetName,
+      message,
+      ...(error ? { error: String(error.message || error).slice(0, 500) } : {}),
+    });
 
-  if (!template) {
-    throw new Error('Template sheet "BLANK" not found.');
+    if (logged === false) {
+      console.error(
+        "[Client Creation] Operation logger could not save the log.",
+      );
+    }
+  } catch (logError) {
+    console.error(
+      "[Client Creation] Operation logging failed:",
+      logError?.message || logError,
+    );
   }
-
-  const ss = getSpreadsheet();
-
-  const newSheet = template.copyTo(ss);
-
-  newSheet.setName(sheetName);
-  newSheet.showSheet();
-
-  SpreadsheetApp.flush();
-
-  newSheet.getRange("E1").setValue(sheetName);
-
-  ss.setActiveSheet(newSheet);
-  ss.moveActiveSheet(1);
 }
 
 function getClientDirectoryData(sessionId, signature) {

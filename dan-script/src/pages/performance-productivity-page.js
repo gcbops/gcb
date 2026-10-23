@@ -1,5 +1,5 @@
 import { GcbAuthModule } from "../auth/auth.js";
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 
 const performanceProductivityPage = (() => {
   let initialized = false;

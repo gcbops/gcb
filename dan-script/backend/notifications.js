@@ -241,58 +241,60 @@ function sendEmailReport(report) {
 
   const formatted = formatDateSafe(new Date(), "MMMM dd, yyyy HH:mm:ss");
 
-  MailApp.sendEmail({
-    to: emailTo,
+  try {
+    MailApp.sendEmail({
+      to: emailTo,
+      subject: `${report.type} Report - ${report.name}`,
+      htmlBody: `
+        <p>Your <b>${report.type}</b> report is ready.</p>
 
-    subject: `${report.type} Report - ${report.name}`,
+        <table cellpadding="6" cellspacing="0" border="0">
+          <tr>
+            <td><b>Report</b></td>
+            <td>${report.name}</td>
+          </tr>
+          <tr>
+            <td><b>Type</b></td>
+            <td>${report.type}</td>
+          </tr>
+          <tr>
+            <td><b>ID</b></td>
+            <td>${report.id}</td>
+          </tr>
+        </table>
 
-    htmlBody: `
-      <p>Hey 👋,</p>
+        <p><a href="${report.link}">View Report</a></p>
+        <p>Sent on ${formatted}</p>
+      `,
+    });
 
-      <p>
-        Your <b>${report.type}</b> report is ready.
-      </p>
+    recordGcbOperationLog_({
+      category: "EMAIL",
+      operation: "SEND_REPORT",
+      status: "SUCCESS",
+      trigger: "REPORT_WORKFLOW",
+      processed: 1,
+      succeeded: 1,
+      target: `${report.type}: ${report.name}`,
+      message: "Report email accepted by MailApp.",
+    });
 
-      <table
-        cellpadding="6"
-        cellspacing="0"
-        border="0"
-        class="scrollbar-hover">
+    return true;
+  } catch (error) {
+    recordGcbOperationLog_({
+      category: "EMAIL",
+      operation: "SEND_REPORT",
+      status: "FAILED",
+      trigger: "REPORT_WORKFLOW",
+      processed: 1,
+      failed: 1,
+      target: `${report.type}: ${report.name}`,
+      message: "Report email sending failed.",
+      error: String(error?.message || error),
+    });
 
-        <tr>
-          <td><b>Report</b></td>
-          <td>${report.name}</td>
-        </tr>
-
-        <tr>
-          <td><b>Type</b></td>
-          <td>${report.type}</td>
-        </tr>
-
-        <tr>
-          <td><b>ID</b></td>
-          <td>${report.id}</td>
-        </tr>
-
-      </table>
-
-      <br>
-
-      <p>
-        <a href="${report.link}">
-          📄 View Report
-        </a>
-      </p>
-
-      <p>
-        Sent on ${formatted}
-      </p>
-
-      <br>
-    `,
-  });
-
-  return true;
+    throw error;
+  }
 }
 
 function sendDiscordReport(report) {
@@ -303,26 +305,50 @@ function sendDiscordReport(report) {
   }
 
   const embed = {
-    title: `📄 ${report.type} Report`,
-
+    title: `${report.type} Report`,
     description:
-      `A **${normalizeText(report.type)}** report is available.\n\n` +
+      `A ${normalizeText(report.type)} report is available.\n\n` +
       `**Report:** ${report.name}\n` +
       `**ID:** ${report.id}\n\n` +
       `${report.link}`,
-
     color: report.type === "Monthly" ? 0x3498db : 0x2ecc71,
-
     timestamp: new Date().toISOString(),
   };
 
-  const sent = sendDiscordMessage(webhookUrl, embed);
+  try {
+    const sent = sendDiscordMessage(webhookUrl, embed);
 
-  if (!sent) {
-    throw new Error("Failed sending Discord notification.");
+    if (!sent) {
+      throw new Error("Failed sending Discord notification.");
+    }
+
+    recordGcbOperationLog_({
+      category: "DISCORD",
+      operation: "SEND_REPORT",
+      status: "SUCCESS",
+      trigger: "REPORT_WORKFLOW",
+      processed: 1,
+      succeeded: 1,
+      target: `${report.type}: ${report.name}`,
+      message: "Report notification sent to Discord.",
+    });
+
+    return true;
+  } catch (error) {
+    recordGcbOperationLog_({
+      category: "DISCORD",
+      operation: "SEND_REPORT",
+      status: "FAILED",
+      trigger: "REPORT_WORKFLOW",
+      processed: 1,
+      failed: 1,
+      target: `${report.type}: ${report.name}`,
+      message: "Discord report notification failed.",
+      error: String(error?.message || error),
+    });
+
+    throw error;
   }
-
-  return true;
 }
 
 function emailLatestReport(sessionId, signature, report) {

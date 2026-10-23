@@ -1,7 +1,7 @@
 import { GcbAuthModule } from "./auth/auth.js";
-import { LoaderModule } from "./loader.js";
+import { LoaderModule } from "./components/loader.js";
 import { RouterModule } from "./routers.js";
-import { AppUtils } from "./utils.js";
+import { AppUtils } from "./utils/utils.js";
 
 const ActionRouterModule = (() => {
   let initialized = false;

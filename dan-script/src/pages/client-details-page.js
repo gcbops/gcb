@@ -2,10 +2,10 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { ChartModule } from "../charts.js";
+import { ChartModule } from "../components/charts.js";
 import { RouterModule } from "../routers.js";
-import { DataTableModule } from "../tables/data-table.js";
-import { AppUtils } from "../utils.js";
+import { DataTableModule } from "../components/data-table.js";
+import { AppUtils } from "../utils/utils.js";
 
 const clientDetailsPage = (() => {
   let bound = false;
@@ -38,21 +38,21 @@ const clientDetailsPage = (() => {
     }
 
     if (!clientName) {
-      RouterModule.go("clientDetails");
       console.error("No client selected.");
+      RouterModule.go("home");
       return;
     }
 
     $("#client-details-name").html(`
-      <span>${AppUtils.escapeHtml(clientName)}</span>
-      <span class="client-details-loading ms-2">
-        <i class="fa-solid fa-spinner fa-spin"></i>
-        <span>Loading details<span class="loading-dots"></span></span>
-      </span>
-    `);
+    <span>${AppUtils.escapeHtml(clientName)}</span>
+    <span class="client-details-loading ms-2">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      <span>Checking client<span class="loading-dots"></span></span>
+    </span>
+  `);
 
-    bindEvents();
-    load();
+    const pageToken = RouterModule.getPageToken();
+    checkClientSheetExists(pageToken);
   }
 
   function destroy() {
@@ -80,6 +80,60 @@ const clientDetailsPage = (() => {
     clientDetailsData = null;
     selectedHoursYear = null;
     clientName = "";
+  }
+
+  async function checkClientSheetExists(pageToken) {
+    try {
+      const [sessionId, signature] = await getAuthArgs();
+
+      if (pageToken !== RouterModule.getPageToken()) {
+        return;
+      }
+
+      AppUtils.gScriptRun({
+        gscriptFunc: "clientSheetExists",
+        args: [sessionId, signature, clientName],
+
+        onSuccess: (exists) => {
+          if (pageToken !== RouterModule.getPageToken()) {
+            return;
+          }
+
+          if (!exists) {
+            console.warn(
+              `[Client Details] Client sheet not found: ${clientName}`,
+            );
+
+            sessionStorage.removeItem("clientDetailsName");
+
+            AppUtils.showDashboardToast(
+              `Client not found: ${clientName}`,
+              "error",
+            );
+
+            RouterModule.go("home");
+            return;
+          }
+
+          bindEvents();
+          load();
+        },
+
+        onError: (error) => {
+          console.error("[Client Details] Existence check failed:", error);
+
+          AppUtils.showError(
+            error?.message || "Failed to verify client sheet.",
+          );
+        },
+      });
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to verify client sheet.");
+    }
   }
 
   async function load(reset = false) {
@@ -199,7 +253,7 @@ const clientDetailsPage = (() => {
       )
       .join("");
 
-    AppUtils.initSelect2(".chart-filters");
+    // AppUtils.initSelect2("#client-hours-year");
   }
 
   function renderProjects(data) {
@@ -688,6 +742,7 @@ const clientDetailsPage = (() => {
     init,
     destroy,
     load,
+    checkClientSheetExists,
   };
 })();
 

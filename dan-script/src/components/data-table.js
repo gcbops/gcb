@@ -1,7 +1,7 @@
 import { AuthorizationUIModule } from "../auth/authorization-ui.js";
-import { manageUsersPage } from "../manage-users.js";
-import { AppUtils } from "../utils.js";
-import { ActivityToday } from "./activity-today.js";
+import { manageUsersPage } from "../users/manage-users.js";
+import { AppUtils } from "../utils/utils.js";
+import { ActivityToday } from "../tables/activity-today.js";
 
 const DataTableModule = (() => {
   const instances = {};
@@ -143,6 +143,7 @@ const DataTableModule = (() => {
       "yearly performance": [0, 1, 5],
       "billing records export": [4, 5, -1],
       "backup history": [0, -1],
+      "manage users": [0, 5],
     };
 
     const priorityColumns = priorityMap[cleanTitle] || [];
@@ -648,8 +649,14 @@ const DataTableModule = (() => {
 
     hideTableOverlay(normalizedId);
 
+    /*
+     * Scroll the DataTable back to the top
+     * before locking its scroll area.
+     */
+    scrollDataTableToTop(normalizedId);
+
     const $wrapper = $table.closest(
-      ".dataTables_wrapper, .dataTable-wrapper, div",
+      ".dataTables_wrapper, .dataTable-wrapper, .dt-scroll-body, div",
     );
 
     const $overlay = $(`
@@ -670,9 +677,11 @@ const DataTableModule = (() => {
 
     if ($wrapper.length) {
       $wrapper.addClass("position-relative");
+      $wrapper.addClass("dt-table-scroll-locked");
       $wrapper.append($overlay);
     } else {
       $table.addClass("position-relative");
+      $table.addClass("dt-table-scroll-locked");
       $table.after($overlay);
     }
   }
@@ -686,10 +695,36 @@ const DataTableModule = (() => {
       return;
     }
 
-    $table
-      .closest(".dataTables_wrapper, .dataTable-wrapper, div")
+    const $wrapper = $table.closest(
+      ".dataTables_wrapper, .dataTable-wrapper, div",
+    );
+
+    $wrapper
+      .removeClass("dt-table-scroll-locked")
       .find(".dt-table-overlay")
       .remove();
+
+    $table.removeClass("dt-table-scroll-locked");
+  }
+
+  function scrollDataTableToTop(tableId) {
+    const normalizedId = normalizeTableId(tableId);
+
+    const apiInstance = DataTableModule.instances?.[normalizedId];
+
+    if (apiInstance) {
+      try {
+        apiInstance.row(0).scrollTo(false);
+        return;
+      } catch (error) {
+        console.warn("[DataTable] scrollTo failed:", error);
+      }
+    }
+
+    $(normalizedId)
+      .closest(".dataTables_wrapper, .dataTable-wrapper")
+      .find(".dataTables_scrollBody, .dt-scroll-body")
+      .scrollTop(0);
   }
 
   function showError(tableId, message = "Unable to load data.") {

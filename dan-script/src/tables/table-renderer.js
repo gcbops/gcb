@@ -1,5 +1,5 @@
-import { AppUtils } from "../utils";
-import { DataTableModule } from "./data-table";
+import { AppUtils } from "../utils/utils";
+import { DataTableModule } from "../components/data-table";
 
 const TableRenderer = (() => {
   const STATUS_COLUMN_INDEX = 3;

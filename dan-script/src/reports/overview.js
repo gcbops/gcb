@@ -1,7 +1,8 @@
-import { AppUtils } from "../utils";
-import { DataTableModule } from "../tables/data-table";
+import { AppUtils } from "../utils/utils";
+import { DataTableModule } from "../components/data-table";
 import { TableFilterService } from "../tables/table-filter-service";
 import { GcbAuthModule } from "../auth/auth";
+import { ReportService } from "./service";
 
 const ReportsOverview = (() => {
   const TABLE_ID = "#reports-export-table";
@@ -91,7 +92,12 @@ const ReportsOverview = (() => {
   }
 
   function createReportLogRow(log, index) {
-    const type = String(log.type || "").toUpperCase();
+    const reportDate = log?.date ?? "";
+    const reportName = log?.name ?? "";
+    const reportLink = log?.link ?? "";
+    const reportId = log?.id ?? "";
+    const reportType = log?.type ?? "";
+    const type = String(reportType || "").toUpperCase();
 
     const badgeClass =
       {
@@ -99,6 +105,13 @@ const ReportsOverview = (() => {
         YEARLY: "bg-alternate",
         DATAEXPORT: "bg-night-sky",
       }[type] || "bg-secondary";
+
+    const isBillingReport = reportType === "Billing";
+
+    const fileIcon = isBillingReport ? "fa-file-csv" : "fa-file-pdf";
+    const viewTitle = isBillingReport ? "Open CSV" : "View Report";
+
+    const safeReportUrl = ReportService.getSafeReportUrl(reportLink);
 
     return `
       <tr>
@@ -108,19 +121,19 @@ const ReportsOverview = (() => {
         </td>
 
         <td>
-          ${AppUtils.escapeHtml(log.date ?? "")}
+          ${AppUtils.escapeHtml(reportDate)}
         </td>
 
         <td class="text-center">
           <span class="badge bg-light text-gc">
-            <i class="fa-solid fa-file-pdf"></i>
-            ${AppUtils.escapeHtml(log.name ?? "")}
+            <i class="fa-solid ${fileIcon} fs-5 me-1"></i>
+            ${AppUtils.escapeHtml(reportName)}
           </span>
         </td>
 
         <td class="text-center">
           <span class="badge text-white ${badgeClass}">
-            ${AppUtils.escapeHtml(log.type ?? "")}
+            ${AppUtils.escapeHtml(reportType)}
           </span>
         </td>
 
@@ -147,10 +160,10 @@ const ReportsOverview = (() => {
               tabindex="0"
               role="menuitem"
               class="dropdown-item btn-report-action btn-view-report"
-              data-url="${AppUtils.escapeHtml(log.link ?? "")}"
+              data-url="${AppUtils.escapeHtml(safeReportUrl)}"
             >
               <i class="pe-7s-display2 me-2 text-info"></i>
-              View Report
+              ${AppUtils.escapeHtml(viewTitle)}
             </button>
 
             <button
@@ -159,7 +172,7 @@ const ReportsOverview = (() => {
               role="menuitem"
               data-required-role="admin"
               class="dropdown-item btn-report-action btn-email-report"
-              data-id="${AppUtils.escapeHtml(log.id ?? "")}"
+              data-id="${AppUtils.escapeHtml(reportId)}"
             >
               <i class="pe-7s-mail me-2 text-success"></i>
               Send Email
@@ -171,7 +184,7 @@ const ReportsOverview = (() => {
               role="menuitem"
               data-required-role="admin"
               class="dropdown-item btn-report-action btn-discord-report"
-              data-id="${AppUtils.escapeHtml(log.id ?? "")}"
+              data-id="${AppUtils.escapeHtml(reportId)}"
             >
               <i class="pe-7s-joy me-2 text-alternate"></i>
               Send to Discord

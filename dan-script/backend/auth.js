@@ -171,7 +171,8 @@ function buildGcbAuthResultPage({
       `
     : "";
 
-  return HtmlService.createHtmlOutput(`
+  return HtmlService.createHtmlOutput(
+    `
     <!DOCTYPE html>
     <html lang="en">
 
@@ -445,7 +446,14 @@ function buildGcbAuthResultPage({
     </body>
 
     </html>
-  `);
+  `,
+  )
+    .setTitle("Go Crayons GS")
+    .addMetaTag(
+      "viewport",
+      "width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no",
+    )
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
@@ -1284,7 +1292,6 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
 
 function logGcbAuthEvent_({
   operation,

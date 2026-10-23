@@ -1,11 +1,11 @@
 import { RouterModule } from "../routers.js";
-import { AppUtils } from "../utils.js";
-import { ValidationModule } from "../validations.js";
+import { AppUtils } from "../utils/utils.js";
+import { ValidationModule } from "../utils/validations.js";
 import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { DataTableModule } from "../tables/data-table.js";
+import { DataTableModule } from "../components/data-table.js";
 
 const settingsConfigurationPage = (() => {
   let initialized = false;
@@ -23,6 +23,7 @@ const settingsConfigurationPage = (() => {
   const OPERATION_LOGS_TABLE_TITLE = "Operation Logs";
   const OPERATION_LOGS_TABLE_BODY_ID = "operation-logs-body";
   const OPERATION_LOGS_LIMIT = 200;
+  let operationLogsAllRecords = [];
 
   const tabHandlers = {
     "#backups-tab-content": loadBackupHistory,
@@ -740,11 +741,10 @@ const settingsConfigurationPage = (() => {
   }
 
   function loadOperationLogs(forceRefresh = false, button = null) {
-    const cached = AppUtils.cacheGet(OPERATION_LOGS_CACHE_KEY);
+    const cached = getCachedOperationLogs();
 
-    if (!forceRefresh && Array.isArray(cached)) {
+    if (!forceRefresh && cached) {
       renderOperationLogs(cached);
-      refreshOperationLogsInBackground(cached);
       return;
     }
 
@@ -796,44 +796,22 @@ const settingsConfigurationPage = (() => {
     loadOperationLogs(true, button);
   }
 
-  async function refreshOperationLogsInBackground(cached) {
-    try {
-      const [sessionId, signature] = await getAuthArgs();
+  function renderOperationLogs(logs) {
+    operationLogsAllRecords = Array.isArray(logs) ? [...logs] : [];
 
-      AppUtils.cachedGScriptCall(
-        OPERATION_LOGS_CACHE_KEY,
-        "getOperationLogHistory",
-        [sessionId, signature, OPERATION_LOGS_LIMIT],
-        (result) => {
-          if (!result?.success || !Array.isArray(result.logs)) {
-            return;
-          }
-
-          if (JSON.stringify(result.logs) === JSON.stringify(cached)) {
-            return;
-          }
-
-          renderOperationLogs(result.logs);
-        },
-        false,
-        true,
-      );
-    } catch (error) {
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
-
-      console.error("[OperationLogs] Background refresh failed:", error);
-    }
-  }
-
-  function renderOperationLogs(logs, callback = null) {
     const tbody = document.getElementById(OPERATION_LOGS_TABLE_BODY_ID);
     const message = document.getElementById("operation-log-message");
 
-    if (!tbody || !message) {return;}
+    if (!tbody || !message || !Array.isArray(logs)) {
+      console.error("[OperationLogs] Cannot render logs:", {
+        tbodyFound: Boolean(tbody),
+        messageFound: Boolean(message),
+        logsIsArray: Array.isArray(logs),
+      });
+      return;
+    }
 
-    const tableSelector = "#" + OPERATION_LOGS_TABLE_ID;
+    const tableSelector = `#${OPERATION_LOGS_TABLE_ID}`;
 
     DataTableModule.hideTableOverlay(OPERATION_LOGS_TABLE_ID);
 
@@ -843,62 +821,103 @@ const settingsConfigurationPage = (() => {
 
     tbody.replaceChildren();
 
-    if (!Array.isArray(logs) || logs.length === 0) {
-      DataTableModule.showEmpty(
-        OPERATION_LOGS_TABLE_ID,
-        "No operation logs found.",
-      );
-
-      message.textContent = "No operation records found.";
-      return;
-    }
-
-    const category =
-      document.getElementById("operation-log-category")?.value?.trim() || "";
-
-    const status =
-      document.getElementById("operation-log-status")?.value?.trim() || "";
-
-    const filteredLogs = logs.filter((log) => {
-      const matchesCategory =
-        !category || String(log.category || "GENERAL").trim() === category;
-
-      const matchesStatus =
-        !status || String(log.status || "UNKNOWN").trim() === status;
-
-      return matchesCategory && matchesStatus;
-    });
-
-    if (filteredLogs.length === 0) {
-      DataTableModule.showEmpty(
-        OPERATION_LOGS_TABLE_ID,
-        "No matching operation logs found.",
-      );
-
-      message.textContent = `No logs match the selected filters. ${logs.length} record(s) loaded.`;
-
-      return;
-    }
-
-    message.textContent = `${filteredLogs.length} record(s) shown from ${logs.length} loaded.`;
-
-    filteredLogs.forEach((log) => {
+    logs.forEach((log) => {
       tbody.appendChild(createOperationLogRow(log));
     });
 
+    message.textContent = `${logs.length} record(s) loaded.`;
+
     setTimeout(() => {
-      // Avoid initializing a table that has been removed during navigation.
-      if (!document.getElementById(OPERATION_LOGS_TABLE_ID)?.isConnected) {
+      const tableElement = document.getElementById(OPERATION_LOGS_TABLE_ID);
+
+      if (!tableElement?.isConnected) {
+        console.warn("[OperationLogs] Table is no longer in the document.");
         return;
       }
 
-      DataTableModule.init(
+      const instance = DataTableModule.init(
         OPERATION_LOGS_TABLE_TITLE,
         tableSelector,
         false,
-        callback,
+        {
+          paging: false,
+          scrollY: "80vh",
+          order: [[0, "desc"]],
+          layout: {
+            topStart: null,
+            topEnd: null,
+            bottomStart: ["info"],
+            bottomEnd: ["search"],
+          },
+        },
       );
+
+      if (instance) {
+        applyOperationLogFilters();
+      }
     }, 50);
+  }
+
+  function applyOperationLogFilters() {
+    const categoryElement = document.getElementById("operation-log-category");
+    const statusElement = document.getElementById("operation-log-status");
+    const message = document.getElementById("operation-log-message");
+
+    const table = DataTableModule.getInstance(`#${OPERATION_LOGS_TABLE_ID}`);
+
+    if (!categoryElement || !statusElement || !table) {
+      console.warn("[OperationLogs] Filter dependencies missing.");
+      return;
+    }
+
+    const selectedCategory = categoryElement.value.trim().toUpperCase();
+    const selectedStatus = statusElement.value.trim().toUpperCase();
+
+    const category = selectedCategory === "ALL" ? "" : selectedCategory;
+    const status = selectedStatus === "ALL" ? "" : selectedStatus;
+
+    const filteredLogs = operationLogsAllRecords.filter((log) => {
+      const logCategory = String(log.category ?? "")
+        .trim()
+        .toUpperCase();
+      const logStatus = String(log.status ?? "")
+        .trim()
+        .toUpperCase();
+
+      return (
+        (!category || logCategory === category) &&
+        (!status || logStatus === status)
+      );
+    });
+
+    // Replace the table's data without reinitializing DataTables.
+    table.clear();
+
+    filteredLogs.forEach((log) => {
+      table.row.add(createOperationLogRow(log));
+    });
+
+    table.draw();
+
+    if (message) {
+      message.textContent = filteredLogs.length
+        ? `${filteredLogs.length} record(s) shown from ${operationLogsAllRecords.length} loaded.`
+        : `No logs match the selected filters. ${operationLogsAllRecords.length} record(s) loaded.`;
+    }
+  }
+
+  function getCachedOperationLogs() {
+    const cached = AppUtils.cacheGet(OPERATION_LOGS_CACHE_KEY);
+
+    if (Array.isArray(cached)) {
+      return cached;
+    }
+
+    if (Array.isArray(cached?.logs)) {
+      return cached.logs;
+    }
+
+    return null;
   }
 
   function createOperationLogRow(log) {
@@ -906,6 +925,14 @@ const settingsConfigurationPage = (() => {
 
     const timestampCell = document.createElement("td");
     timestampCell.textContent = formatOperationLogTimestamp(log.timestamp);
+
+    // Sort by the actual timestamp, not the displayed date string.
+    const timestamp = new Date(log.timestamp).getTime();
+
+    timestampCell.setAttribute(
+      "data-order",
+      Number.isFinite(timestamp) ? String(timestamp) : "0",
+    );
 
     const categoryCell = document.createElement("td");
     categoryCell.textContent = log.category || "GENERAL";
@@ -1133,7 +1160,7 @@ const settingsConfigurationPage = (() => {
 
         <button
           type="button"
-          class="btn btn-primary btn-save"
+          class="btn btn-gc btn-save"
         >
           Apply Formula
         </button>
@@ -1617,13 +1644,8 @@ const settingsConfigurationPage = (() => {
       return;
     }
 
-    const cached = AppUtils.cacheGet(OPERATION_LOGS_CACHE_KEY);
-
-    if (Array.isArray(cached)) {
-      renderOperationLogs(cached);
-    } else {
-      loadOperationLogs();
-    }
+    // Filter the already-loaded table. No cache lookup or server call.
+    applyOperationLogFilters();
   }
 
   function init() {
@@ -1638,7 +1660,11 @@ const settingsConfigurationPage = (() => {
     document.addEventListener("shown.bs.tab", handleTabShown);
     document.addEventListener("change", handleOperationLogFilterChange);
 
-    AppUtils.initSelect2(".dt-table-filters");
+    $(document).on(
+      "change.operationLogs",
+      "#operation-log-category, #operation-log-status",
+      handleOperationLogFilterChange,
+    );
   }
 
   function destroy() {
@@ -1652,6 +1678,8 @@ const settingsConfigurationPage = (() => {
     document.removeEventListener("click", handleIntegrationListClick);
     document.removeEventListener("shown.bs.tab", handleTabShown);
     document.removeEventListener("change", handleOperationLogFilterChange);
+
+    $(document).off(".operationLogs");
 
     for (const tableId of [BACKUP_HISTORY_TABLE_ID, OPERATION_LOGS_TABLE_ID]) {
       if ($.fn.DataTable.isDataTable("#" + tableId)) {

@@ -2,8 +2,8 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { DataTableModule } from "../tables/data-table";
-import { AppUtils } from "../utils";
+import { DataTableModule } from "../components/data-table.js";
+import { AppUtils } from "../utils/utils.js";
 
 const billingOwedHoursPage = (() => {
   let initialized = false;
@@ -165,7 +165,7 @@ const billingOwedHoursPage = (() => {
       select.value = "all";
     }
 
-    AppUtils.initSelect2(".dt-table-filters");
+    // AppUtils.initSelect2("#owed-hours-year-filter");
   }
 
   function applyFilters() {

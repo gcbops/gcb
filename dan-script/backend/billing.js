@@ -700,49 +700,41 @@ function getInvoiceStatus(sessionId, signature) {
 function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
   requireCapability(sessionId, signature, "billing.export");
 
-  if (!fileId) {
-    throw new Error("Billing CSV file ID is required.");
-  }
-
-  const file = DriveApp.getFileById(fileId);
+  const { file } = getVerifiedBillingCSVExport_(fileId);
   const emailTo = getNotificationEmail();
 
   if (!emailTo) {
     throw new Error("No notification email configured.");
   }
 
-  const now = new Date();
-  const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
+  const formatted = formatDateSafe(new Date(), "MMMM dd, yyyy HH:mm:ss");
 
-  MailApp.sendEmail({
-    to: emailTo,
-    subject: `Billing Records Export - ${file.getName()}`,
-    htmlBody: `
-      <p>Hey 👋,</p>
+  try {
+    MailApp.sendEmail({
+      to: emailTo,
+      subject: `Billing Records Export - ${file.getName()}`,
+      htmlBody: `
+        <p>Your <b>Billing Records</b> export is ready.</p>
+        <p>
+          <a href="${file.getUrl()}">View Billing Records CSV</a>
+        </p>
+        <p>Generated on ${formatted}</p>
+      `,
+    });
 
-      <p>Your <b>Billing Records</b> data export is ready.</p>
+    logBillingCSVDelivery_("EMAIL", "SUCCESS", file);
+  } catch (error) {
+    logBillingCSVDelivery_("EMAIL", "FAILED", file, error);
+    throw error;
+  }
 
-      <p>
-        <a href="${file.getUrl()}">
-          📄 View Billing Records CSV
-        </a>
-      </p>
-
-      <p>Generated on ${formatted}</p>
-    `,
-  });
-
-  logResponse("✅ Billing Records CSV emailed.");
+  return { success: true };
 }
 
 function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
   requireCapability(sessionId, signature, "billing.export");
 
-  if (!fileId) {
-    throw new Error("Billing CSV file ID is required.");
-  }
-
-  const file = DriveApp.getFileById(fileId);
+  const { file } = getVerifiedBillingCSVExport_(fileId);
   const webhookUrl = getDiscordWebhook();
 
   if (!webhookUrl) {
@@ -753,15 +745,68 @@ function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
   const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
 
   const embed = {
-    title: `📊 Billing Records Export - ${formatted}`,
+    title: `Billing Records Export - ${formatted}`,
     description: `**Billing Records CSV:**\n${file.getUrl()}`,
     color: 0x3498db,
     timestamp: now.toISOString(),
   };
 
-  sendDiscordMessage(webhookUrl, embed);
+  try {
+    const sent = sendDiscordMessage(webhookUrl, embed);
 
-  logResponse("✅ Billing Records CSV sent to Discord.");
+    if (!sent) {
+      throw new Error("Failed to send Billing Records CSV to Discord.");
+    }
+
+    logBillingCSVDelivery_("DISCORD", "SUCCESS", file);
+  } catch (error) {
+    logBillingCSVDelivery_("DISCORD", "FAILED", file, error);
+    throw error;
+  }
+
+  return { success: true };
+}
+
+function checkExistingBillingCSVExport(
+  sessionId,
+  signature,
+  startDate,
+  endDate,
+) {
+  requireCapability(sessionId, signature, "billing.export");
+
+  if (!startDate || !endDate || startDate > endDate) {
+    throw new Error("A valid billing CSV date range is required.");
+  }
+
+  const expectedName = `Billing Records_${startDate}_to_${endDate}.csv`;
+
+  const folder = getReportFolder();
+  const files = folder.getFiles();
+
+  while (files.hasNext()) {
+    const file = files.next();
+
+    if (file.isTrashed()) continue;
+
+    const fileName = file.getName().trim();
+
+    // Match the displayed name, with or without the .csv extension.
+    if (fileName === expectedName || fileName === `${expectedName}.csv`) {
+      return {
+        exists: true,
+        report: {
+          name: fileName,
+          link: file.getUrl(),
+          fileId: file.getId(),
+          startDate,
+          endDate,
+        },
+      };
+    }
+  }
+
+  return { exists: false };
 }
 
 function getBillingRecordsForExport(sessionId, signature, startDate, endDate) {
@@ -823,12 +868,88 @@ function getBillingRecordsForExportInternal(startDate, endDate) {
     }));
 }
 
-function saveBillingRecordsCSV(sessionId, signature, startDate, endDate) {
+function getVerifiedBillingCSVExport_(fileId) {
+  const id = Validation.requiredString(fileId, "Billing CSV file ID", {
+    maxLength: 200,
+  });
+
+  const ss = getSpreadsheet();
+  const logSheet = ss.getSheetByName("BillingRecordsExport_Log");
+
+  if (!logSheet || logSheet.getLastRow() < 2) {
+    throw new Error("No registered Billing CSV exports were found.");
+  }
+
+  const rows = logSheet
+    .getRange(2, 1, logSheet.getLastRow() - 1, 7)
+    .getValues();
+
+  // Columns: Date, Start Date, End Date, Record Count,
+  // File Name, File URL, File ID.
+  const loggedExport = rows.find((row) => String(row[6] || "").trim() === id);
+
+  if (!loggedExport) {
+    throw new Error("This file is not a registered Billing CSV export.");
+  }
+
+  const expectedName = String(loggedExport[4] || "").trim();
+  const expectedUrl = String(loggedExport[5] || "").trim();
+
+  if (!expectedName || !expectedUrl) {
+    throw new Error("The registered CSV export metadata is incomplete.");
+  }
+
+  const file = DriveApp.getFileById(id);
+
+  if (file.isTrashed()) {
+    throw new Error("The registered Billing CSV file is in the trash.");
+  }
+
+  if (file.getName() !== expectedName) {
+    throw new Error("The CSV file name no longer matches its export record.");
+  }
+
+  if (file.getUrl() !== expectedUrl) {
+    throw new Error("The CSV file URL no longer matches its export record.");
+  }
+
+  if (file.getMimeType() !== MimeType.CSV) {
+    throw new Error("The registered file is not a CSV file.");
+  }
+
+  const expectedFolderId = getReportFolder().getId();
+  const parents = file.getParents();
+  let isInReportFolder = false;
+
+  while (parents.hasNext()) {
+    if (parents.next().getId() === expectedFolderId) {
+      isInReportFolder = true;
+      break;
+    }
+  }
+
+  if (!isInReportFolder) {
+    throw new Error(
+      "The CSV file is no longer in the configured report folder.",
+    );
+  }
+
+  return {
+    file,
+    startDate: loggedExport[1],
+    endDate: loggedExport[2],
+    recordCount: loggedExport[3],
+  };
+}
+
+function saveBillingRecordsCSV(
+  sessionId,
+  signature,
+  startDate,
+  endDate,
+  requestId,
+) {
   requireCapability(sessionId, signature, "billing.export");
-
-  enforceUserRateLimit("billing_export", sessionId, 5, 60);
-
-  enforceGlobalRateLimit("billing_export", 10, 60);
 
   if (!startDate || !endDate) {
     throw new Error("A start date and end date are required.");
@@ -845,103 +966,267 @@ function saveBillingRecordsCSV(sessionId, signature, startDate, endDate) {
     throw new Error("The start date cannot be later than the end date.");
   }
 
-  const records = getBillingRecordsForExportInternal(startDate, endDate);
+  const startedAt = Date.now();
 
-  if (!records.length) {
-    throw new Error(
-      "No Billing Records were found for the selected date range.",
-    );
-  }
+  // Keep older callers working, but only callers that reuse a stable
+  // requestId receive retry idempotency.
+  const stableRequestId = requestId
+    ? Validation.requiredString(requestId, "Request ID", {
+        maxLength: 200,
+      })
+    : Utilities.getUuid();
 
-  let folder;
+  // Scope the key to the authenticated session.
+  const operationKey = `${sessionId}:${stableRequestId}`;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
 
   try {
-    folder = getReportFolder();
-  } catch (error) {
-    console.error("[Billing Export] Drive folder access failed:", error);
+    const logSheet = getBillingRecordsExportLogSheet_();
+    const existingRow = findBillingCSVOperationRow_(logSheet, operationKey);
 
-    throw new Error(
-      "Google Drive authorization/access is required to save the Billing CSV. " +
-        `Details: ${error?.message || error}`,
-    );
+    if (existingRow) {
+      const existing = logSheet.getRange(existingRow, 1, 1, 9).getValues()[0];
+
+      const status = String(existing[8] || "")
+        .trim()
+        .toUpperCase();
+
+      if (status === "COMPLETED") {
+        const fileId = String(existing[6] || "").trim();
+
+        if (!fileId) {
+          throw new Error(
+            "The previous CSV operation is marked completed, " +
+              "but its file ID is missing. Verify the export log before retrying.",
+          );
+        }
+
+        // Verify the original file against the existing export registry.
+        const verified = getVerifiedBillingCSVExport_(fileId);
+        const file = verified.file;
+
+        return {
+          success: true,
+          url: file.getUrl(),
+          fileId: file.getId(),
+          name: file.getName(),
+          startDate: verified.startDate,
+          endDate: verified.endDate,
+          recordCount: verified.recordCount,
+          reusedExisting: true,
+        };
+      }
+
+      if (status === "PROCESSING") {
+        throw new Error(
+          "This CSV request is already processing or its previous outcome " +
+            "is uncertain. Check BillingRecordsExport_Log and Google Drive " +
+            "before attempting another export.",
+        );
+      }
+
+      if (status !== "FAILED") {
+        throw new Error(
+          `The previous CSV operation has an unknown status ("${status || "blank"}"). ` +
+            "Verify the export log before retrying.",
+        );
+      }
+    }
+
+    // Only a new operation or a known pre-file-creation failure reaches here.
+    enforceUserRateLimit("billing_export", sessionId, 5, 60);
+    enforceGlobalRateLimit("billing_export", 10, 60);
+
+    const records = getBillingRecordsForExportInternal(startDate, endDate);
+
+    if (!records.length) {
+      throw new Error(
+        "No Billing Records were found for the selected date range.",
+      );
+    }
+
+    let folder;
+
+    try {
+      folder = getReportFolder();
+    } catch (error) {
+      console.error("[Billing Export] Drive folder access failed:", error);
+
+      throw new Error(
+        "Google Drive authorization/access is required to save the Billing CSV. " +
+          `Details: ${error?.message || error}`,
+      );
+    }
+
+    const headers = [
+      "Client",
+      "Type",
+      "Project",
+      "Hours",
+      "Date",
+      "Payment Status",
+    ];
+
+    const rows = records.map((record) => [
+      record.client ?? "",
+      record.type ?? "",
+      record.project ?? "",
+      record.hours ?? 0,
+      record.date ?? "",
+      record.paymentStatus ?? "",
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) =>
+        row
+          .map((value) => {
+            const text = String(value ?? "");
+            return `"${text.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      )
+      .join("\r\n");
+
+    const fileName = `Billing Records_${startDate}_to_${endDate}.csv`;
+    const blob = Utilities.newBlob(csvContent, "text/csv", fileName);
+
+    // Record the operation BEFORE attempting to create the Drive file.
+    // If execution becomes uncertain during file creation, the retry
+    // will see PROCESSING and will not blindly create another file.
+    let operationRow = existingRow;
+
+    const processingRecord = [
+      new Date(),
+      startDate,
+      endDate,
+      0,
+      "",
+      "",
+      "",
+      operationKey,
+      "PROCESSING",
+    ];
+
+    if (operationRow) {
+      logSheet.getRange(operationRow, 1, 1, 9).setValues([processingRecord]);
+    } else {
+      operationRow = logSheet.getLastRow() + 1;
+
+      logSheet.getRange(operationRow, 1, 1, 9).setValues([processingRecord]);
+    }
+
+    SpreadsheetApp.flush();
+
+    let createAttempted = false;
+
+    try {
+      createAttempted = true;
+
+      const file = folder.createFile(blob);
+
+      // Updating the existing operation row registers this file as
+      // the result of this operation instead of adding a second row.
+      logBillingRecordsCSV({
+        file,
+        startDate,
+        endDate,
+        recordCount: records.length,
+        operationKey,
+        operationRow,
+      });
+
+      logBillingCSVGeneration_("SUCCESS", {
+        startedAt,
+        startDate,
+        endDate,
+        recordCount: records.length,
+      });
+
+      return {
+        success: true,
+        url: file.getUrl(),
+        fileId: file.getId(),
+        name: file.getName(),
+        startDate,
+        endDate,
+        recordCount: records.length,
+        reusedExisting: false,
+      };
+    } catch (error) {
+      // Only mark FAILED when file creation was never attempted.
+      // Once the Drive operation begins, an exception cannot always
+      // prove that no file was created. Leave PROCESSING in that case.
+      if (!createAttempted) {
+        logSheet.getRange(operationRow, 9).setValue("FAILED");
+        SpreadsheetApp.flush();
+      }
+
+      throw error;
+    }
+  } finally {
+    lock.releaseLock();
   }
-
-  const headers = [
-    "Client",
-    "Type",
-    "Project",
-    "Hours",
-    "Date",
-    "Payment Status",
-  ];
-
-  const rows = records.map((record) => [
-    record.client ?? "",
-    record.type ?? "",
-    record.project ?? "",
-    record.hours ?? 0,
-    record.date ?? "",
-    record.paymentStatus ?? "",
-  ]);
-
-  const csvRows = [headers, ...rows];
-
-  const csvContent = csvRows
-    .map((row) =>
-      row
-        .map((value) => {
-          const text = String(value ?? "");
-
-          return `"${text.replace(/"/g, '""')}"`;
-        })
-        .join(","),
-    )
-    .join("\r\n");
-
-  const fileName = `Billing Records_${startDate}_to_${endDate}.csv`;
-
-  const blob = Utilities.newBlob(csvContent, "text/csv", fileName);
-
-  const file = folder.createFile(blob);
-
-  logBillingRecordsCSV({
-    file,
-    startDate,
-    endDate,
-    recordCount: records.length,
-  });
-
-  return {
-    success: true,
-    url: file.getUrl(),
-    fileId: file.getId(),
-    name: file.getName(),
-    startDate,
-    endDate,
-    recordCount: records.length,
-  };
 }
 
-function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
+function getBillingRecordsExportLogSheet_() {
   const ss = getSpreadsheet();
-
   let sheet = ss.getSheetByName("BillingRecordsExport_Log");
+
+  const headers = [
+    "Date",
+    "Start Date",
+    "End Date",
+    "Record Count",
+    "File Name",
+    "File URL",
+    "File ID",
+    "Operation Key",
+    "Status",
+  ];
 
   if (!sheet) {
     sheet = ss.insertSheet("BillingRecordsExport_Log");
-
-    sheet.appendRow([
-      "Date",
-      "Start Date",
-      "End Date",
-      "Record Count",
-      "File Name",
-      "File URL",
-      "File ID",
-    ]);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return sheet;
   }
 
-  sheet.appendRow([
+  // Preserve the existing seven-column log and add the new columns.
+  sheet.getRange(1, 8).setValue("Operation Key");
+  sheet.getRange(1, 9).setValue("Status");
+
+  return sheet;
+}
+
+function findBillingCSVOperationRow_(sheet, operationKey) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return 0;
+  }
+
+  const keys = sheet
+    .getRange(2, 8, lastRow - 1, 1)
+    .getDisplayValues()
+    .flat();
+
+  const index = keys.findIndex((key) => String(key).trim() === operationKey);
+
+  return index === -1 ? 0 : index + 2;
+}
+
+function logBillingRecordsCSV({
+  file,
+  startDate,
+  endDate,
+  recordCount,
+  operationKey = "",
+  operationRow = 0,
+}) {
+  const sheet = getBillingRecordsExportLogSheet_();
+
+  const row = [
     new Date(),
     startDate,
     endDate,
@@ -949,7 +1234,67 @@ function logBillingRecordsCSV({ file, startDate, endDate, recordCount }) {
     file.getName(),
     file.getUrl(),
     file.getId(),
-  ]);
+    operationKey,
+    "COMPLETED",
+  ];
+
+  if (operationRow) {
+    sheet.getRange(operationRow, 1, 1, row.length).setValues([row]);
+  } else {
+    // Backward compatibility for any other existing callers.
+    sheet.appendRow(row);
+  }
+}
+
+function logBillingCSVDelivery_(channel, status, file, error = null) {
+  try {
+    recordGcbOperationLog_({
+      category: channel,
+      operation: "SEND_BILLING_CSV",
+      status,
+      trigger: "REPORT_WORKFLOW",
+      processed: 1,
+      succeeded: status === "SUCCESS" ? 1 : 0,
+      failed: status === "FAILED" ? 1 : 0,
+      target: file?.getName() || "Billing CSV",
+      message:
+        status === "SUCCESS"
+          ? `Billing CSV ${channel.toLowerCase()} delivery succeeded.`
+          : `Billing CSV ${channel.toLowerCase()} delivery failed.`,
+      ...(error ? { error: String(error.message || error) } : {}),
+    });
+  } catch (logError) {
+    console.error("[Billing CSV] Operation logging failed:", logError);
+  }
+}
+
+function logBillingCSVGeneration_(
+  status,
+  { startedAt, startDate, endDate, recordCount = 0, error = null } = {},
+) {
+  try {
+    recordGcbOperationLog_({
+      category: "REPORT",
+      operation: "GENERATE_CSV",
+      status,
+      trigger: "MANUAL",
+      durationMs: Date.now() - startedAt,
+      processed: recordCount,
+      succeeded: status === "SUCCESS" ? 1 : 0,
+      failed: status === "FAILED" ? 1 : 0,
+      target: "BILLING_RECORDS",
+      message:
+        status === "SUCCESS"
+          ? `Billing Records CSV generated successfully (${startDate} to ${endDate}).`
+          : "Billing Records CSV generation failed.",
+      ...(error ? { error: String(error.message || error).slice(0, 500) } : {}),
+    });
+  } catch (logError) {
+    console.error(
+      "[Billing Export] Operation logging failed:",
+      logError?.message || logError,
+    );
+  }
 }
 
 function getBillingRecordsCSVExportCount(sessionId, signature) {

@@ -1,14 +1,15 @@
 import { ReportService } from "./service";
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils.js";
 import { ReportGenerator } from "./generator";
-import { ValidationModule } from "../validations";
+import { ValidationModule } from "../utils/validations.js";
+import { RequestManager } from "../requests/request-manager.js";
 import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
 
 const ReportActions = (() => {
-  function downloadLatestPDF(btn, loading, reportType) {
+  function downloadLatestPDF(loading, reportType) {
     const report = getLatestReport(reportType);
 
     if (!report) {
@@ -16,13 +17,18 @@ const ReportActions = (() => {
       return;
     }
 
-    if (!report.link) {
-      if (loading) {loading.restore();}
-      AppUtils.showError("Report link is unavailable.");
+    const reportUrl = ReportService.getSafeReportUrl(report.link);
+
+    if (!reportUrl) {
+      if (loading) {
+        loading.restore();
+      }
+
+      AppUtils.showError("Report link is invalid or unavailable.");
       return;
     }
 
-    window.open(report.link, "_blank");
+    window.open(reportUrl, "_blank", "noopener,noreferrer");
 
     if (loading) {loading.restore();}
   }
@@ -118,72 +124,66 @@ const ReportActions = (() => {
 
     AppUtils.showError(err);
   }
-
+  
   const handleEmailReport = async ($btn) => {
     const reportId = $btn.data("id");
     const reportType = $btn.data("type");
+    const isBillingReport = reportType === "Billing";
 
-    const successMessage =
-      reportType === "Data Export"
-        ? "CSV emailed successfully!"
-        : "Email sent successfully!";
-
-    const serverFunction =
-      reportType === "Data Export"
-        ? "sendBillingRecordsCSVEmail"
-        : "sendRequestedEmailReport";
+    if (!reportId) {
+      AppUtils.showError("The report ID is missing.");
+      return;
+    }
 
     try {
-      const [sessionId, signature] = await getAuthArgs();
+      RequestManager.enqueue(
+        "send-report-email",
+        {
+          reportId: String(reportId),
+          reportType,
+          isBillingReport,
+        },
+        isBillingReport ? "Email Billing Records CSV" : "Email report",
+      );
 
-      AppUtils.gScriptRun({
-        gscriptFunc: serverFunction,
-        args: [sessionId, signature, reportId],
-
-        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
-
-        onError: (err) => AppUtils.showError(err),
-      });
+      AppUtils.showDashboardToast(
+        "Email delivery added to the request queue.",
+        "success",
+      );
     } catch (error) {
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
-
-      AppUtils.showError(error?.message || "Unable to send report on email.");
+      AppUtils.showError(error?.message || "Unable to queue report email.");
     }
   };
 
   const handleDiscordReport = async ($btn) => {
     const reportId = $btn.data("id");
     const reportType = $btn.data("type");
+    const isBillingReport = reportType === "Billing";
 
-    const successMessage =
-      reportType === "Data Export"
-        ? "CSV sent to Discord successfully!"
-        : "Discord notification sent!";
-
-    const serverFunction =
-      reportType === "Data Export"
-        ? "sendBillingRecordsCSVDiscord"
-        : "sendRequestedDiscordReport";
+    if (!reportId) {
+      AppUtils.showError("The report ID is missing.");
+      return;
+    }
 
     try {
-      const [sessionId, signature] = await getAuthArgs();
+      RequestManager.enqueue(
+        "send-report-discord",
+        {
+          reportId: String(reportId),
+          reportType,
+          isBillingReport,
+        },
+        isBillingReport
+          ? "Send Billing Records CSV to Discord"
+          : "Send report to Discord",
+      );
 
-      AppUtils.gScriptRun({
-        gscriptFunc: serverFunction,
-        args: [sessionId, signature, reportId],
-
-        onSuccess: () => AppUtils.showDashboardToast(successMessage, "success"),
-
-        onError: (err) => AppUtils.showError(err),
-      });
+      AppUtils.showDashboardToast(
+        "Discord delivery added to the request queue.",
+        "success",
+      );
     } catch (error) {
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
-
-      AppUtils.showError(error?.message || "Unable to send report on discord.");
+      AppUtils.showError(error?.message || "Unable to queue Discord delivery.");
     }
   };
 
@@ -222,15 +222,20 @@ const ReportActions = (() => {
         args: [sessionId, signature, year],
 
         onSuccess: (result) => {
-          if (!result.valid) {
-            ReportGenerator.setGenerateState(type, false, loading);
 
+          ReportGenerator.setGenerateState(type, false, loading);
+
+          if (!result.valid) {
             AppUtils.showDashboardToast(result.message, "warning");
 
             return;
           }
 
-          ReportGenerator.generateYearlyReport(year, $btn, loading);
+          RequestManager.enqueue(
+            "generate-report",
+            { type: "yearly", year },
+            `Generate annual report — ${year}`,
+          );
         },
 
         onError: (err) => {
@@ -309,15 +314,18 @@ const ReportActions = (() => {
         args: [sessionId, signature, month, year],
 
         onSuccess: (result) => {
+          ReportGenerator.setGenerateState(type, false, loading);
+          
           if (!result.valid) {
-            ReportGenerator.setGenerateState(type, false, loading);
-
             AppUtils.showDashboardToast(result.message, "warning");
-
             return;
           }
 
-          ReportGenerator.generateMonthlyReport(month, year, $btn, loading);
+          RequestManager.enqueue(
+            "generate-report",
+            { type: "monthly", month, year },
+            `Generate monthly report — ${month} ${year}`,
+          );
         },
 
         onError: (err) => {
@@ -348,13 +356,13 @@ const ReportActions = (() => {
   };
 
   const handleEmailLatestReport = ($btn, reportType) => {
-    const loading = AppUtils.setButtonLoading($btn[0], "Sending email...");
+    const loading = AppUtils.setButtonLoading($btn[0], false, true);
 
     emailLatestReport($btn, loading, reportType);
   };
 
   const handleSendDiscordNotification = ($btn, reportType) => {
-    const loading = AppUtils.setButtonLoading($btn[0], "Sending Discord...");
+    const loading = AppUtils.setButtonLoading($btn[0], false, true);
 
     sendLatestReportToDiscord($btn, loading, reportType);
   };

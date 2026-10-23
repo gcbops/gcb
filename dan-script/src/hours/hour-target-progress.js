@@ -2,8 +2,8 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { ChartModule } from "../charts";
-import { AppUtils } from "../utils";
+import { ChartModule } from "../components/charts.js";
+import { AppUtils } from "../utils/utils.js";
 
 const HourTargetProgress = (() => {
   const TARGET_CONFIG = [

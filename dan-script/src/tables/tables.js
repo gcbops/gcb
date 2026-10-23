@@ -1,11 +1,12 @@
-import { DataTableModule } from "./data-table.js";
+import { DataTableModule } from "../components/data-table.js";
 import { TableRenderer } from "./table-renderer.js";
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 import { TodayHoursEditor } from "./today-hours-editor.js";
 import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
+import { RouterModule } from "../routers.js";
 
 const TableModule = (() => {
   /* ============================================================
@@ -64,8 +65,8 @@ const TableModule = (() => {
             return;
           }
 
-          if ($btn.hasClass("edit-client-sheet")) {
-            editClientSheet(clientName);
+          if ($btn.hasClass("view-client-details")) {
+            viewClientDetails(clientName);
           }
         },
       );
@@ -173,39 +174,15 @@ const TableModule = (() => {
     }
   }
 
-  async function editClientSheet(clientName) {
+  async function viewClientDetails(clientName) {
     if (!clientName) {
+      AppUtils.showError("The client name is missing.");
       return;
     }
 
-    AppUtils.showDashboardToast("Redirecting you to the sheet!", "info");
-
-    try {
-      const [sessionId, signature] = await getAuthArgs();
-
-      AppUtils.gScriptRun({
-        gscriptFunc: "getClientSheetUrl",
-        args: [sessionId, signature, clientName],
-
-        onSuccess: (url) => {
-          if (url && String(url).startsWith("http")) {
-            window.open(url, "_blank");
-          } else {
-            AppUtils.showError("Invalid sheet URL.");
-          }
-        },
-
-        onError: (error) => {
-          AppUtils.showError(error?.message || "Sheet doesn't exist!");
-        },
-      });
-    } catch (error) {
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
-
-      AppUtils.showError(error?.message || "Unable to redirect to the sheet.");
-    }
+    RouterModule.go("clientDetails", true, {
+      client: clientName,
+    });
   }
 
   /* ============================================================
@@ -484,7 +461,7 @@ const TableModule = (() => {
 
     DataTableModule.init(title, selector, false, {
       paging: false,
-      scrollY: "420px",
+      scrollY: "295px",
       layout: {
         topStart: null,
         topEnd: null,
@@ -578,7 +555,7 @@ const TableModule = (() => {
     bindTableActions,
     addClientHours,
     viewClientHoursHistory,
-    editClientSheet,
+    viewClientDetails,
   };
 })();
 

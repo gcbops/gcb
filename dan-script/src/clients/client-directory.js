@@ -2,10 +2,10 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { ProfilePopoverModule } from "../profile/profile-popover";
+import { ProfilePopoverModule } from "./profile-popover.js";
 import { TableClientSelector } from "../tables/client-selector";
-import { DataTableModule } from "../tables/data-table";
-import { AppUtils } from "../utils";
+import { DataTableModule } from "../components/data-table.js";
+import { AppUtils } from "../utils/utils.js";
 
 const ClientDirectory = (() => {
   let initialized = false;
@@ -104,7 +104,11 @@ const ClientDirectory = (() => {
   ) {
     DataTableModule.showLoader(TABLE_ID);
 
-    const loading = AppUtils.setButtonLoading(button, false, true);
+    let loading = false;
+
+    if(button) {
+      loading = AppUtils.setButtonLoading(button, false, true);
+    }
 
     /*
      * Clear the client cache so the next request
@@ -120,7 +124,9 @@ const ClientDirectory = (() => {
         SERVER_FUNCTION,
         [sessionId, signature],
         (data) => {
-          loading.restore();
+          if(loading) {
+            loading.restore();
+          }
 
           if (!Array.isArray(data)) {
             AppUtils.showDashboardToast(

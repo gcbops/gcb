@@ -1,7 +1,7 @@
-import { AppUtils } from "../utils.js";
-import { DataTableModule } from "../tables/data-table.js";
-import { ChartModule } from "../charts.js";
-import { ValidationModule } from "../validations.js";
+import { AppUtils } from "../utils/utils.js";
+import { DataTableModule } from "../components/data-table.js";
+import { ChartModule } from "../components/charts.js";
+import { ValidationModule } from "../utils/validations.js";
 import {
   getAuthArgs,
   handleInvalidSessionError,

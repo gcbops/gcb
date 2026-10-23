@@ -1,6 +1,7 @@
 import { GcbAuthModule } from "../auth/auth";
-import { DataTableModule } from "../tables/data-table";
-import { AppUtils } from "../utils";
+import { DataTableModule } from "../components/data-table";
+import { AppUtils } from "../utils/utils";
+import { ReportService } from "./service";
 
 const ReportHistory = (() => {
   const TABLE_TITLE = "Report History";
@@ -103,10 +104,12 @@ const ReportHistory = (() => {
     const reportId = log?.id ?? "";
     const reportType = log?.type ?? "";
 
-    const isDataExport = reportType === "Data Export";
+    const isBillingReport = reportType === "Billing";
 
-    const fileIcon = isDataExport ? "fa-file-csv" : "fa-file-pdf";
-    const viewTitle = isDataExport ? "Open CSV" : "View Report";
+    const fileIcon = isBillingReport ? "fa-file-csv" : "fa-file-pdf";
+    const viewTitle = isBillingReport ? "Open CSV" : "View Report";
+
+    const safeReportUrl = ReportService.getSafeReportUrl(reportLink);
 
     tr.innerHTML = `
       <td class="text-center">
@@ -119,7 +122,7 @@ const ReportHistory = (() => {
 
       <td class="text-center">
         <span class="badge bg-light text-gc">
-          <i class="fa-solid ${fileIcon}"></i>
+          <i class="fa-solid ${AppUtils.escapeHtml(fileIcon)} fs-5 me-1"></i>
           ${AppUtils.escapeHtml(reportName)}
         </span>
       </td>
@@ -148,8 +151,8 @@ const ReportHistory = (() => {
               tabindex="0"
               role="menuitem"
               class="dropdown-item btn-report-action btn-view-report"
-              data-url="${AppUtils.escapeHtml(reportLink)}"
-              title="${viewTitle}"
+              data-url="${AppUtils.escapeHtml(safeReportUrl)}"
+              title="${AppUtils.escapeHtml(viewTitle)}"
             >
               <i class="pe-7s-display2 me-2 text-info"></i>
               ${AppUtils.escapeHtml(viewTitle)}

@@ -1,8 +1,9 @@
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 import { ReportHistory } from "../reports/history.js";
 import { ReportActions } from "../reports/actions.js";
-import { DataTableModule } from "../tables/data-table.js";
+import { DataTableModule } from "../components/data-table.js";
 import { GcbAuthModule } from "../auth/auth.js";
+import { ReportService } from "../reports/service.js";
 
 const reportsMonthlyReportPage = (() => {
   let bound = false;
@@ -40,9 +41,14 @@ const reportsMonthlyReportPage = (() => {
       .on("click.reportsMonthly", ".btn-view-report", (e) => {
         const url = $(e.currentTarget).data("url");
 
-        if (url) {
-          window.open(url, "_blank");
+        const reportUrl = ReportService.getSafeReportUrl(url);
+
+        if (!reportUrl) {
+          AppUtils.showError("Report link is invalid or unavailable.");
+          return;
         }
+
+        window.open(reportUrl, "_blank", "noopener,noreferrer");
       })
 
       .on("click.reportsMonthly", ".btn-email-report", function () {
@@ -89,9 +95,9 @@ const reportsMonthlyReportPage = (() => {
       .on("click.reportsMonthly", "#download-latest-pdf", function () {
         const $btn = $(this);
 
-        const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
+        const loading = AppUtils.setButtonLoading($btn[0], false, true);
 
-        ReportActions.downloadLatestPDF($btn, loading, "Monthly");
+        ReportActions.downloadLatestPDF(loading, "Monthly");
       })
 
       .on("click.reportsMonthly", "#email-latest-report", function () {
@@ -160,7 +166,7 @@ const reportsMonthlyReportPage = (() => {
 
     $year.val(currentYear);
 
-    AppUtils.initSelect2(".generator-filters");
+    // AppUtils.initSelect2(".generator-filters");
   };
 
   const loadReportsOverview = async () => {

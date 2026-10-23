@@ -1,9 +1,9 @@
 import {
   getAuthArgs,
   handleInvalidSessionError,
-} from "./auth/auth-error-handler.js";
-import { DataTableModule } from "./tables/data-table.js";
-import { AppUtils } from "./utils.js";
+} from "../auth/auth-error-handler.js";
+import { DataTableModule } from "../components/data-table.js";
+import { AppUtils } from "../utils/utils.js";
 
 const manageUsersPage = (() => {
   const ROOT_ID = "manage-users-page";
@@ -70,18 +70,20 @@ const manageUsersPage = (() => {
   function renderDisplayRow(user) {
     return `
       <tr>
-        <td>${statusBadge(user.online)}</td>
         <td class="text-break">${escapeHtml(user.email)}</td>
         <td>${enabledBadge(user.enabled)}</td>
         <td>${escapeHtml(user.role || "—")}</td>
-        <td class="text-break">${escapeHtml(user.capabilities?.join(", ") || "—")}</td>
+        <td class="text-break">
+        ${renderCapabilitiesCell(user.capabilities)}
+        </td>
+        <td>${statusBadge(user.online)}</td>
         <td class="text-break">${escapeHtml(user.notes || "—")}</td>
-        <td>
+        <td class="action-btn-group" role="cell">
           <button type="button"
-            class="btn btn-outline-primary btn-sm"
+            class="p-0 btn border-0"
             data-manage-action="edit"
             data-email="${escapeHtml(user.email)}">
-            <i class="pe-7s-edit"></i> Edit
+            <i class="pe-7s-edit"></i>
           </button>
         </td>
       </tr>
@@ -116,6 +118,27 @@ const manageUsersPage = (() => {
         bottomEnd: ["search"],
       },
     });
+  }
+
+  function renderCapabilitiesCell(capabilities) {
+    if (!Array.isArray(capabilities) || capabilities.length === 0) {
+      return "—";
+    }
+
+    const count = capabilities.length;
+
+    const details = capabilities
+      .map((capability) => escapeHtml(capability))
+      .join("\n");
+
+    return `
+    <span
+      class="badge bg-primary"
+      title="${details}"
+    >
+      ${count} capabilit${count === 1 ? "y" : "ies"}
+    </span>
+  `;
   }
 
   function updateView(data, forceRender = false) {
@@ -294,7 +317,7 @@ const manageUsersPage = (() => {
       refreshTimer = null;
     }
   }
-
+  
   function openEditModal(email) {
     const user = users.find(
       (item) => item.email.toLowerCase() === String(email).toLowerCase(),
@@ -324,6 +347,136 @@ const manageUsersPage = (() => {
       )
       .join("");
 
+    const isEnabled = normalizeEnabled(user.enabled);
+
+    function getEditedUserData($modal) {
+      return {
+        enabled: $modal.find('[data-field="enabled"]').val() === "true",
+
+        role: $modal.find('[data-field="role"]').val() || "",
+
+        capabilities: $modal.find('[data-field="capabilities"]').val() || [],
+
+        notes: String($modal.find('[data-field="notes"]').val() ?? "").trim(),
+      };
+    }
+
+    function renderUserReview($modal, updated) {
+      const currentCapabilities = user.capabilities || [];
+      const updatedCapabilities = updated.capabilities;
+
+      const escape = (value) => escapeHtml(String(value ?? ""));
+
+      const renderValue = (value) => {
+        const normalized = String(value ?? "").trim();
+
+        return normalized
+          ? escape(normalized)
+          : '<span class="text-muted">None</span>';
+      };
+
+      const renderCapabilities = (items) => {
+        if (!items.length) {
+          return '<span class="text-muted">None</span>';
+        }
+
+        return items
+          .map(
+            (capability) =>
+              `<span class="badge bg-light text-dark border me-1 mb-1">${escape(capability)}</span>`,
+          )
+          .join("");
+      };
+
+      const rows = [
+        {
+          label: "Account status",
+          current: isEnabled ? "Enabled" : "Disabled",
+          updated: updated.enabled ? "Enabled" : "Disabled",
+        },
+        {
+          label: "Role",
+          current: user.role,
+          updated: updated.role,
+        },
+        {
+          label: "Capabilities",
+          current: renderCapabilities(currentCapabilities),
+          updated: renderCapabilities(updatedCapabilities),
+          html: true,
+        },
+        {
+          label: "Notes",
+          current: renderValue(user.notes),
+          updated: renderValue(updated.notes),
+          html: true,
+        },
+      ];
+
+      $modal.find("#manage-user-review-content").html(`
+        <div class="mb-3">
+          <div class="small text-muted">User</div>
+          <strong>${escape(user.email)}</strong>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Current</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map((row) => {
+                  const current = row.html ? row.current : renderValue(row.current);
+
+                  const next = row.html ? row.updated : renderValue(row.updated);
+
+                  return `
+                  <tr>
+                    <th scope="row">${escape(row.label)}</th>
+                    <td>${current}</td>
+                    <td>${next}</td>
+                  </tr>
+                `;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `);
+    }
+
+    function showUserModalStep($modal, step) {
+      const isReview = step === "review";
+
+      $modal
+        .find("#manage-user-edit-body, #manage-user-edit-footer")
+        .toggleClass("d-none", isReview);
+
+      $modal.find("#manage-user-review-body").toggleClass("d-none", !isReview);
+
+      $modal
+        .find("#manage-user-review-footer")
+        .toggleClass("d-none", !isReview)
+        .toggleClass("d-flex", isReview);
+    }
+
+    function normalizeEnabled(value) {
+      return (
+        value === true ||
+        value === 1 ||
+        ["true", "1", "enabled", "active"].includes(
+          String(value ?? "")
+            .trim()
+            .toLowerCase(),
+        )
+      );
+    }
+
     AppUtils.openModal(MODAL_ID, {
       size: "lg",
       placement: "center",
@@ -331,112 +484,166 @@ const manageUsersPage = (() => {
 
       header: `
         <strong>Manage User</strong>
-        <div class="small text-muted">${escapeHtml(user.email)}</div>
+        <div class="small text-muted ms-2"><i class="fa fa-user"></i>${escapeHtml(user.email)}</div>
       `,
 
       body: `
         <form id="manage-user-edit-form">
-          <div class="mb-3">
-            <label class="form-label" for="manage-user-enabled">Account status</label>
-            <select id="manage-user-enabled"
-              class="form-select"
-              data-field="enabled">
-              <option value="true" ${user.enabled ? "selected" : ""}>Enabled</option>
-              <option value="false" ${!user.enabled ? "selected" : ""}>Disabled</option>
-            </select>
-          </div>
+          <!-- STEP 1: MAIN FORM BODY -->
+          <div id="manage-user-edit-body">
+            <div class="row g-3 mb-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="manage-user-enabled">
+                  Account status
+                </label>
 
-          <div class="mb-3">
-            <label class="form-label" for="manage-user-role">Role</label>
-            <select id="manage-user-role"
-              class="form-select"
-              data-field="role">
-              ${roleOptions}
-            </select>
-          </div>
+                <select
+                  id="manage-user-enabled"
+                  class="custom-select js-select2"
+                  data-field="enabled"
+                >
+                  <option value="true" ${isEnabled ? "selected" : ""}>
+                    Enabled
+                  </option>
 
-          <div class="mb-3">
-            <label class="form-label" for="manage-user-capabilities">Capabilities</label>
-            <select id="manage-user-capabilities"
-              class="form-select"
-              data-field="capabilities"
-              multiple>
-              ${capabilityOptions}
-            </select>
-            <div class="form-text">
-              Select the capabilities assigned to this user.
+                  <option value="false" ${!isEnabled ? "selected" : ""}>
+                    Disabled
+                  </option>
+                </select>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="manage-user-role">
+                  Role
+                </label>
+
+                <select
+                  id="manage-user-role"
+                  class="custom-select js-select2"
+                  data-field="role"
+                >
+                  ${roleOptions}
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="manage-user-capabilities">Capabilities</label>
+              <select id="manage-user-capabilities"
+                class="custom-select js-select2"
+                data-field="capabilities"
+                multiple>
+                ${capabilityOptions}
+              </select>
+              <div class="form-text">
+                Select the capabilities assigned to this user.
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="manage-user-notes">Notes</label>
+              <textarea id="manage-user-notes"
+                class="form-control"
+                data-field="notes"
+                rows="2"
+                maxlength="1000">${escapeHtml(user.notes || "")}</textarea>
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label" for="manage-user-notes">Notes</label>
-            <textarea id="manage-user-notes"
-              class="form-control"
-              data-field="notes"
-              rows="3"
-              maxlength="1000">${escapeHtml(user.notes || "")}</textarea>
+          <!-- STEP 2: REVIEW / CONFIRMATION BODY -->
+          <div id="manage-user-review-body" class="d-none">
+            <h5 class="mb-2">
+              <strong>Review User Changes</strong>
+            </h5>
+
+            <p class="text-muted small">
+              Review the updated account settings before saving.
+            </p>
+
+            <div id="manage-user-review-content"></div>
+
+            <div class="alert alert-warning mt-3 mb-0">
+              <i class="fa fa-shield-halved me-1"></i>
+              These changes will update this user's account settings and access permissions.
+            </div>
           </div>
+
         </form>
       `,
 
       footer: `
-        <button type="button"
-          class="btn btn-outline-secondary"
-          data-manage-modal-action="cancel">
-          Cancel
-        </button>
-        <button type="button"
-          class="btn btn-primary"
-          data-manage-modal-action="save"
-          data-email="${escapeHtml(user.email)}">
-          Save Changes
-        </button>
+        <!-- STEP 1: EDIT FOOTER -->
+        <div id="manage-user-edit-footer" class="d-flex gap-2">
+          <button type="button"
+            class="btn btn-outline-secondary"
+            data-manage-modal-action="cancel">
+            Cancel
+          </button>
+
+          <button type="button"
+            class="btn btn-gc"
+            data-manage-modal-action="review">
+            Submit
+          </button>
+        </div>
+
+        <!-- STEP 2: REVIEW FOOTER -->
+        <div id="manage-user-review-footer" class="d-none gap-2">
+          <button type="button"
+            class="btn btn-outline-secondary"
+            data-manage-modal-action="back">
+            Back
+          </button>
+
+          <button type="button"
+            class="btn btn-gc"
+            data-manage-modal-action="proceed">
+            <i class="fa fa-check me-1"></i>
+            Confirm & Save
+          </button>
+        </div>
       `,
 
-      onOpen: () => {
-        const $modal = $(MODAL_ID);
+      onOpen: ($modal) => {
         $modal.off(MODAL_NS);
 
-        if ($?.fn?.select2) {
-          $modal.find("select[data-field]").each(function () {
-            const $select = $(this);
+        const $enabled = $modal.find('[data-field="enabled"]');
+        const $role = $modal.find('[data-field="role"]');
+        const $capabilities = $modal.find('[data-field="capabilities"]');
+        const $notes = $modal.find('[data-field="notes"]');
 
-            $select.select2({
-              width: "100%",
-              dropdownParent: $modal,
-              minimumResultsForSearch: Infinity,
-              placeholder: $select.is("[multiple]")
-                ? "Select capabilities"
-                : "Select an option",
-              closeOnSelect: !$select.is("[multiple]"),
-            });
-          });
-        }
-
-        $modal.on(
-          `click${MODAL_NS}`,
-          '[data-manage-modal-action="cancel"]',
-          () => AppUtils.closeModal(MODAL_ID),
+        // Explicitly synchronize form values with the selected user.
+        // This also updates Select2's displayed selection.
+        $enabled.val(String(normalizeEnabled(user.enabled)));
+        $role.val(user.role ?? "");
+        $capabilities.val(
+          Array.isArray(user.capabilities) ? user.capabilities : [],
         );
+        $notes.val(user.notes ?? "");
 
-        $modal.on(
-          `click${MODAL_NS}`,
-          '[data-manage-modal-action="save"]',
-          (event) => {
-            saveUser(event.currentTarget.dataset.email);
-          },
-        );
+        $enabled.add($role).add($capabilities).trigger("change.select2");
+
+        $modal
+          .on(`click${MODAL_NS}`, '[data-manage-modal-action="cancel"]', () =>
+            AppUtils.closeModal(MODAL_ID),
+          )
+          .on(`click${MODAL_NS}`, '[data-manage-modal-action="review"]', () => {
+            const updated = getEditedUserData($modal);
+
+            renderUserReview($modal, updated);
+            showUserModalStep($modal, "review");
+          })
+          .on(`click${MODAL_NS}`, '[data-manage-modal-action="back"]', () =>
+            showUserModalStep($modal, "edit"),
+          )
+          .on(`click${MODAL_NS}`, '[data-manage-modal-action="proceed"]', () =>
+            saveUser(user.email),
+          );
       },
 
       onClose: () => {
         const $modal = $(MODAL_ID);
         $modal.off(MODAL_NS);
-
-        if ($?.fn?.select2) {
-          $modal.find(".select2-hidden-accessible").each(function () {
-            $(this).select2("destroy");
-          });
-        }
       },
     });
   }

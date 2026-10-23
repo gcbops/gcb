@@ -1,9 +1,9 @@
 import {
   getAuthArgs as getGcbAuthArgs,
   handleInvalidSessionError,
-} from "./auth/auth-error-handler.js";
-import { AuthorizationUIModule } from "./auth/authorization-ui.js";
-import { RouterModule } from "./routers.js";
+} from "../auth/auth-error-handler.js";
+import { AuthorizationUIModule } from "../auth/authorization-ui.js";
+import { RouterModule } from "../routers.js";
 
 const AppUtils = (() => {
   // ---- CACHE ----
@@ -713,7 +713,7 @@ const AppUtils = (() => {
   function initSelect2(parent, options = {}) {
     const $parent = parent ? $(parent) : $(document.body);
 
-    if (!$parent.length) {
+    if (!$parent.length || !$.fn.select2) {
       return;
     }
 
@@ -730,8 +730,23 @@ const AppUtils = (() => {
         $el.select2("destroy");
       }
 
+      const isMultiple = $el.is("[multiple]");
+
+      const emptyOptionText = $el
+        .find('option[value=""]')
+        .first()
+        .text()
+        .trim();
+
       const selectOptions = {
         width: "100%",
+        placeholder:
+          $el.data("placeholder") ||
+          (isMultiple
+            ? "Select options"
+            : emptyOptionText || "Select an option"),
+        allowClear: isMultiple ? false : false,
+        closeOnSelect: !isMultiple,
         ...options,
       };
 
@@ -739,14 +754,59 @@ const AppUtils = (() => {
         selectOptions.tags = true;
       }
 
-      /*
-       * Use the actual modal element as dropdown parent.
-       */
       if ($parent.is(".modal")) {
         selectOptions.dropdownParent = $parent;
       }
 
       $el.select2(selectOptions);
+    });
+  }
+
+  function destroySelect2(parent) {
+    const $parent = parent ? $(parent) : $(document.body);
+
+    if (!$parent.length || !$.fn.select2) {
+      return;
+    }
+
+    $parent
+      .find("select.js-select2, select.js-select2-dynamic")
+      .each(function () {
+        const $select = $(this);
+
+        /*
+         * Do not destroy Select2 fields inside drawers.
+         * Drawers can remain open while the page or modal
+         * is being cleaned up.
+         */
+        if ($select.closest(".drawer").length) {
+          return;
+        }
+
+        if ($select.hasClass("select2-hidden-accessible")) {
+          $select.select2("destroy");
+        }
+      });
+  }
+
+  function destroyAllSelect2() {
+    if (!$.fn.select2) {
+      return;
+    }
+
+    $("select.js-select2, select.js-select2-dynamic").each(function () {
+      const $select = $(this);
+
+      /*
+       * Preserve Select2 instances inside drawers.
+       */
+      if ($select.closest(".drawer").length) {
+        return;
+      }
+
+      if ($select.hasClass("select2-hidden-accessible")) {
+        $select.select2("destroy");
+      }
     });
   }
 
@@ -757,6 +817,10 @@ const AppUtils = (() => {
       return;
     }
     const $content = $drawer.find(".drawer-content");
+
+    if ($content.find("select.js-select2, select.js-select2-dynamic").length) {
+      initSelect2($content);
+    }
 
     $drawer
       .off("click.AppUtilsDrawerClose")
@@ -826,6 +890,12 @@ const AppUtils = (() => {
       .find(".drawer-minimize i")
       .removeClass("pe-7s-angle-up")
       .addClass("pe-7s-angle-down");
+
+    /*
+     * Destroy Select2 instances before Bootstrap
+     * hides and clears the modal content.
+     */
+    destroySelect2($drawerElement);
 
     /*
      * Reset / empty all form elements inside the drawer.
@@ -1414,6 +1484,10 @@ const AppUtils = (() => {
       },
     );
 
+    if ($modal.find("select.js-select2, select.js-select2-dynamic").length) {
+      initSelect2($modal);
+    }
+
     /*
      * Initialize modal interactions immediately.
      *
@@ -1520,11 +1594,19 @@ const AppUtils = (() => {
   // },
 
   function closeModal(modalSelector) {
-    const modalEl = document.querySelector(modalSelector);
+    const $modal = $(modalSelector);
 
-    if (!modalEl) {
+    if (!$modal.length) {
       return;
     }
+
+    const modalEl = $modal[0];
+
+    /*
+     * Destroy Select2 instances before Bootstrap
+     * hides and clears the modal content.
+     */
+    destroySelect2($modal);
 
     const focusedInside = modalEl.querySelector(":focus");
 
@@ -1548,7 +1630,7 @@ const AppUtils = (() => {
     </button>
   `);
 
-    $(modalEl).append($closeTrigger);
+    $modal.append($closeTrigger);
 
     /*
      * Let DashboardPack's Bootstrap instance hide the modal.
@@ -1930,6 +2012,8 @@ const AppUtils = (() => {
 
     showDashboardToast,
     initSelect2,
+    destroySelect2,
+    destroyAllSelect2,
     submitForm,
     setButtonLoading,
 

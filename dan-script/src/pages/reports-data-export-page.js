@@ -1,5 +1,5 @@
-import { AppUtils } from "../utils.js";
-import { DataTableModule } from "../tables/data-table.js";
+import { AppUtils } from "../utils/utils.js";
+import { DataTableModule } from "../components/data-table.js";
 import { ReportsOverview } from "../reports/overview.js";
 import { ReportActions } from "../reports/actions.js";
 import { TableFilterService } from "../tables/table-filter-service.js";
@@ -7,6 +7,8 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
+import { ReportService } from "../reports/service.js";
+import { RequestManager } from "../requests/request-manager.js";
 
 const reportsDataExportPage = (() => {
   let bound = false;
@@ -58,9 +60,14 @@ const reportsDataExportPage = (() => {
       .on("click.reports", ".btn-view-report", (e) => {
         const url = $(e.currentTarget).data("url");
 
-        if (url) {
-          window.open(url, "_blank");
+        const reportUrl = ReportService.getSafeReportUrl(url);
+
+        if (!reportUrl) {
+          AppUtils.showError("Report link is invalid or unavailable.");
+          return;
         }
+
+        window.open(reportUrl, "_blank", "noopener,noreferrer");
       })
 
       .on("click.reports", ".btn-email-report", function () {
@@ -93,14 +100,31 @@ const reportsDataExportPage = (() => {
       )
 
       .on("click.reports", "#btn-generate-billing-records-csv", () => {
-        AppUtils.confirmAction(
-          "generateBillingRecordsCsv",
-          "Generate Billing Records?",
-          "This will generate billing records for the selected date range. Do you want to continue?",
-          () => {
-            handleGenerateBillingRecordsCSV();
-          },
+        const tbody = document.querySelector(
+          "#billing-records-export-table-body",
         );
+        const text = tbody.textContent.trim();
+
+        if (text.includes("No Billing Records found")) {
+          AppUtils.confirmAction(
+            "syncBillingRecords",
+            "No Billing Records Found",
+            "The billing records have not been updated yet for the selected date range. Would you like to update and sync the billing records now?",
+            () => {
+              const button = $("#btn-generate-billing-records-csv");
+              syncBillingRecords(button);
+            },
+          );
+        } else {
+          AppUtils.confirmAction(
+            "generateBillingRecordsCsv",
+            "Generate Billing Records?",
+            "This will generate billing records for the selected date range. Do you want to continue?",
+            () => {
+              handleGenerateBillingRecordsCSV();
+            },
+          );
+        }
       });
   };
 
@@ -218,6 +242,51 @@ const reportsDataExportPage = (() => {
       );
     }
   };
+
+  async function syncBillingRecords(button) {
+    const loading = AppUtils.setButtonLoading(button, "Syncing Records");
+
+    try {
+      const [sessionId, signature] = await getAuthArgs();
+
+      AppUtils.gScriptRun({
+        gscriptFunc: "syncBillingRecords",
+        args: [sessionId, signature],
+
+        onSuccess: (response) => {
+          loading.restore();
+
+          if (!response?.success) {
+            AppUtils.showError("Unable to sync Billing Records.");
+            return;
+          }
+
+          $("#billingRecordsFilterSubmit").trigger("click");
+
+          AppUtils.showDashboardToast(
+            `Billing Records synced: ${response.records} record(s).`,
+            "success",
+          );
+        },
+
+        onError: (error) => {
+          loading.restore();
+
+          AppUtils.showError(
+            error?.message || "Failed to sync Billing Records.",
+          );
+        },
+      });
+    } catch (error) {
+      loading.restore();
+
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(error?.message || "Failed to sync Billing Records.");
+    }
+  }
 
   function normalizeBillingStatus(value) {
     const status = String(value || "").toUpperCase();
@@ -345,68 +414,60 @@ const reportsDataExportPage = (() => {
 
       return;
     }
+    
+    const requestId = RequestManager.enqueue(
+      "generate-billing-csv",
+      { startDate, endDate },
+      `Generate Billing Records CSV — ${startDate} to ${endDate}`,
+    );
 
-    const button = document.getElementById("btn-generate-billing-records-csv");
+    if (!requestId) {
+      return;
+    }
 
-    const loading = AppUtils.setButtonLoading(button, "Generating");
+    AppUtils.showDashboardToast(
+      "Billing Records CSV added to the request queue.",
+    );
 
-    try {
-      const [sessionId, signature] = await getAuthArgs();
+    let unsubscribeCompletion = () => {};
 
-      AppUtils.gScriptRun({
-        gscriptFunc: "saveBillingRecordsCSV",
+    unsubscribeCompletion = RequestManager.subscribe((state) => {
+      const finishedRequest = state.history.find(
+        (request) => request.id === requestId,
+      );
 
-        args: [sessionId, signature, startDate, endDate],
-
-        onSuccess: (result) => {
-          if (loading) {
-            loading.restore();
-          }
-
-          /*
-           * The GAS call succeeded, but the server
-           * operation itself may still report failure.
-           */
-          if (!result?.success || !result?.url) {
-            AppUtils.showError(
-              "The Billing Records CSV could not be generated.",
-            );
-
-            return;
-          }
-
-          AppUtils.showDashboardToast(
-            `CSV generated successfully (${result.recordCount} records).`,
-          );
-
-          loadBillingRecords(startDate, endDate);
-
-          ReportsOverview.loadReportsOverview();
-
-          window.open(result.url, "_blank");
-
-          loadBillingCSVExportCount();
-        },
-
-        onError: (error) => {
-          if (loading) {
-            loading.restore();
-          }
-
-          AppUtils.showError(
-            error?.message || "Failed to generate the Billing Records CSV.",
-          );
-        },
-      });
-    } catch (error) {
-      loading?.restore();
-
-      if (handleInvalidSessionError(error)) {
+      if (!finishedRequest) {
         return;
       }
 
-      AppUtils.showError(error?.message || "Failed to generated billing records.");
-    }
+      unsubscribeCompletion();
+
+      if (finishedRequest.status !== "completed") {
+        return;
+      }
+
+      const result = finishedRequest.result;
+
+      loadBillingRecords(startDate, endDate);
+      ReportsOverview.loadReportsOverview();
+      loadBillingCSVExportCount();
+
+      if (result?.downloaded) {
+        AppUtils.showDashboardToast(
+          `Existing CSV downloaded (${result.recordCount} records).`,
+          "success",
+        );
+        return;
+      }
+
+      AppUtils.showDashboardToast(
+        result?.reusedExisting
+          ? `Existing CSV reused (${result.recordCount} records).`
+          : `CSV generated successfully (${result.recordCount} records).`,
+        "success",
+      );
+    });
+
   };
 
   const loadBillingCSVExportCount = async () => {

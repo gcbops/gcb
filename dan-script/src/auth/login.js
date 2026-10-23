@@ -1,3 +1,5 @@
+import { LoaderModule } from "../components/loader.js";
+
 const GcbLoginModule = (() => {
   let initialized = false;
 
@@ -21,6 +23,7 @@ const GcbLoginModule = (() => {
     }
 
     screen.classList.remove("d-none");
+    LoaderModule.hide();
   }
 
   function hide() {

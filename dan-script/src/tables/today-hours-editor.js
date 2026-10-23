@@ -1,6 +1,6 @@
 import { GcbAuthModule } from "../auth/auth.js";
-import { AppUtils } from "../utils.js";
-import { ValidationModule } from "../validations.js";
+import { AppUtils } from "../utils/utils.js";
+import { ValidationModule } from "../utils/validations.js";
 import { RequestManager } from "../requests/request-manager.js";
 
 const TodayHoursEditor = (() => {
@@ -152,6 +152,10 @@ const TodayHoursEditor = (() => {
             }
           }
 
+          console.log(
+            "[TodayHoursEditor] Active queued changes:",
+            RequestManager.getActiveTodayHoursChanges(clientName),
+          );
           render(records, Array.isArray(tasks) ? tasks : [], $modal);
         },
       );
@@ -176,6 +180,11 @@ const TodayHoursEditor = (() => {
       return;
     }
 
+    const clientName = String($modal.find(CLIENT_ID).val() || "").trim();
+
+    const pendingChanges =
+      RequestManager.getActiveTodayHoursChanges(clientName);
+
     records.forEach((record) => {
       const rowNumber = Number(record.row);
 
@@ -193,7 +202,24 @@ const TodayHoursEditor = (() => {
       const originalHours = String(record.hours ?? "");
       const originalDate = String(record.dateFormatted ?? record.date ?? "");
 
-      const taskOptions = buildTaskOptions(tasks, originalTask);
+      const pendingChange = findPendingChange(record, pendingChanges);
+
+      const isPendingDelete = pendingChange?.action === "delete";
+      const isPendingEdit = Boolean(pendingChange && !isPendingDelete);
+
+      const displayedType = isPendingEdit
+        ? String(pendingChange.type ?? originalType)
+        : originalType;
+
+      const displayedTask = isPendingEdit
+        ? String(pendingChange.task ?? originalTask)
+        : originalTask;
+
+      const displayedHours = isPendingEdit
+        ? String(pendingChange.hours ?? originalHours)
+        : originalHours;
+
+      const taskOptions = buildTaskOptions(tasks, displayedTask);
 
       const $row = $(`
         <div
@@ -206,6 +232,8 @@ const TodayHoursEditor = (() => {
           data-original-task="${AppUtils.escapeHtml(originalTask)}"
           data-original-hours="${AppUtils.escapeHtml(originalHours)}"
           data-original-date="${AppUtils.escapeHtml(originalDate)}"
+          data-pending-request-id="${AppUtils.escapeHtml(pendingChange?.requestId || "")}"
+          data-pending-action="${AppUtils.escapeHtml(pendingChange?.action || "")}"
         >
           <div class="row">
             <div class="col-md-4 mb-2">
@@ -259,9 +287,31 @@ const TodayHoursEditor = (() => {
         </div>
       `);
 
-      $row.find(".today-hours-type").val(originalType);
-      $row.find(".today-hours-task").val(originalTask);
-      $row.find(".today-hours-hours").val(originalHours);
+      $row.find(".today-hours-type").val(displayedType);
+      $row.find(".today-hours-task").val(displayedTask);
+      $row.find(".today-hours-hours").val(displayedHours);
+
+      if (pendingChange) {
+        const statusLabel = getPendingChangeLabel(pendingChange);
+
+        $row.addClass(
+          isPendingDelete ? "record-pending-delete" : "record-pending-edit",
+        ).append(`
+      <div class="small mt-2 text-warning today-hours-pending-status">
+        <i class="fa fa-clock-o" aria-hidden="true"></i>
+        ${AppUtils.escapeHtml(statusLabel)}
+      </div>
+    `);
+
+        $row.find("input, select").prop("disabled", true);
+
+        $row
+          .find(".btn-delete-today-hours")
+          .prop("disabled", true)
+          .text(isPendingDelete ? "Pending deletion" : "Edit queued")
+          .removeClass("btn-outline-danger")
+          .addClass("btn-secondary");
+      }
 
       $container.append($row);
     });
@@ -275,9 +325,71 @@ const TodayHoursEditor = (() => {
       return;
     }
 
-    AppUtils.initSelect2($modal);
+    // AppUtils.initSelect2($modal);
+
+    $container
+      .find(".today-hours-record")
+      .filter(function () {
+        return Boolean(this.dataset.pendingRequestId);
+      })
+      .find("input, select, button")
+      .prop("disabled", true);
 
     $container.find(".today-hours-type, .today-hours-task").trigger("change");
+  }
+
+  function findPendingChange(record, pendingChanges) {
+    const row = Number(record.row);
+    const sourceSheet = String(record.sourceSheet || "")
+      .trim()
+      .toLowerCase();
+
+    const sourceRowValue = Number(record.sourceRow);
+    const sourceRow =
+      Number.isInteger(sourceRowValue) && sourceRowValue >= 1
+        ? sourceRowValue
+        : null;
+
+    return pendingChanges.find((change) => {
+      const changeRow = Number(change.row);
+      const changeSheet = String(change.sourceSheet || "")
+        .trim()
+        .toLowerCase();
+
+      const changeSourceRowValue = Number(change.sourceRow);
+      const changeSourceRow =
+        change.sourceRow !== null &&
+        change.sourceRow !== undefined &&
+        change.sourceRow !== "" &&
+        Number.isInteger(changeSourceRowValue) &&
+        changeSourceRowValue >= 1
+          ? changeSourceRowValue
+          : null;
+
+      // Main-sheet records must match the same main-sheet row.
+      // External records must also match their external source row.
+      if (changeRow !== row || changeSheet !== sourceSheet) {
+        return false;
+      }
+
+      if (sourceSheet) {
+        return sourceRow !== null && changeSourceRow === sourceRow;
+      }
+
+      return changeSourceRow === null;
+    });
+  }
+
+  function getPendingChangeLabel(change) {
+    const uncertain = change.requestStatus === "interrupted";
+
+    if (change.action === "delete") {
+      return uncertain
+        ? "Deletion outcome unknown — verify request"
+        : "Pending deletion";
+    }
+
+    return uncertain ? "Edit outcome unknown — verify request" : "Pending edit";
   }
 
   function buildTaskOptions(tasks, selectedTask) {
@@ -349,6 +461,11 @@ const TodayHoursEditor = (() => {
 
     $modal.find(".today-hours-record").each(function () {
       const $row = $(this);
+
+      // This record already has an active RequestManager operation.
+      if ($row.attr("data-pending-request-id")) {
+        return;
+      }
 
       const sourceRowValue = $row.attr("data-source-row");
 

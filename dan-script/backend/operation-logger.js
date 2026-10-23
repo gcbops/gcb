@@ -139,7 +139,6 @@ function runGcbLoggedOperation_(options, callback) {
   }
 }
 
-
 function getOperationLogHistory(sessionId, signature, limit = 200) {
   requireRole(sessionId, signature, "admin");
 

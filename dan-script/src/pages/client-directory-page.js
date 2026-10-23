@@ -1,11 +1,12 @@
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 import { ClientDirectory } from "../clients/client-directory.js";
 import { TableClientSelector } from "../tables/client-selector.js";
-import { ValidationModule } from "../validations.js";
+import { ValidationModule } from "../utils/validations.js";
 import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
+import { RequestManager } from "../requests/request-manager.js";
 
 const clientDirectoryPage = (() => {
   let bound = false;
@@ -202,7 +203,7 @@ const clientDirectoryPage = (() => {
           /*
            * Review -> Form
            */
-          .on(`click${namespace}`, ".btn-back", () => {
+          .on(`click${namespace}`, ".btn-modal-back", () => {
             showFormStep($modal);
           })
 
@@ -242,67 +243,63 @@ const clientDirectoryPage = (() => {
 
     if (!clientNameResult.valid) {
       AppUtils.showDashboardToast(clientNameResult.message, "error");
-
       return;
     }
 
     const clientName = clientNameResult.value;
 
-    const loading = AppUtils.setButtonLoading(
-      $button[0],
-      "Creating new client",
+    // Prevent repeated submissions while the request is being enqueued.
+    if ($button.data("requestEnqueued")) {
+      return;
+    }
+
+    $button.data("requestEnqueued", true);
+
+    const requestId = RequestManager.enqueue(
+      "create-client-sheet",
+      { name: clientName },
+      `Create Client Sheet — ${clientName}`,
     );
 
-    try {
-      const [sessionId, signature] = await getAuthArgs();
+    if (!requestId) {
+      $button.removeData("requestEnqueued");
+      return;
+    }
 
-      AppUtils.gScriptRun({
-        gscriptFunc: "createClientSheet",
+    AppUtils.closeModal(MODAL_ID);
 
-        args: [
-          sessionId,
-          signature,
-          {
-            name: clientName,
-          },
-        ],
+    AppUtils.showDashboardToast(`Client creation queued for "${clientName}".`);
 
-        onSuccess: () => {
-          loading.setSuccess("Saved");
+    let unsubscribeCompletion = () => {};
 
-          AppUtils.closeModal(MODAL_ID);
+    unsubscribeCompletion = RequestManager.subscribe((state) => {
+      const finishedRequest = state.history.find(
+        (request) => request.id === requestId,
+      );
 
-          AppUtils.showDashboardToast(
-            "Client sheet created successfully!",
-            "success",
-          );
-
-          /*
-           * Refresh the client list on the server.
-           *
-           * Failure here should not invalidate
-           * the successfully-created sheet.
-           */
-          syncClientSheetList();
-        },
-
-        onError: (error) => {
-          loading.restore();
-
-          AppUtils.showError(
-            error?.message || "Unable to create client sheet.",
-          );
-        },
-      });
-    } catch (error) {
-      loading.restore();
-
-      if (handleInvalidSessionError(error)) {
+      if (!finishedRequest) {
         return;
       }
 
-      AppUtils.showError(error?.message || "Unable to create client sheet.");
-    }
+      unsubscribeCompletion();
+
+      if (finishedRequest.status === "completed") {
+        AppUtils.showDashboardToast(
+          `Client sheet "${clientName}" created successfully.`,
+          "success",
+        );
+
+        // Keep the existing client synchronization workflow.
+        syncClientSheetList();
+      } else if (finishedRequest.status === "failed") {
+        AppUtils.showError(
+          finishedRequest.message ||
+            `Unable to create client sheet "${clientName}".`,
+        );
+      }
+
+      // Cancelled/interrupted requests are handled by RequestManager.
+    });
   }
 
   /*
@@ -443,7 +440,7 @@ const clientDirectoryPage = (() => {
           /*
            * Review -> Form
            */
-          .on(`click${namespace}`, ".btn-back", () => {
+          .on(`click${namespace}`, ".btn-modal-back", () => {
             showFormStep($modal);
           })
 
@@ -465,7 +462,7 @@ const clientDirectoryPage = (() => {
     });
   }
 
-  async function createExternalSheet($modal, $btn) {
+  function createExternalSheet($modal, $btn) {
     const form = $modal.find("#externalSheetForm")[0];
 
     if (!form) {
@@ -484,11 +481,8 @@ const clientDirectoryPage = (() => {
 
     if (!clientNameResult.valid) {
       AppUtils.showDashboardToast(clientNameResult.message, "error");
-
       return;
     }
-
-    const clientName = clientNameResult.value;
 
     const projectsResult = ValidationModule.requiredString(
       $modal.find("#externalProjects").val(),
@@ -500,81 +494,74 @@ const clientDirectoryPage = (() => {
 
     if (!projectsResult.valid) {
       AppUtils.showDashboardToast(projectsResult.message, "error");
-
       return;
     }
 
+    const clientName = clientNameResult.value;
     const projects = projectsResult.value;
 
     if (!clientName || !projects) {
       return;
     }
 
-    const loading = AppUtils.setButtonLoading(
-      $btn[0],
-      "Creating External Sheet",
+    // Prevent duplicate enqueue attempts from this modal.
+    if ($btn.data("requestEnqueued")) {
+      return;
+    }
+
+    $btn.data("requestEnqueued", true);
+
+    const requestId = RequestManager.enqueue(
+      "create-external-sheet",
+      {
+        clientName,
+        projects,
+      },
+      `Create External Sheet — ${clientName}`,
     );
 
-    try {
-      const [sessionId, signature] = await getAuthArgs();
+    if (!requestId) {
+      $btn.removeData("requestEnqueued");
+      return;
+    }
 
-      AppUtils.gScriptRun({
-        gscriptFunc: "createExternalSheet",
+    AppUtils.closeModal(MODAL_ID);
 
-        args: [
-          sessionId,
-          signature,
-          {
-            clientName,
-            projects,
-          },
-        ],
+    AppUtils.showDashboardToast(
+      `External sheet creation queued for "${clientName}".`,
+    );
 
-        onSuccess: (result) => {
-          loading.setSuccess("Sheet Created");
+    let unsubscribeCompletion = () => {};
 
-          AppUtils.closeModal(MODAL_ID);
+    unsubscribeCompletion = RequestManager.subscribe((state) => {
+      const finishedRequest = state.history.find(
+        (request) => request.id === requestId,
+      );
 
-          AppUtils.showDashboardToast(
-            `External sheet created for ${result.clientName}.`,
-            "success",
-          );
-
-          /*
-           * External clients are included in the
-           * Client Directory, so invalidate it.
-           */
-          AppUtils.cacheClear("clientDirectoryData");
-
-          /*
-           * Keep the client sheet list synchronized.
-           */
-          syncClientSheetList();
-        },
-
-        onError: (error) => {
-          console.error("[clientDirectory] createExternalSheet failed:", error);
-
-          loading.restore();
-
-          AppUtils.showDashboardToast(
-            error?.message || "Failed to create external sheet.",
-            "error",
-          );
-        },
-      });
-    } catch (error) {
-      loading.restore();
-
-      if (handleInvalidSessionError(error)) {
+      if (!finishedRequest) {
         return;
       }
 
-      AppUtils.showDashboardToast(
-        error?.message || "Failed to create external sheet.",
-        "error",
-      );
-    }
+      unsubscribeCompletion();
+
+      if (finishedRequest.status === "completed") {
+        AppUtils.showDashboardToast(
+          `External sheet created for "${clientName}".`,
+          "success",
+        );
+
+        // Invalidate the existing Client Directory cache.
+        AppUtils.cacheClear("clientDirectoryData");
+
+        // Preserve the existing client synchronization workflow.
+        syncClientSheetList();
+      } else if (finishedRequest.status === "failed") {
+        AppUtils.showError(
+          finishedRequest.message ||
+            `Unable to create external sheet for "${clientName}".`,
+        );
+      }
+    });
   }
 
   async function syncClientSheetList() {
@@ -587,22 +574,13 @@ const clientDirectoryPage = (() => {
         args: [sessionId, signature],
 
         onSuccess: () => {
-          AppUtils.confirmAction(
-            "syncClientsList",
-            "Synchronize Client Directory?",
-            "This will pull down the latest names, and sheet records from the main hub spreadsheet. Proceed?",
+          ClientDirectory.refreshClientDirectory(
+            false,
+            "clientDirectoryData",
             () => {
-              AppUtils.cacheClear("clientDirectoryData");
-
-              ClientDirectory.refreshClientDirectory(
-                false,
-                "clientDirectoryData",
-                () => {
-                  AppUtils.showDashboardToast(
-                    "Clients refreshed successfully.",
-                    "success",
-                  );
-                },
+              AppUtils.showDashboardToast(
+                "Clients refreshed successfully.",
+                "success",
               );
             },
           );

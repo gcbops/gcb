@@ -12,12 +12,12 @@ import { HomePage } from "./pages/home-page.js";
 import { monthlyOverviewPage } from "./pages/monthly-overview-page.js";
 import { performanceTargetPage } from "./pages/performance-target-page.js";
 import { yearlyOverviewPage } from "./pages/yearly-overview-page.js";
-import { ChartModule } from "./charts.js";
+import { ChartModule } from "./components/charts.js";
 import { PageLoaderModule } from "./page-loader.js";
-import { DataTableModule } from "./tables/data-table.js";
+import { DataTableModule } from "./components/data-table.js";
 import { AppUI } from "./app-ui.js";
 import { AppShellModule } from "./app-shell.js";
-import { AppUtils } from "./utils.js";
+import { AppUtils } from "./utils/utils.js";
 import { integrationsConfigurationPage } from "./pages/integration-page.js";
 import { clientRankingsPage } from "./pages/client-ranking-page.js";
 import { clientOpportunitiesPage } from "./pages/client-opportunities-page.js";
@@ -28,7 +28,8 @@ import { billingInvoiceStatusPage } from "./pages/billing-invoice-status-page.js
 import { performanceOverviewPage } from "./pages/performance-overview.js";
 import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
 import { clientDetailsPage } from "./pages/client-details-page.js";
-import { manageUsersPage } from "./manage-users.js";
+import { manageUsersPage } from "./users/manage-users.js";
+import { AppPopoverModule } from "./components/app-popover.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -214,6 +215,7 @@ const RouterModule = (() => {
          * 2. Initialize shared UI
          * ------------------------------------------------
          */
+        AppPopoverModule.init();
         AppUI.init();
 
         window.addEventListener("popstate", handlePopState);
@@ -355,6 +357,7 @@ const RouterModule = (() => {
     AppUtils.closeAllDrawers();
     DataTableModule.destroyAll();
     ChartModule.destroyAllCharts();
+    AppUtils.destroyAllSelect2();
 
     currentModule?.destroy?.();
     currentModule = null;
@@ -386,6 +389,7 @@ const RouterModule = (() => {
       currentModule = page;
 
       AppUI.activateNavigation(resolvedPageName);
+      AppUI.initPageSelect2();
 
       requestAnimationFrame(() => {
         AppUI.playSkeletonReveal();

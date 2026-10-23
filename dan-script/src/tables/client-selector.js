@@ -1,5 +1,5 @@
 import { TableModule } from "./tables.js";
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 import { GcbAuthModule } from "../auth/auth.js";
 
 const TableClientSelector = (() => {

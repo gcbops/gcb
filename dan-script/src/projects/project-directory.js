@@ -1,6 +1,6 @@
 import { GcbAuthModule } from "../auth/auth";
-import { DataTableModule } from "../tables/data-table";
-import { AppUtils } from "../utils";
+import { DataTableModule } from "../components/data-table";
+import { AppUtils } from "../utils/utils";
 import { ProjectRankings } from "./project-rankings";
 
 const ProjectDirectory = (() => {

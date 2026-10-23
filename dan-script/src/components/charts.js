@@ -1,8 +1,8 @@
 import {
   getAuthArgs,
   handleInvalidSessionError,
-} from "./auth/auth-error-handler.js";
-import { AppUtils } from "./utils.js";
+} from "../auth/auth-error-handler.js";
+import { AppUtils } from "../utils/utils.js";
 
 const ChartModule = (() => {
   Chart.defaults.font.family = "Inter";

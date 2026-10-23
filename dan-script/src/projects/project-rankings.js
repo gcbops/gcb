@@ -1,5 +1,5 @@
 import { GcbAuthModule } from "../auth/auth";
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils";
 
 const ProjectRankings = (() => {
   let initialized = false;

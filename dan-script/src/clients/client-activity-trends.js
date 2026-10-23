@@ -1,4 +1,4 @@
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 import { getAuthArgs, handleInvalidSessionError } from "../auth/auth-error-handler.js";
 
 const ClientActivityTrends = (() => {

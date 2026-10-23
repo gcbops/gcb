@@ -2,7 +2,7 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils.js";
 
 const clientRankings = (() => {
   const CACHE_KEY = "clientRankings";

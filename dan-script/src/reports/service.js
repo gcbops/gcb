@@ -1,22 +1,4 @@
-// import { AppUtils } from "../utils";
-
-// const ReportService = (() => {
-
-//     function getLatestReport() {
-//         const data = AppUtils.cacheGet("reportsOverview");
-//         if (!data || !data.logs?.length) {
-//             AppUtils.showError("No reports found.");
-//             return null;
-//         }
-//         return data.logs[0];
-//     }
-
-//     return { getLatestReport };
-// })();
-
-// export { ReportService };
-
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils";
 
 const ReportService = (() => {
   function getLatestReport(type = null) {
@@ -41,8 +23,36 @@ const ReportService = (() => {
     return reports[0];
   }
 
+  function getSafeReportUrl(value) {
+    const raw = String(value || "").trim();
+
+    if (!raw) {
+      return "";
+    }
+
+    try {
+      const url = new URL(raw);
+
+      const allowedHosts = ["drive.google.com", "docs.google.com"];
+
+      if (
+        url.protocol !== "https:" ||
+        !allowedHosts.includes(url.hostname.toLowerCase()) ||
+        url.username ||
+        url.password
+      ) {
+        return "";
+      }
+
+      return url.href;
+    } catch {
+      return "";
+    }
+  }
+
   return {
     getLatestReport,
+    getSafeReportUrl,
   };
 })();
 

@@ -4,14 +4,15 @@ import {
 } from "../auth/auth-error-handler.js";
 import { HourSummary } from "../hours/hour-summary.js";
 import { RequestManager } from "../requests/request-manager.js";
-import { AppUtils } from "../utils.js";
-import { ValidationModule } from "../validations.js";
-import { DataTableModule } from "./data-table.js";
+import { AppUtils } from "../utils/utils.js";
+import { ValidationModule } from "../utils/validations.js";
+import { DataTableModule } from "../components/data-table.js";
 
 const ActivityToday = (() => {
   const ACTIVITY_TABLE_ID = "#table";
   const ACTIVITY_CACHE_KEY = "cache_ActivityToday";
   const REFRESH_INTERVAL = 10000;
+  const ERROR_REFRESH_INTERVAL = 30000;
   const MAX_CLIENT_NAME_LENGTH = 100;
   const MAX_TYPE_LENGTH = 100;
   const MAX_TASK_LENGTH = 500;
@@ -38,7 +39,13 @@ const ActivityToday = (() => {
   ];
 
   let refreshTimer = null;
-  let isRefreshing = false;
+  let refreshLockTimer = null;
+
+  let activeRequestId = null;
+  let nextRequestId = 0;
+  let refreshGeneration = 0;
+
+  const REFRESH_LOCK_TIMEOUT = 45000;
 
   /* ---------------------------------------------------------
    * FILTERS
@@ -275,7 +282,7 @@ const ActivityToday = (() => {
       .off("click.activityToday")
       .on("click.activityToday", handleTaskSubmit);
 
-    AppUtils.initSelect2("#drawerManualAdd .drawer-content");
+    // AppUtils.initSelect2("#drawerManualAdd .drawer-content");
   }
 
   function setupClientSelector($selectClient, $taskForm) {
@@ -313,7 +320,6 @@ const ActivityToday = (() => {
 
     AppUtils.openDrawer("#drawerManualAdd");
   }
-
 
   function handleTaskSubmit(event) {
     event.preventDefault();
@@ -358,7 +364,6 @@ const ActivityToday = (() => {
   }
 
   function handleTaskSaveSuccess(formData) {
-
     AppUtils.showDashboardToast(
       "Hours have been successfully recorded!",
       "success",
@@ -412,8 +417,6 @@ const ActivityToday = (() => {
     AppUtils.resetCacheKeys(resetableCacheKeyForUpdatingHours);
 
     resetYearlyChartCaches();
-
-    // $("#hour").val("");
   }
 
   function clientActivityForm(data) {
@@ -618,12 +621,12 @@ const ActivityToday = (() => {
 
           <button
             type="button"
-            id="edit-client-sheet"
+            id="view-client-details"
             data-required-capability="clients.edit" 
-            class="dropdown-item edit-client-sheet"
+            class="dropdown-item view-client-details"
           >
             <i class="pe-7s-note2 me-2 text-info"></i>
-            View Sheet
+            View Details
           </button>
         </div>
       </div>
@@ -631,7 +634,7 @@ const ActivityToday = (() => {
   }
 
   /* ---------------------------------------------------------
-   * AUTO REFRESH
+   * AUTO REFRESH — LOCKED & SELF-RECOVERING
    * --------------------------------------------------------- */
 
   function startRefresh(dataTable) {
@@ -641,72 +644,199 @@ const ActivityToday = (() => {
       return;
     }
 
-    const refresh = () => {
-      loadActivity(dataTable, () => {
-        refreshTimer = setTimeout(refresh, REFRESH_INTERVAL);
-      });
-    };
+    const generation = refreshGeneration;
+
+    function scheduleNextRefresh(success) {
+      // Ignore callbacks belonging to a stopped/restarted cycle.
+      if (generation !== refreshGeneration) {
+        return;
+      }
+
+      clearTimeout(refreshTimer);
+
+      refreshTimer = setTimeout(
+        refresh,
+        success ? REFRESH_INTERVAL : ERROR_REFRESH_INTERVAL,
+      );
+    }
+
+    function refresh() {
+      if (generation !== refreshGeneration) {
+        return;
+      }
+
+      refreshTimer = null;
+
+      loadActivity(
+        dataTable,
+        (success) => scheduleNextRefresh(success),
+        false,
+        generation,
+      );
+    }
 
     refresh();
   }
 
   function stopRefresh() {
-    if (refreshTimer) {
+    // Invalidate callbacks from the previous refresh cycle.
+    refreshGeneration++;
+
+    if (refreshTimer !== null) {
       clearTimeout(refreshTimer);
       refreshTimer = null;
     }
 
-    isRefreshing = false;
+    /*
+     * Do not release an active request's lock here.
+     * Its callback or watchdog must release the lock.
+     */
+  }
+  
+  function acquireRefreshLock(callback, requestGeneration) {
+    if (activeRequestId !== null) {
+      return null;
+    }
+
+    const requestId = ++nextRequestId;
+
+    activeRequestId = requestId;
+
+    clearTimeout(refreshLockTimer);
+
+    refreshLockTimer = setTimeout(() => {
+      if (activeRequestId !== requestId) {
+        return;
+      }
+
+      console.warn(
+        "[ActivityToday] Refresh lock timed out after 45 seconds.",
+      );
+
+      releaseRefreshLock(requestId);
+
+      if (requestGeneration === refreshGeneration) {
+        callback?.(false);
+      }
+    }, REFRESH_LOCK_TIMEOUT);
+
+    return requestId;
   }
 
-  async function loadActivity(dataTable, callback, force = false) {
-    if (!dataTable || (isRefreshing && !force)) {
-      callback?.();
+  function releaseRefreshLock(requestId) {
+    // An old request must never release a newer request's lock.
+    if (activeRequestId !== requestId) {
+      return false;
+    }
+
+    clearTimeout(refreshLockTimer);
+    refreshLockTimer = null;
+
+    activeRequestId = null;
+
+    return true;
+  }
+
+  async function loadActivity(
+    dataTable,
+    callback,
+    force = false,
+    requestGeneration = refreshGeneration,
+  ) {
+    if (!dataTable) {
+      callback?.(false);
       return;
     }
 
-    isRefreshing = true;
+    /*
+     * `force` intentionally does not bypass the lock.
+     * Manual refreshes must follow the same concurrency rules.
+     */
+    const requestId = acquireRefreshLock(
+      callback,
+      requestGeneration,
+    );
+
+    if (requestId === null) {
+      callback?.(false);
+      return;
+    }
 
     try {
       const [sessionId, signature] = await getAuthArgs();
+
+      // The request may have timed out while authentication was pending.
+      if (activeRequestId !== requestId) {
+        return;
+      }
 
       AppUtils.gScriptRun({
         gscriptFunc: "getDailyActivityData",
         args: [sessionId, signature],
 
         onSuccess: (data) => {
-          isRefreshing = false;
+          if (!releaseRefreshLock(requestId)) {
+            return;
+          }
 
-          updateActivityTable(data, dataTable);
+          // Do not update a page belonging to an old refresh cycle.
+          if (requestGeneration !== refreshGeneration) {
+            return;
+          }
 
-          updateFilterCounts(dataTable);
-          HourSummary.loadTodayChargedHours();
+          try {
+            updateActivityTable(data, dataTable);
 
-          callback?.();
+            updateFilterCounts(dataTable);
+            HourSummary.loadTodayChargedHours();
+
+            callback?.(true);
+          } catch (error) {
+            console.error("[ActivityToday] Failed to process refresh:", error);
+
+            AppUtils.showError(
+              error?.message || "Unable to update today's activities.",
+            );
+
+            callback?.(false);
+          }
         },
 
         onError: (error) => {
-          isRefreshing = false;
+          if (!releaseRefreshLock(requestId)) {
+            return;
+          }
 
-          console.error("Activity Today refresh failed:", error);
+          if (requestGeneration !== refreshGeneration) {
+            return;
+          }
+
+          console.error("[ActivityToday] Refresh failed:", error);
 
           AppUtils.showError(error);
 
-          callback?.();
+          callback?.(false);
         },
       });
     } catch (error) {
-      isRefreshing = false;
-
-      if (handleInvalidSessionError(error)) {
+      if (!releaseRefreshLock(requestId)) {
         return;
       }
 
-      AppUtils.showError(
-        error?.message || "Unable to refresh activities today.",
-      );
+      if (requestGeneration !== refreshGeneration) {
+        return;
+      }
 
-      callback?.();
+      if (!handleInvalidSessionError(error)) {
+        console.error("[ActivityToday] Unable to authenticate refresh:", error);
+
+        AppUtils.showError(
+          error?.message || "Unable to refresh activities today.",
+        );
+      }
+
+      // Includes invalid-session failures: do not retry every 10 seconds.
+      callback?.(false);
     }
   }
 

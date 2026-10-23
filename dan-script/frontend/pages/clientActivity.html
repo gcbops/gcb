@@ -193,85 +193,130 @@
     <div class="col-md-12 col-lg-3">
 
         <!-- HOURS TODAY -->
+        <div
+            id="infoCarousel"
+            class="custom-carousel"
+            data-effect="fade"
+            data-interval="4000"
+            data-pause-on-hover="true"
+        >
+            <div class="carousel-track">
+                <div class="carousel-item active" data-interval="15000">
 
-        <div class="mb-3 card skeleton-target" id="today-hours-summary">
+                    <div class="mb-3 card skeleton-target" id="today-hours-summary">
 
-            <div class="card-body p-4">
+                        <div class="card-body p-4">
 
-                <h5 class="card-title widget-card-title mb-2">
-                    Hours Today
-                </h5>
+                            <h5 class="card-title widget-card-title mb-2">
+                                Hours Today
+                            </h5>
 
-                <div class="row gy-0">
-                    <div class="col-12">
-                        <h4 class="mb-0" data-metric="today-hours">0.0</h4>
-                    </div>
+                            <div class="row gy-0">
+                                <div class="col-12">
+                                    <h4 class="mb-0" data-metric="today-hours">0.0</h4>
+                                </div>
 
-                    <div class="col-12 mt-2">
-                        <div class="d-flex align-items-center">
-                        <span
-                            class="fs-6 bsb-w-25 bsb-h-25 rounded-circle d-flex align-items-center justify-content-center me-2 status-icon-sm"
-                            data-metric="today-hours-status"
-                        >
-                            <i class="fa-solid fa-arrow-right"></i>
-                        </span>
+                                <div class="col-12 mt-2">
+                                    <div class="d-flex align-items-center">
+                                    <span
+                                        class="fs-6 bsb-w-25 bsb-h-25 rounded-circle d-flex align-items-center justify-content-center me-2 status-icon-sm"
+                                        data-metric="today-hours-status"
+                                    >
+                                        <i class="fa-solid fa-arrow-right"></i>
+                                    </span>
 
-                        <div>
-                            <span
-                            class="fs-7"
-                            data-metric="today-hours-change"
-                            >
-                            0%
-                            </span>
+                                    <div>
+                                        <span
+                                        class="fs-7"
+                                        data-metric="today-hours-change"
+                                        >
+                                        0%
+                                        </span>
 
-                            <span
-                            class="fs-8 text-muted ms-1"
-                            data-metric="today-hours-label"
-                            >
-                            vs yesterday
-                            </span>
+                                        <span
+                                        class="fs-8 text-muted ms-1"
+                                        data-metric="today-hours-label"
+                                        >
+                                        vs yesterday
+                                        </span>
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="chart-daily" style="height:90px;">
+                                <div class="bar-loader">
+                                    <span></span><span></span><span></span>
+                                </div>
+                            </div>
+
                         </div>
+
+                    </div>
+
+
+                    <!-- ACTIVE CLIENTS -->
+
+                    <div class="mb-3 card skeleton-target">
+
+                        <div class="card-body p-4">
+
+                            <div class="d-flex align-items-center mb-3">
+
+                                <div>
+                                    <h5 class="card-title mb-1">
+                                        Active Clients
+                                    </h5>
+
+                                    <p class="text-secondary m-0 fs-7">
+                                        This month
+                                    </p>
+                                </div>
+
+                                <div class="ms-auto">
+                                    <!-- All / Online / Idle -->
+                                </div>
+
+                            </div>
+
+                            <div id="active-clients-list">
+                                <!-- JS -->
+                            </div>
+
                         </div>
+
                     </div>
                 </div>
+                <div class="carousel-item" data-interval="5000">
+                    <!-- =====================================================
+                    ACTIVITY TRENDS
+                    ===================================================== -->
 
-                <div id="chart-daily" style="height:150px;">
-                    <div class="bar-loader">
-                        <span></span><span></span><span></span>
-                    </div>
-                </div>
+                    <div class="mb-3 card skeleton-target">
 
-            </div>
+                        <div class="card-body p-4">
 
-        </div>
+                            <div class="mb-4">
+                                <h5 class="card-title mb-1">
+                                    Client Activity Trends
+                                </h5>
 
+                                <p class="text-secondary m-0 fs-7">
+                                    Recent changes across all clients
+                                </p>
+                            </div>
 
-        <!-- ACTIVE CLIENTS -->
+                            <div
+                                id="client-activity-trends"
+                                class="client-activity-trends-grid"
+                            >
+                                <!-- JS -->
+                            </div>
 
-        <div class="mb-3 card skeleton-target">
+                        </div>
 
-            <div class="card-body p-4">
-
-                <div class="d-flex align-items-center mb-3">
-
-                    <div>
-                        <h5 class="card-title mb-1">
-                            Active Clients
-                        </h5>
-
-                        <p class="text-secondary m-0 fs-7">
-                            This month
-                        </p>
-                    </div>
-
-                    <div class="ms-auto">
-                        <!-- All / Online / Idle -->
                     </div>
 
-                </div>
-
-                <div id="active-clients-list">
-                    <!-- JS -->
                 </div>
 
             </div>
@@ -280,38 +325,129 @@
 
     </div>
 
-
-    <!-- =====================================================
-         ACTIVITY TRENDS
-         ===================================================== -->
-
     <div class="col-12">
+      <div class="card skeleton-target card-shadow-sm border-0 bg-white">
+        <div class="card-body">
 
-        <div class="mb-3 card skeleton-target">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-uppercase font-size-xs text-muted font-weight-bold tracking-wider mb-1">
+                Target Guidance
+              </div>
 
-            <div class="card-body p-4">
+              <h5 class="mb-0 font-weight-bold text-dark">
+                Your Current Pace
+              </h5>
+            </div>
 
-                <div class="mb-4">
-                    <h5 class="card-title mb-1">
-                        Client Activity Trends
-                    </h5>
+            <span
+              data-metric="guidance-status"
+              class="badge bg-secondary"
+            >
+              —
+            </span>
+          </div>
 
-                    <p class="text-secondary m-0 fs-7">
-                        Recent changes across all clients
-                    </p>
-                </div>
 
-                <div
-                    id="client-activity-trends"
-                    class="client-activity-trends-grid"
+          <!-- GUIDANCE SUMMARY -->
+          <div class="row align-items-center">
+
+            <div class="col-md-7 mb-3 mb-md-0">
+
+              <div class="font-size-sm text-secondary mb-1">
+                Current month progress
+              </div>
+
+              <div class="d-flex align-items-baseline mb-2">
+                <span
+                  data-metric="guidance-current-hours"
+                  class="h3 mb-0 font-weight-bold text-dark"
                 >
-                    <!-- JS -->
-                </div>
+                  —
+                </span>
+
+                <span class="text-secondary ml-1">
+                  / <span data-metric="guidance-monthly-target">—</span> hrs
+                </span>
+              </div>
+
+              <div class="progress-bar-animated-alt progress mb-2">
+                <div
+                  id="target-guidance-progress-bar"
+                  class="progress-bar"
+                  role="progressbar"
+                  style="width: 0%;"
+                  aria-valuenow="0"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                ></div>
+              </div>
+
+              <div class="font-size-xs text-secondary">
+                <span data-metric="guidance-remaining-hours">—</span>
+                hrs remaining to reach the monthly target
+              </div>
 
             </div>
 
-        </div>
 
+            <div class="col-md-5">
+
+              <div class="p-3 bg-light rounded">
+
+                <div class="font-size-xs text-uppercase text-muted font-weight-bold tracking-wider mb-1">
+                  Required Pace
+                </div>
+
+                <div class="h4 mb-1 font-weight-bold text-dark">
+                  <span data-metric="guidance-required-daily">—</span>
+                  <span class="font-size-sm font-weight-normal text-secondary">
+                    hrs/day
+                  </span>
+                </div>
+
+                <div class="font-size-xs text-secondary">
+                  Based on remaining working days
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- GUIDANCE MESSAGE -->
+          <div class="pt-3 mt-3 border-top">
+
+            <div class="d-flex align-items-start">
+
+              <div class="me-2 text-primary">
+                <i class="fa fa-lightbulb"></i>
+              </div>
+
+              <div>
+                <div
+                  data-metric="guidance-message"
+                  class="font-size-sm font-weight-bold text-dark"
+                >
+                  Calculating your current pace...
+                </div>
+
+                <div
+                  data-metric="guidance-detail"
+                  class="font-size-xs text-secondary mt-1"
+                >
+                  —
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      </div>
     </div>
 
 </div>

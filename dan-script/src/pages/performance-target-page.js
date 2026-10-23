@@ -3,8 +3,8 @@ import {
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
 import { HourTargetProgress } from "../hours/hour-target-progress.js";
-import { AppUtils } from "../utils.js";
-import { ValidationModule } from "../validations.js";
+import { AppUtils } from "../utils/utils.js";
+import { ValidationModule } from "../utils/validations.js";
 
 const performanceTargetPage = (() => {
   let initialized = false;
@@ -771,6 +771,7 @@ const performanceTargetPage = (() => {
   return {
     init,
     destroy,
+    loadTargetProgress,
   };
 })();
 

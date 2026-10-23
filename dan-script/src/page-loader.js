@@ -1,6 +1,6 @@
 import { AppUI } from "./app-ui.js";
 import { AuthorizationUIModule } from "./auth/authorization-ui.js";
-import { AppUtils } from "./utils.js";
+import { AppUtils } from "./utils/utils.js";
 
 const PageLoaderModule = (() => {
   const DEFAULT_PAGE_META = {

@@ -1,7 +1,7 @@
-import { AppUtils } from "../utils.js";
-import { ChartModule } from "../charts.js";
+import { AppUtils } from "../utils/utils.js";
+import { ChartModule } from "../components/charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
-import { ValidationModule } from "../validations.js";
+import { ValidationModule } from "../utils/validations.js";
 import { GcbAuthModule } from "../auth/auth.js";
 
 const dailyOverviewPage = (() => {

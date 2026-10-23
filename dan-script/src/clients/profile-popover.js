@@ -2,10 +2,10 @@ import {
   getAuthArgs,
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
-import { AuthorizationUIModule } from "../auth/authorization-ui";
-import { RouterModule } from "../routers";
-import { TableModule } from "../tables/tables";
-import { AppUtils } from "../utils";
+import { AuthorizationUIModule } from "../auth/authorization-ui.js";
+import { RouterModule } from "../routers.js";
+import { TableModule } from "../tables/tables.js";
+import { AppUtils } from "../utils/utils.js";
 
 const ProfilePopoverModule = (() => {
   let popover = null;

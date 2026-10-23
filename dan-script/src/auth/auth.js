@@ -1,4 +1,4 @@
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils.js";
 import {
   setInvalidSessionHandler,
   setGetAuthArgsHandler,

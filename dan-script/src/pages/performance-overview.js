@@ -1,6 +1,6 @@
-import { DataTableModule } from "../tables/data-table";
-import { ChartModule } from "../charts";
-import { AppUtils } from "../utils";
+import { DataTableModule } from "../components/data-table";
+import { ChartModule } from "../components/charts";
+import { AppUtils } from "../utils/utils";
 import { GcbAuthModule } from "../auth/auth";
 
 const performanceOverviewPage = (() => {

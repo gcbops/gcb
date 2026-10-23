@@ -1,11 +1,11 @@
-import { ChartModule } from "../charts.js";
+import { ChartModule } from "../components/charts.js";
 import { HourSummary } from "../hours/hour-summary.js";
 import { clientRankings } from "../clients/client-ranking.js";
 import { ProjectRankings } from "../projects/project-rankings.js";
 import { PerformanceMetrics } from "../performance/performance-metrics.js";
 import { ClientDataService } from "../clients/client-data-service.js";
 import { TableFilterService } from "../tables/table-filter-service.js";
-import { ProfilePopoverModule } from "../profile/profile-popover.js";
+import { ProfilePopoverModule } from "../clients/profile-popover.js";
 
 const HomePage = (() => {
   let initialized = false;
@@ -50,7 +50,7 @@ const HomePage = (() => {
     clientRankings.renderTopPaidClients();
     ProjectRankings.renderTopProjects();
 
-    ClientDataService.renderActivePaidOwedClients(true);
+    ClientDataService.renderActivePaidOwedClients();
   }
 
   function bindEvents() {

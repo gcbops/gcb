@@ -1,8 +1,9 @@
-import { AppUtils } from "../utils.js";
+import { AppUtils } from "../utils/utils.js";
 import { ReportHistory } from "../reports/history.js";
 import { ReportActions } from "../reports/actions.js";
-import { DataTableModule } from "../tables/data-table.js";
+import { DataTableModule } from "../components/data-table.js";
 import { GcbAuthModule } from "../auth/auth.js";
+import { ReportService } from "../reports/service.js";
 
 const reportsAnnualReportPage = (() => {
   let bound = false;
@@ -40,9 +41,14 @@ const reportsAnnualReportPage = (() => {
       .on("click.reportsAnnual", ".btn-view-report", (e) => {
         const url = $(e.currentTarget).data("url");
 
-        if (url) {
-          window.open(url, "_blank");
+        const reportUrl = ReportService.getSafeReportUrl(url);
+
+        if (!reportUrl) {
+          AppUtils.showError("Report link is invalid or unavailable.");
+          return;
         }
+
+        window.open(reportUrl, "_blank", "noopener,noreferrer");
       })
 
       .on("click.reportsAnnual", ".btn-email-report", function () {
@@ -91,7 +97,7 @@ const reportsAnnualReportPage = (() => {
 
         const loading = AppUtils.setButtonLoading($btn[0], "Opening...");
 
-        ReportActions.downloadLatestPDF($btn, loading, "Yearly");
+        ReportActions.downloadLatestPDF(loading, "Yearly");
       })
 
       .on("click.reportsAnnual", "#email-latest-report", function () {
@@ -156,7 +162,7 @@ const reportsAnnualReportPage = (() => {
 
     $year.val(currentYear);
 
-    AppUtils.initSelect2(".generator-filters");
+    // AppUtils.initSelect2(".generator-filters");
   };
 
   const loadReportsOverview = async () => {

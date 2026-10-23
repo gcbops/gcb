@@ -280,3 +280,81 @@ function applyFormulaToExternalProjectSheets(
     throw new Error(`Failed to update external project sheets: ${err.message}`);
   }
 }
+
+function reorderActiveClientSheets() {
+  const ss = getSpreadsheet();
+  const clientNamesSheet = getSheetSafe("Client Names");
+
+  if (!ss || !clientNamesSheet) {
+    console.warn("[Client Sheets] Client Names sheet not found.");
+    return;
+  }
+
+  const lastRow = clientNamesSheet.getLastRow();
+
+  if (lastRow < 2) {
+    console.warn("[Client Sheets] No client names found.");
+    return;
+  }
+
+  const clientNames = [
+    ...new Set(
+      clientNamesSheet
+        .getRange(2, 1, lastRow - 1, 1)
+        .getDisplayValues()
+        .flat()
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  const activeClientNames = [
+    ...new Set(
+      clientNamesSheet
+        .getRange(2, 9, lastRow - 1, 1)
+        .getDisplayValues()
+        .flat()
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (!clientNames.length || !activeClientNames.length) {
+    console.warn("[Client Sheets] Client or active client list is empty.");
+    return;
+  }
+
+  const sheets = ss.getSheets();
+
+  const clientSheetNames = new Set(clientNames);
+
+  const sheetsByName = new Map(sheets.map((sheet) => [sheet.getName(), sheet]));
+
+  // Keep all non-client sheets first, in their current relative order.
+  const systemSheets = sheets.filter(
+    (sheet) => !clientSheetNames.has(sheet.getName()),
+  );
+
+  let targetIndex = systemSheets.length + 1;
+  let reorderedCount = 0;
+
+  activeClientNames.forEach((clientName) => {
+    const sheet = sheetsByName.get(clientName);
+
+    if (!sheet) {
+      console.warn(
+        `[Client Sheets] Sheet not found for active client: ${clientName}`,
+      );
+      return;
+    }
+
+    ss.setActiveSheet(sheet);
+    ss.moveActiveSheet(targetIndex++);
+
+    reorderedCount++;
+  });
+
+  console.log(
+    `[Client Sheets] Reordered ${reorderedCount} active client sheets after ${systemSheets.length} system sheets.`,
+  );
+}

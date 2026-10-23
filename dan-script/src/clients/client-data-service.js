@@ -1,7 +1,7 @@
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils.js";
 import { TableModule } from "../tables/tables";
-import { DataTableModule } from "../tables/data-table";
-import { ChartModule } from "../charts";
+import { DataTableModule } from "../components/data-table.js";
+import { ChartModule } from "../components/charts.js";
 import { TableFilterService } from "../tables/table-filter-service";
 import {
   getAuthArgs,
@@ -286,14 +286,11 @@ const ClientDataService = (() => {
 
     const toggleSummary = () => {
       const isHidden = summary.classList.contains("is-collapsing");
-      const screen = AppUtils.checkScreen();
 
       if (isHidden) {
         showTodaySummary(summary, more, remaining, container);
       } else {
-        if (!screen.isMobile) {
-          hideTodaySummary(summary, more, container);
-        }
+        hideTodaySummary(summary, more, container);
       }
     };
 
@@ -311,20 +308,27 @@ const ClientDataService = (() => {
     summary.classList.add("is-collapsing");
 
     more.setAttribute("aria-expanded", "true");
-    more.textContent = "Show today summary";
+    
+    const screen = AppUtils.checkScreen();
 
-    summary.addEventListener(
-      "transitionend",
-      (e) => {
-        if (e.propertyName !== "max-height") {
-          container.classList.add("scrollable", "scrollbar-hover");
-          return;
-        }
+    if (!screen.isMobile) {
+      more.textContent = "Show today summary";
+      summary.addEventListener(
+        "transitionend",
+        (e) => {
+          if (e.propertyName !== "max-height") {
+            container.classList.add("scrollable", "scrollbar-hover");
+            return;
+          }
+  
+          summary.hidden = true;
+        },
+        { once: true },
+      );
+    }
 
-        summary.hidden = true;
-      },
-      { once: true },
-    );
+    more.textContent = "Show less";
+    container.classList.add("scrollable", "scrollbar-hover");
   }
 
   function showTodaySummary(summary, more, remaining, container) {
@@ -344,7 +348,7 @@ const ClientDataService = (() => {
     const item = document.createElement("div");
 
     item.className =
-      "client-activity-active-client d-flex align-items-center mb-4";
+      "client-activity-active-client d-flex align-items-center";
 
     const status = String(client?.today || "").trim();
 

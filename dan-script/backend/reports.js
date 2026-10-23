@@ -292,16 +292,66 @@ function saveReportPDFInternal(config) {
     // Save PDF
     // ==========================
 
-    const file = folder.createFile(blob);
-    const fileUrl = file.getUrl();
-
+    
     const reportLogSheet = getSheetSafe(logSheet);
 
     if (!reportLogSheet) {
       throw new Error(`Report log sheet "${logSheet}" not found.`);
     }
 
-    reportLogSheet.appendRow([new Date(), reportNum, reportName, fileUrl]);
+    const operationKey = String(config.operationKey || "").trim();
+    const operationRow = Number(config.operationRow) || 0;
+
+    let file;
+    let fileUrl;
+
+    if (operationKey && operationRow >= 2) {
+      // Custom queued request: use its pre-reserved log row.
+      const savedKey = String(
+        reportLogSheet.getRange(operationRow, 5).getDisplayValue(),
+      ).trim();
+
+      const savedStatus = String(
+        reportLogSheet.getRange(operationRow, 6).getDisplayValue(),
+      ).trim();
+
+      if (savedKey !== operationKey || savedStatus !== "PROCESSING") {
+        throw new Error(
+          "The reserved PDF operation record is missing or has changed.",
+        );
+      }
+
+      // Create the Drive file only after validating the reserved record.
+      file = findCustomReportFileByOperationKey_(operationKey);
+
+      if (!file) {
+        file = folder.createFile(blob);
+        markCustomReportFile_(file, operationKey);
+      }
+
+      fileUrl = file.getUrl();
+
+      // Write the file details and completion status to the same row.
+      reportLogSheet
+        .getRange(operationRow, 1, 1, 7)
+        .setValues([
+          [
+            new Date(),
+            reportNum,
+            reportName,
+            fileUrl,
+            operationKey,
+            "COMPLETED",
+            file.getId(),
+          ],
+        ]);
+    } else {
+      // Preserve the existing scheduled/manual report behavior.
+      file = folder.createFile(blob);
+      fileUrl = file.getUrl();
+
+      reportLogSheet.appendRow([new Date(), reportNum, reportName, fileUrl]);
+    }
 
     if (latestLinkCell) {
       getLabSheet()?.getRange(latestLinkCell).setValue(fileUrl);
@@ -329,6 +379,115 @@ function saveReportPDFInternal(config) {
       sheet.hideSheet();
     }
   }
+}
+
+function getCustomReportOperationMarker_(operationKey) {
+  return `GCB_REPORT_OPERATION_KEY=${encodeURIComponent(operationKey)}`;
+}
+
+function findCustomReportFileByOperationKey_(operationKey) {
+  if (!operationKey) {
+    return null;
+  }
+
+  const folder = getReportFolder();
+  const marker = getCustomReportOperationMarker_(operationKey);
+  const files = folder.getFiles();
+
+  while (files.hasNext()) {
+    const file = files.next();
+
+    if (file.isTrashed()) {
+      continue;
+    }
+
+    const description = String(file.getDescription() || "");
+    const markers = description.split(/\r?\n/);
+
+    if (markers.includes(marker)) {
+      return file;
+    }
+  }
+
+  return null;
+}
+
+function markCustomReportFile_(file, operationKey) {
+  const marker = getCustomReportOperationMarker_(operationKey);
+  const description = String(file.getDescription() || "");
+  const markers = description.split(/\r?\n/);
+
+  if (!markers.includes(marker)) {
+    file.setDescription(description ? `${description}\n${marker}` : marker);
+  }
+
+  return file;
+}
+
+/**
+ * Reconciles a previously created PDF with its reserved operation row.
+ */
+function recoverCustomReportOperation_(sheet, operation) {
+  if (!operation?.row || !operation.operationKey) {
+    return null;
+  }
+
+  let file = null;
+
+  if (operation.fileId) {
+    try {
+      file = DriveApp.getFileById(operation.fileId);
+
+      if (file.isTrashed()) {
+        file = null;
+      }
+    } catch (_) {
+      file = null;
+    }
+  }
+
+  if (!file) {
+    file = findCustomReportFileByOperationKey_(operation.operationKey);
+  }
+
+  if (!file || file.isTrashed()) {
+    return null;
+  }
+
+  const marker = getCustomReportOperationMarker_(operation.operationKey);
+
+  const markers = String(file.getDescription() || "").split(/\r?\n/);
+
+  if (!markers.includes(marker)) {
+    return null;
+  }
+
+  const fileUrl = file.getUrl();
+
+  sheet
+    .getRange(operation.row, 1, 1, 7)
+    .setValues([
+      [
+        operation.date || new Date(),
+        operation.reportNum,
+        operation.reportName,
+        fileUrl,
+        operation.operationKey,
+        "COMPLETED",
+        file.getId(),
+      ],
+    ]);
+
+  SpreadsheetApp.flush();
+
+  return {
+    success: true,
+    reusedExisting: true,
+    reportName: String(operation.reportName || ""),
+    reportNum: operation.reportNum,
+    reportUrl: fileUrl,
+    reportId: file.getId(),
+  };
 }
 
 function saveMonthlyReportPDF() {
@@ -588,6 +747,300 @@ function saveReportPDF_Fallback2(config, pdfName) {
       sheet.hideSheet();
     }
   }
+}
+
+function generateCustomReportPDF(
+  sessionId,
+  signature,
+  type,
+  month,
+  year,
+  requestId,
+) {
+  requireCapability(sessionId, signature, "reports.generate");
+
+  const reportType = Validation.enumValue(type, "Report type", [
+    "monthly",
+    "yearly",
+  ]);
+
+  const stableRequestId = Validation.requiredString(requestId, "Request ID", {
+    maxLength: 200,
+  });
+
+  const operationKey = `${sessionId}:${stableRequestId}`;
+
+  const configs = {
+    monthly: {
+      reportType: "monthly",
+      reportSheet: "Monthly Report PDF Generator",
+      logSheet: "MonthlyReport_Log",
+      latestLinkCell: "AZ27",
+    },
+    yearly: {
+      reportType: "yearly",
+      reportSheet: "Yearly Report PDF Generator",
+      logSheet: "YearlyReport_Log",
+      latestLinkCell: "BA27",
+    },
+  };
+
+  const config = configs[reportType];
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const logSheet = getSheetSafe(config.logSheet);
+
+    if (!logSheet) {
+      throw new Error(`Report log sheet "${config.logSheet}" not found.`);
+    }
+
+    ensureCustomReportOperationColumns_(logSheet);
+
+    // Idempotency check must happen before rate limiting.
+    const existingOperation = findCustomReportOperation_(
+      logSheet,
+      operationKey,
+    );
+
+    if (existingOperation?.status === "COMPLETED") {
+      return {
+        ...getCompletedCustomReportResult_(existingOperation),
+        type: reportType,
+      };
+    }
+
+    if (existingOperation?.status === "PROCESSING") {
+      const recovered = recoverCustomReportOperation_(logSheet, existingOperation);
+
+      if (recovered) {
+        return {
+          ...recovered,
+          type: reportType,
+        };
+      }
+
+      throw new Error(
+        "This report request is still marked PROCESSING, but no matching saved PDF could be verified. " +
+          "The operation requires reconciliation before it can be retried safely.",
+      );
+    }
+
+    if (existingOperation) {
+      throw new Error(
+        `This report request has status "${existingOperation.status || "UNKNOWN"}". ` +
+          "Reconcile the operation before retrying.",
+      );
+    }
+
+    enforceUserRateLimit("report_generation", sessionId, 3, 60);
+    enforceGlobalRateLimit("report_generation", 5, 60);
+
+    const settings = getSheetSafe("Settings");
+
+    if (!settings) {
+      throw new Error('Sheet "Settings" not found.');
+    }
+
+    const reportYear = Validation.number(year, "Report year", {
+      min: 2024,
+      max: new Date().getFullYear(),
+    });
+
+    if (reportType === "monthly") {
+      const reportMonth = Validation.requiredString(month, "Report month", {
+        maxLength: 20,
+      });
+
+      const validation = validateCustomMonthlyReport(
+        sessionId,
+        signature,
+        reportMonth,
+        reportYear,
+      );
+
+      if (!validation.valid) {
+        throw new Error(validation.message);
+      }
+
+      settings.getRange("A3").setValue(reportMonth);
+      settings.getRange("A5").setValue(reportYear);
+    } else {
+      const validation = validateCustomYearlyReport(
+        sessionId,
+        signature,
+        reportYear,
+      );
+
+      if (!validation.valid) {
+        throw new Error(validation.message);
+      }
+
+      settings.getRange("A11").setValue(reportYear);
+    }
+
+    SpreadsheetApp.flush();
+
+    // Wait for the matching report to finish updating.
+    // The lock protects the shared Settings/report-sheet workflow.
+    const maxAttempts = 60;
+    const checkIntervalMs = 5000;
+    let ready = false;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (isReportReady(reportType)) {
+        ready = true;
+        break;
+      }
+
+      Utilities.sleep(checkIntervalMs);
+    }
+
+    if (!ready) {
+      // No file creation has been attempted yet. Do not leave a
+      // PROCESSING record; a deliberate retry can start cleanly.
+      throw new Error(
+        "Timed out waiting for the report to become ready. No PDF save was attempted.",
+      );
+    }
+
+    // Record the operation before attempting to create the file.
+    // If execution becomes uncertain, retries will not blindly create
+    // another PDF.
+    const reportSheet = getSheetSafe(config.reportSheet);
+
+    if (!reportSheet) {
+      throw new Error(`Report sheet "${config.reportSheet}" not found.`);
+    }
+
+    const reportNum = reportSheet.getRange("G1").getValue();
+    const reportName = reportSheet.getRange("B1").getValue();
+
+    const operationRow = logSheet.getLastRow() + 1;
+
+    logSheet
+      .getRange(operationRow, 1, 1, 7)
+      .setValues([
+        [new Date(), reportNum, reportName, "", operationKey, "PROCESSING", ""],
+      ]);
+
+    SpreadsheetApp.flush();
+
+    // saveReportPDF() will be updated in Step 2 to pass this
+    // operation key and reserved row through to the file-save logic.
+    const fileUrl = saveReportPDF({
+      ...config,
+      operationKey,
+      operationRow,
+    });
+
+    const operation = findCustomReportOperation_(logSheet, operationKey);
+
+    if (
+      !operation ||
+      operation.status !== "COMPLETED" ||
+      !operation.fileId ||
+      operation.fileUrl !== fileUrl
+    ) {
+      throw new Error(
+        "The PDF save returned, but the operation log was not completed correctly. Reconcile the operation before retrying.",
+      );
+    }
+
+    return {
+      success: true,
+      reusedExisting: false,
+      type: reportType,
+      reportName: String(operation.reportName || ""),
+      reportNum: operation.reportNum,
+      reportUrl: operation.fileUrl,
+      reportId: operation.fileId,
+      year: reportYear,
+      ...(reportType === "monthly" ? { month: String(month).trim() } : {}),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Finds a custom PDF generation operation by its stable request ID.
+ *
+ * Existing report history remains in columns A:D.
+ * Operation tracking uses columns E:G:
+ * E = Operation Key
+ * F = Operation Status
+ * G = Drive File ID
+ */
+function findCustomReportOperation_(sheet, operationKey) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return null;
+  }
+
+  // Read only the operation-tracking column.
+  const keys = sheet.getRange(2, 5, lastRow - 1, 1).getDisplayValues();
+
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (keys[i][0] === operationKey) {
+      const row = i + 2;
+
+      return {
+        row,
+        operationKey,
+        date: sheet.getRange(row, 1).getValue(),
+        reportNum: sheet.getRange(row, 2).getValue(),
+        reportName: sheet.getRange(row, 3).getValue(),
+        fileUrl: sheet.getRange(row, 4).getValue(),
+        status: sheet.getRange(row, 6).getDisplayValue(),
+        fileId: sheet.getRange(row, 7).getDisplayValue(),
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Ensures operation tracking columns exist without changing
+ * the existing report-history columns A:D.
+ */
+function ensureCustomReportOperationColumns_(sheet) {
+  sheet.getRange(1, 5, 1, 3).setValues([
+    ["Operation Key", "Operation Status", "Drive File ID"],
+  ]);
+}
+
+/**
+ * Returns a completed operation's saved result.
+ */
+function getCompletedCustomReportResult_(operation) {
+  if (!operation?.fileId || !operation?.fileUrl) {
+    throw new Error(
+      "The report operation is marked completed but its saved file details are missing. Reconcile the report before retrying.",
+    );
+  }
+
+  const file = DriveApp.getFileById(operation.fileId);
+
+  if (file.isTrashed() || file.getUrl() !== operation.fileUrl) {
+    throw new Error(
+      "The previously generated report file is unavailable. Reconcile the report before retrying.",
+    );
+  }
+
+  return {
+    success: true,
+    reusedExisting: true,
+    type: operation.reportName ? undefined : undefined,
+    reportName: String(operation.reportName || ""),
+    reportNum: operation.reportNum,
+    reportUrl: operation.fileUrl,
+    reportId: operation.fileId,
+  };
 }
 
 function sendReport(config) {
@@ -864,7 +1317,7 @@ function getReportLogs() {
     },
     {
       sheet: "BillingRecordsExport_Log",
-      type: "Data Export",
+      type: "Billing",
       format: "billingExport",
     },
   ];

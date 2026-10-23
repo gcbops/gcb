@@ -1,4 +1,4 @@
-import { AppUtils } from "../utils";
+import { AppUtils } from "../utils/utils.js";
 import { ReportHistory } from "./history";
 import { TableModule } from "../tables/tables";
 import { reportsMonthlyReportPage } from "../pages/reports-monthly-report-page";
@@ -45,7 +45,7 @@ const ReportGenerator = (() => {
     }
   }
 
-  function handleGenerateError(type, btn, err, message = "Something went wrong!", loading) {
+  function handleGenerateError(type, err, message = "Something went wrong!", loading) {
     setGenerateState(type, false, loading);
 
     if (err) {
@@ -71,14 +71,24 @@ const ReportGenerator = (() => {
           AppUtils.showError(err);
         },
 
-        onSuccess: (result) => {
+        onSuccess: async (result) => {
           if (!result.exists) {
             loading.setText("Generating Report");
             requestReportGeneration(cfg, type, btn, params, loading);
             return;
           }
 
-          showExistsModal(cfg, type, btn, params, result.report, loading);
+          const choice = await confirmExistingReport(result.report);
+
+          if (choice?.cancelled || choice?.downloaded) {
+            setGenerateState(type, false, loading);
+            return;
+          }
+
+          if (choice?.regenerate) {
+            loading.setText("Generating Report");
+            requestReportGeneration(cfg, type, btn, params, loading);
+          }
         },
       });
     } catch (error) {
@@ -92,67 +102,6 @@ const ReportGenerator = (() => {
     }
   }
 
-  function showExistsModal(cfg, type, btn, params, report, loading) {
-    const ns = `.${type}ReportModal`;
-
-    AppUtils.openModal("#app-modal", {
-      placement: "center",
-
-      header: "<div></div>",
-
-      body: `
-                <h5 class="modal-title">
-                    <strong>Report Already Exists</strong>
-                </h5>
-                <p>
-                    A report for <strong>${report.name}</strong> already exists.
-                </p>
-            `,
-
-      footer: `
-                <button class="btn btn-secondary btn-lg btn-cancel">
-                    Cancel
-                </button>
-                <button class="btn btn-info btn-lg btn-download">
-                    Download
-                </button>
-                <button class="btn btn-danger btn-lg btn-generate">
-                    Generate New
-                </button>
-            `,
-
-      onOpen($modal) {
-        $modal
-          .off(ns)
-          .on(`click${ns}`, ".btn-cancel, .btn-close", () => {
-            AppUtils.closeModal("#app-modal");
-            
-            if (loading) {
-              setGenerateState(type, false, loading);
-            }
-          })
-          .on(`click${ns}`, ".btn-download", () => {
-            window.open(report.link, "_blank");
-            AppUtils.closeModal("#app-modal");
-            if (loading) {
-              setGenerateState(type, false, loading);
-            }
-          })
-          .on(`click${ns}`, ".btn-generate", () => {
-            if (loading) {
-              loading.setText("Generating Annual Report");
-            }
-            requestReportGeneration(cfg, type, btn, params, loading);
-            AppUtils.closeModal("#app-modal");
-          });
-      },
-
-      onClose($modal) {
-        $modal.off(ns);
-      },
-    });
-  }
-
   async function requestReportGeneration(cfg, type, btn, params, loading) {
     try {
       const [sessionId, signature] = await getAuthArgs();
@@ -160,7 +109,13 @@ const ReportGenerator = (() => {
         gscriptFunc: "updateCustomReportPDF",
         args: [sessionId, signature, type, ...cfg.updateArgs(params)],
 
-        onError: (err) => handleGenerateError(type, btn, err, loading),
+        onError: (err) =>
+          handleGenerateError(
+            type,
+            err,
+            err?.message || "Unable to request report.",
+            loading,
+          ),
 
         onSuccess: () => checkReportReady(cfg, type, btn, "", loading),
       });
@@ -171,7 +126,7 @@ const ReportGenerator = (() => {
 
       handleGenerateError(
         type,
-        btn,
+        error,
         error?.message || "Unable to request report.",
         loading,
       );
@@ -190,7 +145,13 @@ const ReportGenerator = (() => {
       gscriptFunc: "isReportReady",
       args: [type],
 
-      onError: (err) => handleGenerateError(type, btn, err, loading),
+      onError: (err) =>
+        handleGenerateError(
+          type,
+          err,
+          err?.message || "Report not ready.",
+          loading,
+        ),
 
       onSuccess: (ready) => {
         if (!ready) {
@@ -214,7 +175,12 @@ const ReportGenerator = (() => {
         args: [sessionId, signature, type],
 
         onError: (err) => {
-          handleGenerateError(type, btn, err, loading);
+          handleGenerateError(
+            type,
+            err,
+            err?.message || "Unable to save the report.",
+            loading,
+          );
         },
 
         onSuccess: () => {
@@ -244,7 +210,7 @@ const ReportGenerator = (() => {
 
       handleGenerateError(
         type,
-        btn,
+        error,
         error?.message || "Unable to save the report.",
         loading,
       );
@@ -259,10 +225,244 @@ const ReportGenerator = (() => {
     prepareReportGeneration("yearly", btn, { year }, loading);
   }
 
+  
+  function callGScriptAsync(gscriptFunc, args) {
+    return new Promise((resolve, reject) => {
+      AppUtils.gScriptRun({
+        gscriptFunc,
+        args,
+        staleCheck: false,
+        onSuccess: resolve,
+        onError: reject,
+      });
+    });
+  }
+
+  function getSafeReportUrl(value) {
+    try {
+      const url = new URL(String(value || "").trim());
+
+      if (
+        url.protocol !== "https:" ||
+        !["drive.google.com", "docs.google.com"].includes(
+          url.hostname.toLowerCase(),
+        ) ||
+        url.username ||
+        url.password
+      ) {
+        return "";
+      }
+
+      return url.href;
+    } catch {
+      return "";
+    }
+  }
+
+  function confirmExistingReport(report) {
+    return new Promise((resolve) => {
+      const ns = ".queuedReportExists";
+      let settled = false;
+
+      const finish = (result) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        AppUtils.closeModal("#app-modal");
+        resolve(result);
+      };
+
+      AppUtils.openModal("#app-modal", {
+        placement: "center",
+
+        header: "<div></div>",
+
+        body: `
+          <h5 class="modal-title">
+            <strong>Report Already Exists</strong>
+          </h5>
+          <p>
+            A report for
+            <strong>${AppUtils.escapeHtml(report?.name || "this period")}</strong>
+            already exists.
+          </p>
+        `,
+
+        footer: `
+          <button type="button" class="btn btn-secondary btn-cancel">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-info btn-download">
+            Download
+          </button>
+          <button type="button" class="btn btn-danger btn-generate">
+            Generate New
+          </button>
+        `,
+
+        onOpen($modal) {
+          $modal
+            .off(ns)
+            .on(`click${ns}`, ".btn-cancel", () => {
+              finish({ cancelled: true });
+            })
+            .on(`click${ns}`, ".btn-download", () => {
+              const reportUrl = getSafeReportUrl(report?.link);
+
+              if (!reportUrl) {
+                AppUtils.showError("The existing report link is invalid.");
+                return;
+              }
+
+              try {
+                const url = new URL(reportUrl);
+
+                const fileId =
+                  url.pathname.match(
+                    /\/(?:file|document|spreadsheets|presentation)\/d\/([^/]+)/,
+                  )?.[1] || url.searchParams.get("id");
+
+                if (!fileId) {
+                  AppUtils.showError(
+                    "Unable to determine the report file ID for downloading.",
+                  );
+                  return;
+                }
+
+                const downloadUrl = new URL("https://drive.google.com/uc");
+                downloadUrl.searchParams.set("export", "download");
+                downloadUrl.searchParams.set("id", fileId);
+
+                window.open(downloadUrl.href, "_blank", "noopener,noreferrer");
+
+                finish({
+                  downloaded: true,
+                  reportName: report.name,
+                });
+              } catch (error) {
+                console.error(error);
+                AppUtils.showError("Unable to download the existing report.");
+              }
+            })
+            .on(`click${ns}`, ".btn-generate", () => {
+              finish({ regenerate: true });
+            });
+        },
+
+        onClose($modal) {
+          $modal.off(ns);
+
+          if (!settled) {
+            settled = true;
+            resolve({ cancelled: true });
+          }
+        },
+      });
+    });
+  }
+  
+  async function generateReportRequest(payload, { requestId, updateProgress }) {
+    const type = String(payload?.type || "").toLowerCase();
+    const year = Number(payload?.year);
+    const month = String(payload?.month || "").trim();
+
+    if (!CONFIG[type]) {
+      throw new Error("Unsupported report type.");
+    }
+
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      throw new Error("A valid report year is required.");
+    }
+
+    if (type === "monthly" && !month) {
+      throw new Error("A report month is required.");
+    }
+
+    if (!requestId) {
+      throw new Error("Missing request ID for report generation.");
+    }
+
+    const params = type === "monthly" ? { month, year } : { year };
+    const cfg = CONFIG[type];
+    const reportName = cfg.reportName(params);
+
+    updateProgress("Checking for an existing report");
+
+    const [sessionId, signature] = await getAuthArgs();
+
+    const existing = await callGScriptAsync("checkExistingReport", [
+      sessionId,
+      signature,
+      type,
+      reportName,
+    ]);
+
+    if (existing?.exists) {
+      const choice = await confirmExistingReport(existing.report);
+
+      if (choice.cancelled) {
+        return { cancelled: true };
+      }
+
+      if (choice.downloaded) {
+        return {
+          downloaded: true,
+          reportName: choice.reportName,
+        };
+      }
+    }
+
+    updateProgress("Generating and saving PDF");
+
+    const savedReport = await callGScriptAsync("generateCustomReportPDF", [
+      sessionId,
+      signature,
+      type,
+      type === "monthly" ? month : "",
+      year,
+      requestId,
+    ]);
+
+    if (!savedReport?.success || !savedReport.reportUrl) {
+      throw new Error("The report was not saved successfully.");
+    }
+
+    const reportUrl = getSafeReportUrl(savedReport.reportUrl);
+
+    if (!reportUrl) {
+      throw new Error("The generated report returned an invalid URL.");
+    }
+
+    if (type === "monthly") {
+      reportsMonthlyReportPage.refresh();
+    } else {
+      reportsAnnualReportPage.refresh();
+    }
+
+    cfg.reloadHistory(() => {
+      TableModule.highlightLatestRow(cfg.historyTableId, 0);
+    });
+
+    AppUtils.showDashboardToast(cfg.successMessage, "success");
+
+    return {
+      type,
+      reportName,
+      year,
+      ...(type === "monthly" ? { month } : {}),
+      reportUrl,
+      ...(savedReport.reportId ? { reportId: savedReport.reportId } : {}),
+      ...(savedReport.reusedExisting ? { reusedExisting: true } : {}),
+    };
+  }
+
   return {
     generateMonthlyReport,
     generateYearlyReport,
     setGenerateState,
+    generateReportRequest,
   };
 })();
 

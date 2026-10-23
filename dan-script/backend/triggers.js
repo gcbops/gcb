@@ -89,6 +89,25 @@ const SCHEDULED_TRIGGERS = {
         .create();
     },
   },
+
+  reorderActiveClientSheets: {
+    functionName: "reorderActiveClientSheets",
+
+    required: () => {
+      return Boolean(
+        PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID")
+      );
+    },
+
+    create: () => {
+      ScriptApp.newTrigger("reorderActiveClientSheets")
+        .timeBased()
+        .everyWeeks(1)
+        .onWeekDay(ScriptApp.WeekDay.SUNDAY)
+        .atHour(3)
+        .create();
+    },
+  },
 };
 
 function getTrigger(functionName) {

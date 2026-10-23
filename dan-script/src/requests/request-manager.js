@@ -306,6 +306,17 @@ const RequestManager = (() => {
             },
           });
 
+          if (result?.cancelled === true) {
+            finishRequest(
+              request,
+              "cancelled",
+              "Cancelled by user",
+              result,
+            );
+
+            continue;
+          }
+
           finishRequest(request, "completed", "Completed successfully", result);
         } catch (error) {
           finishRequest(request, "failed", error?.message || "Request failed");
@@ -373,8 +384,53 @@ const RequestManager = (() => {
     return { total, byClient };
   }
 
+  function getRequestClientName(request) {
+    if (
+      !["create-client-sheet", "create-external-sheet"].includes(request?.type)
+    ) {
+      return "";
+    }
+
+    return String(
+      request.payload?.clientName || request.payload?.name || "",
+    ).trim();
+  }
+
+  function getActiveTodayHoursChanges(clientName) {
+    const normalizedClient = normalizeText(clientName);
+
+    if (!normalizedClient) {
+      return [];
+    }
+
+    const activeStatuses = ["pending", "paused", "running", "interrupted"];
+
+    return state.queue
+      .filter(
+        (request) =>
+          request.type === "edit-today-hours" &&
+          activeStatuses.includes(request.status) &&
+          normalizeText(request.payload?.client) === normalizedClient,
+      )
+      .flatMap((request) =>
+        (request.payload?.records || []).map((record) => ({
+          ...record,
+          requestId: request.id,
+          requestStatus: request.status,
+        })),
+      );
+  }
+
   function retryRequest(id) {
     let request = state.queue.find((item) => item.id === id);
+
+    if (request && isNonRetryableRequest(request)) {
+      return false;
+    }
+
+    if (request && !handlers.has(request.type)) {
+      return false;
+    }
 
     if (request && !handlers.has(request.type)) {
       return false;
@@ -392,6 +448,14 @@ const RequestManager = (() => {
       }
 
       const historyRequest = state.history[historyIndex];
+
+      if (
+        isNonRetryableRequest(historyRequest) ||
+        !["interrupted", "failed"].includes(historyRequest.status) ||
+        !handlers.has(historyRequest.type)
+      ) {
+        return false;
+      }
 
       if (
         !["interrupted", "failed"].includes(historyRequest.status) ||
@@ -426,11 +490,16 @@ const RequestManager = (() => {
     return true;
   }
 
+  function isNonRetryableRequest(request) {
+    return /\bHOURS_CONFLICT\s*:/i.test(String(request?.message || ""));
+  }
+
   function getRetryableRequests() {
     return [...state.queue, ...state.history].filter(
       (request) =>
         ["interrupted", "failed"].includes(request.status) &&
-        handlers.has(request.type),
+        handlers.has(request.type) &&
+        !isNonRetryableRequest(request),
     );
   }
 
@@ -614,12 +683,78 @@ const RequestManager = (() => {
     return true;
   }
 
+  function movePendingRequest(id, direction) {
+    const allowedDirections = ["top", "up", "down", "bottom"];
+
+    if (!allowedDirections.includes(direction)) {
+      return false;
+    }
+
+    // Only pending requests can be reordered.
+    const pendingRequests = state.queue.filter(
+      (request) => request.status === "pending",
+    );
+
+    const currentIndex = pendingRequests.findIndex(
+      (request) => request.id === id,
+    );
+
+    if (currentIndex === -1) {
+      return false;
+    }
+
+    let targetIndex = currentIndex;
+
+    switch (direction) {
+      case "top":
+        targetIndex = 0;
+        break;
+
+      case "up":
+        targetIndex = Math.max(0, currentIndex - 1);
+        break;
+
+      case "down":
+        targetIndex = Math.min(pendingRequests.length - 1, currentIndex + 1);
+        break;
+
+      case "bottom":
+        targetIndex = pendingRequests.length - 1;
+        break;
+    }
+
+    if (targetIndex === currentIndex) {
+      return false;
+    }
+
+    // Reorder only the pending requests.
+    const [movedRequest] = pendingRequests.splice(currentIndex, 1);
+    pendingRequests.splice(targetIndex, 0, movedRequest);
+
+    // Replace pending queue slots without moving paused or running entries.
+    let pendingIndex = 0;
+
+    state.queue = state.queue.map((request) =>
+      request.status === "pending" ? pendingRequests[pendingIndex++] : request,
+    );
+
+    // Persist and refresh the widget.
+    notify();
+
+    // Respect the existing queue processor and hour-batching safeguards.
+    scheduleProcessQueue(0);
+
+    return true;
+  }
+
   return {
     registerHandler,
     subscribe,
     enqueue,
     getState,
     getProjectedHours,
+    getRequestClientName,
+    getActiveTodayHoursChanges,
     retryRequest,
     getRetryableRequests,
     retryRequests,
@@ -632,6 +767,7 @@ const RequestManager = (() => {
     archiveHistory,
     archiveHistoryByIds,
     dismissHistoryItem,
+    movePendingRequest,
   };
 })();
 

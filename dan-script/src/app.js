@@ -6,29 +6,29 @@ import { AuthorizationUIModule } from "./auth/authorization-ui.js";
 import { setInvalidSessionUIHandler } from "./auth/auth-error-handler.js";
 import { RequestWidget } from "./requests/request-widget.js";
 import "./requests/request-handlers.js";
-import { LoaderModule } from "./loader.js";
+import { LoaderModule } from "./components/loader.js";
 
 setInvalidSessionUIHandler(() => {
   GcbLoginModule.show();
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
-  LoaderModule.start("login");
+  LoaderModule.start("loading");
+
   GcbLoginModule.init();
 
   const authenticated = await GcbAuthModule.init();
 
   if (!authenticated) {
-    console.warn("[GCB Auth] Authentication required.");
-    LoaderModule.hide();
+    LoaderModule.restart("login");
+
     GcbLoginModule.show();
 
     return;
   }
 
   GcbLoginModule.hide();
-  LoaderModule.start("loading");
-
+  
   AuthorizationUIModule.applyNavigationPermissions();
 
   RequestWidget.init();
