@@ -1,3 +1,4 @@
+import { handleInvalidSessionError } from "../auth/auth-error-handler.js";
 import { TableModule } from "./tables.js";
 import { AppUtils } from "../utils/utils.js";
 import { GcbAuthModule } from "../auth/auth.js";
@@ -47,6 +48,67 @@ const TableClientSelector = (() => {
       return;
     }
 
+    const cached = AppUtils.cacheGet(CLIENTS_CACHE_KEY);
+
+    /*
+     * Render cached client options immediately.
+     */
+    if (Array.isArray(cached) && cached.length > 0) {
+      renderClientOptions($select, cached);
+
+      if (isForProject !== "forRecords") {
+        bindClientChange($select, isForProject);
+      }
+
+      refreshClientSelectorInBackground($select, cached, isForProject);
+
+      return;
+    }
+
+    /*
+     * No usable cache: fetch fresh client data.
+     */
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      return AppUtils.cachedGScriptCall(
+        CLIENTS_CACHE_KEY,
+        CLIENTS_SERVER_FUNCTION,
+        [sessionId, signature],
+        (data) => {
+          if (!Array.isArray(data)) {
+            AppUtils.showError("Client data missing or invalid");
+
+            return;
+          }
+
+          renderClientOptions($select, data);
+
+          if (isForProject !== "forRecords") {
+            bindClientChange($select, isForProject);
+          }
+        },
+      );
+    } catch (error) {
+      console.error("[TableClientSelector] Failed to load clients:", error);
+
+      AppUtils.showError(error?.message || "Unable to load client data.");
+
+      throw error;
+    }
+  }
+
+  /*
+   * Refresh client options in the background.
+   *
+   * Rebuilds the Select2 only when the fresh data
+   * differs from the cached data.
+   */
+  async function refreshClientSelectorInBackground(
+    $select,
+    cached,
+    isForProject = false,
+  ) {
     try {
       const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
 
@@ -54,21 +116,78 @@ const TableClientSelector = (() => {
         CLIENTS_CACHE_KEY,
         CLIENTS_SERVER_FUNCTION,
         [sessionId, signature],
+        (fresh) => {
+          if (!Array.isArray(fresh)) {
+            return;
+          }
+
+          if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+            return;
+          }
+
+          renderClientOptions($select, fresh);
+
+          if (isForProject !== "forRecords") {
+            bindClientChange($select, isForProject);
+          }
+        },
+        false,
+        true,
+      );
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      console.error("[TableClientSelector] Background refresh failed:", error);
+    }
+  }
+
+  /*
+   * Hard refresh: bypass cache, fetch fresh data,
+   * then rebuild the client Select2.
+   */
+  async function refreshClientSelector(
+    selectId = currentSelectId,
+    isForProject = false,
+  ) {
+    const $select = $(selectId);
+
+    if (!$select.length) {
+      return;
+    }
+
+    AppUtils.cacheClear(CLIENTS_CACHE_KEY);
+
+    try {
+      const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+
+      return AppUtils.cachedGScriptCall(
+        CLIENTS_CACHE_KEY,
+        CLIENTS_SERVER_FUNCTION,
+        [sessionId, signature],
         (data) => {
           if (!Array.isArray(data)) {
             AppUtils.showError("Client data missing or invalid");
+
             return;
           }
 
           renderClientOptions($select, data);
 
-          bindClientChange($select, isForProject);
+          if (isForProject !== "forRecords") {
+            bindClientChange($select, isForProject);
+          }
         },
+        false,
+        true,
       );
     } catch (error) {
-      console.error("[TableClientSelector] Failed to load clients:", error);
+      console.error("[TableClientSelector] Failed to refresh clients:", error);
 
-      AppUtils.showError(error?.message || "Unable to load client data.");
+      AppUtils.showError(error?.message || "Unable to refresh client data.");
+
+      throw error;
     }
   }
 
@@ -80,9 +199,6 @@ const TableClientSelector = (() => {
         text: client.name,
       }));
 
-    /*
-     * Destroy existing Select2 instance before rebuilding it.
-     */
     if ($select.hasClass("select2-hidden-accessible")) {
       $select.select2("destroy");
     }
@@ -109,13 +225,49 @@ const TableClientSelector = (() => {
           return;
         }
 
+        resetTaskSelectForLoading();
+
         TableModule.addClientHours(selectedName, true, isForProject);
       });
+  }
+
+  function resetTaskSelectForLoading() {
+    const $taskSelect = $("#task");
+
+    if (!$taskSelect.length) {
+      return;
+    }
+
+    $taskSelect.empty().val("");
+
+    if (
+      window.jQuery &&
+      $.fn.select2 &&
+      $taskSelect.hasClass("select2-hidden-accessible")
+    ) {
+      $taskSelect.select2("destroy");
+    }
+
+    $taskSelect.append(new Option("", ""));
+
+    if ($.fn.select2) {
+      $taskSelect.select2({
+        width: "100%",
+        placeholder: "Loading...",
+        allowClear: false,
+        closeOnSelect: true,
+        dropdownParent: $taskSelect.closest(".drawer"),
+      });
+    }
+
+    $taskSelect.val(null).trigger("change");
   }
 
   return {
     init,
     destroy,
+    initClientSelector,
+    refreshClientSelector,
   };
 })();
 

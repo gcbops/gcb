@@ -73,11 +73,11 @@ const SCHEDULED_TRIGGERS = {
     functionName: "scheduledBackup",
 
     required: () => {
+      const properties = PropertiesService.getScriptProperties();
+
       return Boolean(
-        PropertiesService.getScriptProperties().getProperty(
-          "MAIN_SHEETS_FOLDER_ID",
-        ) &&
-        PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID"),
+        properties.getProperty("MANAGER_REGISTRY_SPREADSHEET_ID") &&
+        properties.getProperty("ADMIN_COMBINED_BACKUP_FOLDER_ID"),
       );
     },
 
@@ -95,7 +95,7 @@ const SCHEDULED_TRIGGERS = {
 
     required: () => {
       return Boolean(
-        PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID")
+        PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID"),
       );
     },
 
@@ -118,12 +118,6 @@ function getTrigger(functionName) {
 
 function triggerExists(functionName) {
   return Boolean(getTrigger(functionName));
-}
-
-function reconcileScheduledTriggers(sessionId, signature) {
-  requireRole(sessionId, signature, "admin");
-
-  return reconcileScheduledTriggersInternal();
 }
 
 function reconcileScheduledTriggersInternal() {

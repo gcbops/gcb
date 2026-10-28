@@ -1,0 +1,133 @@
+<section id="client-records-page" class="client-records-page">
+  <header class="client-records-header">
+    <div>
+      <span class="client-records-eyebrow">WORKFORCE</span>
+      <h2>Client Records</h2>
+      <p>Review client records and manage their status.</p>
+    </div>
+
+    <a
+      id="client-records-open-sheet"
+      class="btn btn-outline-primary"
+      href="#"
+      target="_blank"
+      rel="noopener noreferrer"
+      hidden
+    >
+      <i class="pe-7s-external-link"></i>
+      Open Sheet
+    </a>
+  </header>
+
+  <div class="client-records-summary">
+    <article class="client-records-stat">
+      <span>Total Records</span>
+      <strong id="client-records-total">—</strong>
+    </article>
+
+    <article class="client-records-stat">
+      <span>Invoiced</span>
+      <strong id="client-records-invoiced">—</strong>
+    </article>
+
+    <article class="client-records-stat">
+      <span>Paid</span>
+      <strong id="client-records-paid">—</strong>
+    </article>
+
+    <article class="client-records-stat">
+      <span>Unpaid</span>
+      <strong id="client-records-unpaid">—</strong>
+    </article>
+  </div>
+
+  <div class="client-records-panel">
+    <div class="client-records-filters">
+      <div class="client-records-field">
+        <label for="client-records-client">Client</label>
+        <select id="client-records-client" class="custom-select js-select2" style="width: 100%">
+          <option value="">Select client</option>
+        </select>
+      </div>
+
+      <div class="client-records-field">
+        <label for="client-records-task">Project / Task</label>
+        <select id="client-records-task" class="custom-select js-select2" style="width: 100%">
+          <option value="">All projects and tasks</option>
+        </select>
+      </div>
+
+      <div class="client-records-field">
+        <label for="client-records-status-filter">Status</label>
+        <select
+          id="client-records-status-filter"
+          class="custom-select js-select2"
+          multiple
+          style="width: 100%"
+        >
+          <option value="INVOICED">Invoiced</option>
+          <option value="PAID">Paid</option>
+          <option value="UNPAID">Unpaid</option>
+        </select>
+      </div>
+
+      <div class="client-records-field client-records-search-field">
+        <label for="client-records-search">Search</label>
+        <input
+          id="client-records-search"
+          type="search"
+          class="form-control"
+          placeholder="Search type, task, or date..."
+        />
+      </div>
+    </div>
+
+    <div
+      id="client-records-feedback"
+      class="client-records-feedback"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+
+    <div
+      id="client-records-loading"
+      class="client-records-loading"
+      hidden
+    >
+      <span class="spinner-border spinner-border-sm"></span>
+      Loading client records...
+    </div>
+
+    <div
+      id="client-records-empty"
+      class="client-records-empty"
+      hidden
+    >
+      <i class="pe-7s-note2"></i>
+      <strong>No records found</strong>
+      <span>Select a client or adjust your filters.</span>
+    </div>
+
+    <div class="client-records-table-wrap">
+      <table
+        id="client-records-table"
+        class="table client-records-table"
+      >
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Task</th>
+            <th>Date</th>
+            <th class="client-records-status-heading">Status</th>
+          </tr>
+        </thead>
+        <tbody id="client-records-tbody"></tbody>
+      </table>
+    </div>
+
+    <footer class="client-records-footer">
+      <span id="client-records-result-count">Select a client to begin.</span>
+    </footer>
+  </div>
+</section>

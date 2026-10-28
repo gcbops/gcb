@@ -193,7 +193,6 @@ const TableModule = (() => {
     clientName,
     $submitBtn = $("#submit-new-hours"),
   ) {
-
     if (!clientName && !$submitBtn) {
       return;
     }
@@ -204,13 +203,7 @@ const TableModule = (() => {
       return;
     }
 
-    /*
-     * Show loading state.
-     */
-    $taskSelect
-      .html('<option value="">Loading...</option>')
-      .val("")
-      .trigger("change");
+    $submitBtn.prop("disabled", true);
 
     try {
       const [sessionId, signature] = await getAuthArgs();
@@ -225,12 +218,14 @@ const TableModule = (() => {
           $taskSelect.empty();
 
           if (!tasks.length) {
-            $taskSelect
-              .append(new Option("No tasks found", ""))
-              .val("")
-              .trigger("change");
+            $taskSelect.append(new Option("", ""));
+
+            setTaskSelectReady("No tasks found");
+
+            $taskSelect.val(null).trigger("change");
 
             $submitBtn.prop("disabled", false);
+
             return;
           }
 
@@ -244,7 +239,6 @@ const TableModule = (() => {
                 : task;
 
             if (!value && !text) {
-              $submitBtn.prop("disabled", false);
               return;
             }
 
@@ -252,24 +246,25 @@ const TableModule = (() => {
           });
 
           /*
-           * Select the first actual task option.
-           *
-           * The first option is now the first real task because
-           * the select was emptied before adding the tasks.
+           * Restore the normal Select2 placeholder
+           * after the real task options are loaded.
            */
+          setTaskSelectReady("Select a task");
+
           const firstValue = $taskSelect.find("option:first").val();
 
           $taskSelect.val(firstValue || "").trigger("change");
+
           $submitBtn.prop("disabled", false);
         },
       );
     } catch (error) {
-      $taskSelect
-      .empty()
-      .append(new Option("Unable to load tasks", ""))
-      .val("")
-      .trigger("change");
-      
+      $taskSelect.empty().append(new Option("", ""));
+
+      setTaskSelectReady("Unable to load tasks");
+
+      $taskSelect.val(null).trigger("change");
+
       $submitBtn.prop("disabled", true);
 
       if (handleInvalidSessionError(error)) {
@@ -280,6 +275,24 @@ const TableModule = (() => {
 
       AppUtils.showError(error?.message || "Unable to load client tasks.");
     }
+  }
+
+  function setTaskSelectReady(placeholder = "Select a task") {
+    const $taskSelect = $("#task");
+
+    if (!$taskSelect.length || !$.fn.select2) {
+      return;
+    }
+
+    $taskSelect.select2("destroy");
+
+    $taskSelect.select2({
+      width: "100%",
+      placeholder,
+      allowClear: false,
+      closeOnSelect: true,
+      dropdownParent: $taskSelect.closest(".drawer"),
+    });
   }
 
   function parseTaskOptions(returned) {

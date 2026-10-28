@@ -116,7 +116,7 @@ function openClientManualSheet() {
   const sheet = getSheetSafe(name);
 
   if (sheet) {
-    getSpreadsheet().setActiveSheet(sheet);
+    getMainSpreadsheet().setActiveSheet(sheet);
     return;
   }
 
@@ -135,7 +135,7 @@ function openClientSheet(name) {
   const sheet = getSheetSafe(name);
 
   if (sheet) {
-    getSpreadsheet().setActiveSheet(sheet);
+    getMainSpreadsheet().setActiveSheet(sheet);
     return;
   }
 

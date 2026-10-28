@@ -738,28 +738,36 @@ const clientOpportunitiesPage = (() => {
     ChartModule.loadChart("hourly", false, false, forceRefresh);
   }
 
-  function loadTotalHourlyHours() {
-    AppUtils.gScriptRun({
-      gscriptFunc: "getDirectCellValueSafe",
+  async function loadTotalHourlyHours() {
+    try {
+      const [sessionId, signature] = await getAuthArgs();
 
-      args: ["Hourly History", "B8"],
+      AppUtils.gScriptRun({
+        gscriptFunc: "getDirectCellValueSafe",
+        args: [sessionId, signature, "Hourly History", "B8"],
 
-      onSuccess: (value) => {
-        const $total = $("#opportunities-total-hourly-hours");
+        onSuccess: (value) => {
+          const $total = $("#opportunities-total-hourly-hours");
 
-        if (!$total.length) {
-          return;
-        }
+          if (!$total.length) {
+            return;
+          }
 
-        $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
-      },
+          $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
+        },
 
-      onError: (err) => {
-        AppUtils.showError(err);
+        onError: (err) => {
+          AppUtils.showError(err);
+          AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
+        },
+      });
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
 
-        AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
-      },
-    });
+      AppUtils.showError(error?.message || "Unable to load hourly totals.");
+    }
   }
 
   // ----------------------------------------------------------

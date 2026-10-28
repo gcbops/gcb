@@ -162,7 +162,7 @@ const reportsAnnualReportPage = (() => {
 
     $year.val(currentYear);
 
-    // AppUtils.initSelect2(".generator-filters");
+    // Select2Module.init(".generator-filters");
   };
 
   const loadReportsOverview = async () => {

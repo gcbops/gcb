@@ -1,11 +1,14 @@
 const EXTERNAL_SHEETS_CONFIG = {
   registrySheet: "External Sheets",
-
   templateProperty: "EXTERNAL_SHEET_TEMPLATE_ID",
 
-  folderProperty: "MAIN_SHEETS_FOLDER_ID",
-
-  headers: ["Spreadsheet ID", "Client Name", "Verified", "Status"],
+  headers: [
+    "Spreadsheet ID",
+    "Client Name",
+    "Spreadsheet Name",
+    "Status",
+    "Verified",
+  ],
 };
 
 const EXTERNAL_CREATION_JOURNAL_CONFIG = {
@@ -39,85 +42,110 @@ function getExternalSheetTemplateId() {
   return id;
 }
 
-function getExternalSheetsRegistry() {
-  const sheet = getSheetSafe(EXTERNAL_SHEETS_CONFIG.registrySheet);
+function getExternalSheetsFolder(workspace) {
+  if (!workspace || !workspace.managerId) {
+    throw new Error("A valid manager workspace is required.");
+  }
 
-  if (!sheet) {
+  const folderId = String(workspace.externalSheetsFolderId || "").trim();
+
+  if (!folderId) {
     throw new Error(
-      `Sheet "${EXTERNAL_SHEETS_CONFIG.registrySheet}" not found.`,
+      `External Sheets Folder ID is not configured for manager "${workspace.managerId}".`,
     );
   }
 
-  return sheet;
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+
+    // Verify the folder is accessible and not trashed.
+    if (folder.isTrashed()) {
+      throw new Error("The configured folder is in the trash.");
+    }
+
+    return folder;
+  } catch (error) {
+    console.error(
+      `[External Sheets] Folder access failed for manager ${workspace.managerId}.`,
+      error,
+    );
+
+    throw new Error(
+      `The External Sheets folder for manager "${workspace.managerId}" ` +
+        "could not be accessed. Verify the folder ID and Shared Drive permissions.",
+    );
+  }
 }
 
-function getExternalSheetsFolder() {
-  const folderId = PropertiesService.getScriptProperties().getProperty(
-    EXTERNAL_SHEETS_CONFIG.folderProperty,
+function getExternalClientMap(spreadsheet) {
+  if (!spreadsheet || typeof spreadsheet.getSheetByName !== "function") {
+    throw new Error("The target operational spreadsheet is required.");
+  }
+
+  const sheet = spreadsheet.getSheetByName(
+    EXTERNAL_SHEETS_CONFIG.registrySheet,
   );
 
-  if (!folderId) {
-    throw new Error("MAIN_SHEETS_FOLDER_ID is not configured.");
+  if (!sheet) {
+    return new Map();
   }
 
-  try {
-    return DriveApp.getFolderById(folderId);
-  } catch (err) {
-    throw new Error("The external sheets Drive folder could not be accessed.");
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return new Map();
   }
-}
 
-function getExternalClientMap() {
-  try {
-    const sheet = getSheetSafe("External Sheets");
+  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  const externalMap = new Map();
 
-    if (!sheet) {
-      return new Map();
+  values.forEach((row) => {
+    const spreadsheetId = String(row[0] ?? "").trim();
+    const name = String(row[1] ?? "").trim();
+
+    if (!spreadsheetId || !name) {
+      return;
     }
 
-    const lastRow = sheet.getLastRow();
+    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
 
-    if (lastRow < 2) {
-      return new Map();
-    }
+    externalMap.set(normalizeText(name), url);
+  });
 
-    // A = Spreadsheet ID
-    // B = Client Name
-    const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-
-    const externalMap = new Map();
-
-    values.forEach((row) => {
-      const spreadsheetId = String(row[0] ?? "").trim();
-      const name = String(row[1] ?? "").trim();
-
-      if (!spreadsheetId || !name) {
-        return;
-      }
-
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-
-      externalMap.set(normalizeText(name), url);
-    });
-
-    return externalMap;
-  } catch (err) {
-    throw new Error(err.message || String(err));
-  }
+  return externalMap;
 }
 
-/**
- * Return all registered external spreadsheets.
- */
 function getExternalSheets(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const session = requireCapability(sessionId, signature, "clients.view");
 
-  return getExternalSheetsInternal();
+  const workspace = getManagerWorkspaceForSession_(session);
+
+  if (!workspace || !workspace.spreadsheet) {
+    throw new Error(
+      "No operational spreadsheet is assigned to the authenticated manager.",
+    );
+  }
+
+  if (!String(workspace.externalSheetsFolderId || "").trim()) {
+    return [];
+  }
+
+  return getExternalSheetsInternal(workspace.spreadsheet);
 }
 
-function getExternalSheetsInternal() {
+function getExternalSheetsInternal(managerSpreadsheet) {
+  if (
+    !managerSpreadsheet ||
+    typeof managerSpreadsheet.getSheetByName !== "function"
+  ) {
+    throw new Error("The manager operational spreadsheet is required.");
+  }
 
-  const sheet = getSheetSafe("External Sheets");
+  const spreadsheet = managerSpreadsheet;
+
+  const sheet = spreadsheet.getSheetByName(
+    EXTERNAL_SHEETS_CONFIG.registrySheet,
+  );
 
   if (!sheet || sheet.getLastRow() < 2) {
     return [];
@@ -128,7 +156,7 @@ function getExternalSheetsInternal() {
   return values
     .filter((row) => row[0] && row[1])
     .map((row) => {
-      const spreadsheetId = String(row[0]);
+      const spreadsheetId = String(row[0]).trim();
       const clientName = String(row[1]);
       const spreadsheetName = String(row[2] || "");
 
@@ -139,8 +167,7 @@ function getExternalSheetsInternal() {
       let accessible = false;
 
       try {
-        const externalSS = SpreadsheetApp.openById(spreadsheetId);
-
+        const externalSS = openSpreadsheetById(spreadsheetId);
         const projectsSheet = externalSS.getSheetByName("Projects");
 
         if (projectsSheet) {
@@ -154,13 +181,21 @@ function getExternalSheetsInternal() {
         projectCount = externalSS
           .getSheets()
           .filter(
-            (sheet) =>
-              sheet.getName() !== "Projects" && sheet.getName() !== "BLANK",
+            (externalSheet) =>
+              externalSheet.getName() !== "Projects" &&
+              externalSheet.getName() !== "BLANK" &&
+              externalSheet.getName() !==
+                GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName &&
+              externalSheet.getName() !==
+                GCB_TODAY_HOURS_OPERATION_LEDGER.sheetName,
           ).length;
 
         accessible = true;
       } catch (err) {
-        console.warn(`Unable to access external sheet ${spreadsheetId}:`, err);
+        console.warn(
+          `Unable to access registered external spreadsheet ${spreadsheetId}:`,
+          err,
+        );
       }
 
       return {
@@ -175,18 +210,59 @@ function getExternalSheetsInternal() {
     });
 }
 
-function getExternalCreationJournal_() {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(EXTERNAL_CREATION_JOURNAL_CONFIG.sheetName);
+function getExternalProjectSheets_(externalSS) {
+  const excludedSheetNames = new Set([
+    "Projects",
+    "BLANK",
+    GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName,
+    GCB_TODAY_HOURS_OPERATION_LEDGER.sheetName,
+  ]);
+
+  return externalSS
+    .getSheets()
+    .filter((sheet) => !excludedSheetNames.has(sheet.getName()));
+}
+
+function getExternalCreationJournal_(spreadsheet) {
+  if (!spreadsheet || typeof spreadsheet.getSheetByName !== "function") {
+    throw new Error(
+      "The manager operational spreadsheet is required for the creation journal.",
+    );
+  }
+
+  const config = EXTERNAL_CREATION_JOURNAL_CONFIG;
+
+  let sheet = spreadsheet.getSheetByName(config.sheetName);
 
   if (!sheet) {
-    sheet = ss.insertSheet(EXTERNAL_CREATION_JOURNAL_CONFIG.sheetName);
+    sheet = spreadsheet.insertSheet(config.sheetName);
 
-    sheet
-      .getRange(1, 1, 1, EXTERNAL_CREATION_JOURNAL_CONFIG.headers.length)
-      .setValues([EXTERNAL_CREATION_JOURNAL_CONFIG.headers]);
+    sheet.getRange(1, 1, 1, config.headers.length).setValues([config.headers]);
 
     sheet.setFrozenRows(1);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, config.headers.length).setValues([config.headers]);
+
+    sheet.setFrozenRows(1);
+    return sheet;
+  }
+
+  const actualHeaders = sheet
+    .getRange(1, 1, 1, config.headers.length)
+    .getDisplayValues()[0];
+
+  const schemaMatches = config.headers.every(
+    (header, index) => actualHeaders[index] === header,
+  );
+
+  if (!schemaMatches) {
+    throw new Error(
+      `Invalid schema in "${config.sheetName}". ` +
+        "The existing creation journal was not modified.",
+    );
   }
 
   return sheet;
@@ -307,12 +383,11 @@ function findExternalCreationFiles_(folder, marker, temporaryFileName) {
   return matches;
 }
 
-/**
- * Create a new external spreadsheet from the template.
- */
 function createExternalSheet(sessionId, signature, data, requestId) {
-  requireRole(sessionId, signature, "admin");
-  requireCapability(sessionId, signature, "clients.create");
+  requireRole(sessionId, signature, "manager");
+
+  const session = requireCapability(sessionId, signature, "clients.create");
+  const workspace = getManagerWorkspaceForSession_(session);
 
   if (
     typeof requestId !== "string" ||
@@ -334,7 +409,9 @@ function createExternalSheet(sessionId, signature, data, requestId) {
     throw new Error("At least one project is required.");
   }
 
-  const operationKey = `${sessionId}:${requestId}`;
+  const normalizedRequestId = requestId.trim();
+
+  const operationKey = `${workspace.managerId}:${normalizedRequestId}`;
 
   const requestHash = hashExternalCreationPayload_({
     clientName: normalizeText(clientName),
@@ -358,7 +435,7 @@ function createExternalSheet(sessionId, signature, data, requestId) {
   lock.waitLock(30000);
 
   try {
-    const journal = getExternalCreationJournal_();
+    const journal = getExternalCreationJournal_(workspace.spreadsheet);
 
     let entry = findExternalCreationOperation_(journal, operationKey);
 
@@ -460,7 +537,7 @@ function createExternalSheet(sessionId, signature, data, requestId) {
      * 1. Recover or create the external spreadsheet.
      * ---------------------------------------------------------
      */
-    const destinationFolder = getExternalSheetsFolder();
+    const destinationFolder = getExternalSheetsFolder(workspace);
 
     let newFile = null;
 
@@ -537,16 +614,6 @@ function createExternalSheet(sessionId, signature, data, requestId) {
       });
     }
 
-    /*
-     * ---------------------------------------------------------
-     * 2. Apply and verify Drive sharing.
-     * ---------------------------------------------------------
-     *
-     * Do not trash the spreadsheet if this fails. A retry can
-     * resume configuration on the same resource.
-     */
-    newFile.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.EDIT);
-
     updateExternalCreationOperation_(journal, rowNumber, operation, {
       stage: "SHARING_CONFIGURED",
     });
@@ -556,7 +623,7 @@ function createExternalSheet(sessionId, signature, data, requestId) {
      * 3. Validate and configure the template.
      * ---------------------------------------------------------
      */
-    const spreadsheet = SpreadsheetApp.openById(operation.spreadsheetId);
+    const spreadsheet = openSpreadsheetById(operation.spreadsheetId);
 
     const projectsSheet = spreadsheet.getSheetByName("Projects");
     const blankSheet = spreadsheet.getSheetByName("BLANK");
@@ -604,6 +671,7 @@ function createExternalSheet(sessionId, signature, data, requestId) {
      * ---------------------------------------------------------
      */
     registerExternalSheet({
+      spreadsheet: workspace.spreadsheet,
       spreadsheetId: operation.spreadsheetId,
       clientName,
       spreadsheetName: finalFileName,
@@ -621,6 +689,7 @@ function createExternalSheet(sessionId, signature, data, requestId) {
     const clientSheetResult = createExternalClientSheet(
       clientName,
       operation.spreadsheetId,
+      workspace.spreadsheet,
     );
 
     updateExternalCreationOperation_(journal, rowNumber, operation, {
@@ -653,7 +722,7 @@ function createExternalSheet(sessionId, signature, data, requestId) {
      * request can resume after a transient failure.
      */
     try {
-      const journal = getExternalCreationJournal_();
+      const journal = getExternalCreationJournal_(workspace.spreadsheet);
 
       const entry = findExternalCreationOperation_(journal, operationKey);
 
@@ -681,9 +750,6 @@ function createExternalSheet(sessionId, signature, data, requestId) {
   }
 }
 
-/**
- * Duplicate BLANK for each project.
- */
 function createExternalProjectSheets(
   spreadsheet,
   blankSheet,
@@ -729,9 +795,6 @@ function createExternalProjectSheets(
   blankSheet.hideSheet();
 }
 
-/**
- * Normalize comma-separated projects.
- */
 function normalizeProjectNames(projects) {
   if (Array.isArray(projects)) {
     projects = projects.join(",");
@@ -741,35 +804,46 @@ function normalizeProjectNames(projects) {
     return [];
   }
 
-  return [
-    ...new Set(
-      projects
-        .split(",")
-        .map((project) => project.trim())
-        .filter(Boolean)
-        .map(Validation.sanitizeSheetName)
-        .filter(Boolean)
-        .map((project) => Validation.sheetName(project, "Project name")),
-    ),
-  ];
+  const projectsByNormalizedName = new Map();
+
+  projects
+    .split(",")
+    .map((project) => project.trim())
+    .filter(Boolean)
+    .map(Validation.sanitizeSheetName)
+    .filter(Boolean)
+    .map((project) => Validation.sheetName(project, "Project name"))
+    .forEach((project) => {
+      const key = normalizeText(project);
+
+      if (!projectsByNormalizedName.has(key)) {
+        projectsByNormalizedName.set(key, project);
+      }
+    });
+
+  return [...projectsByNormalizedName.values()];
 }
 
-/**
- * Register the external spreadsheet
- * in the main spreadsheet.
- */
-function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
+function registerExternalSheet({
+  spreadsheet,
+  spreadsheetId,
+  clientName,
+  spreadsheetName,
+}) {
+  if (!spreadsheet || typeof spreadsheet.getSheetByName !== "function") {
+    throw new Error("The manager operational spreadsheet is required.");
+  }
+
   if (!spreadsheetId || !clientName || !spreadsheetName) {
     throw new Error(
       "Spreadsheet ID, client name, and spreadsheet name are required.",
     );
   }
 
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName("External Sheets");
+  let sheet = spreadsheet.getSheetByName(EXTERNAL_SHEETS_CONFIG.registrySheet);
 
   if (!sheet) {
-    sheet = ss.insertSheet("External Sheets");
+    sheet = spreadsheet.insertSheet(EXTERNAL_SHEETS_CONFIG.registrySheet);
 
     sheet
       .getRange(1, 1, 1, 5)
@@ -782,75 +856,111 @@ function registerExternalSheet({ spreadsheetId, clientName, spreadsheetName }) {
           "Verified",
         ],
       ]);
+
+    sheet.setFrozenRows(1);
   }
+
+  const normalizedClient = normalizeText(clientName);
+  const targetId = String(spreadsheetId).trim();
 
   const lastRow = sheet.getLastRow();
 
+  // Keep these variables available throughout the function.
+  const matchingIdRows = [];
+  const matchingClientRows = [];
+
   if (lastRow >= 2) {
-    const ids = sheet
-      .getRange(2, 1, lastRow - 1, 1)
-      .getDisplayValues()
-      .flat()
-      .map((value) => value.trim());
+    const rows = sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
 
-    const matchingRows = [];
+    rows.forEach((row, index) => {
+      const existingId = String(row[0] || "").trim();
+      const existingClient = normalizeText(String(row[1] || ""));
 
-    ids.forEach((id, index) => {
-      if (id === String(spreadsheetId)) {
-        matchingRows.push(index + 2);
+      if (existingId === targetId) {
+        matchingIdRows.push({
+          rowNumber: index + 2,
+          clientName: String(row[1] || "").trim(),
+        });
+      }
+
+      if (existingClient === normalizedClient && existingId) {
+        matchingClientRows.push({
+          rowNumber: index + 2,
+          spreadsheetId: existingId,
+        });
       }
     });
-
-    if (matchingRows.length > 1) {
-      throw new Error(
-        "Multiple registry rows already reference this external " +
-          "spreadsheet. Manual reconciliation is required.",
-      );
-    }
-
-    if (matchingRows.length === 1) {
-      const row = matchingRows[0];
-
-      sheet
-        .getRange(row, 1, 1, 5)
-        .setValues([
-          [spreadsheetId, clientName, spreadsheetName, "Active", new Date()],
-        ]);
-
-      return {
-        created: false,
-        row,
-      };
-    }
   }
 
+  // Reject duplicate or conflicting registry entries.
+  if (matchingIdRows.length > 1 || matchingClientRows.length > 1) {
+    throw new Error(
+      "Conflicting external registry entries were found. " +
+        "Manual reconciliation is required.",
+    );
+  }
+
+  if (
+    matchingIdRows.length === 1 &&
+    normalizeText(matchingIdRows[0].clientName) !== normalizedClient
+  ) {
+    throw new Error(
+      "This external spreadsheet is already registered to another client.",
+    );
+  }
+
+  if (
+    matchingClientRows.length === 1 &&
+    matchingClientRows[0].spreadsheetId !== targetId
+  ) {
+    throw new Error(
+      "This client is already registered to a different external spreadsheet.",
+    );
+  }
+
+  // Update an existing registration instead of appending a duplicate.
+  if (matchingIdRows.length === 1) {
+    const row = matchingIdRows[0].rowNumber;
+
+    sheet
+      .getRange(row, 1, 1, 5)
+      .setValues([
+        [targetId, clientName, spreadsheetName, "Active", new Date()],
+      ]);
+
+    return { created: false, row };
+  }
+
+  // No matching registration: append a new entry.
   const row = Math.max(sheet.getLastRow() + 1, 2);
 
   sheet
     .getRange(row, 1, 1, 5)
-    .setValues([
-      [spreadsheetId, clientName, spreadsheetName, "Active", new Date()],
-    ]);
+    .setValues([[targetId, clientName, spreadsheetName, "Active", new Date()]]);
 
-  return {
-    created: true,
-    row,
-  };
+  return { created: true, row };
 }
 
-function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
-  const ss = getSpreadsheet();
-  const clientNamesSheet = getSheetSafe("Client Names");
+function ensureExternalClientOnMainSheet(
+  clientName,
+  externalSpreadsheetId,
+  managerSpreadsheet,
+) {
+  if (
+    !managerSpreadsheet ||
+    typeof managerSpreadsheet.getSheetByName !== "function"
+  ) {
+    throw new Error("The manager operational spreadsheet is required.");
+  }
+
+  const ss = managerSpreadsheet;
+  const clientNamesSheet = ss.getSheetByName("Client Names");
 
   if (!clientNamesSheet) {
     throw new Error('Sheet "Client Names" not found.');
   }
 
   const normalizedClientName = normalizeText(clientName);
-
-  /*
-   * Check Client Names!A2:A.
-   */
   const lastRow = clientNamesSheet.getLastRow();
 
   let clientInList = false;
@@ -866,32 +976,33 @@ function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
     );
   }
 
-  /*
-   * Check the actual main client sheet.
-   */
   const existingSheet = ss
     .getSheets()
     .find((sheet) => normalizeText(sheet.getName()) === normalizedClientName);
 
-  /*
-   * Both already exist.
-   */
   if (clientInList && existingSheet) {
+    const result = createExternalClientSheet(
+      clientName,
+      externalSpreadsheetId,
+      ss,
+    );
+
     return {
       created: false,
       clientName,
       clientInList: true,
       clientSheetExists: true,
-      reason: "already-exists",
+      reason: "verified-existing-client-sheet",
+      ...result,
     };
   }
 
-  /*
-   * Client is in Client Names but its actual
-   * client sheet is missing.
-   */
   if (clientInList && !existingSheet) {
-    const result = createExternalClientSheet(clientName, externalSpreadsheetId);
+    const result = createExternalClientSheet(
+      clientName,
+      externalSpreadsheetId,
+      ss,
+    );
 
     return {
       created: true,
@@ -903,27 +1014,28 @@ function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
     };
   }
 
-  /*
-   * Client sheet exists but Client Names entry
-   * is missing.
-   *
-   * IMPORTANT:
-   * Do NOT create another sheet.
-   */
   if (!clientInList && existingSheet) {
+    const result = createExternalClientSheet(
+      clientName,
+      externalSpreadsheetId,
+      ss,
+    );
+
     return {
       created: false,
       clientName,
       clientInList: false,
       clientSheetExists: true,
       reason: "client-list-entry-missing",
+      ...result,
     };
   }
 
-  /*
-   * Neither exists.
-   */
-  const result = createExternalClientSheet(clientName, externalSpreadsheetId);
+  const result = createExternalClientSheet(
+    clientName,
+    externalSpreadsheetId,
+    ss,
+  );
 
   return {
     created: true,
@@ -936,10 +1048,13 @@ function ensureExternalClientOnMainSheet(clientName, externalSpreadsheetId) {
 }
 
 function reconcileExternalSheets(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.manage");
+  const session = requireCapability(sessionId, signature, "clients.manage");
 
-  const registry = getSheetSafe("External Sheets");
-  const clientNamesSheet = getSheetSafe("Client Names");
+  const workspace = getManagerWorkspaceForSession_(session);
+  const managerSpreadsheet = workspace.spreadsheet;
+
+  const registry = managerSpreadsheet.getSheetByName("External Sheets");
+  const clientNamesSheet = managerSpreadsheet.getSheetByName("Client Names");
 
   if (!registry) {
     throw new Error('Sheet "External Sheets" not found.');
@@ -949,17 +1064,44 @@ function reconcileExternalSheets(sessionId, signature) {
     throw new Error('Sheet "Client Names" not found.');
   }
 
-  const folder = getExternalSheetsFolder();
+  const folder = getExternalSheetsFolder(workspace);
 
-  if (!folder) {
-    throw new Error("External Sheets folder not found.");
-  }
+  /*
+   * ---------------------------------------------------------
+   * 1. Load existing registry entries.
+   * Preserve existing rows unless a file is successfully
+   * verified and its corresponding row can be refreshed.
+   * ---------------------------------------------------------
+   */
+  const width = Math.max(registry.getLastColumn(), 5);
+  const lastRow = registry.getLastRow();
 
-  const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
+  const existingRows =
+    lastRow >= 2 ? registry.getRange(2, 1, lastRow - 1, width).getValues() : [];
 
-  const rows = [];
-  const results = [];
+  const registryRowsById = new Map();
 
+  existingRows.forEach((row, index) => {
+    const spreadsheetId = String(row[0] || "").trim();
+
+    if (!spreadsheetId) return;
+
+    if (registryRowsById.has(spreadsheetId)) {
+      throw new Error(
+        `Duplicate external spreadsheet ID "${spreadsheetId}" ` +
+          `found in the registry at row ${index + 2}. ` +
+          "Resolve the duplicate entries before reconciling.",
+      );
+    }
+
+    registryRowsById.set(spreadsheetId, row.slice());
+  });
+
+  /*
+   * ---------------------------------------------------------
+   * 2. Load existing Client Names.
+   * ---------------------------------------------------------
+   */
   const clientNamesLastRow = clientNamesSheet.getLastRow();
 
   const existingClientNames =
@@ -976,16 +1118,19 @@ function reconcileExternalSheets(sessionId, signature) {
   );
 
   const clientNamesToAdd = [];
+  const results = [];
+
+  /*
+   * ---------------------------------------------------------
+   * 3. Scan only this manager's External Sheets folder.
+   * ---------------------------------------------------------
+   */
+  const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
 
   let fileCount = 0;
   let matchingFileCount = 0;
   let validExternalCount = 0;
 
-  /*
-   * ---------------------------------------------------------
-   * Scan external folder.
-   * ---------------------------------------------------------
-   */
   while (files.hasNext()) {
     const file = files.next();
 
@@ -994,11 +1139,6 @@ function reconcileExternalSheets(sessionId, signature) {
     const spreadsheetId = file.getId();
     const spreadsheetName = file.getName();
 
-    /*
-     * -------------------------------------------------------
-     * Check filename.
-     * -------------------------------------------------------
-     */
     if (!spreadsheetName.endsWith(" Projects - External")) {
       continue;
     }
@@ -1014,11 +1154,14 @@ function reconcileExternalSheets(sessionId, signature) {
     }
 
     try {
-      const ss = SpreadsheetApp.openById(spreadsheetId);
-
-      const projectsSheet = ss.getSheetByName("Projects");
+      const externalSpreadsheet = openSpreadsheetById(spreadsheetId);
+      const projectsSheet = externalSpreadsheet.getSheetByName("Projects");
 
       if (!projectsSheet) {
+        console.warn(
+          `[External Sheets] Skipping "${spreadsheetName}": ` +
+            'missing "Projects" sheet. Existing registry entry preserved.',
+        );
         continue;
       }
 
@@ -1028,37 +1171,51 @@ function reconcileExternalSheets(sessionId, signature) {
 
       const status = activity > 0 ? "Active" : "Inactive";
 
+      /*
+       * Ensure the client tab exists in this manager's
+       * operational spreadsheet, never the global spreadsheet.
+       */
       const mainSheetResult = ensureExternalClientOnMainSheet(
         clientName,
         spreadsheetId,
+        managerSpreadsheet,
       );
 
       /*
-       * -------------------------------------------------------
-       * Make sure Client Names!A contains client.
-       * -------------------------------------------------------
+       * Add the client name only if it does not already exist.
        */
       const normalizedClientName = normalizeText(clientName);
-
       let clientNameAdded = false;
 
       if (!clientNameSet.has(normalizedClientName)) {
         clientNamesToAdd.push([clientName]);
-
         clientNameSet.add(normalizedClientName);
-
         clientNameAdded = true;
       } else {
         logResponse(`[${clientName}] Client Names entry already exists.`);
       }
 
-      rows.push([
-        spreadsheetId,
-        clientName,
-        spreadsheetName,
-        status,
-        new Date(),
-      ]);
+      /*
+       * Refresh the existing row for this ID, or append a new
+       * entry. Any additional existing columns are preserved.
+       */
+      const existingRow = registryRowsById.get(spreadsheetId);
+
+      const updatedRow = existingRow
+        ? existingRow.slice()
+        : Array(width).fill("");
+
+      while (updatedRow.length < width) {
+        updatedRow.push("");
+      }
+
+      updatedRow[0] = spreadsheetId;
+      updatedRow[1] = clientName;
+      updatedRow[2] = spreadsheetName;
+      updatedRow[3] = status;
+      updatedRow[4] = new Date();
+
+      registryRowsById.set(spreadsheetId, updatedRow);
 
       validExternalCount++;
 
@@ -1067,19 +1224,29 @@ function reconcileExternalSheets(sessionId, signature) {
         clientName,
         totalHours,
         status,
-
         mainSheetCreated: mainSheetResult.created,
         mainSheetAction: mainSheetResult.reason,
-
         clientNameAdded,
-
         action: "registered",
       });
     } catch (err) {
-      console.error(`Failed to read external sheet "${spreadsheetName}".`, err);
+      /*
+       * Do not remove the existing registry entry when a file
+       * cannot be opened or reconciled.
+       */
+      console.error(
+        `[External Sheets] Failed to reconcile "${spreadsheetName}". ` +
+          "Existing registry entry, if any, is preserved.",
+        err,
+      );
     }
   }
 
+  /*
+   * ---------------------------------------------------------
+   * 4. Add missing Client Names entries.
+   * ---------------------------------------------------------
+   */
   if (clientNamesToAdd.length) {
     const startRow = Math.max(clientNamesSheet.getLastRow() + 1, 2);
 
@@ -1094,43 +1261,61 @@ function reconcileExternalSheets(sessionId, signature) {
 
   /*
    * ---------------------------------------------------------
-   * SAFETY CHECK
-   * ---------------------------------------------------------
+   * 5. Safely refresh the registry.
    *
-   * Never clear the registry if the scan found zero
-   * valid external spreadsheets.
+   * Existing entries not verified during this scan remain.
+   * A zero-valid-file scan never clears the registry.
+   * ---------------------------------------------------------
    */
-  if (!rows.length) {
+  if (validExternalCount === 0) {
+    console.warn(
+      `[External Sheets] No valid files reconciled for ` +
+        `${workspace.managerId}. Existing registry preserved. ` +
+        `Files scanned: ${fileCount}; matching filenames: ${matchingFileCount}.`,
+    );
+
     return results;
   }
 
-  /*
-   * ---------------------------------------------------------
-   * Refresh External Sheets registry.
-   * ---------------------------------------------------------
-   */
-  const lastRow = registry.getLastRow();
-  const lastColumn = registry.getLastColumn();
+  const mergedRows = Array.from(registryRowsById.values());
 
   if (lastRow >= 2) {
-    registry.getRange(2, 1, lastRow - 1, lastColumn).clearContent();
+    registry.getRange(2, 1, lastRow - 1, width).clearContent();
   }
 
-  registry.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  if (mergedRows.length) {
+    registry.getRange(2, 1, mergedRows.length, width).setValues(mergedRows);
+  }
+
+  logResponse(
+    `[External Sheets] Reconciled ${validExternalCount} file(s) for ` +
+      `${workspace.managerId}. Preserved ${mergedRows.length} registry entry/entries.`,
+  );
 
   return results;
 }
 
-function createExternalClientSheet(clientName, externalSpreadsheetId) {
+function createExternalClientSheet(
+  clientName,
+  externalSpreadsheetId,
+  managerSpreadsheet,
+) {
   if (!clientName || !externalSpreadsheetId) {
     throw new Error("Client name and external spreadsheet ID are required.");
   }
 
-  const ss = getSpreadsheet();
+  if (
+    !managerSpreadsheet ||
+    typeof managerSpreadsheet.getSheetByName !== "function"
+  ) {
+    throw new Error("The manager operational spreadsheet is required.");
+  }
+
+  const ss = managerSpreadsheet;
   const blankSheet = ss.getSheetByName("BLANK");
 
   if (!blankSheet) {
-    throw new Error('Main spreadsheet "BLANK" template was not found.');
+    throw new Error('Manager spreadsheet "BLANK" template was not found.');
   }
 
   const normalizedClientName = normalizeText(clientName);
@@ -1144,44 +1329,37 @@ function createExternalClientSheet(clientName, externalSpreadsheetId) {
   const linkText = `${clientName} - Go to actual sheet`;
 
   if (clientSheet) {
-    /*
-     * An existing tab may be the result of an interrupted attempt.
-     * Reuse it only when its existing external link matches this
-     * operation, or when its E1 cell is still blank.
-     */
     const e1 = clientSheet.getRange("E1");
     const richText = e1.getRichTextValue();
     const existingUrl = richText ? richText.getLinkUrl() : null;
-
     const existingText = String(e1.getDisplayValue() || "").trim();
 
-    if (
+    const isCorrectLink =
       existingUrl &&
-      existingUrl.includes(`/spreadsheets/d/${externalSpreadsheetId}`)
-    ) {
-      // This tab already points to the correct external spreadsheet.
-    } else if (!existingText && !existingUrl) {
-      // An earlier attempt created the tab but did not configure E1.
+      existingUrl.includes(`/spreadsheets/d/${externalSpreadsheetId}`);
+
+    const isExpectedUnlinkedText =
+      !existingUrl &&
+      (existingText === linkText ||
+        existingText === `${clientName} - Go to actual sheet here`);
+
+    const isBlankCell = !existingText && !existingUrl;
+
+    if (isCorrectLink || isExpectedUnlinkedText || isBlankCell) {
+      // Safe to repair or refresh the expected client link.
     } else {
       throw new Error(
-        `A main client tab named "${clientSheet.getName()}" already ` +
-          "exists but is not linked to this external spreadsheet. " +
-          "No duplicate tab was created; manual reconciliation is required.",
+        `A manager client tab named "${clientSheet.getName()}" contains ` +
+          "conflicting content or a different external link. " +
+          "Manual reconciliation is required.",
       );
     }
   } else {
-    /*
-     * Create directly from BLANK with the final name.
-     * Do not silently append a numeric suffix to an existing client.
-     */
     clientSheet = ss.insertSheet(clientName, {
       template: blankSheet,
     });
   }
 
-  /*
-   * Idempotently configure the client link and imported data.
-   */
   const richText = SpreadsheetApp.newRichTextValue()
     .setText(linkText)
     .setLinkUrl(externalUrl)
@@ -1189,9 +1367,11 @@ function createExternalClientSheet(clientName, externalSpreadsheetId) {
 
   clientSheet.getRange("E1").setRichTextValue(richText);
 
-  clientSheet
-    .getRange("E3")
-    .setFormula(`=IMPORTRANGE("${externalSpreadsheetId}","Projects!E3:I")`);
+  // Read Projects!E3:I directly through Apps Script.
+  const syncResult = syncExternalClientSheetData_(
+    clientSheet,
+    externalSpreadsheetId,
+  );
 
   clientSheet.showSheet();
 
@@ -1199,17 +1379,86 @@ function createExternalClientSheet(clientName, externalSpreadsheetId) {
     sheetName: clientSheet.getName(),
     externalSpreadsheetId,
     externalUrl,
+    syncedRows: syncResult.rows,
+  };
+}
+
+function refreshExistingExternalClientSnapshot_(
+  clientName,
+  externalSpreadsheetId,
+  managerSpreadsheet,
+) {
+  const normalizedClient = normalizeText(String(clientName).trim());
+
+  const clientSheet = managerSpreadsheet
+    .getSheets()
+    .find((sheet) => normalizeText(sheet.getName()) === normalizedClient);
+
+  // If the internal tab doesn't exist yet, use the normal creation workflow.
+  if (!clientSheet) {
+    return createExternalClientSheet(
+      clientName,
+      externalSpreadsheetId,
+      managerSpreadsheet,
+    );
+  }
+
+  // Protect an existing tab linked to a different workbook.
+  const e1 = clientSheet.getRange("E1");
+  const richText = e1.getRichTextValue();
+  const existingUrl = richText ? richText.getLinkUrl() : null;
+  const existingText = String(e1.getDisplayValue() || "").trim();
+
+  const expectedUrlPart = `/spreadsheets/d/${externalSpreadsheetId}`;
+  const linkMatches = existingUrl && existingUrl.includes(expectedUrlPart);
+
+  const expectedUnlinkedText =
+    !existingUrl && existingText === `${clientName} - Go to actual sheet`;
+
+  const blankCell = !existingText && !existingUrl;
+
+  if (!linkMatches && !expectedUnlinkedText && !blankCell) {
+    logResponse(
+      `External snapshot refresh skipped for "${clientName}": ` +
+        "the internal tab's E1 link needs manual reconciliation.",
+    );
+
+    return {
+      success: true,
+      synced: false,
+      reason: "conflicting_internal_link",
+      sheetName: clientSheet.getName(),
+    };
+  }
+
+  // Refresh E3:I only. Do not modify E1 or recreate the tab.
+  const syncResult = syncExternalClientSheetData_(
+    clientSheet,
+    externalSpreadsheetId,
+  );
+
+  return {
+    ...syncResult,
+    synced: true,
   };
 }
 
 function isExternalClient(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "hours.add");
-  
+  const session = requireCapability(sessionId, signature, "hours.add");
+
   if (!clientName) {
     return false;
   }
 
-  const registrySheet = getSheetSafe("External Sheets");
+  const workspace = getManagerWorkspaceForSession_(session);
+
+  if (!String(workspace.externalSheetsFolderId || "").trim()) {
+    return false;
+  }
+
+  const registrySheet = workspace.spreadsheet.getSheetByName(
+    EXTERNAL_SHEETS_CONFIG.registrySheet,
+  );
 
   if (!registrySheet || registrySheet.getLastRow() < 2) {
     return false;
@@ -1228,54 +1477,130 @@ function isExternalClient(sessionId, signature, clientName) {
   );
 }
 
-function combineExternalSheetData(spreadsheetId) {
-  const ss = SpreadsheetApp.openById(spreadsheetId);
+function combineExternalSheetData_(spreadsheetId) {
+  const id = String(spreadsheetId || "").trim();
+
+  if (!id) {
+    throw new Error("An external spreadsheet ID is required.");
+  }
+
+  const ss = openSpreadsheetById(id);
   const dest = ss.getSheetByName("Projects");
 
   if (!dest) {
     throw new Error('External spreadsheet is missing the "Projects" sheet.');
   }
 
-  dest.getRange("E3:I").clearContent();
+  const destStartRow = 3;
+  const destStartCol = 5; // E
+  const numCols = 5; // E:I
+  const rows = [];
 
-  let destRow = 3;
-  
-  ss.getSheets().forEach((sheet) => {
-    const sheetName = sheet.getName();
-    
-    if (
-      sheetName === "Projects" ||
-      sheetName === "BLANK" ||
-      sheetName === GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName
-    ) {
-      return;
-    }
-
+  // Collect source data before modifying Projects.
+  getExternalProjectSheets_(ss).forEach((sheet) => {
     const lastRow = sheet.getLastRow();
 
-    if (lastRow < 3) {
-      return;
-    }
+    if (lastRow < destStartRow) return;
 
     const values = sheet
-      .getRange(`E3:I${lastRow}`)
+      .getRange(destStartRow, destStartCol, lastRow - destStartRow + 1, numCols)
       .getValues()
-      .filter((row) => row.some((value) => value !== ""));
+      .filter((row) => row.some((value) => value !== "" && value !== null));
 
-    if (!values.length) {
-      return;
-    }
-
-    dest
-      .getRange(destRow, 5, values.length, values[0].length)
-      .setValues(values);
-
-    destRow += values.length;
+    rows.push(...values);
   });
+
+  const requiredLastRow = destStartRow + rows.length - 1;
+  const currentMaxRows = dest.getMaxRows();
+
+  if (rows.length > 0 && requiredLastRow > currentMaxRows) {
+    dest.insertRowsAfter(currentMaxRows, requiredLastRow - currentMaxRows);
+  }
+
+  // Clear the previous aggregate throughout E:I, including stale rows.
+  const existingMaxRows = dest.getMaxRows();
+
+  if (existingMaxRows >= destStartRow) {
+    dest
+      .getRange(
+        destStartRow,
+        destStartCol,
+        existingMaxRows - destStartRow + 1,
+        numCols,
+      )
+      .clearContent();
+  }
+
+  // Write the refreshed aggregate.
+  if (rows.length > 0) {
+    dest
+      .getRange(destStartRow, destStartCol, rows.length, numCols)
+      .setValues(rows);
+
+    SpreadsheetApp.flush();
+  }
 
   return {
     success: true,
-    spreadsheetId,
-    rows: destRow - 3,
+    spreadsheetId: id,
+    rows: rows.length,
+  };
+}
+
+function syncExternalClientSheetData_(
+  internalClientSheet,
+  externalSpreadsheetId,
+) {
+  if (
+    !internalClientSheet ||
+    typeof internalClientSheet.getRange !== "function"
+  ) {
+    throw new Error("A valid internal client sheet is required.");
+  }
+
+  if (!externalSpreadsheetId) {
+    throw new Error("External spreadsheet ID is required.");
+  }
+
+  const externalSS = openSpreadsheetById(externalSpreadsheetId);
+  const projectsSheet = externalSS.getSheetByName("Projects");
+
+  if (!projectsSheet) {
+    throw new Error('External spreadsheet is missing the "Projects" sheet.');
+  }
+
+  // Ensure pending summary formulas have been calculated before reading.
+  SpreadsheetApp.flush();
+
+  const sourceLastRow = projectsSheet.getLastRow();
+  const destinationLastRow = internalClientSheet.getLastRow();
+
+  const sourceRowCount = Math.max(0, sourceLastRow - 2);
+  const destinationRowCount = Math.max(0, destinationLastRow - 2);
+
+  let values = [];
+
+  if (sourceRowCount > 0) {
+    // Same source range as the former IMPORTRANGE formula.
+    values = projectsSheet.getRange(3, 5, sourceRowCount, 5).getValues();
+  }
+
+  // Clear stale imported values if the source has fewer rows now.
+  // Only E:I from row 3 downward is affected.
+  const rowsToClear = Math.max(sourceRowCount, destinationRowCount);
+
+  if (rowsToClear > 0) {
+    internalClientSheet.getRange(3, 5, rowsToClear, 5).clearContent();
+  }
+
+  if (values.length > 0) {
+    internalClientSheet.getRange(3, 5, values.length, 5).setValues(values);
+  }
+
+  return {
+    success: true,
+    rows: values.length,
+    spreadsheetId: externalSpreadsheetId,
+    sheetName: internalClientSheet.getName(),
   };
 }

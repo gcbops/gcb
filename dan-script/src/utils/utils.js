@@ -3,6 +3,7 @@ import {
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
 import { AuthorizationUIModule } from "../auth/authorization-ui.js";
+import { Select2Module } from "../components/select2.js";
 import { RouterModule } from "../routers.js";
 
 const AppUtils = (() => {
@@ -710,106 +711,6 @@ const AppUtils = (() => {
     }
   }
 
-  function initSelect2(parent, options = {}) {
-    const $parent = parent ? $(parent) : $(document.body);
-
-    if (!$parent.length || !$.fn.select2) {
-      return;
-    }
-
-    const $selects = $parent.is("select") ? $parent : $parent.find("select");
-
-    $selects.each(function () {
-      const $el = $(this);
-
-      if (!$el.hasClass("js-select2") && !$el.hasClass("js-select2-dynamic")) {
-        return;
-      }
-
-      if ($el.hasClass("select2-hidden-accessible")) {
-        $el.select2("destroy");
-      }
-
-      const isMultiple = $el.is("[multiple]");
-
-      const emptyOptionText = $el
-        .find('option[value=""]')
-        .first()
-        .text()
-        .trim();
-
-      const selectOptions = {
-        width: "100%",
-        placeholder:
-          $el.data("placeholder") ||
-          (isMultiple
-            ? "Select options"
-            : emptyOptionText || "Select an option"),
-        allowClear: isMultiple ? false : false,
-        closeOnSelect: !isMultiple,
-        ...options,
-      };
-
-      if ($el.hasClass("js-select2-dynamic")) {
-        selectOptions.tags = true;
-      }
-
-      if ($parent.is(".modal")) {
-        selectOptions.dropdownParent = $parent;
-      }
-
-      $el.select2(selectOptions);
-    });
-  }
-
-  function destroySelect2(parent) {
-    const $parent = parent ? $(parent) : $(document.body);
-
-    if (!$parent.length || !$.fn.select2) {
-      return;
-    }
-
-    $parent
-      .find("select.js-select2, select.js-select2-dynamic")
-      .each(function () {
-        const $select = $(this);
-
-        /*
-         * Do not destroy Select2 fields inside drawers.
-         * Drawers can remain open while the page or modal
-         * is being cleaned up.
-         */
-        if ($select.closest(".drawer").length) {
-          return;
-        }
-
-        if ($select.hasClass("select2-hidden-accessible")) {
-          $select.select2("destroy");
-        }
-      });
-  }
-
-  function destroyAllSelect2() {
-    if (!$.fn.select2) {
-      return;
-    }
-
-    $("select.js-select2, select.js-select2-dynamic").each(function () {
-      const $select = $(this);
-
-      /*
-       * Preserve Select2 instances inside drawers.
-       */
-      if ($select.closest(".drawer").length) {
-        return;
-      }
-
-      if ($select.hasClass("select2-hidden-accessible")) {
-        $select.select2("destroy");
-      }
-    });
-  }
-
   function openDrawer(drawerSelector, options = {}) {
     const { contentClass = "", onOpen = null, onClose = null } = options;
     const $drawer = $(drawerSelector);
@@ -819,7 +720,7 @@ const AppUtils = (() => {
     const $content = $drawer.find(".drawer-content");
 
     if ($content.find("select.js-select2, select.js-select2-dynamic").length) {
-      initSelect2($content);
+      Select2Module.init($content);
     }
 
     $drawer
@@ -895,7 +796,7 @@ const AppUtils = (() => {
      * Destroy Select2 instances before Bootstrap
      * hides and clears the modal content.
      */
-    destroySelect2($drawerElement);
+    Select2Module.destroy($drawerElement);
 
     /*
      * Reset / empty all form elements inside the drawer.
@@ -1485,7 +1386,7 @@ const AppUtils = (() => {
     );
 
     if ($modal.find("select.js-select2, select.js-select2-dynamic").length) {
-      initSelect2($modal);
+      Select2Module.init($modal);
     }
 
     /*
@@ -1606,7 +1507,7 @@ const AppUtils = (() => {
      * Destroy Select2 instances before Bootstrap
      * hides and clears the modal content.
      */
-    destroySelect2($modal);
+    Select2Module.destroy($modal);
 
     const focusedInside = modalEl.querySelector(":focus");
 
@@ -2011,9 +1912,6 @@ const AppUtils = (() => {
     checkScreen,
 
     showDashboardToast,
-    initSelect2,
-    destroySelect2,
-    destroyAllSelect2,
     submitForm,
     setButtonLoading,
 

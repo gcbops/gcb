@@ -18,6 +18,10 @@ const AuthorizationUIModule = (() => {
     clientDetails: {
       capability: "clients.view",
     },
+    clientRecords: {
+      role: "admin",
+      capability: "clients.edit",
+    },
 
     // Projects
     projectDirectory: {
@@ -68,10 +72,10 @@ const AuthorizationUIModule = (() => {
       capability: "settings.manage",
     },
 
-    // Integrations — admin only
+    // Integrations — manager only
     integrationsConfiguration: {
       capability: "settings.manage",
-      role: "admin",
+      role: "manager",
     },
 
     // Manage Users — admin only

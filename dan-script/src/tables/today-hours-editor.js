@@ -325,7 +325,7 @@ const TodayHoursEditor = (() => {
       return;
     }
 
-    // AppUtils.initSelect2($modal);
+    // Select2Module.init($modal);
 
     $container
       .find(".today-hours-record")

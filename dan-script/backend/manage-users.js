@@ -6,7 +6,7 @@
 const MANAGE_USERS_SHEET_NAME = "AUTHORIZED_USERS";
 const MANAGE_USERS_SESSION_PREFIX = "GCB_SESSION_RECORD_";
 
-const MANAGE_USERS_ROLE_OPTIONS = ["admin", "workforce", "staff"];
+const MANAGE_USERS_ROLE_OPTIONS = ["admin", "manager", "workforce", "staff"];
 
 const MANAGE_USERS_CAPABILITY_OPTIONS = [
   "*",
@@ -22,13 +22,20 @@ function requireManageUsersAdmin_(sessionId, signature) {
 }
 
 function getManageUsersSheet_() {
-  const sheet = getSheetSafe(MANAGE_USERS_SHEET_NAME);
+  const registryId = PropertiesService.getScriptProperties().getProperty(
+    "MANAGER_REGISTRY_SPREADSHEET_ID",
+  );
+
+  if (!registryId) {
+    throw new Error("MANAGER_REGISTRY_SPREADSHEET_ID is not configured.");
+  }
+
+  const spreadsheet = openSpreadsheetById(registryId);
+  const sheet = spreadsheet.getSheetByName(MANAGE_USERS_SHEET_NAME);
 
   if (!sheet) {
     throw new Error(
-      'Manage Users could not find the "' +
-        MANAGE_USERS_SHEET_NAME +
-        '" sheet.',
+      `The central registry is missing the "${MANAGE_USERS_SHEET_NAME}" sheet.`,
     );
   }
 
@@ -38,9 +45,9 @@ function getManageUsersSheet_() {
     throw new Error("AUTHORIZED_USERS has no header row.");
   }
 
-  const headers = values[0].map(function (header) {
-    return String(header).trim().toLowerCase();
-  });
+  const headers = values[0].map((header) =>
+    String(header).trim().toLowerCase(),
+  );
 
   const requiredHeaders = [
     "email",
@@ -53,22 +60,21 @@ function getManageUsersSheet_() {
 
   const columns = {};
 
-  requiredHeaders.forEach(function (header) {
+  requiredHeaders.forEach((header) => {
     const index = headers.indexOf(header);
 
     if (index === -1) {
-      throw new Error(
-        'AUTHORIZED_USERS is missing the "' + header + '" column.',
-      );
+      throw new Error(`AUTHORIZED_USERS is missing the "${header}" column.`);
     }
 
     columns[header] = index;
   });
 
   return {
-    sheet: sheet,
-    values: values,
-    columns: columns,
+    spreadsheet,
+    sheet,
+    values,
+    columns,
   };
 }
 
@@ -143,19 +149,19 @@ function getManageUsersData(sessionId, signature) {
         return null;
       }
 
+      const enabled = manageUsersIsEnabled_(row[c.enabled]);
+
       return {
         rowNumber: index + 2,
-        email: email,
-        enabled: manageUsersIsEnabled_(row[c.enabled]),
+        email,
+        enabled,
         role: String(row[c.role] || "").trim(),
         capabilities: String(row[c.capabilities] || "")
           .split(",")
-          .map(function (item) {
-            return item.trim();
-          })
+          .map((item) => item.trim())
           .filter(Boolean),
         notes: String(row[c.notes] || ""),
-        online: onlineEmails.has(email.toLowerCase()),
+        online: enabled && onlineEmails.has(email.toLowerCase()),
       };
     })
     .filter(Boolean);
@@ -284,61 +290,78 @@ function updateManagedUser(sessionId, signature, payload) {
     );
   }
 
-  const data = getManageUsersSheet_();
-  const c = data.columns;
-  const matchingRows = [];
+  const lock = LockService.getScriptLock();
 
-  data.values.slice(1).forEach(function (row, index) {
-    if (
-      String(row[c.email] || "")
-        .trim()
-        .toLowerCase() === email
-    ) {
-      matchingRows.push({
-        rowNumber: index + 2,
-        row: row,
-      });
-    }
-  });
-
-  if (matchingRows.length !== 1) {
-    throw new Error(
-      matchingRows.length
-        ? "Duplicate email rows were found. Resolve them before editing."
-        : "User not found.",
-    );
+  if (!lock.tryLock(10000)) {
+    throw new Error("User management is busy. Please try again.");
   }
 
-  const target = matchingRows[0];
-  const currentEnabled = manageUsersIsEnabled_(target.row[c.enabled]);
-  const currentRole = String(target.row[c.role] || "").trim();
+  try {
+    // Re-read the central registry while holding the lock.
+    const data = getManageUsersSheet_();
+    const c = data.columns;
+    const matchingRows = [];
 
-  const removesAdminAccess =
-    currentEnabled && currentRole === "admin" && (!enabled || role !== "admin");
-
-  if (removesAdminAccess) {
-    const enabledAdmins = data.values.slice(1).filter(function (row) {
-      return (
-        manageUsersIsEnabled_(row[c.enabled]) &&
-        String(row[c.role] || "").trim() === "admin"
-      );
+    data.values.slice(1).forEach((row, index) => {
+      if (
+        String(row[c.email] || "")
+          .trim()
+          .toLowerCase() === email
+      ) {
+        matchingRows.push({
+          rowNumber: index + 2,
+          row,
+        });
+      }
     });
 
-    if (enabledAdmins.length <= 1) {
-      throw new Error("The last enabled admin cannot be disabled or demoted.");
+    if (matchingRows.length !== 1) {
+      throw new Error(
+        matchingRows.length
+          ? "Duplicate email rows were found. Resolve them before editing."
+          : "User not found.",
+      );
     }
+
+    const target = matchingRows[0];
+    const currentEnabled = manageUsersIsEnabled_(target.row[c.enabled]);
+    const currentRole = String(target.row[c.role] || "").trim();
+
+    const removesAdminAccess =
+      currentEnabled &&
+      currentRole === "admin" &&
+      (!enabled || role !== "admin");
+
+    if (removesAdminAccess) {
+      const enabledAdmins = data.values
+        .slice(1)
+        .filter(
+          (row) =>
+            manageUsersIsEnabled_(row[c.enabled]) &&
+            String(row[c.role] || "").trim() === "admin",
+        );
+
+      if (enabledAdmins.length <= 1) {
+        throw new Error(
+          "The last enabled admin cannot be disabled or demoted.",
+        );
+      }
+    }
+
+    // Preserve Google Sub and all unrelated columns.
+    const updatedRow = target.row.slice();
+
+    updatedRow[c.enabled] = enabled;
+    updatedRow[c.role] = role;
+    updatedRow[c.capabilities] = capabilities.join(", ");
+    updatedRow[c.notes] = notes;
+
+    data.sheet
+      .getRange(target.rowNumber, 1, 1, updatedRow.length)
+      .setValues([updatedRow]);
+  } finally {
+    lock.releaseLock();
   }
-
-  // Preserve unrelated columns and Google Sub.
-  const updatedRow = target.row.slice();
-  updatedRow[c.enabled] = enabled;
-  updatedRow[c.role] = role;
-  updatedRow[c.capabilities] = capabilities.join(", ");
-  updatedRow[c.notes] = notes;
-
-  data.sheet
-    .getRange(target.rowNumber, 1, 1, updatedRow.length)
-    .setValues([updatedRow]);
 
   return {
     success: true,

@@ -6,6 +6,7 @@ import { HourSummary } from "../hours/hour-summary.js";
 import { RequestManager } from "./request-manager.js";
 import { AppUtils } from "../utils/utils.js";
 import { ReportGenerator } from "../reports/generator.js";
+import { ActivityToday } from "../tables/activity-today.js";
 
 function callGScriptAsync(gscriptFunc, args) {
   return new Promise((resolve, reject) => {
@@ -51,7 +52,9 @@ function confirmNewProjects(newProjects) {
     let confirmed = false;
 
     const finish = (result) => {
-      if (settled) {return;}
+      if (settled) {
+        return;
+      }
 
       settled = true;
       confirmed = result;
@@ -156,8 +159,6 @@ function notifyHoursRecorded(formData) {
   );
 }
 
-// Registration Handlers
-
 // edit-today-hours — Hours
 RequestManager.registerHandler(
   "edit-today-hours",
@@ -195,6 +196,8 @@ RequestManager.registerHandler(
         ...formData,
         action: "edit",
       });
+
+      ActivityToday.refreshAfterSave();
 
       AppUtils.showDashboardToast(
         response.message || "Today's hours updated successfully!",
@@ -268,25 +271,62 @@ RequestManager.registerHandler(
 
     const [sessionId, signature] = await getAuthArgs();
 
-    let existingTasks;
+    const existingTasks = new Set(
+      (Array.isArray(cachedTasks) ? cachedTasks : [])
+        .map(normalizeProjectName)
+        .filter(Boolean),
+    );
 
-    if (Array.isArray(cachedTasks) && cachedTasks.length > 0) {
-      existingTasks = new Set(cachedTasks.map(normalizeProjectName));
-    } else {
+    const requestedTasks = [
+      ...new Set(
+        records
+          .map((record) => String(record.task || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    // Only verify with the server if the cache misses a requested task.
+    const missingFromCache = requestedTasks.filter(
+      (task) => !existingTasks.has(normalizeProjectName(task)),
+    );
+
+    if (missingFromCache.length > 0) {
       try {
-        const projects = await callGScriptAsync("getProjects", [
+        updateProgress("Verifying existing projects");
+
+        const projects = await callGScriptAsync("getTaskOptions", [
           sessionId,
           signature,
+          clientName,
         ]);
 
-        existingTasks = new Set(
-          (Array.isArray(projects) ? projects : []).map((project) =>
-            normalizeProjectName(project[0]),
-          ),
-        );
+        const serverTasks = Array.isArray(projects)
+          ? projects
+              .map((project) =>
+                normalizeProjectName(
+                  typeof project === "string" ? project : project?.[0],
+                ),
+              )
+              .filter(Boolean)
+          : [];
+
+        // Merge server results with the existing cache.
+        for (const task of serverTasks) {
+          existingTasks.add(task);
+        }
+
+        // Refresh the cache with the authoritative server response.
+        const mergedTasks = [
+          ...new Set([
+            ...(Array.isArray(cachedTasks) ? cachedTasks : []),
+            ...serverTasks,
+          ]),
+        ];
+
+        AppUtils.cacheSet(cacheKey, mergedTasks);
       } catch (error) {
         console.error(
-          "[RequestHandlers] Unable to check existing projects:",
+          "[RequestHandlers] Unable to verify existing projects:",
           error,
         );
 
@@ -297,13 +337,9 @@ RequestManager.registerHandler(
       }
     }
 
-    const newProjects = [
-      ...new Set(
-        records
-          .map((record) => String(record.task || "").trim())
-          .filter((task) => !existingTasks.has(normalizeProjectName(task))),
-      ),
-    ];
+    const newProjects = requestedTasks.filter(
+      (task) => !existingTasks.has(normalizeProjectName(task)),
+    );
 
     const needsProjectSync = newProjects.length > 0;
 
@@ -368,6 +404,8 @@ RequestManager.registerHandler(
       (sum, record) => sum + Number(record.hour || 0),
       0,
     );
+
+    ActivityToday.refreshAfterSave();
 
     AppUtils.showDashboardToast(
       `${records.length} hour entr${records.length === 1 ? "y" : "ies"} successfully recorded!`,
@@ -435,7 +473,9 @@ RequestManager.registerHandler(
     ]);
 
     if (existing?.exists) {
-      const choice = await ReportGenerator.confirmExistingReport(existing.report);
+      const choice = await ReportGenerator.confirmExistingReport(
+        existing.report,
+      );
 
       if (choice?.cancelled) {
         return { cancelled: true };
@@ -639,5 +679,94 @@ RequestManager.registerHandler(
     updateProgress("External sheet created successfully");
 
     return result;
+  },
+);
+
+// update-client-record-status
+RequestManager.registerHandler(
+  "update-client-record-status",
+  async (payload, { updateProgress }) => {
+    const clientName = String(payload?.clientName || "").trim();
+    const operations = payload?.operations;
+
+    if (!clientName) {
+      throw new Error("A client name is required.");
+    }
+
+    if (!Array.isArray(operations) || operations.length === 0) {
+      throw new Error("At least one status update is required.");
+    }
+
+    updateProgress("Authorizing client status updates");
+
+    const [sessionId, signature] = await getAuthArgs();
+
+    const results = [];
+
+    for (let index = 0; index < operations.length; index++) {
+      const operation = operations[index];
+
+      updateProgress(
+        `Updating record ${index + 1} of ${operations.length}`,
+      );
+
+      try {
+        const result = await callGScriptAsync(
+          "updateClientRecordStatus",
+          [
+            sessionId,
+            signature,
+            {
+              ...operation,
+              clientName,
+              spreadsheetId: payload.spreadsheetId,
+              sheetId: payload.sheetId,
+            },
+          ],
+        );
+
+        results.push({
+          rowIndex: operation.rowIndex,
+          success: true,
+          result,
+        });
+      } catch (error) {
+        results.push({
+          rowIndex: operation.rowIndex,
+          success: false,
+          message: error?.message || "Status update failed.",
+        });
+      }
+    }
+
+    const failed = results.filter((item) => !item.success);
+
+    // Preserve individual outcomes in Request Manager history.
+    if (failed.length) {
+      const error = new Error(
+        `${failed.length} of ${operations.length} status update(s) failed. ` +
+          "Review the operation results before retrying.",
+      );
+
+      error.results = results;
+      throw error;
+    }
+
+    updateProgress("Client statuses updated successfully");
+
+    document.dispatchEvent(
+      new CustomEvent("gcb:client-record-status-updated", {
+        detail: {
+          clientName,
+          results,
+        },
+      }),
+    );
+
+    return {
+      success: true,
+      clientName,
+      results,
+    };
   },
 );

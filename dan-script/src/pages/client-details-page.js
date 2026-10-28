@@ -44,12 +44,12 @@ const clientDetailsPage = (() => {
     }
 
     $("#client-details-name").html(`
-    <span>${AppUtils.escapeHtml(clientName)}</span>
-    <span class="client-details-loading ms-2">
-      <i class="fa-solid fa-spinner fa-spin"></i>
-      <span>Checking client<span class="loading-dots"></span></span>
-    </span>
-  `);
+      <span>${AppUtils.escapeHtml(clientName)}</span>
+      <span class="client-details-loading ms-2">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        <span>Checking client<span class="loading-dots"></span></span>
+      </span>
+    `);
 
     const pageToken = RouterModule.getPageToken();
     checkClientSheetExists(pageToken);
@@ -253,7 +253,7 @@ const clientDetailsPage = (() => {
       )
       .join("");
 
-    // AppUtils.initSelect2("#client-hours-year");
+    // Select2Module.init("#client-hours-year");
   }
 
   function renderProjects(data) {

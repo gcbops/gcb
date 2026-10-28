@@ -35,7 +35,7 @@ const growthComparisonOverviewPage = (() => {
     // Default: previous year + current year
     $year.val([currentYear - 1, currentYear].filter((year) => year >= 2024));
 
-    // AppUtils.initSelect2($year, {
+    // Select2Module.init($year, {
     //   closeOnSelect: false,
     //   placeholder: "Select years",
     // });

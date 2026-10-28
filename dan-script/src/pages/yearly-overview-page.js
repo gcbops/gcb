@@ -32,7 +32,7 @@ const yearlyOverviewPage = (() => {
       showYearlyMonthlyHoursChartLoading();
     }
 
-    // AppUtils.initSelect2(".chart-filters");
+    // Select2Module.init(".chart-filters");
 
     ChartModule.loadChart(
       "yearly_monthly_hours",

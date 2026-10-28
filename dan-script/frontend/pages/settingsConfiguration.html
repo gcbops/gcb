@@ -4,7 +4,7 @@
             aria-selected="true">
             <span>General</span></a>
     </li>
-    <li class="nav-item" data-required-role="admin" role="presentation">
+    <li class="nav-item" data-required-role="manager" role="presentation">
         <a role="tab" class="nav-link" id="integration-tab" data-bs-toggle="tab" href="#integration-tab-content" aria-selected="false"
             tabindex="-1">
             <span>Integrations</span>
@@ -87,7 +87,7 @@
 
 
                     <!-- Client Registry Synchronization -->
-                    <div data-required-role="admin" class="pipeline-group border-bottom">
+                    <div data-required-role="manager" class="pipeline-group border-bottom">
 
                         <div
                             class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all"
@@ -429,7 +429,7 @@
         id="integration-tab-content" 
         role="tabpanel" 
         aria-labelledby="integrations-tab"
-        data-required-role="admin" 
+        data-required-role="manager" 
     >
 
         <div class="py-4">
@@ -577,9 +577,9 @@
             <div class="card-body">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
                     <div>
-                        <h5 class="mb-1">Backup Management</h5>
+                        <h5 class="mb-1">Admin Backup Management</h5>
                         <p class="text-muted font-size-sm mb-0">
-                            Create and review backups of registered Google Sheets.
+                            Create combined backups of enabled managers' operational and external spreadsheets.
                         </p>
                     </div>
                 </div>
@@ -613,7 +613,7 @@
                         <div class="card card-shadow-sm border-0 bg-light">
                             <div class="card-body">
                                 <div class="text-muted font-size-xs">
-                                    Backup Destination
+                                    Admin Backup Destination
                                 </div>
                                 <div class="font-weight-bold" id="backup-destination-status">
                                     —
@@ -638,7 +638,7 @@
                                 data-settings-action="create-manual-backup"
                             >
                                 <i class="fa fa-cloud-upload me-1"></i>
-                                Create Backup
+                                Create Combined Backup
                             </button>
                             
                             <button
@@ -700,7 +700,7 @@
                                         data-settings-action="create-manual-backup"
                                     >
                                         <i class="pe-7s-cloud-upload text-primary me-2"></i>
-                                        Create Backup
+                                        Create Combined Backup
                                     </button>
                                 </li>
 
@@ -736,7 +736,7 @@
                             <tr>
                                 <th>Backup Date</th>
                                 <th>Backup Name</th>
-                                <th>Files</th>
+                                <th>ZIP Contents</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>

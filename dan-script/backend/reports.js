@@ -1,21 +1,51 @@
+function getManagerReportWorkspace_(manager) {
+  if (!manager?.managerId || !manager?.spreadsheetId) {
+    throw new Error("A valid manager registry entry is required.");
+  }
+
+  if (!manager.reportsFolderId) {
+    throw new Error(
+      `Reports Folder ID is missing for manager "${manager.managerId}".`,
+    );
+  }
+
+  const workspace = {
+    managerId: manager.managerId,
+    managerName: manager.managerName || manager.managerId,
+    email: String(manager.email || "").trim(),
+    discordWebhookUrl: String(manager.discordWebhookUrl || "").trim(),
+    spreadsheetId: manager.spreadsheetId,
+    reportsFolderId: manager.reportsFolderId,
+    spreadsheet: openSpreadsheetById(manager.spreadsheetId),
+  };
+
+  // Verify the manager's configured Reports Folder is accessible.
+  getReportFolder(workspace);
+
+  return workspace;
+}
+
 function cleanupOldReports() {
   const startedAt = Date.now();
 
   try {
     const result = cleanupOldReportsInternal();
 
+    const failed = result.missing + result.managerErrors;
+
     recordGcbOperationLog_({
       category: "REPORT",
       operation: "CLEANUP_OLD_REPORTS",
-      status: result.missing > 0 ? "PARTIAL" : "SUCCESS",
+      status: failed > 0 ? "PARTIAL" : "SUCCESS",
       trigger: "SCHEDULED_OR_MANUAL",
       durationMs: Date.now() - startedAt,
       processed: result.processed,
       succeeded: result.deleted + result.kept,
-      failed: result.missing,
+      failed,
       message:
         `Deleted ${result.deleted}; kept ${result.kept}; ` +
-        `missing or inaccessible ${result.missing}.`,
+        `missing or inaccessible ${result.missing}; ` +
+        `manager errors ${result.managerErrors}.`,
     });
 
     return result;
@@ -38,36 +68,79 @@ function cleanupOldReportsInternal() {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - 3);
 
-  const logs = getReportLogs();
+  const managers = getBackupManagers_();
 
   let processed = 0;
   let deleted = 0;
   let kept = 0;
   let missing = 0;
+  let managerErrors = 0;
 
-  logs.forEach((report) => {
-    const match = report.link.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  // Prevent duplicate processing if folders are accidentally shared.
+  const processedFileIds = new Set();
 
-    if (!match) {
-      return;
-    }
-
-    const fileId = match[1];
-
+  managers.forEach((manager) => {
     try {
-      const file = DriveApp.getFileById(fileId);
+      const workspace = getManagerReportWorkspace_(manager);
+      const reportsFolder = getReportFolder(workspace);
+      const files = reportsFolder.getFiles();
 
-      processed++;
+      while (files.hasNext()) {
+        const file = files.next();
 
-      if (file.getDateCreated() < cutoff) {
-        file.setTrashed(true);
-        deleted++;
-      } else {
-        kept++;
+        try {
+          if (file.isTrashed()) {
+            continue;
+          }
+
+          const fileId = file.getId();
+
+          if (processedFileIds.has(fileId)) {
+            continue;
+          }
+
+          processedFileIds.add(fileId);
+          processed++;
+
+          // Includes PDFs, CSVs, spreadsheets, and other direct files.
+          // The configured manager Reports Folder defines the scope.
+          if (file.getDateCreated() < cutoff) {
+            file.setTrashed(true);
+            deleted++;
+          } else {
+            kept++;
+          }
+        } catch (error) {
+          missing++;
+
+          recordGcbOperationLog_({
+            category: "REPORT",
+            operation: "CLEANUP_REPORT_FILE",
+            status: "FAILED",
+            trigger: "SCHEDULED_OR_MANUAL",
+            target: manager.managerId,
+            processed: 1,
+            failed: 1,
+            message:
+              "Unable to process a file in the manager's Reports Folder.",
+            error: String(error?.message || error),
+          });
+        }
       }
-    } catch (err) {
-      // File may already be deleted or inaccessible.
-      missing++;
+    } catch (error) {
+      managerErrors++;
+
+      recordGcbOperationLog_({
+        category: "REPORT",
+        operation: "CLEANUP_MANAGER_REPORTS",
+        status: "FAILED",
+        trigger: "SCHEDULED_OR_MANUAL",
+        target: manager.managerId,
+        processed: 0,
+        failed: 1,
+        message: "Unable to clean up files for this manager.",
+        error: String(error?.message || error),
+      });
     }
   });
 
@@ -76,32 +149,56 @@ function cleanupOldReportsInternal() {
     deleted,
     kept,
     missing,
+    managerErrors,
   };
 
-  Logger.log(result);
-
+  Logger.log(JSON.stringify(result));
   return result;
 }
 
-function getReportFolder() {
-  const folderId =
-    PropertiesService.getScriptProperties().getProperty("REPORT_FOLDER_ID");
+function getReportFolder(workspace) {
+  const folderId = String(workspace?.reportsFolderId || "").trim();
 
   if (!folderId) {
-    throw new Error("REPORT_FOLDER_ID is not configured.");
+    throw new Error(
+      `No Reports Folder ID is configured for manager "${workspace?.managerId || "unknown"}".`,
+    );
   }
 
-  return DriveApp.getFolderById(folderId);
+  let folder;
+
+  try {
+    folder = DriveApp.getFolderById(folderId);
+
+    if (folder.isTrashed()) {
+      throw new Error("The configured reports folder is in the trash.");
+    }
+
+    folder.getName();
+  } catch (error) {
+    throw new Error(
+      `Unable to access the reports folder for manager "${workspace?.managerId || "unknown"}": ` +
+        `${error?.message || error}`,
+    );
+  }
+
+  return folder;
 }
 
-function saveReportPDF(config) {
+function saveReportPDF(config, workspace) {
   const startedAt = Date.now();
   const reportType = String(config?.reportType || "UNKNOWN")
     .trim()
     .toUpperCase();
 
   try {
-    const fileUrl = saveReportPDFInternal(config);
+    if (!workspace?.managerId || !workspace?.spreadsheet) {
+      throw new Error(
+        "A valid manager workspace is required to generate a report.",
+      );
+    }
+
+    const fileUrl = saveReportPDFInternal(config, workspace);
 
     recordGcbOperationLog_({
       category: "REPORT",
@@ -134,8 +231,14 @@ function saveReportPDF(config) {
   }
 }
 
-function saveReportPDFInternal(config) {
+function saveReportPDFInternal(config, workspace) {
   Validation.requireObject(config, "Report configuration");
+
+  if (!workspace?.managerId || !workspace?.spreadsheet) {
+    throw new Error("A valid manager workspace is required.");
+  }
+
+  const ss = workspace.spreadsheet;
 
   const reportType = String(config.reportType || "")
     .trim()
@@ -143,13 +246,13 @@ function saveReportPDFInternal(config) {
 
   Validation.enumValue(reportType, "report type", ["monthly", "yearly"]);
 
-  const reportSheet = Validation.requiredString(
+  const reportSheetName = Validation.requiredString(
     config.reportSheet,
     "Report sheet",
     { maxLength: 100 },
   );
 
-  const logSheet = Validation.requiredString(
+  const logSheetName = Validation.requiredString(
     config.logSheet,
     "Report log sheet",
     { maxLength: 100 },
@@ -162,36 +265,41 @@ function saveReportPDFInternal(config) {
       })
     : "";
 
-  const ss = getSpreadsheet();
-  const sheet = getSheetSafe(reportSheet);
+  const sheet = ss.getSheetByName(reportSheetName);
 
   if (!sheet) {
-    throw new Error(`Report sheet "${reportSheet}" not found.`);
+    throw new Error(`Report sheet "${reportSheetName}" not found.`);
   }
 
-  const folder = getReportFolder();
+  const reportLogSheet = ss.getSheetByName(logSheetName);
+
+  if (!reportLogSheet) {
+    throw new Error(`Report log sheet "${logSheetName}" not found.`);
+  }
+
+  const folder = getReportFolder(workspace);
 
   const reportNum = sheet.getRange("G1").getValue();
   const reportName = sheet.getRange("B1").getValue();
   const pdfName = `${reportType}Report_${reportNum}_${reportName}.pdf`;
 
   const range = sheet.getDataRange();
+  const originalValues = range.getValues();
   const formulas = range.getFormulas();
-
   const wasHidden = sheet.isSheetHidden();
 
   let blob = null;
   let success = false;
+  let createdNewFile = false;
 
   try {
-    // 👀 Unhide temporarily if needed
     if (wasHidden) {
       sheet.showSheet();
       SpreadsheetApp.flush();
       Utilities.sleep(1000);
     }
 
-    // Freeze formulas as values for export
+    // Preserve the existing export behavior: temporarily freeze formulas.
     range.setValues(range.getDisplayValues());
     SpreadsheetApp.flush();
     Utilities.sleep(5000);
@@ -213,11 +321,8 @@ function saveReportPDFInternal(config) {
 
     const token = ScriptApp.getOAuthToken();
 
-    // ==========================
-    // Try 1
-    // ==========================
-
-    for (let i = 1; i <= 3; i++) {
+    // Primary export: retry up to three times.
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const response = UrlFetchApp.fetch(url, {
           headers: {
@@ -230,73 +335,55 @@ function saveReportPDFInternal(config) {
           blob = response.getBlob().setName(pdfName);
           success = true;
 
-          logResponse(`✅ Success on Try 1 (attempt ${i})`);
-
+          logResponse(`Success on primary PDF export, attempt ${attempt}.`);
           break;
         }
 
         logResponse(
-          `Try 1 Attempt ${i} failed (${response.getResponseCode()})\n` +
-            response.getContentText(),
+          `Primary PDF export attempt ${attempt} failed ` +
+            `(${response.getResponseCode()}): ${response.getContentText()}`,
         );
-      } catch (err) {
-        logResponse(`Try 1 Attempt ${i} error: ${err}`);
+      } catch (error) {
+        logResponse(
+          `Primary PDF export attempt ${attempt} error: ${error?.message || error}`,
+        );
       }
 
-      Utilities.sleep(2000);
+      if (attempt < 3) {
+        Utilities.sleep(2000);
+      }
     }
 
-    // ==========================
-    // Try 2
-    // ==========================
-
     if (!success) {
-      logResponse("⚠️ Try 1 failed. Running Fallback 1...");
+      logResponse("Primary PDF export failed. Trying fallback 1.");
 
       try {
-        blob = saveReportPDF_Fallback1(config, pdfName);
+        blob = saveReportPDF_Fallback1(config, pdfName, workspace);
 
         if (blob) {
           success = true;
-          logResponse("✅ Fallback 1 succeeded!");
         }
-      } catch (err) {
-        logResponse("❌ Fallback 1 failed: " + err.message);
+      } catch (error) {
+        logResponse(`Fallback 1 failed: ${error?.message || error}`);
       }
     }
 
-    // ==========================
-    // Try 3
-    // ==========================
-
     if (!success) {
-      logResponse("⚠️ Fallback 1 failed. Running Fallback 2...");
+      logResponse("Fallback 1 failed. Trying fallback 2.");
 
       try {
-        blob = saveReportPDF_Fallback2(config, pdfName);
+        blob = saveReportPDF_Fallback2(config, pdfName, workspace);
 
         if (blob) {
           success = true;
-          logResponse("✅ Fallback 2 succeeded!");
         }
-      } catch (err) {
-        logResponse("❌ Fallback 2 failed: " + err.message);
+      } catch (error) {
+        logResponse(`Fallback 2 failed: ${error?.message || error}`);
       }
     }
 
-    if (!success) {
-      throw new Error("❌ Failed to export PDF after 3 layered attempts.");
-    }
-
-    // ==========================
-    // Save PDF
-    // ==========================
-
-    
-    const reportLogSheet = getSheetSafe(logSheet);
-
-    if (!reportLogSheet) {
-      throw new Error(`Report log sheet "${logSheet}" not found.`);
+    if (!success || !blob) {
+      throw new Error("Failed to export PDF after all attempts.");
     }
 
     const operationKey = String(config.operationKey || "").trim();
@@ -306,7 +393,6 @@ function saveReportPDFInternal(config) {
     let fileUrl;
 
     if (operationKey && operationRow >= 2) {
-      // Custom queued request: use its pre-reserved log row.
       const savedKey = String(
         reportLogSheet.getRange(operationRow, 5).getDisplayValue(),
       ).trim();
@@ -321,17 +407,17 @@ function saveReportPDFInternal(config) {
         );
       }
 
-      // Create the Drive file only after validating the reserved record.
-      file = findCustomReportFileByOperationKey_(operationKey);
+      // Search only this manager's Reports Folder.
+      file = findCustomReportFileByOperationKey_(workspace, operationKey);
 
       if (!file) {
         file = folder.createFile(blob);
+        createdNewFile = true;
         markCustomReportFile_(file, operationKey);
       }
 
       fileUrl = file.getUrl();
 
-      // Write the file details and completion status to the same row.
       reportLogSheet
         .getRange(operationRow, 1, 1, 7)
         .setValues([
@@ -346,36 +432,75 @@ function saveReportPDFInternal(config) {
           ],
         ]);
     } else {
-      // Preserve the existing scheduled/manual report behavior.
       file = folder.createFile(blob);
+      createdNewFile = true;
       fileUrl = file.getUrl();
 
       reportLogSheet.appendRow([new Date(), reportNum, reportName, fileUrl]);
     }
 
     if (latestLinkCell) {
-      getLabSheet()?.getRange(latestLinkCell).setValue(fileUrl);
+      const labSheet = ss.getSheetByName("Lab 3.0");
+
+      if (!labSheet) {
+        throw new Error(
+          `Manager ${workspace.managerId} is missing the "Lab 3.0" sheet.`,
+        );
+      }
+
+      // Update the latest report link in this manager's spreadsheet only.
+      labSheet.getRange(latestLinkCell).setValue(fileUrl);
+
+      // Scheduled monthly: AX27 -> AX30
+      // Scheduled yearly:  AY27 -> AY30
+      // Custom monthly/yearly: AZ27/BA27 -> AZ30
+      const normalizedLinkCell = latestLinkCell.toUpperCase();
+
+      const counterCellByLinkCell = {
+        AX27: "AX30",
+        AY27: "AY30",
+        AZ27: "AZ30",
+        BA27: "AZ30",
+      };
+
+      const counterCell = counterCellByLinkCell[normalizedLinkCell];
+
+      if (!counterCell) {
+        throw new Error(
+          `No report counter is configured for latest-link cell "${latestLinkCell}".`,
+        );
+      }
+
+      // Do not count a custom report twice when recovering an existing operation.
+      if (createdNewFile) {
+        const counterRange = labSheet.getRange(counterCell);
+        const currentCount = Number(counterRange.getValue()) || 0;
+
+        counterRange.setValue(currentCount + 1);
+      }
+
+      SpreadsheetApp.flush();
     }
 
-    const lab = getLabSheet();
-
-    if (lab) {
-      const cell = lab.getRange("AZ30");
-
-      cell.setValue((Number(cell.getValue()) || 0) + 1);
-    }
-
-    logResponse(`✅ PDF saved successfully: ${fileUrl}`);
+    logResponse(
+      `PDF saved successfully for manager ${workspace.managerId}: ${fileUrl}`,
+    );
 
     return fileUrl;
   } finally {
-    // Always restore formulas
-    range.setFormulas(formulas);
+    range.setValues(originalValues);
+
+    formulas.forEach((row, rowIndex) => {
+      row.forEach((formula, columnIndex) => {
+        if (formula) {
+          sheet.getRange(rowIndex + 1, columnIndex + 1).setFormula(formula);
+        }
+      });
+    });
 
     SpreadsheetApp.flush();
 
-    // Restore hidden state
-    if (wasHidden) {
+    if (wasHidden && !sheet.isSheetHidden()) {
       sheet.hideSheet();
     }
   }
@@ -385,12 +510,18 @@ function getCustomReportOperationMarker_(operationKey) {
   return `GCB_REPORT_OPERATION_KEY=${encodeURIComponent(operationKey)}`;
 }
 
-function findCustomReportFileByOperationKey_(operationKey) {
+function findCustomReportFileByOperationKey_(workspace, operationKey) {
+  if (!workspace?.managerId || !workspace?.spreadsheet) {
+    throw new Error(
+      "A valid manager workspace is required for report recovery.",
+    );
+  }
+
   if (!operationKey) {
     return null;
   }
 
-  const folder = getReportFolder();
+  const folder = getReportFolder(workspace);
   const marker = getCustomReportOperationMarker_(operationKey);
   const files = folder.getFiles();
 
@@ -424,10 +555,13 @@ function markCustomReportFile_(file, operationKey) {
   return file;
 }
 
-/**
- * Reconciles a previously created PDF with its reserved operation row.
- */
-function recoverCustomReportOperation_(sheet, operation) {
+function recoverCustomReportOperation_(workspace, sheet, operation) {
+  if (!workspace?.managerId || !workspace?.spreadsheet) {
+    throw new Error(
+      "A valid manager workspace is required for report recovery.",
+    );
+  }
+
   if (!operation?.row || !operation.operationKey) {
     return null;
   }
@@ -436,10 +570,19 @@ function recoverCustomReportOperation_(sheet, operation) {
 
   if (operation.fileId) {
     try {
-      file = DriveApp.getFileById(operation.fileId);
+      const candidate = DriveApp.getFileById(operation.fileId);
 
-      if (file.isTrashed()) {
-        file = null;
+      if (!candidate.isTrashed()) {
+        // Confirm the file belongs to this manager's Reports Folder.
+        const folderId = getReportFolder(workspace).getId();
+        const parents = candidate.getParents();
+
+        while (parents.hasNext()) {
+          if (parents.next().getId() === folderId) {
+            file = candidate;
+            break;
+          }
+        }
       }
     } catch (_) {
       file = null;
@@ -447,7 +590,10 @@ function recoverCustomReportOperation_(sheet, operation) {
   }
 
   if (!file) {
-    file = findCustomReportFileByOperationKey_(operation.operationKey);
+    file = findCustomReportFileByOperationKey_(
+      workspace,
+      operation.operationKey,
+    );
   }
 
   if (!file || file.isTrashed()) {
@@ -455,7 +601,6 @@ function recoverCustomReportOperation_(sheet, operation) {
   }
 
   const marker = getCustomReportOperationMarker_(operation.operationKey);
-
   const markers = String(file.getDescription() || "").split(/\r?\n/);
 
   if (!markers.includes(marker)) {
@@ -491,7 +636,7 @@ function recoverCustomReportOperation_(sheet, operation) {
 }
 
 function saveMonthlyReportPDF() {
-  return saveReportPDF({
+  return saveScheduledReportsForManagers_({
     reportType: "Monthly",
     reportSheet: "Monthly Report PDF",
     logSheet: "MonthlyReport_Log",
@@ -500,7 +645,7 @@ function saveMonthlyReportPDF() {
 }
 
 function saveYearlyReportPDF() {
-  return saveReportPDF({
+  return saveScheduledReportsForManagers_({
     reportType: "Yearly",
     reportSheet: "Yearly Report PDF",
     logSheet: "YearlyReport_Log",
@@ -508,11 +653,66 @@ function saveYearlyReportPDF() {
   });
 }
 
+function saveScheduledReportsForManagers_(config) {
+  const managers = getBackupManagers_();
+  const results = [];
+
+  managers.forEach((manager) => {
+    try {
+      const workspace = getManagerReportWorkspace_(manager);
+
+      const reportUrl = saveReportPDF(config, workspace);
+
+      results.push({
+        managerId: manager.managerId,
+        success: true,
+        reportUrl,
+      });
+    } catch (error) {
+      const message = String(error?.message || error);
+
+      results.push({
+        managerId: manager.managerId,
+        success: false,
+        error: message,
+      });
+
+      recordGcbOperationLog_({
+        category: "REPORT",
+        operation: `SAVE_${String(config.reportType).toUpperCase()}_REPORT`,
+        status: "FAILED",
+        trigger: "SCHEDULED_REPORT",
+        processed: 1,
+        failed: 1,
+        target: manager.managerId,
+        message: "Scheduled report generation failed for this manager.",
+        error: message,
+      });
+    }
+  });
+
+  return {
+    success: results.every((result) => result.success),
+    processed: results.length,
+    succeeded: results.filter((result) => result.success).length,
+    failed: results.filter((result) => !result.success).length,
+    results,
+  };
+}
+
 function saveCustomReportPDF(sessionId, signature, type) {
-  requireCapability(sessionId, signature, "reports.generate");
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.generate",
+  );
+
+  const reportType = Validation.enumValue(type, "Report type", [
+    "monthly",
+    "yearly",
+  ]);
 
   enforceUserRateLimit("report_generation", sessionId, 3, 60);
-
   enforceGlobalRateLimit("report_generation", 5, 60);
 
   SpreadsheetApp.flush();
@@ -534,17 +734,17 @@ function saveCustomReportPDF(sessionId, signature, type) {
     },
   };
 
-  const config = configs[type];
+  const config = configs[reportType];
 
-  if (!config) {
-    throw new Error(`Unknown report type: ${type}`);
-  }
-
-  return saveReportPDF(config);
+  return saveReportPDF(config, workspace);
 }
 
 function updateCustomReportPDF(sessionId, signature, type, month, year) {
-  requireCapability(sessionId, signature, "reports.generate");
+  const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.generate",
+  );
 
   const reportType = Validation.enumValue(type, "report type", [
     "monthly",
@@ -556,7 +756,7 @@ function updateCustomReportPDF(sessionId, signature, type, month, year) {
     max: new Date().getFullYear(),
   });
 
-  const settings = getSheetSafe("Settings");
+  const settings = ss.getSheetByName("Settings");
 
   if (!settings) {
     throw new Error('Sheet "Settings" not found.');
@@ -567,9 +767,32 @@ function updateCustomReportPDF(sessionId, signature, type, month, year) {
       maxLength: 20,
     });
 
+    const validation = validateCustomMonthlyReport(
+      sessionId,
+      signature,
+      reportMonth,
+      reportYear,
+      ss,
+    );
+
+    if (!validation.valid) {
+      throw new Error(validation.message);
+    }
+
     settings.getRange("A3").setValue(reportMonth);
     settings.getRange("A5").setValue(reportYear);
   } else {
+    const validation = validateCustomYearlyReport(
+      sessionId,
+      signature,
+      reportYear,
+      ss,
+    );
+
+    if (!validation.valid) {
+      throw new Error(validation.message);
+    }
+
     settings.getRange("A11").setValue(reportYear);
   }
 
@@ -578,8 +801,16 @@ function updateCustomReportPDF(sessionId, signature, type, month, year) {
   return true;
 }
 
-function isReportReady(type = "monthly") {
-  const settings = getSheetSafe("Settings");
+function isReportReady(type = "monthly", spreadsheet) {
+  if (!spreadsheet) {
+    throw new Error("A manager spreadsheet is required.");
+  }
+
+  const settings = spreadsheet.getSheetByName("Settings");
+
+  if (!settings) {
+    throw new Error('Sheet "Settings" not found.');
+  }
 
   const configs = {
     monthly: {
@@ -602,49 +833,56 @@ function isReportReady(type = "monthly") {
     throw new Error(`Unknown report type: ${type}`);
   }
 
-  const generator = getSheetSafe(config.generatorSheet);
-  const pdf = getSheetSafe(config.pdfSheet);
+  const generator = spreadsheet.getSheetByName(config.generatorSheet);
+  const pdf = spreadsheet.getSheetByName(config.pdfSheet);
 
   if (!generator || !pdf) {
     throw new Error(`Required sheets for "${type}" report not found.`);
   }
 
-  // Expected title
   const expectedTitle = config.expectedTitle();
 
-  // Current PDF title
+  if (!expectedTitle) {
+    return false;
+  }
+
   const actualTitle = pdf.getRange("B1").getDisplayValue().trim();
 
-  // Wait until the title has updated
   if (!actualTitle.includes(expectedTitle)) {
     return false;
   }
 
-  // Compare client lists
   const generatorClients = generator
     .getRange("J3:J")
     .getDisplayValues()
     .flat()
-    .map((v) => String(v).trim())
+    .map((value) => String(value).trim())
     .filter(Boolean);
 
   const pdfClients = pdf
     .getRange("C5:C")
     .getDisplayValues()
     .flat()
-    .map((v) => String(v).trim())
+    .map((value) => String(value).trim())
     .filter(Boolean);
 
   if (generatorClients.length !== pdfClients.length) {
     return false;
   }
 
-  return generatorClients.every((client, i) => client === pdfClients[i]);
+  return generatorClients.every(
+    (client, index) => client === pdfClients[index],
+  );
 }
 
-function saveReportPDF_Fallback1(config, pdfName) {
-  const ss = getSpreadsheet();
-  const sourceSheet = getSheetSafe(config.reportSheet);
+function saveReportPDF_Fallback1(config, pdfName, workspace) {
+  const ss = workspace?.spreadsheet;
+
+  if (!workspace?.managerId || !ss) {
+    throw new Error("A valid manager workspace is required for PDF export.");
+  }
+
+  const sourceSheet = ss.getSheetByName(config.reportSheet);
   const tempName = `TempExport_${Date.now()}`;
   const tempSS = SpreadsheetApp.create(tempName);
   const tempId = tempSS.getId();
@@ -706,9 +944,14 @@ function saveReportPDF_Fallback1(config, pdfName) {
   }
 }
 
-function saveReportPDF_Fallback2(config, pdfName) {
-  const ss = getSpreadsheet();
-  const sheet = getSheetSafe(config.reportSheet);
+function saveReportPDF_Fallback2(config, pdfName, workspace) {
+  const ss = workspace?.spreadsheet;
+
+  if (!workspace?.managerId || !ss) {
+    throw new Error("A valid manager workspace is required for PDF export.");
+  }
+
+  const sheet = ss.getSheetByName(config.reportSheet);
 
   const range = sheet.getDataRange();
   const formulas = range.getFormulas();
@@ -757,7 +1000,11 @@ function generateCustomReportPDF(
   year,
   requestId,
 ) {
-  requireCapability(sessionId, signature, "reports.generate");
+  const { workspace, spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.generate",
+  );
 
   const reportType = Validation.enumValue(type, "Report type", [
     "monthly",
@@ -791,7 +1038,7 @@ function generateCustomReportPDF(
   lock.waitLock(30000);
 
   try {
-    const logSheet = getSheetSafe(config.logSheet);
+    const logSheet = ss.getSheetByName(config.logSheet);
 
     if (!logSheet) {
       throw new Error(`Report log sheet "${config.logSheet}" not found.`);
@@ -807,13 +1054,17 @@ function generateCustomReportPDF(
 
     if (existingOperation?.status === "COMPLETED") {
       return {
-        ...getCompletedCustomReportResult_(existingOperation),
+        ...getCompletedCustomReportResult_(workspace, existingOperation),
         type: reportType,
       };
     }
 
     if (existingOperation?.status === "PROCESSING") {
-      const recovered = recoverCustomReportOperation_(logSheet, existingOperation);
+      const recovered = recoverCustomReportOperation_(
+        workspace,
+        logSheet,
+        existingOperation,
+      );
 
       if (recovered) {
         return {
@@ -838,7 +1089,7 @@ function generateCustomReportPDF(
     enforceUserRateLimit("report_generation", sessionId, 3, 60);
     enforceGlobalRateLimit("report_generation", 5, 60);
 
-    const settings = getSheetSafe("Settings");
+    const settings = ss.getSheetByName("Settings");
 
     if (!settings) {
       throw new Error('Sheet "Settings" not found.');
@@ -859,6 +1110,7 @@ function generateCustomReportPDF(
         signature,
         reportMonth,
         reportYear,
+        ss,
       );
 
       if (!validation.valid) {
@@ -872,6 +1124,7 @@ function generateCustomReportPDF(
         sessionId,
         signature,
         reportYear,
+        ss,
       );
 
       if (!validation.valid) {
@@ -890,7 +1143,7 @@ function generateCustomReportPDF(
     let ready = false;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (isReportReady(reportType)) {
+      if (isReportReady(reportType, ss)) {
         ready = true;
         break;
       }
@@ -909,7 +1162,7 @@ function generateCustomReportPDF(
     // Record the operation before attempting to create the file.
     // If execution becomes uncertain, retries will not blindly create
     // another PDF.
-    const reportSheet = getSheetSafe(config.reportSheet);
+    const reportSheet = ss.getSheetByName(config.reportSheet);
 
     if (!reportSheet) {
       throw new Error(`Report sheet "${config.reportSheet}" not found.`);
@@ -930,11 +1183,14 @@ function generateCustomReportPDF(
 
     // saveReportPDF() will be updated in Step 2 to pass this
     // operation key and reserved row through to the file-save logic.
-    const fileUrl = saveReportPDF({
-      ...config,
-      operationKey,
-      operationRow,
-    });
+    const fileUrl = saveReportPDF(
+      {
+        ...config,
+        operationKey,
+        operationRow,
+      },
+      workspace,
+    );
 
     const operation = findCustomReportOperation_(logSheet, operationKey);
 
@@ -1009,33 +1265,73 @@ function findCustomReportOperation_(sheet, operationKey) {
  * the existing report-history columns A:D.
  */
 function ensureCustomReportOperationColumns_(sheet) {
-  sheet.getRange(1, 5, 1, 3).setValues([
-    ["Operation Key", "Operation Status", "Drive File ID"],
-  ]);
+  sheet
+    .getRange(1, 5, 1, 3)
+    .setValues([["Operation Key", "Operation Status", "Drive File ID"]]);
 }
 
-/**
- * Returns a completed operation's saved result.
- */
-function getCompletedCustomReportResult_(operation) {
+function getCompletedCustomReportResult_(workspace, operation) {
+  if (!workspace?.managerId || !workspace?.spreadsheet) {
+    throw new Error("A valid manager workspace is required.");
+  }
+
   if (!operation?.fileId || !operation?.fileUrl) {
     throw new Error(
-      "The report operation is marked completed but its saved file details are missing. Reconcile the report before retrying.",
+      "The report operation is marked completed but its saved file details are missing. " +
+        "Reconcile the report before retrying.",
     );
   }
 
-  const file = DriveApp.getFileById(operation.fileId);
+  let file;
+
+  try {
+    file = DriveApp.getFileById(operation.fileId);
+  } catch (_) {
+    throw new Error(
+      "The previously generated report file is unavailable. " +
+        "Reconcile the report before retrying.",
+    );
+  }
 
   if (file.isTrashed() || file.getUrl() !== operation.fileUrl) {
     throw new Error(
-      "The previously generated report file is unavailable. Reconcile the report before retrying.",
+      "The previously generated report file is unavailable. " +
+        "Reconcile the report before retrying.",
+    );
+  }
+
+  const folderId = getReportFolder(workspace).getId();
+  const parents = file.getParents();
+  let belongsToManager = false;
+
+  while (parents.hasNext()) {
+    if (parents.next().getId() === folderId) {
+      belongsToManager = true;
+      break;
+    }
+  }
+
+  if (!belongsToManager) {
+    throw new Error(
+      "The saved report does not belong to this manager's Reports Folder. " +
+        "Reconcile the report before retrying.",
+    );
+  }
+
+  const marker = getCustomReportOperationMarker_(operation.operationKey);
+
+  const markers = String(file.getDescription() || "").split(/\r?\n/);
+
+  if (!markers.includes(marker)) {
+    throw new Error(
+      "The saved PDF does not contain the expected operation marker. " +
+        "Reconcile the report before retrying.",
     );
   }
 
   return {
     success: true,
     reusedExisting: true,
-    type: operation.reportName ? undefined : undefined,
     reportName: String(operation.reportName || ""),
     reportNum: operation.reportNum,
     reportUrl: operation.fileUrl,
@@ -1043,32 +1339,69 @@ function getCompletedCustomReportResult_(operation) {
   };
 }
 
-function sendReport(config) {
-  const sheet = getLabSheet();
-  if (!sheet) return;
+function sendReport(config, workspace) {
+  if (!workspace?.managerId || !workspace?.spreadsheet) {
+    throw new Error("A valid manager workspace is required.");
+  }
 
-  const webhookUrl = getDiscordWebhook();
-  const emailTo = getNotificationEmail();
-  const reportLink = sheet.getRange(config.latestLinkCell).getValue();
+  const ss = workspace.spreadsheet;
+  const sheet = ss.getSheetByName("Lab 3.0");
+
+  if (!sheet) {
+    throw new Error(
+      `Sheet "Lab 3.0" not found for manager "${workspace.managerId}".`,
+    );
+  }
+
+  const properties = PropertiesService.getScriptProperties();
+
+  const webhookPropertyKey = getManagerIntegrationPropertyKey_(
+    workspace.managerId,
+    "DISCORD_WEBHOOK_URL",
+  );
+
+  const emailPropertyKey = getManagerIntegrationPropertyKey_(
+    workspace.managerId,
+    "NOTIFICATION_EMAIL",
+  );
+
+  const webhookUrl = String(
+    properties.getProperty(webhookPropertyKey) || "",
+  ).trim();
+
+  const emailTo = String(properties.getProperty(emailPropertyKey) || "").trim();
+
+  const reportLink = String(
+    sheet.getRange(config.latestLinkCell).getDisplayValue() || "",
+  ).trim();
 
   if (!reportLink) {
-    throw new Error(`No ${config.reportType} report link found.`);
+    throw new Error(
+      `No ${config.reportType} report link found for manager "${workspace.managerId}".`,
+    );
   }
 
   const now = new Date();
   const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
 
   const embed = {
-    title: `📊 ${config.reportType} Report - ${formatted}`,
+    title: `${config.reportType} Report - ${formatted}`,
     description: `**${config.reportType} Report:**\n${reportLink}`,
     color: config.color,
     timestamp: now.toISOString(),
   };
 
-  // Discord
+  const result = {
+    managerId: workspace.managerId,
+    discord: "SKIPPED",
+    email: "SKIPPED",
+  };
+
+  // Discord notification.
   if (webhookUrl) {
     try {
       sendDiscordMessage(webhookUrl, embed);
+      result.discord = "SUCCESS";
 
       recordGcbOperationLog_({
         category: "DISCORD",
@@ -1077,10 +1410,12 @@ function sendReport(config) {
         trigger: "REPORT_WORKFLOW",
         processed: 1,
         succeeded: 1,
-        target: config.reportType,
-        message: "Report notification sent to Discord.",
+        target: workspace.managerId,
+        message: `${config.reportType} report notification sent to Discord.`,
       });
     } catch (error) {
+      result.discord = "FAILED";
+
       recordGcbOperationLog_({
         category: "DISCORD",
         operation: "SEND_REPORT_NOTIFICATION",
@@ -1088,30 +1423,28 @@ function sendReport(config) {
         trigger: "REPORT_WORKFLOW",
         processed: 1,
         failed: 1,
-        target: config.reportType,
-        message: "Discord report notification failed.",
+        target: workspace.managerId,
+        message: `${config.reportType} report notification failed on Discord.`,
         error: String(error?.message || error),
       });
-
-      logResponse("Discord report notification failed.");
     }
-  } else {
-    logResponse("No Discord webhook configured.");
   }
 
-  // Email
+  // Email notification.
   if (emailTo) {
     try {
       MailApp.sendEmail({
         to: emailTo,
         subject: `${config.reportType} Report - ${formatted}`,
         htmlBody: `
-        <p>Hey 👋,</p>
-        <p>Your latest <b>${config.reportType}</b> report is ready.</p>
-        <p><a href="${reportLink}">View ${config.reportType} Report</a></p>
-        <p>Generated on ${formatted}</p>
-      `,
+          <p>Hello,</p>
+          <p>Your latest <b>${config.reportType}</b> report is ready.</p>
+          <p><a href="${reportLink}">View ${config.reportType} Report</a></p>
+          <p>Generated on ${formatted}</p>
+        `,
       });
+
+      result.email = "SUCCESS";
 
       recordGcbOperationLog_({
         category: "EMAIL",
@@ -1120,10 +1453,12 @@ function sendReport(config) {
         trigger: "REPORT_WORKFLOW",
         processed: 1,
         succeeded: 1,
-        target: config.reportType,
-        message: "Report email accepted by MailApp.",
+        target: workspace.managerId,
+        message: `${config.reportType} report email accepted by MailApp.`,
       });
     } catch (error) {
+      result.email = "FAILED";
+
       recordGcbOperationLog_({
         category: "EMAIL",
         operation: "SEND_REPORT_NOTIFICATION",
@@ -1131,42 +1466,64 @@ function sendReport(config) {
         trigger: "REPORT_WORKFLOW",
         processed: 1,
         failed: 1,
-        target: config.reportType,
-        message: "Report email sending failed.",
+        target: workspace.managerId,
+        message: `${config.reportType} report email failed.`,
         error: String(error?.message || error),
       });
-
-      logResponse("Report email sending failed.");
     }
-  } else {
-    logResponse("No notification email configured.");
   }
+
+  return result;
 }
 
-function sendMonthlyReport() {
-  return sendReport({
-    reportType: "Monthly",
-    latestLinkCell: "AX27",
-    color: 0x3498db,
-  });
+function sendMonthlyReport(sessionId, signature) {
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
+
+  return sendReport(
+    {
+      reportType: "Monthly",
+      latestLinkCell: "AX27",
+      color: 0x3498db,
+    },
+    workspace,
+  );
 }
 
-function sendYearlyReport() {
-  return sendReport({
-    reportType: "Yearly",
-    latestLinkCell: "AY27",
-    color: 0x2ecc71,
-  });
+function sendYearlyReport(sessionId, signature) {
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
+
+  return sendReport(
+    {
+      reportType: "Yearly",
+      latestLinkCell: "AY27",
+      color: 0x2ecc71,
+    },
+    workspace,
+  );
 }
 
-function getReportById(reportId) {
-  requireCapability(sessionId, signature, "reports.view");
+function getReportById(sessionId, signature, reportId) {
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
 
-  return getReportByIdInternal(reportId);
+  return getReportByIdInternal(spreadsheet, reportId);
 }
 
-function getReportByIdInternal(reportId) {
-  const report = getReportLogs().find((r) => r.id === reportId);
+function getReportByIdInternal(spreadsheet, reportId) {
+  const report = getReportLogs(spreadsheet).find(
+    (item) => item.id === reportId,
+  );
 
   if (!report) {
     throw new Error("Report not found.");
@@ -1176,10 +1533,16 @@ function getReportByIdInternal(reportId) {
 }
 
 function checkExistingReport(sessionId, signature, type, reportName) {
-  requireCapability(sessionId, signature, "reports.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
 
-  const report = getReportLogs().find((log) => {
-    if (log.type !== (type === "monthly" ? "Monthly" : "Yearly")) {
+  const normalizedType = type === "monthly" ? "Monthly" : "Yearly";
+
+  const report = getReportLogs(spreadsheet).find((log) => {
+    if (log.type !== normalizedType) {
       return false;
     }
 
@@ -1192,8 +1555,12 @@ function checkExistingReport(sessionId, signature, type, reportName) {
   };
 }
 
-function getFirstAvailableReportMonth() {
-  const sheet = getSheetSafe("Monthly Hours Log");
+function getFirstAvailableReportMonth(spreadsheet) {
+  if (!spreadsheet) {
+    throw new Error("A manager spreadsheet is required.");
+  }
+
+  const sheet = spreadsheet.getSheetByName("Monthly Hours Log");
 
   if (!sheet) {
     throw new Error('Sheet "Monthly Hours Log" not found.');
@@ -1217,7 +1584,7 @@ function getFirstAvailableReportMonth() {
 
   const firstDate = new Date(`1 ${firstMonthText}`);
 
-  if (isNaN(firstDate)) {
+  if (isNaN(firstDate.getTime())) {
     throw new Error(
       `Invalid first month found in Monthly Hours Log: ${firstMonthText}`,
     );
@@ -1228,14 +1595,31 @@ function getFirstAvailableReportMonth() {
   return firstDate;
 }
 
-function validateCustomMonthlyReport(sessionId, signature, month, year) {
-  requireCapability(sessionId, signature, "reports.generate");
+function validateCustomMonthlyReport(
+  sessionId,
+  signature,
+  month,
+  year,
+  spreadsheet,
+) {
+  let ss = spreadsheet;
 
-  const firstDate = getFirstAvailableReportMonth();
+  if (!ss) {
+    const result = getManagerWorkspaceForCapability_(
+      sessionId,
+      signature,
+      "reports.generate",
+    );
 
+    ss = result.spreadsheet;
+  } else {
+    requireCapability(sessionId, signature, "reports.generate");
+  }
+
+  const firstDate = getFirstAvailableReportMonth(ss);
   const selectedDate = new Date(`1 ${month} ${year}`);
 
-  if (isNaN(selectedDate)) {
+  if (isNaN(selectedDate.getTime())) {
     return {
       valid: false,
       message: "Invalid month or year.",
@@ -1263,16 +1647,25 @@ function validateCustomMonthlyReport(sessionId, signature, month, year) {
     };
   }
 
-  return {
-    valid: true,
-  };
+  return { valid: true };
 }
 
-function validateCustomYearlyReport(sessionId, signature, year) {
-  requireCapability(sessionId, signature, "reports.generate");
+function validateCustomYearlyReport(sessionId, signature, year, spreadsheet) {
+  let ss = spreadsheet;
 
-  const firstDate = getFirstAvailableReportMonth();
+  if (!ss) {
+    const result = getManagerWorkspaceForCapability_(
+      sessionId,
+      signature,
+      "reports.generate",
+    );
 
+    ss = result.spreadsheet;
+  } else {
+    requireCapability(sessionId, signature, "reports.generate");
+  }
+
+  const firstDate = getFirstAvailableReportMonth(ss);
   const firstYear = firstDate.getFullYear();
   const selectedYear = Number(year);
   const currentYear = new Date().getFullYear();
@@ -1298,12 +1691,14 @@ function validateCustomYearlyReport(sessionId, signature, year) {
     };
   }
 
-  return {
-    valid: true,
-  };
+  return { valid: true };
 }
 
-function getReportLogs() {
+function getReportLogs(spreadsheet) {
+  if (!spreadsheet) {
+    throw new Error("Manager spreadsheet is required to read report logs.");
+  }
+
   const sources = [
     {
       sheet: "MonthlyReport_Log",
@@ -1325,7 +1720,7 @@ function getReportLogs() {
   const logs = [];
 
   sources.forEach(({ sheet: sheetName, type, format }) => {
-    const sheet = getSheetSafe(sheetName);
+    const sheet = spreadsheet.getSheetByName(sheetName);
 
     if (!sheet) return;
 
@@ -1348,15 +1743,13 @@ function getReportLogs() {
         ]) => {
           if (!date || !fileUrl || !fileId) return;
 
-          let name = fileName
+          const name = fileName
             ? String(fileName)
                 .replace(/\.csv$/i, "")
                 .replace(/_/g, " ")
-            : "";
-
-          if (!name && startDate && endDate) {
-            name = `Billing Records ${startDate} to ${endDate}`;
-          }
+            : startDate && endDate
+              ? `Billing Records ${startDate} to ${endDate}`
+              : "";
 
           logs.push({
             date,
@@ -1393,55 +1786,92 @@ function getReportLogs() {
 }
 
 function getMonthlyReportHistory(sessionId, signature) {
-  requireCapability(sessionId, signature, "reports.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
 
   return {
-    reportLogs: getReportLogs().filter((report) => report.type === "Monthly"),
+    reportLogs: getReportLogs(spreadsheet).filter(
+      (report) => report.type === "Monthly",
+    ),
   };
 }
 
 function getYearlyReportHistory(sessionId, signature) {
-  requireCapability(sessionId, signature, "reports.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
 
   return {
-    reportLogs: getReportLogs().filter((report) => report.type === "Yearly"),
+    reportLogs: getReportLogs(spreadsheet).filter(
+      (report) => report.type === "Yearly",
+    ),
   };
 }
 
 function getReportsOverview(sessionId, signature) {
-  requireCapability(sessionId, signature, "reports.view");
+  const { workspace, spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.view",
+  );
 
-  const recentLogs = getReportLogs();
+  const recentLogs = getReportLogs(ss);
 
-  const lab = getLabSheet();
+  // Manager-specific analytics sheet.
+  const analytics = ss.getSheetByName("Lab 3.0");
 
-  const getLabValue = (cell, fallback = null) => {
-    if (!lab) return fallback;
+  const getAnalyticsValue = (cell, fallback = 0) => {
+    if (!analytics) return fallback;
 
-    const value = lab.getRange(cell).getValue();
+    const value = analytics.getRange(cell).getValue();
 
     return value === "" || value === null ? fallback : value;
   };
 
-  const monthlyCount = Number(getLabValue("AX30", 0)) || 0;
-  const yearlyCount = Number(getLabValue("AY30", 0)) || 0;
-  const pdfGenerated = Number(getLabValue("AZ30", 0)) || 0;
+  const monthlyCount = Number(getAnalyticsValue("AX30", 0)) || 0;
+  const yearlyCount = Number(getAnalyticsValue("AY30", 0)) || 0;
+  const pdfGenerated = Number(getAnalyticsValue("AZ30", 0)) || 0;
 
   const properties = PropertiesService.getScriptProperties();
 
-  const reportFolderId = String(
-    properties.getProperty("REPORT_FOLDER_ID") || "",
-  ).trim();
+  const notificationEmailKey = getManagerIntegrationPropertyKey_(
+    workspace.managerId,
+    "NOTIFICATION_EMAIL",
+  );
 
-  const driveStorage = Boolean(reportFolderId);
+  const discordWebhookKey = getManagerIntegrationPropertyKey_(
+    workspace.managerId,
+    "DISCORD_WEBHOOK_URL",
+  );
 
-  const discord = Boolean(getDiscordWebhook());
-  const email = Boolean(getNotificationEmail());
+  const email = Boolean(
+    String(properties.getProperty(notificationEmailKey) || "").trim(),
+  );
+
+  const discord = Boolean(
+    String(properties.getProperty(discordWebhookKey) || "").trim(),
+  );
+
+  let driveStorage = false;
+
+  try {
+    getReportFolder(workspace);
+    driveStorage = true;
+  } catch (error) {
+    Logger.log(
+      `Reports Folder unavailable for ${workspace.managerId}: ` +
+        String(error?.message || error),
+    );
+  }
 
   const automationActive = driveStorage && discord && email;
 
   const today = new Date();
-
   const nextMonthly = new Date(today.getFullYear(), today.getMonth(), 15);
 
   if (today.getDate() >= 15) {

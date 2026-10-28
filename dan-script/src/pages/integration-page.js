@@ -13,7 +13,7 @@ const integrationsConfigurationPage = (() => {
     gmail: {
       title: "Gmail",
       description:
-        "Configure the email address used by the application for notifications.",
+        "Configure the notification email address for your manager workspace.",
       authorizationRequired: true,
       fields: [
         {
@@ -21,6 +21,7 @@ const integrationsConfigurationPage = (() => {
           label: "Notification Email",
           type: "email",
           placeholder: "Enter notification email",
+          help: "Used for notifications associated with your manager workspace.",
         },
       ],
       logo: "https://s13.gifyu.com/images/bnmHx.png",
@@ -28,8 +29,7 @@ const integrationsConfigurationPage = (() => {
 
     discord: {
       title: "Discord",
-      description:
-        "Send application notifications and updates to a Discord channel.",
+      description: "Configure the Discord webhook for your manager workspace.",
       authorizationRequired: false,
       fields: [
         {
@@ -37,6 +37,7 @@ const integrationsConfigurationPage = (() => {
           label: "Discord Webhook",
           type: "url",
           placeholder: "Enter Discord webhook URL",
+          help: "Notifications for this manager workspace use this webhook.",
         },
       ],
       logo: "https://s13.gifyu.com/images/bnmHv.png",
@@ -45,22 +46,23 @@ const integrationsConfigurationPage = (() => {
     sheets: {
       title: "Google Sheets",
       description:
-        "Connect the application to its Google Sheets and external sheet template.",
+        "View the spreadsheet assigned to your manager workspace. Spreadsheet assignments and shared templates are managed centrally.",
       authorizationRequired: true,
+      readOnly: true,
       fields: [
         {
           name: "spreadsheetId",
-          label: "Google Spreadsheet ID",
+          label: "Assigned Operational Spreadsheet",
           type: "text",
-          placeholder: "Enter Google Spreadsheet ID",
-          help: "Main Google Spreadsheet used by the application.",
+          placeholder: "Managed in the central registry",
+          help: "This assignment is managed through the Managers registry.",
         },
         {
           name: "externalSheetTemplateId",
-          label: "External Sheet Template ID",
+          label: "Shared External Sheet Template",
           type: "text",
-          placeholder: "Enter external sheet template ID",
-          help: "Google Sheet template cloned when creating external client sheets.",
+          placeholder: "Managed centrally",
+          help: "This template is shared across managers.",
         },
       ],
       logo: "https://s13.gifyu.com/images/bnmHH.png",
@@ -69,29 +71,30 @@ const integrationsConfigurationPage = (() => {
     drive: {
       title: "Google Drive",
       description:
-        "Configure the Google Drive folders used by the application.",
+        "View the Drive folders assigned to your manager workspace. Folder assignments are managed centrally.",
       authorizationRequired: true,
+      readOnly: true,
       fields: [
         {
           name: "reportFolderId",
-          label: "Report Folder ID",
+          label: "Assigned Reports Folder",
           type: "text",
-          placeholder: "Enter Google Drive report folder ID",
-          help: "Folder used to store generated reports.",
+          placeholder: "Managed in the central registry",
+          help: "The reports folder is assigned through the Managers registry.",
         },
         {
           name: "backupFolderId",
-          label: "Backup Folder ID",
+          label: "Assigned Backup Folder",
           type: "text",
-          placeholder: "Enter Google Drive backup folder ID",
-          help: "Folder used to store backups of application sheets.",
+          placeholder: "Managed in the central registry",
+          help: "The backup folder is assigned through the Managers registry.",
         },
         {
           name: "mainSheetsFolderId",
-          label: "Main Sheets Folder ID",
+          label: "Operational Spreadsheet",
           type: "text",
-          placeholder: "Enter main sheets folder ID",
-          help: "Folder containing the application's main Google Sheets.",
+          placeholder: "Managed in the central registry",
+          help: "The operational spreadsheet replaces the old Main Sheets Folder setting.",
         },
       ],
       logo: "https://s13.gifyu.com/images/bnmHK.png",
@@ -485,7 +488,7 @@ const integrationsConfigurationPage = (() => {
       footer: `
       <!-- INITIAL SUBMIT FOOTER -->
       <div id="main-modal-footer" class="d-flex gap-2">
-        ${buildFooterHtml()}
+        ${buildFooterHtml(config)}
       </div>
 
       <!-- REVIEW ACTION FOOTER -->
@@ -667,7 +670,15 @@ const integrationsConfigurationPage = (() => {
   `;
   }
 
-  function buildFooterHtml() {
+  function buildFooterHtml(config) {
+    if (config?.readOnly) {
+      return `
+      <button type="button" class="btn btn-secondary btn-cancel">
+        Close
+      </button>
+    `;
+    }
+
     return `
     <button type="button" class="btn btn-secondary btn-cancel">
       Cancel
@@ -675,7 +686,7 @@ const integrationsConfigurationPage = (() => {
 
     <button
       type="button"
-      data-required-role="admin"
+      data-required-role="manager"
       class="btn btn-primary btn-save"
     >
       Save Changes
@@ -708,6 +719,23 @@ const integrationsConfigurationPage = (() => {
             const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
 
             if (!$input.length || !$help.length) {
+              return;
+            }
+
+            if (config.readOnly) {
+              $input
+                .prop("readonly", true)
+                .prop("disabled", true)
+                .val(fieldData?.masked || "")
+                .attr(
+                  "placeholder",
+                  fieldData?.configured ? "" : "Not assigned",
+                );
+
+              $help
+                .removeClass("is-configured")
+                .text(field.help || "This setting is managed centrally.");
+
               return;
             }
 
@@ -773,6 +801,14 @@ const integrationsConfigurationPage = (() => {
 
   async function saveIntegration(integration, $modal, $btn) {
     const config = getIntegrationConfig(integration);
+
+    if (config.readOnly) {
+      AppUtils.showDashboardToast(
+        "This integration is managed centrally.",
+        "info",
+      );
+      return;
+    }
 
     const title = config?.title || "Integration";
 

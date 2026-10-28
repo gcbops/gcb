@@ -355,6 +355,13 @@ const RequestWidget = (() => {
           ...(latestState?.history || []),
         ].find((item) => item.id === requestId);
 
+        if (!request || request.status !== "completed") {
+          AppUtils.showDashboardToast?.(
+            "Client details are available after the request completes.",
+          );
+          return;
+        }
+
         const clientName = RequestManager.getRequestClientName(request);
 
         if (!clientName) {
@@ -363,6 +370,8 @@ const RequestWidget = (() => {
           );
           return;
         }
+
+        sessionStorage.setItem("clientDetailsName", clientName);
 
         RouterModule.go("clientDetails", true, {
           client: clientName,
@@ -1251,14 +1260,17 @@ const RequestWidget = (() => {
             `
           : "";
 
-        const clientDetailsHTML = clientName
+        const canOpenClientDetails =
+          Boolean(clientName) && isHistory && request.status === "completed";
+
+        const clientDetailsHTML = canOpenClientDetails
           ? `
-              <button
-                type="button"
-                class="gcb-request-client-details"
-                data-request-client-details="${escapeHTML(request.id)}"
-              >Details</button>
-            `
+            <button
+              type="button"
+              class="gcb-request-client-details"
+              data-request-client-details="${escapeHTML(request.id)}"
+            >Details</button>
+          `
           : "";
 
         const pendingRequests = state.queue.filter(

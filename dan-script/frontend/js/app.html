@@ -80,7 +80,6 @@
                 "https://gcbops.github.io"
               );
             }
-            console.log("[GCB Auth] Session handoff completed.");
             resolve(true);
           } catch (error) {
             reject(error);
@@ -147,7 +146,6 @@
           }
           const ticket = String(window.GCB_AUTH_TICKET || "").trim();
           if (ticket) {
-            console.log("[GCB Auth] Exchanging authentication handoff ticket.");
             await exchangeTicket(ticket);
           }
           if (!hasSession()) {
@@ -268,6 +266,10 @@
       clientDetails: {
         capability: "clients.view"
       },
+      clientRecords: {
+        role: "admin",
+        capability: "clients.edit"
+      },
       // Projects
       projectDirectory: {
         capability: "clients.view"
@@ -312,10 +314,10 @@
       settingsConfiguration: {
         capability: "settings.manage"
       },
-      // Integrations — admin only
+      // Integrations — manager only
       integrationsConfiguration: {
         capability: "settings.manage",
-        role: "admin"
+        role: "manager"
       },
       // Manage Users — admin only
       manageUsers: {
@@ -386,6 +388,126 @@
       applyNavigationPermissions,
       canAccessRequirement,
       applyActionPermissions
+    };
+  })();
+
+  // src/components/select2.js
+  var Select2Module = /* @__PURE__ */ (() => {
+    const SELECT2_SELECTOR = "select.js-select2, select.js-select2-dynamic";
+    const DRAWER_SELECTOR = ".drawer";
+    function isAvailable() {
+      return Boolean(window.jQuery && $.fn && $.fn.select2);
+    }
+    function isInsideDrawer($select) {
+      return $select.closest(DRAWER_SELECTOR).length > 0;
+    }
+    function createPrioritizedMatcher() {
+      return function(params, data) {
+        const term = (params.term || "").trim().toLowerCase();
+        if (!term) {
+          return data;
+        }
+        const text = (data.text || "").trim().toLowerCase();
+        if (!text) {
+          return null;
+        }
+        const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const startsWith = text.startsWith(term);
+        const wordStartMatch = new RegExp(`\\b${escapedTerm}`).test(text);
+        const contains = text.includes(term);
+        if (!startsWith && !wordStartMatch && !contains) {
+          return null;
+        }
+        return {
+          ...data,
+          _matchPriority: startsWith ? 0 : wordStartMatch ? 1 : 2
+        };
+      };
+    }
+    function sortResults(results) {
+      return [...results].sort((a, b) => {
+        const priorityA = a._matchPriority ?? 3;
+        const priorityB = b._matchPriority ?? 3;
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+        return 0;
+      });
+    }
+    function init(parent, options = {}) {
+      if (!isAvailable()) {
+        console.warn("[Select2Module] jQuery Select2 is not available.");
+        return;
+      }
+      const $parent = parent ? $(parent) : $(document.body);
+      if (!$parent.length) {
+        return;
+      }
+      const $selects = $parent.is("select") ? $parent : $parent.find("select");
+      $selects.each(function() {
+        const $el = $(this);
+        if (!$el.hasClass("js-select2") && !$el.hasClass("js-select2-dynamic")) {
+          return;
+        }
+        if ($el.hasClass("select2-hidden-accessible")) {
+          $el.select2("destroy");
+        }
+        const isMultiple = $el.is("[multiple]");
+        const emptyOptionText = $el.find('option[value=""]').first().text().trim();
+        const selectOptions = {
+          width: "100%",
+          placeholder: $el.data("placeholder") || (isMultiple ? "Select options" : emptyOptionText || "Select an option"),
+          allowClear: false,
+          closeOnSelect: !isMultiple,
+          matcher: createPrioritizedMatcher(),
+          sorter: sortResults,
+          ...options
+        };
+        if ($el.hasClass("js-select2-dynamic")) {
+          selectOptions.tags = true;
+        }
+        if ($parent.is(".modal")) {
+          selectOptions.dropdownParent = $parent;
+        }
+        $el.select2(selectOptions);
+      });
+    }
+    function destroy(parent) {
+      if (!isAvailable()) {
+        return;
+      }
+      const $parent = parent ? $(parent) : $(document.body);
+      if (!$parent.length) {
+        return;
+      }
+      $parent.find(SELECT2_SELECTOR).each(function() {
+        const $select = $(this);
+        if (isInsideDrawer($select)) {
+          return;
+        }
+        if ($select.hasClass("select2-hidden-accessible")) {
+          $select.select2("destroy");
+        }
+      });
+    }
+    function destroyAll() {
+      if (!isAvailable()) {
+        return;
+      }
+      $(SELECT2_SELECTOR).each(function() {
+        const $select = $(this);
+        if (isInsideDrawer($select)) {
+          return;
+        }
+        if ($select.hasClass("select2-hidden-accessible")) {
+          $select.select2("destroy");
+        }
+      });
+    }
+    return {
+      init,
+      destroy,
+      destroyAll
     };
   })();
 
@@ -842,67 +964,6 @@
         window.setTimeout(removeToast, duration);
       }
     }
-    function initSelect2(parent, options = {}) {
-      const $parent = parent ? $(parent) : $(document.body);
-      if (!$parent.length || !$.fn.select2) {
-        return;
-      }
-      const $selects = $parent.is("select") ? $parent : $parent.find("select");
-      $selects.each(function() {
-        const $el = $(this);
-        if (!$el.hasClass("js-select2") && !$el.hasClass("js-select2-dynamic")) {
-          return;
-        }
-        if ($el.hasClass("select2-hidden-accessible")) {
-          $el.select2("destroy");
-        }
-        const isMultiple = $el.is("[multiple]");
-        const emptyOptionText = $el.find('option[value=""]').first().text().trim();
-        const selectOptions = {
-          width: "100%",
-          placeholder: $el.data("placeholder") || (isMultiple ? "Select options" : emptyOptionText || "Select an option"),
-          allowClear: isMultiple ? false : false,
-          closeOnSelect: !isMultiple,
-          ...options
-        };
-        if ($el.hasClass("js-select2-dynamic")) {
-          selectOptions.tags = true;
-        }
-        if ($parent.is(".modal")) {
-          selectOptions.dropdownParent = $parent;
-        }
-        $el.select2(selectOptions);
-      });
-    }
-    function destroySelect2(parent) {
-      const $parent = parent ? $(parent) : $(document.body);
-      if (!$parent.length || !$.fn.select2) {
-        return;
-      }
-      $parent.find("select.js-select2, select.js-select2-dynamic").each(function() {
-        const $select = $(this);
-        if ($select.closest(".drawer").length) {
-          return;
-        }
-        if ($select.hasClass("select2-hidden-accessible")) {
-          $select.select2("destroy");
-        }
-      });
-    }
-    function destroyAllSelect2() {
-      if (!$.fn.select2) {
-        return;
-      }
-      $("select.js-select2, select.js-select2-dynamic").each(function() {
-        const $select = $(this);
-        if ($select.closest(".drawer").length) {
-          return;
-        }
-        if ($select.hasClass("select2-hidden-accessible")) {
-          $select.select2("destroy");
-        }
-      });
-    }
     function openDrawer(drawerSelector, options = {}) {
       const { contentClass = "", onOpen = null, onClose = null } = options;
       const $drawer = $(drawerSelector);
@@ -911,7 +972,7 @@
       }
       const $content = $drawer.find(".drawer-content");
       if ($content.find("select.js-select2, select.js-select2-dynamic").length) {
-        initSelect2($content);
+        Select2Module.init($content);
       }
       $drawer.off("click.AppUtilsDrawerClose").off("click.AppUtilsDrawerMinimize");
       $drawer.removeClass("drawer-minimized").addClass("drawer-open");
@@ -954,7 +1015,7 @@
       }
       $drawerElement.removeClass("drawer-open drawer-minimized");
       $drawerElement.find(".drawer-minimize i").removeClass("pe-7s-angle-up").addClass("pe-7s-angle-down");
-      destroySelect2($drawerElement);
+      Select2Module.destroy($drawerElement);
       resetDrawerForms($drawerElement);
       if (typeof onClose === "function") {
         onClose($drawerElement, $contentElement);
@@ -1336,7 +1397,7 @@
         }
       );
       if ($modal.find("select.js-select2, select.js-select2-dynamic").length) {
-        initSelect2($modal);
+        Select2Module.init($modal);
       }
       if (typeof onOpen === "function") {
         onOpen($modal, $dialog, $content);
@@ -1370,7 +1431,7 @@
         return;
       }
       const modalEl = $modal[0];
-      destroySelect2($modal);
+      Select2Module.destroy($modal);
       const focusedInside = modalEl.querySelector(":focus");
       if (focusedInside) {
         focusedInside.blur();
@@ -1599,9 +1660,6 @@
       parsePercent,
       checkScreen,
       showDashboardToast,
-      initSelect2,
-      destroySelect2,
-      destroyAllSelect2,
       submitForm,
       setButtonLoading,
       // drawer and modal helpers
@@ -2746,6 +2804,7 @@
   var STORAGE_KEY = "gcb_request_manager_v1";
   var MAX_HISTORY = 50;
   var HOURS_BATCH_DELAY = 400;
+  var STATUS_BATCH_DELAY = 400;
   var RequestManager = (() => {
     const handlers = /* @__PURE__ */ new Map();
     const listeners = /* @__PURE__ */ new Set();
@@ -2805,6 +2864,11 @@
               records: item.payload.records.map((record) => ({
                 ...record
               }))
+            } : {},
+            ...Array.isArray(item.payload.operations) ? {
+              operations: item.payload.operations.map((operation) => ({
+                ...operation
+              }))
             } : {}
           } : item.payload
         })),
@@ -2834,6 +2898,67 @@
         throw new Error("One or more hour entries are invalid.");
       }
       return { client, records };
+    }
+    function normalizeStatusPayload(payload) {
+      if (!payload || typeof payload !== "object") {
+        throw new Error("Invalid status request payload.");
+      }
+      const clientName = String(payload.clientName ?? "").trim();
+      const spreadsheetId = String(payload.spreadsheetId ?? "").trim();
+      const sheetId = Number(payload.sheetId);
+      if (!clientName || !spreadsheetId || !Number.isInteger(sheetId)) {
+        throw new Error("Client and source sheet are required.");
+      }
+      if (!Array.isArray(payload.operations) || payload.operations.length === 0) {
+        throw new Error("At least one status operation is required.");
+      }
+      const operations = payload.operations.map((operation) => {
+        const normalized = {
+          ...operation,
+          clientName,
+          spreadsheetId,
+          sheetId,
+          rowIndex: Number(operation.rowIndex),
+          statusColumnIndex: Number(operation.statusColumnIndex),
+          newStatus: String(operation.newStatus ?? "").trim().toUpperCase()
+        };
+        if (!Number.isInteger(normalized.rowIndex) || normalized.rowIndex < 3 || normalized.statusColumnIndex !== 9 || !["INVOICED", "PAID", "UNPAID"].includes(normalized.newStatus)) {
+          throw new Error("A status operation contains invalid data.");
+        }
+        return normalized;
+      });
+      return {
+        clientName,
+        spreadsheetId,
+        sheetId,
+        operations
+      };
+    }
+    function mergeStatusPayload(existingPayload, incomingPayload) {
+      const existing = normalizeStatusPayload(existingPayload);
+      const incoming = normalizeStatusPayload(incomingPayload);
+      if (normalizeText(existing.clientName) !== normalizeText(incoming.clientName) || existing.spreadsheetId !== incoming.spreadsheetId || existing.sheetId !== incoming.sheetId) {
+        return null;
+      }
+      const operations = existing.operations.map((operation) => ({
+        ...operation
+      }));
+      incoming.operations.forEach((incomingOperation) => {
+        const match = operations.find(
+          (operation) => operation.rowIndex === incomingOperation.rowIndex && operation.statusColumnIndex === incomingOperation.statusColumnIndex
+        );
+        if (match) {
+          match.newStatus = incomingOperation.newStatus;
+        } else {
+          operations.push({ ...incomingOperation });
+        }
+      });
+      return {
+        clientName: existing.clientName,
+        spreadsheetId: existing.spreadsheetId,
+        sheetId: existing.sheetId,
+        operations
+      };
     }
     function mergeHoursPayload(existingPayload, incomingPayload) {
       const existing = normalizeHoursPayload(existingPayload);
@@ -2903,6 +3028,25 @@
         }
         payload = normalizedPayload;
       }
+      if (type === "update-client-record-status") {
+        const normalizedPayload = normalizeStatusPayload(payload);
+        const existing = state.queue.find(
+          (request2) => request2.type === "update-client-record-status" && ["pending", "paused"].includes(request2.status) && normalizeText(request2.payload?.clientName) === normalizeText(normalizedPayload.clientName) && request2.payload?.spreadsheetId === normalizedPayload.spreadsheetId && Number(request2.payload?.sheetId) === normalizedPayload.sheetId
+        );
+        if (existing) {
+          existing.payload = mergeStatusPayload(
+            existing.payload,
+            normalizedPayload
+          );
+          existing.title = `Update statuses \u2014 ${existing.payload.clientName} (${existing.payload.operations.length} operations)`;
+          existing.message = "Additional status changes added to this pending request";
+          existing.updatedAt = Date.now();
+          notify();
+          scheduleProcessQueue(STATUS_BATCH_DELAY);
+          return existing.id;
+        }
+        payload = normalizedPayload;
+      }
       const request = {
         id: crypto.randomUUID(),
         type,
@@ -2915,7 +3059,9 @@
       };
       state.queue.push(request);
       notify();
-      scheduleProcessQueue(type === "record-hours" ? HOURS_BATCH_DELAY : 0);
+      scheduleProcessQueue(
+        ["record-hours", "update-client-record-status"].includes(type) ? type === "record-hours" ? HOURS_BATCH_DELAY : STATUS_BATCH_DELAY : 0
+      );
       return request.id;
     }
     function updateRequest(id, updates) {
@@ -2941,8 +3087,11 @@
           if (!handler) {
             break;
           }
-          if (request.type === "record-hours") {
-            const remainingDelay = HOURS_BATCH_DELAY - (Date.now() - request.updatedAt);
+          if (["record-hours", "update-client-record-status"].includes(
+            request.type
+          )) {
+            const batchDelay = request.type === "record-hours" ? HOURS_BATCH_DELAY : STATUS_BATCH_DELAY;
+            const remainingDelay = batchDelay - (Date.now() - request.updatedAt);
             if (remainingDelay > 0) {
               scheduleProcessQueue(remainingDelay);
               break;
@@ -2972,7 +3121,12 @@
             }
             finishRequest(request, "completed", "Completed successfully", result);
           } catch (error) {
-            finishRequest(request, "failed", error?.message || "Request failed");
+            finishRequest(
+              request,
+              "failed",
+              error?.message || "Request failed",
+              error?.results ? { results: error.results } : null
+            );
           }
         }
       } finally {
@@ -3528,11 +3682,12 @@
   })();
 
   // src/tables/activity-today.js
-  var ActivityToday = /* @__PURE__ */ (() => {
+  var ActivityToday = (() => {
     const ACTIVITY_TABLE_ID = "#table";
     const ACTIVITY_CACHE_KEY = "cache_ActivityToday";
-    const REFRESH_INTERVAL = 1e4;
-    const ERROR_REFRESH_INTERVAL = 3e4;
+    const REFRESH_INTERVAL = 5 * 60 * 1e3;
+    const ERROR_REFRESH_INTERVAL = 3 * 60 * 1e3;
+    const REFRESH_LOCK_TIMEOUT = 6e4;
     const MAX_CLIENT_NAME_LENGTH = 100;
     const MAX_TYPE_LENGTH = 100;
     const MAX_TASK_LENGTH = 500;
@@ -3559,7 +3714,8 @@
     let activeRequestId = null;
     let nextRequestId = 0;
     let refreshGeneration = 0;
-    const REFRESH_LOCK_TIMEOUT = 45e3;
+    let pendingImmediateRefresh = false;
+    let pendingRefreshTable = null;
     function setupFilters(dataTable) {
       if (!dataTable) {
         return;
@@ -3846,7 +4002,23 @@
       };
     }
     function refreshActivityTable(dataTable) {
+      if (!dataTable) {
+        return;
+      }
+      if (activeRequestId !== null) {
+        pendingImmediateRefresh = true;
+        pendingRefreshTable = dataTable;
+        return;
+      }
+      pendingImmediateRefresh = false;
+      pendingRefreshTable = null;
       loadActivity(dataTable, null, true);
+    }
+    function refreshAfterSave() {
+      const activityTable = DataTableModule.getInstance(ACTIVITY_TABLE_ID);
+      if (activityTable) {
+        refreshActivityTable(activityTable);
+      }
     }
     function resetYearlyChartCaches(startYear = 2024) {
       const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
@@ -3929,7 +4101,7 @@
           <button
             type="button"
             id="add-hours"
-            data-required-role="admin"
+            data-required-role="manager"
             class="dropdown-item add-hours"
           >
             <i class="pe-7s-plus me-2 text-primary"></i>
@@ -3939,7 +4111,7 @@
           ${canEdit ? `
                 <button
                   type="button"
-                  data-required-role="admin"
+                  data-required-role="manager"
                   id="edit-today-hours"
                   class="dropdown-item edit-today-hours"
                 >
@@ -4035,6 +4207,20 @@
       clearTimeout(refreshLockTimer);
       refreshLockTimer = null;
       activeRequestId = null;
+      if (pendingImmediateRefresh && pendingRefreshTable) {
+        setTimeout(() => {
+          if (activeRequestId !== null) {
+            return;
+          }
+          if (!pendingImmediateRefresh || !pendingRefreshTable) {
+            return;
+          }
+          const table = pendingRefreshTable;
+          pendingImmediateRefresh = false;
+          pendingRefreshTable = null;
+          refreshActivityTable(table);
+        }, 0);
+      }
       return true;
     }
     async function loadActivity(dataTable, callback, force = false, requestGeneration = refreshGeneration) {
@@ -4086,7 +4272,6 @@
               return;
             }
             console.error("[ActivityToday] Refresh failed:", error);
-            AppUtils.showError(error);
             callback?.(false);
           }
         });
@@ -4174,7 +4359,8 @@
       handleTaskSaveSuccess,
       clearClientCaches,
       resetYearlyChartCaches,
-      refreshActivityTable
+      refreshActivityTable,
+      refreshAfterSave
     };
   })();
 
@@ -5440,7 +5626,7 @@
       if (!$taskSelect.length) {
         return;
       }
-      $taskSelect.html('<option value="">Loading...</option>').val("").trigger("change");
+      $submitBtn.prop("disabled", true);
       try {
         const [sessionId, signature] = await getAuthArgs();
         AppUtils.cachedGScriptCall(
@@ -5451,7 +5637,9 @@
             const tasks = parseTaskOptions(returned);
             $taskSelect.empty();
             if (!tasks.length) {
-              $taskSelect.append(new Option("No tasks found", "")).val("").trigger("change");
+              $taskSelect.append(new Option("", ""));
+              setTaskSelectReady("No tasks found");
+              $taskSelect.val(null).trigger("change");
               $submitBtn.prop("disabled", false);
               return;
             }
@@ -5459,18 +5647,20 @@
               const value = typeof task === "object" ? task.value || task.id || "" : task;
               const text = typeof task === "object" ? task.label || task.name || value : task;
               if (!value && !text) {
-                $submitBtn.prop("disabled", false);
                 return;
               }
               $taskSelect.append(new Option(text, value));
             });
+            setTaskSelectReady("Select a task");
             const firstValue = $taskSelect.find("option:first").val();
             $taskSelect.val(firstValue || "").trigger("change");
             $submitBtn.prop("disabled", false);
           }
         );
       } catch (error) {
-        $taskSelect.empty().append(new Option("Unable to load tasks", "")).val("").trigger("change");
+        $taskSelect.empty().append(new Option("", ""));
+        setTaskSelectReady("Unable to load tasks");
+        $taskSelect.val(null).trigger("change");
         $submitBtn.prop("disabled", true);
         if (handleInvalidSessionError(error)) {
           return;
@@ -5478,6 +5668,20 @@
         console.error("[TableModule] Failed to load client tasks:", error);
         AppUtils.showError(error?.message || "Unable to load client tasks.");
       }
+    }
+    function setTaskSelectReady(placeholder = "Select a task") {
+      const $taskSelect = $("#task");
+      if (!$taskSelect.length || !$.fn.select2) {
+        return;
+      }
+      $taskSelect.select2("destroy");
+      $taskSelect.select2({
+        width: "100%",
+        placeholder,
+        allowClear: false,
+        closeOnSelect: true,
+        dropdownParent: $taskSelect.closest(".drawer")
+      });
     }
     function parseTaskOptions(returned) {
       if (Array.isArray(returned)) {
@@ -6061,9 +6265,18 @@
       if (!$select.length) {
         return;
       }
+      const cached = AppUtils.cacheGet(CLIENTS_CACHE_KEY);
+      if (Array.isArray(cached) && cached.length > 0) {
+        renderClientOptions($select, cached);
+        if (isForProject !== "forRecords") {
+          bindClientChange($select, isForProject);
+        }
+        refreshClientSelectorInBackground($select, cached, isForProject);
+        return;
+      }
       try {
         const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
-        AppUtils.cachedGScriptCall(
+        return AppUtils.cachedGScriptCall(
           CLIENTS_CACHE_KEY,
           CLIENTS_SERVER_FUNCTION,
           [sessionId, signature],
@@ -6073,12 +6286,75 @@
               return;
             }
             renderClientOptions($select, data);
-            bindClientChange($select, isForProject);
+            if (isForProject !== "forRecords") {
+              bindClientChange($select, isForProject);
+            }
           }
         );
       } catch (error) {
         console.error("[TableClientSelector] Failed to load clients:", error);
         AppUtils.showError(error?.message || "Unable to load client data.");
+        throw error;
+      }
+    }
+    async function refreshClientSelectorInBackground($select, cached, isForProject = false) {
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        AppUtils.cachedGScriptCall(
+          CLIENTS_CACHE_KEY,
+          CLIENTS_SERVER_FUNCTION,
+          [sessionId, signature],
+          (fresh) => {
+            if (!Array.isArray(fresh)) {
+              return;
+            }
+            if (JSON.stringify(fresh) === JSON.stringify(cached)) {
+              return;
+            }
+            renderClientOptions($select, fresh);
+            if (isForProject !== "forRecords") {
+              bindClientChange($select, isForProject);
+            }
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        if (handleInvalidSessionError(error)) {
+          return;
+        }
+        console.error("[TableClientSelector] Background refresh failed:", error);
+      }
+    }
+    async function refreshClientSelector(selectId = currentSelectId, isForProject = false) {
+      const $select = $(selectId);
+      if (!$select.length) {
+        return;
+      }
+      AppUtils.cacheClear(CLIENTS_CACHE_KEY);
+      try {
+        const [sessionId, signature] = await GcbAuthModule.getAuthArgs();
+        return AppUtils.cachedGScriptCall(
+          CLIENTS_CACHE_KEY,
+          CLIENTS_SERVER_FUNCTION,
+          [sessionId, signature],
+          (data) => {
+            if (!Array.isArray(data)) {
+              AppUtils.showError("Client data missing or invalid");
+              return;
+            }
+            renderClientOptions($select, data);
+            if (isForProject !== "forRecords") {
+              bindClientChange($select, isForProject);
+            }
+          },
+          false,
+          true
+        );
+      } catch (error) {
+        console.error("[TableClientSelector] Failed to refresh clients:", error);
+        AppUtils.showError(error?.message || "Unable to refresh client data.");
+        throw error;
       }
     }
     function renderClientOptions($select, clients) {
@@ -6104,12 +6380,36 @@
         if (!selectedName) {
           return;
         }
+        resetTaskSelectForLoading();
         TableModule.addClientHours(selectedName, true, isForProject);
       });
     }
+    function resetTaskSelectForLoading() {
+      const $taskSelect = $("#task");
+      if (!$taskSelect.length) {
+        return;
+      }
+      $taskSelect.empty().val("");
+      if (window.jQuery && $.fn.select2 && $taskSelect.hasClass("select2-hidden-accessible")) {
+        $taskSelect.select2("destroy");
+      }
+      $taskSelect.append(new Option("", ""));
+      if ($.fn.select2) {
+        $taskSelect.select2({
+          width: "100%",
+          placeholder: "Loading...",
+          allowClear: false,
+          closeOnSelect: true,
+          dropdownParent: $taskSelect.closest(".drawer")
+        });
+      }
+      $taskSelect.val(null).trigger("change");
+    }
     return {
       init,
-      destroy
+      destroy,
+      initClientSelector,
+      refreshClientSelector
     };
   })();
 
@@ -6365,7 +6665,7 @@
       <button
         type="button"
         class="app-profile-popover-action btn-transition btn btn-outline-link"
-        data-required-role="admin"
+        data-required-role="manager"
         data-profile-client-action="add-hours"
         data-client-name="${AppUtils.escapeHtml(client.name)}"
       >
@@ -7142,7 +7442,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
-              data-required-role="admin"
+              data-required-role="manager"
               class="dropdown-item btn-report-action btn-email-report"
               data-id="${AppUtils.escapeHtml(reportId)}"
             >
@@ -7154,7 +7454,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
-              data-required-role="admin"
+              data-required-role="manager"
               class="dropdown-item btn-report-action btn-discord-report"
               data-id="${AppUtils.escapeHtml(reportId)}"
             >
@@ -7332,7 +7632,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
-              data-required-role="admin"
+              data-required-role="manager"
               class="dropdown-item btn-report-action btn-email-report"
               data-id="${AppUtils.escapeHtml(reportId)}"
               data-type="${AppUtils.escapeHtml(reportType)}"
@@ -7346,7 +7646,7 @@
               type="button"
               tabindex="0"
               role="menuitem"
-              data-required-role="admin"
+              data-required-role="manager"
               class="dropdown-item btn-report-action btn-discord-report"
               data-id="${AppUtils.escapeHtml(reportId)}"
               data-type="${AppUtils.escapeHtml(reportType)}"
@@ -8366,11 +8666,11 @@
       }
     };
     const handleEmailLatestReport = ($btn, reportType) => {
-      const loading = AppUtils.setButtonLoading($btn[0], false, true);
+      const loading = false;
       emailLatestReport($btn, loading, reportType);
     };
     const handleSendDiscordNotification = ($btn, reportType) => {
-      const loading = AppUtils.setButtonLoading($btn[0], false, true);
+      const loading = false;
       sendLatestReportToDiscord($btn, loading, reportType);
     };
     return {
@@ -8897,8 +9197,8 @@
         case "btnBackupAllSheets":
           AppUtils.openConfirmationModal({
             ns: "backupAllSheets",
-            title: "Confirm All Google Sheets Backup?",
-            message: "This will create a complete backup point for all active sheets. This process might take a few moments.",
+            title: "Create Admin Combined Backup?",
+            message: "This will export the Google Sheets belonging to all enabled managers into one ZIP archive in the Admin Combined Backups folder. This process may take a few moments.",
             onProceed: ($modal, $btn) => {
               BackupAllSheets($btn);
             }
@@ -9045,11 +9345,14 @@
             }
             if (result.status === "PARTIAL") {
               AppUtils.showDashboardToast(
-                "Backup partially completed. Some files may have failed.",
+                "Admin combined backup partially completed. Some spreadsheets may have failed.",
                 "warning"
               );
             } else {
-              AppUtils.showDashboardToast("Backup completed", "success");
+              AppUtils.showDashboardToast(
+                "Admin combined backup completed.",
+                "success"
+              );
             }
             loading.setSuccess(
               result.status === "PARTIAL" ? "Backup Partially Completed" : "Backup Completed"
@@ -9076,7 +9379,10 @@
     }
     function loadBackupHistory() {
       const cached = AppUtils.cacheGet(BACKUP_HISTORY_CACHE_KEY);
-      loadPropertyStatus("BACKUP_FOLDER_ID", updateBackupDestinationStatus);
+      loadPropertyStatus(
+        "ADMIN_COMBINED_BACKUP_FOLDER_ID",
+        updateBackupDestinationStatus
+      );
       if (Array.isArray(cached) && cached.length > 0) {
         renderBackupHistory(cached);
         refreshBackupHistoryInBackground(cached);
@@ -9093,6 +9399,9 @@
           "getBackupHistory",
           [sessionId, signature],
           (result) => {
+            console.log("[BackupHistory] Backend result:", result);
+            console.log("[BackupHistory] Result success:", result?.success);
+            console.log("[BackupHistory] Backups:", result?.backups?.length);
             if (!result?.success || !Array.isArray(result.backups)) {
               AppUtils.showDashboardToast(
                 "Unable to load backup history.",
@@ -9114,8 +9423,15 @@
       const tbody = document.getElementById(BACKUP_HISTORY_TABLE_BODY_ID);
       const message = document.getElementById("backup-history-message");
       if (!tbody || !message) {
+        console.error("[BackupHistory] Required DOM elements missing:", {
+          tbodyId: BACKUP_HISTORY_TABLE_BODY_ID,
+          tbodyFound: Boolean(tbody),
+          messageFound: Boolean(message),
+          tableFound: Boolean(document.getElementById(BACKUP_HISTORY_TABLE_ID))
+        });
         return;
       }
+      console.log("[BackupHistory] Rendering", backups?.length, "records");
       DataTableModule.hideTableOverlay(BACKUP_HISTORY_TABLE_ID);
       updateBackupSummary(backups);
       if ($.fn.DataTable.isDataTable("#" + BACKUP_HISTORY_TABLE_ID)) {
@@ -9130,7 +9446,7 @@
         message.textContent = "No backup records found.";
         return;
       }
-      message.textContent = `${backups.length} backup folder(s) found.`;
+      message.textContent = `${backups.length} backup archive(s) found.`;
       backups.forEach((backup) => {
         tbody.appendChild(createBackupHistoryRow(backup));
       });
@@ -9165,91 +9481,32 @@
       filesCell.textContent = String(backup.fileCount ?? 0);
       const actionsCell = document.createElement("td");
       actionsCell.className = "text-nowrap";
-      actionsCell.appendChild(createBackupActionsDropdown(backup));
+      actionsCell.appendChild(createBackupDownloadAction(backup));
+      ;
       row.append(dateCell, nameCell, filesCell, actionsCell);
       return row;
     }
-    function createBackupActionsDropdown(backup) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "dropdown btn-group";
-      const toggleButton = document.createElement("button");
-      toggleButton.type = "button";
-      toggleButton.className = "p-0 btn border-0";
-      toggleButton.setAttribute("data-bs-toggle", "dropdown");
-      toggleButton.setAttribute("aria-haspopup", "true");
-      toggleButton.setAttribute("aria-expanded", "false");
-      toggleButton.title = "Backup History actions";
-      const icon = document.createElement("i");
-      icon.className = "pe-7s-more";
-      toggleButton.appendChild(icon);
-      wrapper.appendChild(toggleButton);
-      const menu = document.createElement("div");
-      menu.className = "dropdown-menu";
-      menu.setAttribute("tabindex", "-1");
-      menu.setAttribute("role", "menu");
-      menu.setAttribute("aria-hidden", "true");
-      menu.appendChild(createOpenFolderItem(backup.folderUrl));
-      menu.appendChild(createDownloadZipItem(backup));
-      if (Array.isArray(backup.files) && backup.files.length) {
-        menu.appendChild(createViewFilesSubmenu(backup.files));
-      }
-      wrapper.appendChild(menu);
-      return wrapper;
-    }
-    function createOpenFolderItem(folderUrl) {
-      const item = document.createElement("a");
-      item.className = "dropdown-item";
-      item.href = folderUrl || "#";
-      item.target = "_blank";
-      item.rel = "noopener noreferrer";
-      item.textContent = "Open Folder";
-      return item;
-    }
-    function createViewFilesSubmenu(files) {
-      const listItem = document.createElement("li");
-      listItem.className = "submenu submenu-md dropend";
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "dropdown-item dropdown-toggle";
-      toggle.setAttribute("role", "button");
-      toggle.setAttribute("data-bs-toggle", "dropdown");
-      toggle.setAttribute("aria-expanded", "false");
-      toggle.addEventListener("click", (event) => {
-        event.stopPropagation();
-      });
-      toggle.textContent = "Individual ZIPs";
-      const submenu = document.createElement("ul");
-      submenu.className = "dropdown-menu";
-      files.forEach((file) => {
-        const fileItem = document.createElement("li");
-        const fileLink = document.createElement("a");
-        fileLink.className = "dropdown-item";
-        fileLink.href = file.downloadUrl || file.url || "#";
-        fileLink.target = "_blank";
-        fileLink.rel = "noopener noreferrer";
-        fileLink.textContent = file.name || "Backup ZIP";
-        fileItem.appendChild(fileLink);
-        submenu.appendChild(fileItem);
-      });
-      listItem.append(toggle, submenu);
-      return listItem;
-    }
-    function createDownloadZipItem(backup) {
-      const item = document.createElement("a");
-      item.className = "dropdown-item";
-      item.textContent = "Download ZIP";
+    function createBackupDownloadAction(backup) {
+      const link = document.createElement("a");
       const zipUrl = backup.zipDownloadUrl || backup.zipUrl;
+      link.className = "btn btn-link p-0 border-0";
+      link.title = "Download backup ZIP";
+      link.setAttribute("aria-label", `Download ${backup.name || "backup ZIP"}`);
       if (zipUrl) {
-        item.href = zipUrl;
-        item.target = "_blank";
-        item.rel = "noopener noreferrer";
+        link.href = zipUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
       } else {
-        item.href = "#";
-        item.classList.add("disabled");
-        item.setAttribute("aria-disabled", "true");
-        item.title = "ZIP archive is not available for this backup.";
+        link.href = "#";
+        link.classList.add("disabled");
+        link.setAttribute("aria-disabled", "true");
+        link.title = "Backup ZIP is not available";
       }
-      return item;
+      const icon = document.createElement("i");
+      icon.className = "pe-7s-download";
+      icon.setAttribute("aria-hidden", "true");
+      link.appendChild(icon);
+      return link;
     }
     function updateBackupSummary(backups) {
       const totalCount = document.getElementById("backup-total-count");
@@ -15412,8 +15669,13 @@
           return;
         }
         event.preventDefault();
-        if (activeTrigger === trigger && isVisible()) {
+        if (activeTrigger === trigger) {
           close();
+          setTimeout(() => {
+            if (!isVisible()) {
+              trigger.setAttribute("aria-expanded", "false");
+            }
+          }, 200);
         } else {
           open(trigger, options);
         }
@@ -15770,7 +16032,7 @@
       if (!$select2Fields.length) {
         return;
       }
-      AppUtils.initSelect2($scope);
+      Select2Module.init($scope);
     }
     function activateNavigation(pageName) {
       $(".drawer").removeClass("drawer-open");
@@ -16082,6 +16344,11 @@
         desc: "Browse and manage all clients in one place.",
         icon: "pe-7s-users icon-gradient " + getGradientBg(0)
       },
+      clientRecords: {
+        title: "Client Records",
+        desc: "View client work records and manage invoiced, paid, and unpaid statuses.",
+        icon: "pe-7s-note2 icon-gradient " + getGradientBg(9)
+      },
       clientActivity: {
         title: "Client Activity",
         desc: "Monitor client activity and recent work in real time.",
@@ -16366,79 +16633,83 @@
     const INTEGRATIONS = {
       gmail: {
         title: "Gmail",
-        description: "Configure the email address used by the application for notifications.",
+        description: "Configure the notification email address for your manager workspace.",
         authorizationRequired: true,
         fields: [
           {
             name: "notifEmail",
             label: "Notification Email",
             type: "email",
-            placeholder: "Enter notification email"
+            placeholder: "Enter notification email",
+            help: "Used for notifications associated with your manager workspace."
           }
         ],
         logo: "https://s13.gifyu.com/images/bnmHx.png"
       },
       discord: {
         title: "Discord",
-        description: "Send application notifications and updates to a Discord channel.",
+        description: "Configure the Discord webhook for your manager workspace.",
         authorizationRequired: false,
         fields: [
           {
             name: "notifDiscord",
             label: "Discord Webhook",
             type: "url",
-            placeholder: "Enter Discord webhook URL"
+            placeholder: "Enter Discord webhook URL",
+            help: "Notifications for this manager workspace use this webhook."
           }
         ],
         logo: "https://s13.gifyu.com/images/bnmHv.png"
       },
       sheets: {
         title: "Google Sheets",
-        description: "Connect the application to its Google Sheets and external sheet template.",
+        description: "View the spreadsheet assigned to your manager workspace. Spreadsheet assignments and shared templates are managed centrally.",
         authorizationRequired: true,
+        readOnly: true,
         fields: [
           {
             name: "spreadsheetId",
-            label: "Google Spreadsheet ID",
+            label: "Assigned Operational Spreadsheet",
             type: "text",
-            placeholder: "Enter Google Spreadsheet ID",
-            help: "Main Google Spreadsheet used by the application."
+            placeholder: "Managed in the central registry",
+            help: "This assignment is managed through the Managers registry."
           },
           {
             name: "externalSheetTemplateId",
-            label: "External Sheet Template ID",
+            label: "Shared External Sheet Template",
             type: "text",
-            placeholder: "Enter external sheet template ID",
-            help: "Google Sheet template cloned when creating external client sheets."
+            placeholder: "Managed centrally",
+            help: "This template is shared across managers."
           }
         ],
         logo: "https://s13.gifyu.com/images/bnmHH.png"
       },
       drive: {
         title: "Google Drive",
-        description: "Configure the Google Drive folders used by the application.",
+        description: "View the Drive folders assigned to your manager workspace. Folder assignments are managed centrally.",
         authorizationRequired: true,
+        readOnly: true,
         fields: [
           {
             name: "reportFolderId",
-            label: "Report Folder ID",
+            label: "Assigned Reports Folder",
             type: "text",
-            placeholder: "Enter Google Drive report folder ID",
-            help: "Folder used to store generated reports."
+            placeholder: "Managed in the central registry",
+            help: "The reports folder is assigned through the Managers registry."
           },
           {
             name: "backupFolderId",
-            label: "Backup Folder ID",
+            label: "Assigned Backup Folder",
             type: "text",
-            placeholder: "Enter Google Drive backup folder ID",
-            help: "Folder used to store backups of application sheets."
+            placeholder: "Managed in the central registry",
+            help: "The backup folder is assigned through the Managers registry."
           },
           {
             name: "mainSheetsFolderId",
-            label: "Main Sheets Folder ID",
+            label: "Operational Spreadsheet",
             type: "text",
-            placeholder: "Enter main sheets folder ID",
-            help: "Folder containing the application's main Google Sheets."
+            placeholder: "Managed in the central registry",
+            help: "The operational spreadsheet replaces the old Main Sheets Folder setting."
           }
         ],
         logo: "https://s13.gifyu.com/images/bnmHK.png"
@@ -16719,7 +16990,7 @@
         footer: `
       <!-- INITIAL SUBMIT FOOTER -->
       <div id="main-modal-footer" class="d-flex gap-2">
-        ${buildFooterHtml()}
+        ${buildFooterHtml(config)}
       </div>
 
       <!-- REVIEW ACTION FOOTER -->
@@ -16861,7 +17132,14 @@
     ${fieldsHtml}
   `;
     }
-    function buildFooterHtml() {
+    function buildFooterHtml(config) {
+      if (config?.readOnly) {
+        return `
+      <button type="button" class="btn btn-secondary btn-cancel">
+        Close
+      </button>
+    `;
+      }
       return `
     <button type="button" class="btn btn-secondary btn-cancel">
       Cancel
@@ -16869,7 +17147,7 @@
 
     <button
       type="button"
-      data-required-role="admin"
+      data-required-role="manager"
       class="btn btn-primary btn-save"
     >
       Save Changes
@@ -16893,6 +17171,14 @@
               const $input = $modal.find(`#integrationConfigValue-${field.name}`);
               const $help = $modal.find(`#integrationConfigHelp-${field.name}`);
               if (!$input.length || !$help.length) {
+                return;
+              }
+              if (config.readOnly) {
+                $input.prop("readonly", true).prop("disabled", true).val(fieldData?.masked || "").attr(
+                  "placeholder",
+                  fieldData?.configured ? "" : "Not assigned"
+                );
+                $help.removeClass("is-configured").text(field.help || "This setting is managed centrally.");
                 return;
               }
               if (!fieldData?.configured) {
@@ -16937,6 +17223,13 @@
     }
     async function saveIntegration(integration, $modal, $btn) {
       const config = getIntegrationConfig(integration);
+      if (config.readOnly) {
+        AppUtils.showDashboardToast(
+          "This integration is managed centrally.",
+          "info"
+        );
+        return;
+      }
       const title = config?.title || "Integration";
       if (!config) {
         return;
@@ -17593,22 +17886,30 @@
     function loadHourlyChart(forceRefresh = false) {
       ChartModule.loadChart("hourly", false, false, forceRefresh);
     }
-    function loadTotalHourlyHours() {
-      AppUtils.gScriptRun({
-        gscriptFunc: "getDirectCellValueSafe",
-        args: ["Hourly History", "B8"],
-        onSuccess: (value) => {
-          const $total = $("#opportunities-total-hourly-hours");
-          if (!$total.length) {
-            return;
+    async function loadTotalHourlyHours() {
+      try {
+        const [sessionId, signature] = await getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc: "getDirectCellValueSafe",
+          args: [sessionId, signature, "Hourly History", "B8"],
+          onSuccess: (value) => {
+            const $total = $("#opportunities-total-hourly-hours");
+            if (!$total.length) {
+              return;
+            }
+            $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
+          },
+          onError: (err) => {
+            AppUtils.showError(err);
+            AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
           }
-          $total.find("span").text(AppUtils.formatHours(Number(value) || 0));
-        },
-        onError: (err) => {
-          AppUtils.showError(err);
-          AppUtils.showDashboardToast("Unable to load hourly totals.", "error");
+        });
+      } catch (error) {
+        if (handleInvalidSessionError(error)) {
+          return;
         }
-      });
+        AppUtils.showError(error?.message || "Unable to load hourly totals.");
+      }
     }
     function openHourlyModal() {
       AppUtils.openModal(MODAL_ID, {
@@ -19066,12 +19367,12 @@
         return;
       }
       $("#client-details-name").html(`
-    <span>${AppUtils.escapeHtml(clientName)}</span>
-    <span class="client-details-loading ms-2">
-      <i class="fa-solid fa-spinner fa-spin"></i>
-      <span>Checking client<span class="loading-dots"></span></span>
-    </span>
-  `);
+      <span>${AppUtils.escapeHtml(clientName)}</span>
+      <span class="client-details-loading ms-2">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        <span>Checking client<span class="loading-dots"></span></span>
+      </span>
+    `);
       const pageToken = RouterModule.getPageToken();
       checkClientSheetExists(pageToken);
     }
@@ -19601,6 +19902,355 @@
     };
   })();
 
+  // src/pages/client-records-page.js
+  var ClientRecordsPage = (() => {
+    const ROOT_ID = "client-records-page";
+    const REQUEST_TYPE = "update-client-record-status";
+    const STATUS_OPTIONS = ["INVOICED", "PAID", "UNPAID"];
+    let root = null;
+    let records = [];
+    let clientName = "";
+    let sheetUrl = "";
+    let destroyed = false;
+    let fetchVersion = 0;
+    let unsubscribe = null;
+    let pendingCells = /* @__PURE__ */ new Set();
+    const $2 = window.jQuery;
+    function escapeHtml(value) {
+      return String(value ?? "").replace(
+        /[&<>"']/g,
+        (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        })[char]
+      );
+    }
+    function getElement(id) {
+      return root?.querySelector(`#${id}`);
+    }
+    function showFeedback(message, type = "info") {
+      const element = getElement("client-records-feedback");
+      if (!element) {
+        return;
+      }
+      element.textContent = message;
+      element.className = `client-records-feedback is-${type}`;
+      element.hidden = !message;
+    }
+    function setLoading(loading) {
+      const element = getElement("client-records-loading");
+      if (element) {
+        element.hidden = !loading;
+      }
+    }
+    function callServer(gscriptFunc, extraArgs = []) {
+      return new Promise((resolve, reject) => {
+        const authArgs = getAuthArgs();
+        AppUtils.gScriptRun({
+          gscriptFunc,
+          args: [...authArgs, ...extraArgs],
+          staleCheck: false,
+          onSuccess: resolve,
+          onError: reject
+        });
+      });
+    }
+    function initializeClientOptions() {
+      return TableClientSelector.initClientSelector(
+        "#client-records-client",
+        "forRecords"
+      );
+    }
+    async function loadClient(name) {
+      const version = ++fetchVersion;
+      clientName = String(name || "").trim();
+      records = [];
+      sheetUrl = "";
+      renderSummary();
+      renderTable();
+      updateSheetLink();
+      if (!clientName) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      showFeedback("");
+      try {
+        const result = await callServer("getClientRecordsData", [clientName]);
+        if (destroyed || version !== fetchVersion) {
+          return;
+        }
+        records = Array.isArray(result?.records) ? result.records : [];
+        sheetUrl = result?.sheetUrl || "";
+        populateTaskOptions();
+        renderSummary();
+        renderTable();
+        updateSheetLink();
+      } catch (error) {
+        if (destroyed || version !== fetchVersion) {
+          return;
+        }
+        showFeedback(error?.message || "Unable to load client records.", "error");
+      } finally {
+        if (!destroyed && version === fetchVersion) {
+          setLoading(false);
+        }
+      }
+    }
+    function updateSheetLink() {
+      const link = getElement("client-records-open-sheet");
+      if (!link) {
+        return;
+      }
+      link.hidden = !sheetUrl;
+      if (sheetUrl) {
+        link.href = sheetUrl;
+      } else {
+        link.removeAttribute("href");
+      }
+    }
+    function populateTaskOptions() {
+      const select = getElement("client-records-task");
+      if (!select) {
+        return;
+      }
+      const previousValue = select.value;
+      const tasks = [
+        ...new Set(records.map((record) => record.task).filter(Boolean))
+      ].sort((a, b) => a.localeCompare(b));
+      select.innerHTML = [
+        '<option value="">All projects and tasks</option>',
+        ...tasks.map(
+          (task) => `<option value="${escapeHtml(task)}">${escapeHtml(task)}</option>`
+        )
+      ].join("");
+      if (tasks.includes(previousValue)) {
+        select.value = previousValue;
+      }
+      if ($2.fn.select2) {
+        $2(select).trigger("change.select2");
+      }
+    }
+    function getFilteredRecords() {
+      const selectedTask = getElement("client-records-task")?.value || "";
+      const selectedStatuses = $2("#client-records-status-filter").val() || [];
+      const search = String(getElement("client-records-search")?.value || "").trim().toLowerCase();
+      return records.filter((record) => {
+        if (selectedTask && record.task !== selectedTask) {
+          return false;
+        }
+        if (selectedStatuses.length && !selectedStatuses.includes(record.status)) {
+          return false;
+        }
+        if (search) {
+          const text = [record.type, record.task, record.date, record.status].join(" ").toLowerCase();
+          if (!text.includes(search)) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+    function renderSummary() {
+      const counts = {
+        total: records.length,
+        INVOICED: 0,
+        PAID: 0,
+        UNPAID: 0
+      };
+      records.forEach((record) => {
+        if (Object.hasOwn(counts, record.status)) {
+          counts[record.status]++;
+        }
+      });
+      getElement("client-records-total").textContent = counts.total;
+      getElement("client-records-invoiced").textContent = counts.INVOICED;
+      getElement("client-records-paid").textContent = counts.PAID;
+      getElement("client-records-unpaid").textContent = counts.UNPAID;
+    }
+    function renderTable() {
+      const tbody = getElement("client-records-tbody");
+      const empty = getElement("client-records-empty");
+      if (!tbody) {
+        return;
+      }
+      const filtered = getFilteredRecords();
+      tbody.innerHTML = filtered.map((record) => {
+        const key = getRecordKey(record);
+        const pending = pendingCells.has(key);
+        const options = [
+          '<option value="">Select status</option>',
+          ...STATUS_OPTIONS.map(
+            (status) => `<option value="${status}" ${record.status === status ? "selected" : ""}>${status}</option>`
+          )
+        ].join("");
+        return `
+        <tr
+          data-record-key="${escapeHtml(key)}"
+          class="${pending ? "is-saving" : ""}"
+        >
+          <td>${escapeHtml(record.type)}</td>
+          <td class="client-records-task">
+            ${escapeHtml(record.task)}
+          </td>
+          <td>${escapeHtml(record.date)}</td>
+          <td class="client-records-status-cell">
+            <select
+              class="client-records-status-select"
+              data-status-record="${escapeHtml(key)}"
+              aria-label="Update status for ${escapeHtml(record.task)}"
+              ${pending ? "disabled" : ""}
+            >
+              ${options}
+            </select>
+            ${pending ? '<small class="text-muted">Queued or processing...</small>' : ""}
+          </td>
+        </tr>
+      `;
+      }).join("");
+      empty.hidden = filtered.length > 0;
+      getElement("client-records-result-count").textContent = `${filtered.length} of ${records.length} records`;
+    }
+    function getRecordKey(record) {
+      return [
+        record.spreadsheetId,
+        record.sheetId,
+        record.rowIndex,
+        record.statusColumnIndex
+      ].join(":");
+    }
+    function findRecord(key) {
+      return records.find((record) => getRecordKey(record) === key);
+    }
+    function bindEvents() {
+      const clientSelect = getElement("client-records-client");
+      clientSelect.addEventListener("change", (event) => {
+        loadClient(event.target.value);
+      });
+      getElement("client-records-task").addEventListener("change", renderTable);
+      $2("#client-records-status-filter").on("change.clientRecords", renderTable);
+      getElement("client-records-search").addEventListener("input", renderTable);
+      getElement("client-records-tbody").addEventListener(
+        "change",
+        handleStatusChange
+      );
+    }
+    function handleStatusChange(event) {
+      const select = event.target.closest(".client-records-status-select");
+      if (!select) {
+        return;
+      }
+      const record = findRecord(select.dataset.statusRecord);
+      if (!record) {
+        showFeedback("Record not found. Reload the client.", "error");
+        return;
+      }
+      const newStatus = select.value;
+      const previousStatus = record.status;
+      if (!newStatus || newStatus === previousStatus) {
+        return;
+      }
+      if (!STATUS_OPTIONS.includes(newStatus)) {
+        select.value = previousStatus;
+        return;
+      }
+      const key = getRecordKey(record);
+      if (pendingCells.has(key)) {
+        select.value = previousStatus;
+        return;
+      }
+      const payload = {
+        clientName: record.clientName,
+        spreadsheetId: record.spreadsheetId,
+        sheetId: record.sheetId,
+        rowIndex: record.rowIndex,
+        statusColumnIndex: record.statusColumnIndex,
+        cellA1: record.cellA1,
+        originalStatus: record.originalStatus,
+        expectedType: record.expectedType,
+        expectedTask: record.expectedTask,
+        expectedHours: record.expectedHours,
+        expectedDate: record.expectedDate,
+        newStatus
+      };
+      try {
+        pendingCells.add(key);
+        RequestManager.enqueue(
+          REQUEST_TYPE,
+          {
+            clientName,
+            spreadsheetId: record.spreadsheetId,
+            sheetId: record.sheetId,
+            operations: [payload]
+          },
+          `Update statuses \u2014 ${clientName}`
+        );
+        showFeedback("Status change added to Request Manager.", "info");
+        record.status = newStatus;
+        renderSummary();
+        renderTable();
+      } catch (error) {
+        pendingCells.delete(key);
+        select.value = previousStatus;
+        showFeedback(
+          error?.message || "Unable to queue the status change.",
+          "error"
+        );
+      }
+    }
+    function handleRequestState(state) {
+      const activeRequests = (state?.queue || []).filter(
+        (request) => request.type === REQUEST_TYPE && request.payload?.clientName === clientName
+      );
+      const activeKeys = /* @__PURE__ */ new Set();
+      activeRequests.forEach((request) => {
+        (request.payload?.operations || []).forEach((operation) => {
+          activeKeys.add(
+            [
+              operation.spreadsheetId,
+              operation.sheetId,
+              operation.rowIndex,
+              operation.statusColumnIndex
+            ].join(":")
+          );
+        });
+      });
+      pendingCells = activeKeys;
+      const completed = (state?.history || []).some(
+        (request) => request.type === REQUEST_TYPE && request.payload?.clientName === clientName && request.status === "completed" && !request._clientRecordsHandled
+      );
+      if (completed && clientName) {
+        loadClient(clientName);
+      } else {
+        renderTable();
+      }
+    }
+    function init() {
+      root = document.getElementById(ROOT_ID);
+      if (!root) {
+        throw new Error(`#${ROOT_ID} was not found in the loaded page.`);
+      }
+      destroyed = false;
+      bindEvents();
+      initializeClientOptions();
+      unsubscribe = RequestManager.subscribe(handleRequestState);
+    }
+    function destroy() {
+      destroyed = true;
+      fetchVersion++;
+      unsubscribe?.();
+      unsubscribe = null;
+      $2("#client-records-status-filter").off(".clientRecords");
+      records = [];
+      pendingCells.clear();
+      root = null;
+    }
+    return { init, destroy };
+  })();
+
   // src/routers.js
   var RouterModule = (() => {
     let currentPage = "home";
@@ -19625,6 +20275,7 @@
       growthComparisonOverview: growthComparisonOverviewPage,
       clientDirectory: clientDirectoryPage,
       clientActivity: clientActivityPage,
+      clientRecords: ClientRecordsPage,
       clientRankings: clientRankingsPage,
       clientOpportunities: clientOpportunitiesPage,
       clientDetails: clientDetailsPage,
@@ -19752,7 +20403,9 @@
         pushHistory(resolvedPageName, params);
       }
       if (resolvedPageName === currentPage && currentModule) {
-        return;
+        if (!updateHistory) {
+          return;
+        }
       }
       const now = Date.now();
       if (lastNavigation.page === page && now - lastNavigation.time < PAGE_NAVIGATION_DEBOUNCE) {
@@ -19767,7 +20420,7 @@
       AppUtils.closeAllDrawers();
       DataTableModule.destroyAll();
       ChartModule.destroyAllCharts();
-      AppUtils.destroyAllSelect2();
+      Select2Module.destroyAll();
       currentModule?.destroy?.();
       currentModule = null;
       setCurrentPage(resolvedPageName);
@@ -20281,6 +20934,12 @@
             ...latestState?.queue || [],
             ...latestState?.history || []
           ].find((item) => item.id === requestId);
+          if (!request || request.status !== "completed") {
+            AppUtils.showDashboardToast?.(
+              "Client details are available after the request completes."
+            );
+            return;
+          }
           const clientName = RequestManager.getRequestClientName(request);
           if (!clientName) {
             AppUtils.showError(
@@ -20288,6 +20947,7 @@
             );
             return;
           }
+          sessionStorage.setItem("clientDetailsName", clientName);
           RouterModule.go("clientDetails", true, {
             client: clientName
           });
@@ -20891,13 +21551,14 @@
         }).join("")}
               </div>
             ` : "";
-        const clientDetailsHTML = clientName ? `
-              <button
-                type="button"
-                class="gcb-request-client-details"
-                data-request-client-details="${escapeHTML(request.id)}"
-              >Details</button>
-            ` : "";
+        const canOpenClientDetails = Boolean(clientName) && isHistory && request.status === "completed";
+        const clientDetailsHTML = canOpenClientDetails ? `
+            <button
+              type="button"
+              class="gcb-request-client-details"
+              data-request-client-details="${escapeHTML(request.id)}"
+            >Details</button>
+          ` : "";
         const pendingRequests = state.queue.filter(
           (item) => item.status === "pending"
         );
@@ -21227,6 +21888,7 @@
           ...formData,
           action: "edit"
         });
+        ActivityToday.refreshAfterSave();
         AppUtils.showDashboardToast(
           response.message || "Today's hours updated successfully!",
           "success"
@@ -21276,23 +21938,43 @@
       const cachedTasks = AppUtils.cacheGet(cacheKey) || [];
       const normalizeProjectName = (value) => String(value || "").split(" - ")[0].trim().toLowerCase();
       const [sessionId, signature] = await getAuthArgs();
-      let existingTasks;
-      if (Array.isArray(cachedTasks) && cachedTasks.length > 0) {
-        existingTasks = new Set(cachedTasks.map(normalizeProjectName));
-      } else {
+      const existingTasks = new Set(
+        (Array.isArray(cachedTasks) ? cachedTasks : []).map(normalizeProjectName).filter(Boolean)
+      );
+      const requestedTasks = [
+        ...new Set(
+          records.map((record) => String(record.task || "").trim()).filter(Boolean)
+        )
+      ];
+      const missingFromCache = requestedTasks.filter(
+        (task) => !existingTasks.has(normalizeProjectName(task))
+      );
+      if (missingFromCache.length > 0) {
         try {
-          const projects = await callGScriptAsync("getProjects", [
+          updateProgress("Verifying existing projects");
+          const projects = await callGScriptAsync("getTaskOptions", [
             sessionId,
-            signature
+            signature,
+            clientName
           ]);
-          existingTasks = new Set(
-            (Array.isArray(projects) ? projects : []).map(
-              (project) => normalizeProjectName(project[0])
+          const serverTasks = Array.isArray(projects) ? projects.map(
+            (project) => normalizeProjectName(
+              typeof project === "string" ? project : project?.[0]
             )
-          );
+          ).filter(Boolean) : [];
+          for (const task of serverTasks) {
+            existingTasks.add(task);
+          }
+          const mergedTasks = [
+            .../* @__PURE__ */ new Set([
+              ...Array.isArray(cachedTasks) ? cachedTasks : [],
+              ...serverTasks
+            ])
+          ];
+          AppUtils.cacheSet(cacheKey, mergedTasks);
         } catch (error) {
           console.error(
-            "[RequestHandlers] Unable to check existing projects:",
+            "[RequestHandlers] Unable to verify existing projects:",
             error
           );
           throw new Error(
@@ -21301,11 +21983,9 @@
           );
         }
       }
-      const newProjects = [
-        ...new Set(
-          records.map((record) => String(record.task || "").trim()).filter((task) => !existingTasks.has(normalizeProjectName(task)))
-        )
-      ];
+      const newProjects = requestedTasks.filter(
+        (task) => !existingTasks.has(normalizeProjectName(task))
+      );
       const needsProjectSync = newProjects.length > 0;
       if (needsProjectSync) {
         updateProgress("Waiting for project confirmation");
@@ -21354,6 +22034,7 @@
         (sum, record) => sum + Number(record.hour || 0),
         0
       );
+      ActivityToday.refreshAfterSave();
       AppUtils.showDashboardToast(
         `${records.length} hour entr${records.length === 1 ? "y" : "ies"} successfully recorded!`,
         "success"
@@ -21400,7 +22081,9 @@
         endDate
       ]);
       if (existing?.exists) {
-        const choice = await ReportGenerator.confirmExistingReport(existing.report);
+        const choice = await ReportGenerator.confirmExistingReport(
+          existing.report
+        );
         if (choice?.cancelled) {
           return { cancelled: true };
         }
@@ -21548,6 +22231,76 @@
       ]);
       updateProgress("External sheet created successfully");
       return result;
+    }
+  );
+  RequestManager.registerHandler(
+    "update-client-record-status",
+    async (payload, { updateProgress }) => {
+      const clientName = String(payload?.clientName || "").trim();
+      const operations = payload?.operations;
+      if (!clientName) {
+        throw new Error("A client name is required.");
+      }
+      if (!Array.isArray(operations) || operations.length === 0) {
+        throw new Error("At least one status update is required.");
+      }
+      updateProgress("Authorizing client status updates");
+      const [sessionId, signature] = await getAuthArgs();
+      const results = [];
+      for (let index = 0; index < operations.length; index++) {
+        const operation = operations[index];
+        updateProgress(
+          `Updating record ${index + 1} of ${operations.length}`
+        );
+        try {
+          const result = await callGScriptAsync(
+            "updateClientRecordStatus",
+            [
+              sessionId,
+              signature,
+              {
+                ...operation,
+                clientName,
+                spreadsheetId: payload.spreadsheetId,
+                sheetId: payload.sheetId
+              }
+            ]
+          );
+          results.push({
+            rowIndex: operation.rowIndex,
+            success: true,
+            result
+          });
+        } catch (error) {
+          results.push({
+            rowIndex: operation.rowIndex,
+            success: false,
+            message: error?.message || "Status update failed."
+          });
+        }
+      }
+      const failed = results.filter((item) => !item.success);
+      if (failed.length) {
+        const error = new Error(
+          `${failed.length} of ${operations.length} status update(s) failed. Review the operation results before retrying.`
+        );
+        error.results = results;
+        throw error;
+      }
+      updateProgress("Client statuses updated successfully");
+      document.dispatchEvent(
+        new CustomEvent("gcb:client-record-status-updated", {
+          detail: {
+            clientName,
+            results
+          }
+        })
+      );
+      return {
+        success: true,
+        clientName,
+        results
+      };
     }
   );
 

@@ -894,6 +894,9 @@ textarea[readonly] {
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
 }
 
+.select2-selection--single .select2-selection__clear {
+    display: none;
+}
 
 /* =========================================================
    15. SELECT2 — DROPDOWN & SEARCH
@@ -6342,7 +6345,9 @@ body.dt-table-overlay-open {
   .app-footer-quick-action:hover,
   .app-footer-quick-action:focus,
   .app-footer-quick-action:focus-visible,
-  .app-footer-quick-action:active {
+  .app-footer-quick-action:active,
+  .app-footer-quick-action[aria-expanded="false"]:focus,
+  .app-footer-quick-action[aria-expanded="false"]:active {
     background: transparent !important;
     box-shadow: none !important;
   }
@@ -6371,5 +6376,330 @@ body.dt-table-overlay-open {
   }
 }
 
+
+/* =========================================================
+   114. CLIENT RECORDS CUSTOM STYLING
+   ========================================================= */
+
+/* =========================================================
+   CLIENT RECORDS
+   ========================================================= */
+
+.client-records-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+  color: var(--gc-text, #263238);
+}
+
+.client-records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.client-records-header h2 {
+  margin: 0.2rem 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+}
+
+.client-records-header p {
+  margin: 0;
+  color: var(--gc-text-muted, #77838b);
+  font-size: 0.9rem;
+}
+
+.client-records-eyebrow {
+  color: var(--gc-primary, #27866d);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.client-records-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.client-records-stat,
+.client-records-panel {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid rgba(35, 55, 65, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(35, 55, 65, 0.035);
+}
+
+.client-records-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem 1.15rem;
+}
+
+.client-records-stat span {
+  color: var(--gc-text-muted, #77838b);
+  font-size: 0.8rem;
+}
+
+.client-records-stat strong {
+  font-size: 1.65rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.client-records-panel {
+  overflow: visible;
+}
+
+.client-records-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+  border-bottom: 1px solid #edf0f2;
+}
+
+.client-records-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.client-records-field label {
+  color: #58656d;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.client-records-search-field {
+  grid-column: 1 / -1;
+}
+
+.client-records-page .select2-container {
+  width: 100% !important;
+}
+
+.client-records-page .select2-container--default
+.select2-selection--single,
+.client-records-page .select2-container--default
+.select2-selection--multiple {
+  min-height: 40px;
+  border: 1px solid #dfe5e8;
+  border-radius: 8px;
+}
+
+.client-records-page .select2-container--default
+.select2-selection--single .select2-selection__rendered {
+  line-height: 38px;
+  padding-left: 11px;
+}
+
+.client-records-page .select2-container--default
+.select2-selection--single .select2-selection__arrow {
+  height: 38px;
+}
+
+.client-records-page .select2-container--default
+.select2-selection--multiple .select2-selection__choice {
+  margin-top: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: #edf5f1;
+  color: #276b53;
+}
+
+.client-records-search-field .form-control {
+  min-height: 40px;
+  border-color: #dfe5e8;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.client-records-search-field .form-control:focus {
+  border-color: var(--gc-primary, #27866d);
+}
+
+.client-records-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.client-records-table {
+  width: 100%;
+  min-width: 680px;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.client-records-table thead th {
+  padding: 0.9rem 1rem;
+  background: #f8faf9;
+  border-bottom: 1px solid #e9eeeb;
+  color: #69766f;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.client-records-table tbody td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #eef1ef;
+  vertical-align: middle;
+  font-size: 0.875rem;
+}
+
+.client-records-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.client-records-table tbody tr:hover {
+  background: #fbfdfc;
+}
+
+.client-records-table tbody tr.is-saving {
+  background: #f8fbff;
+}
+
+.client-records-table tbody tr.has-update-error {
+  background: #fffafa;
+}
+
+.client-records-table td:first-child {
+  color: #59676d;
+  white-space: nowrap;
+}
+
+.client-records-task {
+  min-width: 180px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.client-records-status-heading {
+  width: 190px;
+}
+
+.client-records-status-cell {
+  min-width: 190px;
+}
+
+.client-records-status-select {
+  width: 100%;
+  min-width: 150px;
+}
+
+.client-records-status-select option[value="PAID"] {
+  color: #24734f;
+}
+
+.client-records-status-select option[value="UNPAID"] {
+  color: #a65c23;
+}
+
+.client-records-status-select option[value="INVOICED"] {
+  color: #4169a2;
+}
+
+.client-records-feedback {
+  margin: 1rem 1.25rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.client-records-feedback.is-error {
+  background: #fff1f0;
+  color: #a52b2b;
+}
+
+.client-records-feedback.is-info {
+  background: #edf5fb;
+  color: #315f83;
+}
+
+.client-records-loading,
+.client-records-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: #78858b;
+}
+
+.client-records-empty {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.client-records-empty:not([hidden]) {
+  display: flex;
+}
+
+.client-records-empty i {
+  font-size: 2rem;
+}
+
+.client-records-empty strong {
+  color: #38464c;
+}
+
+.client-records-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.9rem 1.25rem;
+  border-top: 1px solid #edf0f2;
+  color: #77838b;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 991px) {
+  .client-records-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .client-records-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .client-records-search-field {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 575px) {
+  .client-records-header h2 {
+    font-size: 1.3rem;
+  }
+
+  .client-records-summary {
+    gap: 0.6rem;
+  }
+
+  .client-records-stat {
+    padding: 0.85rem;
+  }
+
+  .client-records-stat strong {
+    font-size: 1.4rem;
+  }
+
+  .client-records-filters {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1rem;
+  }
+
+  .client-records-search-field {
+    grid-column: auto;
+  }
+}
 
 </style>

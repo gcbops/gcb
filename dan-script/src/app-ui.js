@@ -1,6 +1,6 @@
 import { LoaderModule } from "./components/loader";
 import { AppPopoverModule } from "./components/app-popover";
-import { AppUtils } from "./utils/utils";
+import { Select2Module } from "./components/select2";
 
 const AppUI = (() => {
   function init() {
@@ -86,7 +86,7 @@ const AppUI = (() => {
       return;
     }
 
-    AppUtils.initSelect2($scope);
+    Select2Module.init($scope);
   }
 
   function activateNavigation(pageName) {

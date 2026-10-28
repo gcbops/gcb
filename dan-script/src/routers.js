@@ -30,6 +30,8 @@ import { performanceProductivityPage } from "./pages/performance-productivity-pa
 import { clientDetailsPage } from "./pages/client-details-page.js";
 import { manageUsersPage } from "./users/manage-users.js";
 import { AppPopoverModule } from "./components/app-popover.js";
+import { ClientRecordsPage } from "./pages/client-records-page.js";
+import { Select2Module } from "./components/select2.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
@@ -68,6 +70,7 @@ const RouterModule = (() => {
 
     clientDirectory: clientDirectoryPage,
     clientActivity: clientActivityPage,
+    clientRecords: ClientRecordsPage,
     clientRankings: clientRankingsPage,
     clientOpportunities: clientOpportunitiesPage,
     clientDetails: clientDetailsPage,
@@ -314,7 +317,9 @@ const RouterModule = (() => {
      * Don't reload the same page unnecessarily.
      */
     if (resolvedPageName === currentPage && currentModule) {
-      return;
+      if (!updateHistory) {
+        return;
+      }
     }
 
     const now = Date.now();
@@ -357,7 +362,7 @@ const RouterModule = (() => {
     AppUtils.closeAllDrawers();
     DataTableModule.destroyAll();
     ChartModule.destroyAllCharts();
-    AppUtils.destroyAllSelect2();
+    Select2Module.destroyAll();
 
     currentModule?.destroy?.();
     currentModule = null;
@@ -378,7 +383,7 @@ const RouterModule = (() => {
       top: 0,
       behavior: "instant",
     });
-    
+
     PageLoaderModule.loadPage(resolvedPageName, () => {
       if (token !== pageToken) {
         return;
@@ -395,7 +400,6 @@ const RouterModule = (() => {
         AppUI.playSkeletonReveal();
         // AppUI.playStaggerReveal();
       });
-
     });
   }
 

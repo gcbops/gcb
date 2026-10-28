@@ -118,9 +118,9 @@ const settingsConfigurationPage = (() => {
       case "btnBackupAllSheets":
         AppUtils.openConfirmationModal({
           ns: "backupAllSheets",
-          title: "Confirm All Google Sheets Backup?",
+          title: "Create Admin Combined Backup?",
           message:
-            "This will create a complete backup point for all active sheets. This process might take a few moments.",
+            "This will export the Google Sheets belonging to all enabled managers into one ZIP archive in the Admin Combined Backups folder. This process may take a few moments.",
           onProceed: ($modal, $btn) => {
             BackupAllSheets($btn);
           },
@@ -318,11 +318,14 @@ const settingsConfigurationPage = (() => {
 
           if (result.status === "PARTIAL") {
             AppUtils.showDashboardToast(
-              "Backup partially completed. Some files may have failed.",
+              "Admin combined backup partially completed. Some spreadsheets may have failed.",
               "warning",
             );
           } else {
-            AppUtils.showDashboardToast("Backup completed", "success");
+            AppUtils.showDashboardToast(
+              "Admin combined backup completed.",
+              "success",
+            );
           }
 
           loading.setSuccess(
@@ -361,7 +364,10 @@ const settingsConfigurationPage = (() => {
   function loadBackupHistory() {
     const cached = AppUtils.cacheGet(BACKUP_HISTORY_CACHE_KEY);
 
-    loadPropertyStatus("BACKUP_FOLDER_ID", updateBackupDestinationStatus);
+    loadPropertyStatus(
+      "ADMIN_COMBINED_BACKUP_FOLDER_ID",
+      updateBackupDestinationStatus,
+    );
 
     if (Array.isArray(cached) && cached.length > 0) {
       renderBackupHistory(cached);
@@ -385,12 +391,15 @@ const settingsConfigurationPage = (() => {
         "getBackupHistory",
         [sessionId, signature],
         (result) => {
+          console.log("[BackupHistory] Backend result:", result);
+          console.log("[BackupHistory] Result success:", result?.success);
+          console.log("[BackupHistory] Backups:", result?.backups?.length);
+
           if (!result?.success || !Array.isArray(result.backups)) {
             AppUtils.showDashboardToast(
               "Unable to load backup history.",
               "error",
             );
-
             return;
           }
 
@@ -411,8 +420,16 @@ const settingsConfigurationPage = (() => {
     const message = document.getElementById("backup-history-message");
 
     if (!tbody || !message) {
+      console.error("[BackupHistory] Required DOM elements missing:", {
+        tbodyId: BACKUP_HISTORY_TABLE_BODY_ID,
+        tbodyFound: Boolean(tbody),
+        messageFound: Boolean(message),
+        tableFound: Boolean(document.getElementById(BACKUP_HISTORY_TABLE_ID)),
+      });
       return;
     }
+
+    console.log("[BackupHistory] Rendering", backups?.length, "records");
 
     DataTableModule.hideTableOverlay(BACKUP_HISTORY_TABLE_ID);
 
@@ -434,7 +451,7 @@ const settingsConfigurationPage = (() => {
       return;
     }
 
-    message.textContent = `${backups.length} backup folder(s) found.`;
+    message.textContent = `${backups.length} backup archive(s) found.`;
 
     backups.forEach((backup) => {
       tbody.appendChild(createBackupHistoryRow(backup));
@@ -479,121 +496,39 @@ const settingsConfigurationPage = (() => {
     const actionsCell = document.createElement("td");
     actionsCell.className = "text-nowrap";
 
-    actionsCell.appendChild(createBackupActionsDropdown(backup));
+    actionsCell.appendChild(createBackupDownloadAction(backup));;
 
     row.append(dateCell, nameCell, filesCell, actionsCell);
 
     return row;
   }
 
-  function createBackupActionsDropdown(backup) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "dropdown btn-group";
-
-    const toggleButton = document.createElement("button");
-    toggleButton.type = "button";
-    toggleButton.className = "p-0 btn border-0";
-    toggleButton.setAttribute("data-bs-toggle", "dropdown");
-    toggleButton.setAttribute("aria-haspopup", "true");
-    toggleButton.setAttribute("aria-expanded", "false");
-    toggleButton.title = "Backup History actions";
-
-    const icon = document.createElement("i");
-    icon.className = "pe-7s-more";
-
-    toggleButton.appendChild(icon);
-    wrapper.appendChild(toggleButton);
-
-    const menu = document.createElement("div");
-    menu.className = "dropdown-menu";
-    menu.setAttribute("tabindex", "-1");
-    menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-hidden", "true");
-
-    menu.appendChild(createOpenFolderItem(backup.folderUrl));
-
-    menu.appendChild(createDownloadZipItem(backup));
-
-    if (Array.isArray(backup.files) && backup.files.length) {
-      menu.appendChild(createViewFilesSubmenu(backup.files));
-    }
-
-    wrapper.appendChild(menu);
-
-    return wrapper;
-  }
-
-  function createOpenFolderItem(folderUrl) {
-    const item = document.createElement("a");
-
-    item.className = "dropdown-item";
-    item.href = folderUrl || "#";
-    item.target = "_blank";
-    item.rel = "noopener noreferrer";
-    item.textContent = "Open Folder";
-
-    return item;
-  }
-
-  function createViewFilesSubmenu(files) {
-    const listItem = document.createElement("li");
-    listItem.className = "submenu submenu-md dropend";
-
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "dropdown-item dropdown-toggle";
-    toggle.setAttribute("role", "button");
-    toggle.setAttribute("data-bs-toggle", "dropdown");
-    toggle.setAttribute("aria-expanded", "false");
-
-    toggle.addEventListener("click", (event) => {
-      event.stopPropagation();
-    });
-
-    toggle.textContent = "Individual ZIPs";
-
-    const submenu = document.createElement("ul");
-    submenu.className = "dropdown-menu";
-
-    files.forEach((file) => {
-      const fileItem = document.createElement("li");
-
-      const fileLink = document.createElement("a");
-      fileLink.className = "dropdown-item";
-      fileLink.href = file.downloadUrl || file.url || "#";
-      fileLink.target = "_blank";
-      fileLink.rel = "noopener noreferrer";
-      fileLink.textContent = file.name || "Backup ZIP";
-
-      fileItem.appendChild(fileLink);
-      submenu.appendChild(fileItem);
-    });
-
-    listItem.append(toggle, submenu);
-
-    return listItem;
-  }
-
-  function createDownloadZipItem(backup) {
-    const item = document.createElement("a");
-
-    item.className = "dropdown-item";
-    item.textContent = "Download ZIP";
-
+  function createBackupDownloadAction(backup) {
+    const link = document.createElement("a");
     const zipUrl = backup.zipDownloadUrl || backup.zipUrl;
 
+    link.className = "btn btn-link p-0 border-0";
+    link.title = "Download backup ZIP";
+    link.setAttribute("aria-label", `Download ${backup.name || "backup ZIP"}`);
+
     if (zipUrl) {
-      item.href = zipUrl;
-      item.target = "_blank";
-      item.rel = "noopener noreferrer";
+      link.href = zipUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
     } else {
-      item.href = "#";
-      item.classList.add("disabled");
-      item.setAttribute("aria-disabled", "true");
-      item.title = "ZIP archive is not available for this backup.";
+      link.href = "#";
+      link.classList.add("disabled");
+      link.setAttribute("aria-disabled", "true");
+      link.title = "Backup ZIP is not available";
     }
 
-    return item;
+    const icon = document.createElement("i");
+    icon.className = "pe-7s-download";
+    icon.setAttribute("aria-hidden", "true");
+
+    link.appendChild(icon);
+
+    return link;
   }
 
   function updateBackupSummary(backups) {

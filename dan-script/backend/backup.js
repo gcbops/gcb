@@ -1,54 +1,179 @@
 const BACKUP_CONFIG = {
-  sourceFolderProperty: "MAIN_SHEETS_FOLDER_ID",
-  backupFolderProperty: "BACKUP_FOLDER_ID",
-
+  registryProperty: "MANAGER_REGISTRY_SPREADSHEET_ID",
+  adminBackupFolderProperty: "ADMIN_COMBINED_BACKUP_FOLDER_ID",
   backupFolderPrefix: "GAS Backup - ",
-
   retentionYears: 3,
 };
 
-/**
- * Get the source folder containing the main
- * spreadsheet, external template, and external sheets.
- */
-function getBackupSourceFolder() {
+function getAdminCombinedBackupFolder_() {
   const folderId = PropertiesService.getScriptProperties().getProperty(
-    BACKUP_CONFIG.sourceFolderProperty,
+    BACKUP_CONFIG.adminBackupFolderProperty,
   );
 
   if (!folderId) {
     throw new Error(
-      `Missing Script Property: ${BACKUP_CONFIG.sourceFolderProperty}`,
+      `Missing Script Property: ${BACKUP_CONFIG.adminBackupFolderProperty}`,
     );
   }
 
   return DriveApp.getFolderById(folderId);
 }
 
-/**
- * Get the dedicated backup folder.
- */
-function getBackupFolder() {
-  const folderId = PropertiesService.getScriptProperties().getProperty(
-    BACKUP_CONFIG.backupFolderProperty,
+function getBackupManagers_() {
+  const registryId = PropertiesService.getScriptProperties().getProperty(
+    BACKUP_CONFIG.registryProperty,
   );
 
-  if (!folderId) {
+  if (!registryId) {
     throw new Error(
-      `Missing Script Property: ${BACKUP_CONFIG.backupFolderProperty}`,
+      `Missing Script Property: ${BACKUP_CONFIG.registryProperty}`,
     );
   }
 
-  return DriveApp.getFolderById(folderId);
+  const registry = openSpreadsheetById(registryId);
+  const sheet = registry.getSheetByName("Managers");
+
+  if (!sheet) {
+    throw new Error('The central registry is missing the "Managers" sheet.');
+  }
+
+  const values = sheet.getDataRange().getValues();
+
+  if (values.length < 2) {
+    return [];
+  }
+
+  const headers = values[0].map((value) => String(value).trim().toLowerCase());
+
+  const requiredHeaders = [
+    "manager id",
+    "manager name",
+    "enabled",
+    "operational spreadsheet id",
+    "external sheets folder id",
+    "backup folder id",
+    "reports folder id",
+  ];
+
+  const columns = {};
+
+  requiredHeaders.forEach((header) => {
+    const index = headers.indexOf(header);
+
+    if (index === -1) {
+      throw new Error(`Managers registry is missing the "${header}" column.`);
+    }
+
+    columns[header] = index;
+  });
+
+  return values.slice(1).flatMap((row, index) => {
+    const enabledValue = row[columns.enabled];
+    const enabled =
+      enabledValue === true ||
+      ["true", "1", "yes"].includes(String(enabledValue).trim().toLowerCase());
+
+    const managerId = String(row[columns["manager id"]] || "").trim();
+    const spreadsheetId = String(
+      row[columns["operational spreadsheet id"]] || "",
+    ).trim();
+    const externalFolderId = String(
+      row[columns["external sheets folder id"]] || "",
+    ).trim();
+    const backupFolderId = String(
+      row[columns["backup folder id"]] || "",
+    ).trim();
+    const reportsFolderId = String(
+      row[columns["reports folder id"]] || "",
+    ).trim();
+
+    if (!enabled) {
+      return [];
+    }
+
+    if (!managerId || !spreadsheetId || !backupFolderId || !reportsFolderId) {
+      throw new Error(
+        `Enabled manager on registry row ${index + 2} is missing a manager ID, operational spreadsheet ID, backup folder ID, or reports folder ID.`,
+      );
+    }
+
+    return [
+      {
+        managerId,
+        managerName: String(row[columns["manager name"]] || managerId).trim(),
+        spreadsheetId,
+        externalFolderId,
+        backupFolderId,
+        reportsFolderId,
+      },
+    ];
+  });
 }
 
-/**
- * Return ZIP-only backup history for the admin Backup Management page.
- */
+function getManagerBackupFolder_(manager) {
+  return DriveApp.getFolderById(manager.backupFolderId);
+}
+
+function getManagerBackupSourceFiles_(manager) {
+  if (
+    !manager?.managerId ||
+    !manager?.spreadsheetId ||
+    !manager?.backupFolderId
+  ) {
+    throw new Error("A valid enabled manager entry is required.");
+  }
+
+  const filesById = new Map();
+
+  // 1. Include the manager's operational spreadsheet.
+  const operationalFile = DriveApp.getFileById(manager.spreadsheetId);
+
+  if (operationalFile.getMimeType() !== MimeType.GOOGLE_SHEETS) {
+    throw new Error(
+      `Operational file for ${manager.managerId} is not a Google Spreadsheet.`,
+    );
+  }
+
+  filesById.set(operationalFile.getId(), operationalFile);
+
+  // 2. Include Google Sheets directly inside the external sheets folder.
+  if (manager.externalFolderId) {
+    const externalFolder = DriveApp.getFolderById(manager.externalFolderId);
+
+    const externalFiles = externalFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+
+    while (externalFiles.hasNext()) {
+      const file = externalFiles.next();
+
+      if (!file.isTrashed()) {
+        filesById.set(file.getId(), file);
+      }
+    }
+  }
+
+  // 3. Include ALL files directly inside this manager's Reports Folder.
+  // No report-log lookup, file-type filter, or file-ownership check is used.
+  if (manager.reportsFolderId) {
+    const reportsFolder = DriveApp.getFolderById(manager.reportsFolderId);
+
+    const reportFiles = reportsFolder.getFiles();
+
+    while (reportFiles.hasNext()) {
+      const file = reportFiles.next();
+
+      if (!file.isTrashed()) {
+        filesById.set(file.getId(), file);
+      }
+    }
+  }
+
+  return Array.from(filesById.values());
+}
+
 function getBackupHistory(sessionId, signature) {
   requireRole(sessionId, signature, "admin");
 
-  const backupFolder = getBackupFolder();
+  const backupFolder = getAdminCombinedBackupFolder_();
   const folders = backupFolder.getFolders();
   const backups = [];
 
@@ -101,6 +226,26 @@ function getBackupHistory(sessionId, signature) {
     // Older backup folders contain individual Google Sheets rather than ZIPs.
     const displayedFiles = backupFiles.length ? backupFiles : legacyFiles;
 
+    let metadata = null;
+
+    try {
+      const description = folder.getDescription() || "";
+      const prefix = "GCB_BACKUP_METADATA=";
+
+      if (description.startsWith(prefix)) {
+        metadata = JSON.parse(description.slice(prefix.length));
+      }
+    } catch (error) {
+      console.warn(
+        `[BackupHistory] Could not parse metadata for ${folderName}:`,
+        error,
+      );
+    }
+
+    const fileCount = Number.isFinite(Number(metadata?.fileCount))
+      ? Number(metadata.fileCount)
+      : legacyFiles.length || backupFiles.length || 0;
+
     backups.push({
       id: folder.getId(),
       name: folderName,
@@ -111,7 +256,7 @@ function getBackupHistory(sessionId, signature) {
         "yyyy-MM-dd HH:mm:ss",
       ),
       folderUrl: folder.getUrl(),
-      fileCount: displayedFiles.length,
+      fileCount,
       files: displayedFiles,
       zipFileId: zipFile?.getId() || null,
       zipFileName: zipFile?.getName() || null,
@@ -137,17 +282,13 @@ function getBackupHistory(sessionId, signature) {
   };
 }
 
-/**
- * Create a backup of all Google Sheets
- * directly inside the main sheets folder.
- */
 function backupAllSheets(sessionId, signature) {
   requireRole(sessionId, signature, "admin");
 
-  return backupAllSheetsInternal();
+  return backupAllManagersCombinedInternal_();
 }
 
-function backupAllSheetsInternal(triggerType = "MANUAL") {
+function backupAllSheetsInternal_(manager, triggerType = "SCHEDULED") {
   const startedAt = Date.now();
   const timestamp = new Date();
 
@@ -161,8 +302,8 @@ function backupAllSheetsInternal(triggerType = "MANUAL") {
   const failedFiles = [];
 
   try {
-    const sourceFolder = getBackupSourceFolder();
-    const backupFolder = getBackupFolder();
+    const sourceFiles = getManagerBackupSourceFiles_(manager);
+    const backupFolder = getManagerBackupFolder_(manager);
 
     const formattedTimestamp = Utilities.formatDate(
       timestamp,
@@ -170,34 +311,40 @@ function backupAllSheetsInternal(triggerType = "MANUAL") {
       "yyyy-MM-dd HH-mm-ss",
     );
 
-    backupName = `${BACKUP_CONFIG.backupFolderPrefix}${formattedTimestamp}`;
+    backupName =
+      `${BACKUP_CONFIG.backupFolderPrefix}${manager.managerId} - ${formattedTimestamp}`;
 
     const destinationFolder = backupFolder.createFolder(backupName);
     destinationFolderId = destinationFolder.getId();
 
-    zipResult = createBackupZip_(destinationFolder, sourceFolder, backupName);
+    zipResult = createBackupZip_(
+      destinationFolder,
+      sourceFiles,
+      backupName,
+    );
+
+    setBackupFolderMetadata_(destinationFolder, zipResult);
 
     processed = zipResult.processedFiles;
-    backedUp = zipResult.individualArchives;
+    backedUp = zipResult.created ? 1 : 0;
     skipped = zipResult.failedFiles;
     failedFiles.push(...zipResult.failedFileDetails);
 
-    const overallZipCreated = zipResult.created;
-
-    const status =
-      skipped === 0 && overallZipCreated
-        ? "SUCCESS"
-        : backedUp > 0 || overallZipCreated
-          ? "PARTIAL"
-          : "FAILED";
+    const status = !zipResult.created
+      ? "FAILED"
+      : skipped > 0
+        ? "PARTIAL"
+        : "SUCCESS";
 
     const result = {
       success: status !== "FAILED",
       status,
+      managerId: manager.managerId,
       backupFolderId: destinationFolderId,
       backupFolderName: backupName,
       processed,
       backedUp,
+      exportedFiles: zipResult.exportedFiles,
       skipped,
       failedFiles,
       zip: zipResult,
@@ -206,17 +353,18 @@ function backupAllSheetsInternal(triggerType = "MANUAL") {
     recordGcbOperationLog_({
       timestamp,
       category: "BACKUP",
-      operation: "CREATE_BACKUP",
+      operation: "CREATE_MANAGER_BACKUP",
       status,
       trigger: triggerType,
       durationMs: Date.now() - startedAt,
       processed,
-      succeeded: backedUp,
+      succeeded: zipResult.exportedFiles,
       failed: skipped,
-      target: backupName || destinationFolderId,
+      target: `${manager.managerId}: ${backupName}`,
       message:
-        `Processed ${processed}; individual ZIPs ${backedUp}; ` +
-        `failed ${skipped}; overall ZIP ${overallZipCreated ? "created" : "failed"}.`,
+        `Manager ${manager.managerId}; processed ${processed}; ` +
+        `exported ${zipResult.exportedFiles}; failed ${skipped}; ` +
+        `overall ZIP ${zipResult.created ? "created" : "failed"}.`,
       error: failedFiles
         .map((item) => `${item.name}: ${item.error}`)
         .concat(zipResult.overallZipError || [])
@@ -225,110 +373,273 @@ function backupAllSheetsInternal(triggerType = "MANUAL") {
 
     Logger.log(result);
 
+    if (status === "FAILED") {
+      throw new Error(
+        `Backup failed for manager ${manager.managerId}: ${zipResult.overallZipError || "No files were successfully exported."}`,
+      );
+    }
+
     return result;
   } catch (error) {
-    recordGcbOperationLog_({
-      timestamp,
-      category: "BACKUP",
-      operation: "CREATE_BACKUP",
-      status: "FAILED",
-      trigger: triggerType,
-      durationMs: Date.now() - startedAt,
-      processed,
-      succeeded: backedUp,
-      failed: skipped,
-      target: backupName || destinationFolderId,
-      message: "Backup execution stopped unexpectedly.",
-      error: String(error?.message || error),
-    });
+    // Avoid duplicating the operation log if the backup result was already logged.
+    if (!zipResult) {
+      recordGcbOperationLog_({
+        timestamp,
+        category: "BACKUP",
+        operation: "CREATE_MANAGER_BACKUP",
+        status: "FAILED",
+        trigger: triggerType,
+        durationMs: Date.now() - startedAt,
+        processed,
+        succeeded: backedUp,
+        failed: skipped,
+        target: `${manager.managerId}: ${backupName || destinationFolderId}`,
+        message: "Manager backup execution stopped unexpectedly.",
+        error: String(error?.message || error),
+      });
+    }
 
     throw error;
   }
 }
 
-/**
- * Create one ZIP per spreadsheet and one overall ZIP containing
- * all successfully exported XLSX files.
- *
- * The destination folder contains ZIP files only.
- */
-function createBackupZip_(destinationFolder, sourceFolder, backupName) {
-  const xlsxBlobs = [];
-  const failedFileDetails = [];
+function backupAllManagersCombinedInternal_() {
+  const startedAt = Date.now();
+  const timestamp = new Date();
 
-  let processedFiles = 0;
-  let individualArchives = 0;
+  let backupName = "";
+  let destinationFolderId = "";
+  let zipResult = null;
 
-  const files = sourceFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+  try {
+    const managers = getBackupManagers_();
+    const filesById = new Map();
+    const collectionErrors = [];
 
-  while (files.hasNext()) {
-    const file = files.next();
-    processedFiles++;
+    managers.forEach((manager) => {
+      try {
+        const managerFiles = getManagerBackupSourceFiles_(manager);
 
-    try {
-      const fileSuffix = file.getId().slice(-8);
-      const safeName = sanitizeBackupFileName_(file.getName());
+        managerFiles.forEach((file) => {
+          filesById.set(file.getId(), file);
+        });
+      } catch (error) {
+        collectionErrors.push({
+          managerId: manager.managerId,
+          error: String(error?.message || error),
+        });
 
-      const xlsxBlob = exportGoogleSheetAsXlsx_(
-        file.getId(),
-        `${safeName} [${fileSuffix}]`,
+        console.error(
+          `[Backup] Failed collecting files for ${manager.managerId}:`,
+          error,
+        );
+      }
+    });
+
+    const sourceFiles = Array.from(filesById.values());
+    const backupFolder = getAdminCombinedBackupFolder_();
+
+    const formattedTimestamp = Utilities.formatDate(
+      timestamp,
+      Session.getScriptTimeZone(),
+      "yyyy-MM-dd HH-mm-ss",
+    );
+
+    backupName =
+      `${BACKUP_CONFIG.backupFolderPrefix}ADMIN COMBINED - ${formattedTimestamp}`;
+
+    const destinationFolder = backupFolder.createFolder(backupName);
+    destinationFolderId = destinationFolder.getId();
+
+    // false = do not create individual ZIPs for this admin backup.
+    zipResult = createBackupZip_(
+      destinationFolder,
+      sourceFiles,
+      backupName,
+    );
+
+    setBackupFolderMetadata_(destinationFolder, zipResult, {
+      collectionErrors,
+    });
+
+    const totalFailures = zipResult.failedFiles + collectionErrors.length;
+
+    const status = !zipResult.created
+      ? "FAILED"
+      : totalFailures > 0
+        ? "PARTIAL"
+        : "SUCCESS";
+
+    const result = {
+      success: status !== "FAILED",
+      status,
+      backupFolderId: destinationFolderId,
+      backupFolderName: backupName,
+      managerCount: managers.length,
+      processed: zipResult.processedFiles,
+      exportedFiles: zipResult.exportedFiles,
+      skipped: totalFailures,
+      failedFiles: zipResult.failedFileDetails,
+      collectionErrors,
+      zip: zipResult,
+    };
+
+    recordGcbOperationLog_({
+      timestamp,
+      category: "BACKUP",
+      operation: "CREATE_ADMIN_COMBINED_BACKUP",
+      status,
+      trigger: "MANUAL",
+      durationMs: Date.now() - startedAt,
+      processed: zipResult.processedFiles,
+      succeeded: zipResult.exportedFiles,
+      failed: zipResult.failedFiles,
+      target: backupName || destinationFolderId,
+      message:
+        `Combined backup for ${managers.length} enabled managers; ` +
+        `exported ${zipResult.exportedFiles}; failed ${zipResult.failedFiles}; ` +
+        `overall ZIP ${zipResult.created ? "created" : "failed"}.`,
+      error: zipResult.failedFileDetails
+        .map((item) => `${item.name}: ${item.error}`)
+        .concat(zipResult.overallZipError || [])
+        .join("\n"),
+    });
+
+    Logger.log(result);
+
+    if (status === "FAILED") {
+      throw new Error(
+        `Admin combined backup failed: ${zipResult.overallZipError || "No spreadsheets were successfully exported."}`,
       );
-
-      // Create an individual ZIP containing this spreadsheet's XLSX export.
-      const individualZipName = `Sheet - ${safeName} [${fileSuffix}].zip`;
-
-      const individualZip = Utilities.zip([xlsxBlob], individualZipName);
-
-      destinationFolder.createFile(individualZip);
-
-      individualArchives++;
-      xlsxBlobs.push(xlsxBlob);
-    } catch (error) {
-      const details = {
-        name: file.getName(),
-        error: String(error?.message || error).slice(0, 300),
-      };
-
-      failedFileDetails.push(details);
-
-      console.error(`Failed to create ZIP for "${file.getName()}":`, error);
     }
-  }
 
-  let overallZip = null;
-  let overallZipError = "";
-
-  if (xlsxBlobs.length) {
-    try {
-      overallZip = destinationFolder.createFile(
-        Utilities.zip(xlsxBlobs, `${backupName} - ALL.zip`),
-      );
-    } catch (error) {
-      overallZipError = String(error?.message || error).slice(0, 500);
-
-      console.error("Failed to create overall backup ZIP:", error);
+    return result;
+  } catch (error) {
+    if (!zipResult) {
+      recordGcbOperationLog_({
+        timestamp,
+        category: "BACKUP",
+        operation: "CREATE_ADMIN_COMBINED_BACKUP",
+        status: "FAILED",
+        trigger: "MANUAL",
+        durationMs: Date.now() - startedAt,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        target: backupName || destinationFolderId,
+        message: "Admin combined backup execution stopped unexpectedly.",
+        error: String(error?.message || error),
+      });
     }
-  }
 
-  return {
-    created: Boolean(overallZip),
-    processedFiles,
-    individualArchives,
-    failedFiles: failedFileDetails.length,
-    failedFileDetails,
-    zipFileId: overallZip?.getId() || null,
-    zipFileName: overallZip?.getName() || null,
-    overallZipError,
-    exportedFiles: xlsxBlobs.length,
-    message: overallZip
-      ? "Individual ZIP archives and the overall ZIP were processed."
-      : "The overall ZIP could not be created.",
-  };
+    throw error;
+  }
 }
 
-/**
- * Remove characters that could cause problems in ZIP entry filenames.
- */
+function setBackupFolderMetadata_(folder, zipResult, extra = {}) {
+  const metadata = {
+    version: 1,
+    created: Boolean(zipResult?.created),
+    zipFileId: zipResult?.zipFileId || null,
+    fileCount: Number(zipResult?.exportedFiles) || 0,
+    processedFiles: Number(zipResult?.processedFiles) || 0,
+    failedFiles: Number(zipResult?.failedFiles) || 0,
+    ...extra,
+  };
+
+  folder.setDescription(`GCB_BACKUP_METADATA=${JSON.stringify(metadata)}`);
+}
+
+function createBackupZip_(destinationFolder, sourceFiles, backupName) {
+  const backupBlobs = [];
+  const failedFileDetails = [];
+
+  const files = Array.isArray(sourceFiles) ? sourceFiles : [];
+
+  files.forEach((file) => {
+    try {
+      const blob = exportBackupSourceFile_(file);
+
+      if (!blob) {
+        throw new Error("The export returned no file content.");
+      }
+
+      backupBlobs.push(blob);
+    } catch (error) {
+      const detail = {
+        id: file.getId(),
+        name: file.getName(),
+        error: String(error?.message || error),
+      };
+
+      failedFileDetails.push(detail);
+
+      console.error(
+        `[Backup] Failed to export "${detail.name}" (${detail.id}): ${detail.error}`,
+      );
+    }
+  });
+
+  const baseName = String(backupName || "GAS Backup").replace(/\.zip$/i, "");
+
+  if (backupBlobs.length === 0) {
+    return {
+      success: false,
+      status: "FAILED",
+      created: false,
+      zipFileId: null,
+      zipName: null,
+      zipUrl: null,
+      processedFiles: files.length,
+      exportedFiles: 0,
+      fileCount: 0,
+      failedFiles: failedFileDetails.length,
+      failedFileDetails,
+      individualArchives: 0,
+      overallZipError: "No files could be successfully exported.",
+    };
+  }
+
+  try {
+    // Exactly one ZIP per backup operation.
+    const zipName = `${baseName}.zip`;
+    const zipBlob = Utilities.zip(backupBlobs, zipName);
+    const zipFile = destinationFolder.createFile(zipBlob);
+
+    return {
+      success: failedFileDetails.length === 0,
+      status: failedFileDetails.length ? "PARTIAL" : "SUCCESS",
+      created: true,
+      zipFileId: zipFile.getId(),
+      zipName: zipFile.getName(),
+      zipUrl: zipFile.getUrl(),
+      processedFiles: files.length,
+      exportedFiles: backupBlobs.length,
+      fileCount: backupBlobs.length,
+      failedFiles: failedFileDetails.length,
+      failedFileDetails,
+      individualArchives: 0,
+      overallZipError: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: "FAILED",
+      created: false,
+      zipFileId: null,
+      zipName: null,
+      zipUrl: null,
+      processedFiles: files.length,
+      exportedFiles: backupBlobs.length,
+      fileCount: backupBlobs.length,
+      failedFiles: failedFileDetails.length,
+      failedFileDetails,
+      individualArchives: 0,
+      overallZipError: String(error?.message || error),
+    };
+  }
+}
+
 function sanitizeBackupFileName_(fileName) {
   return (
     String(fileName || "Spreadsheet")
@@ -389,14 +700,34 @@ function exportGoogleSheetAsXlsx_(spreadsheetId, fileName) {
   );
 }
 
-/**
- * Delete backup folders older than the configured retention period.
- */
-function cleanupOldBackups() {
-  const backupFolder = getBackupFolder();
+function exportBackupSourceFile_(file) {
+  const fileId = file.getId();
+  const mimeType = file.getMimeType();
+  const fileName = file.getName();
+  const fileSuffix = fileId.slice(-8);
+  const safeName = sanitizeBackupFileName_(fileName);
+
+  // Google Sheets must be exported as XLSX.
+  if (mimeType === MimeType.GOOGLE_SHEETS) {
+    return exportGoogleSheetAsXlsx_(fileId, `${safeName} [${fileSuffix}]`);
+  }
+
+  // Preserve ordinary Drive files in their original format.
+  // Examples: PDF, CSV, XLSX, TXT, images, and other uploaded files.
+  const blob = file.getBlob();
+
+  const extensionMatch = fileName.match(/(\.[^.]+)$/);
+  const extension = extensionMatch ? extensionMatch[1] : "";
+
+  return blob.setName(`${safeName} [${fileSuffix}]${extension}`);
+}
+
+function cleanupOldBackups_(backupFolder) {
+  if (!backupFolder) {
+    throw new Error("A backup destination folder is required for cleanup.");
+  }
 
   const cutoff = new Date();
-
   cutoff.setFullYear(cutoff.getFullYear() - BACKUP_CONFIG.retentionYears);
 
   const folders = backupFolder.getFolders();
@@ -408,12 +739,7 @@ function cleanupOldBackups() {
   while (folders.hasNext()) {
     const folder = folders.next();
 
-    const name = folder.getName();
-
-    /*
-     * Only touch folders created by this backup system.
-     */
-    if (!name.startsWith(BACKUP_CONFIG.backupFolderPrefix)) {
+    if (!folder.getName().startsWith(BACKUP_CONFIG.backupFolderPrefix)) {
       continue;
     }
 
@@ -433,6 +759,7 @@ function cleanupOldBackups() {
     deleted,
     kept,
     cutoff,
+    destinationFolderId: backupFolder.getId(),
   };
 
   Logger.log(result);
@@ -441,32 +768,77 @@ function cleanupOldBackups() {
 }
 
 function scheduledBackup() {
-  try {
-    const today = new Date();
+  const today = new Date();
+  const month = today.getMonth() + 1;
+  const day = today.getDate();
 
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
+  // Preserve the existing quarterly schedule.
+  if (day !== 1 || ![1, 4, 7, 10].includes(month)) {
+    return {
+      success: true,
+      skipped: true,
+      reason: "Not a scheduled backup date.",
+    };
+  }
 
-    /*
-     * Run backups on the 1st day of:
-     * January, April, July, and October.
-     */
-    if (day !== 1 || ![1, 4, 7, 10].includes(month)) {
-      return {
-        success: true,
-        skipped: true,
-        reason: "Not a scheduled backup date.",
-      };
+  const managers = getBackupManagers_();
+  const results = [];
+  const cleanupResults = [];
+  const errors = [];
+
+  managers.forEach((manager) => {
+    try {
+      results.push(backupAllSheetsInternal_(manager, "SCHEDULED"));
+    } catch (error) {
+      errors.push({
+        managerId: manager.managerId,
+        error: String(error?.message || error),
+      });
+
+      console.error(`Scheduled backup failed for ${manager.managerId}:`, error);
     }
 
-    const backup = backupAllSheetsInternal("SCHEDULED");
+    // Clean only this manager's own backup destination.
+    try {
+      cleanupResults.push({
+        managerId: manager.managerId,
+        ...cleanupOldBackups_(getManagerBackupFolder_(manager)),
+      });
+    } catch (error) {
+      errors.push({
+        managerId: manager.managerId,
+        cleanupError: String(error?.message || error),
+      });
 
-    cleanupOldBackups();
+      console.error(`Backup cleanup failed for ${manager.managerId}:`, error);
+    }
+  });
 
-    return backup;
-  } catch (err) {
-    console.error("Scheduled backup failed:", err);
+  // Retain the same three-year policy for admin combined backups.
+  try {
+    cleanupResults.push({
+      destination: "ADMIN_COMBINED_BACKUPS",
+      ...cleanupOldBackups_(getAdminCombinedBackupFolder_()),
+    });
+  } catch (error) {
+    errors.push({
+      destination: "ADMIN_COMBINED_BACKUPS",
+      cleanupError: String(error?.message || error),
+    });
 
-    throw err;
+    console.error("Admin backup cleanup failed:", error);
   }
+
+  return {
+    success: errors.length === 0,
+    scheduled: true,
+    managerCount: managers.length,
+    successfulBackups: results.filter((item) => item.success).length,
+    failedBackups: errors.filter((item) => item.managerId).length,
+    results,
+    cleanupResults,
+    errors,
+  };
 }
+
+

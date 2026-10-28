@@ -22,7 +22,7 @@ const GCB_OPERATION_LOG_CONFIG = {
  */
 
 function getGcbOperationLogSheet_() {
-  const spreadsheet = getSpreadsheet();
+  const spreadsheet = getMainSpreadsheet();
 
   if (!spreadsheet) {
     throw new Error("Unable to access the main GCB spreadsheet.");

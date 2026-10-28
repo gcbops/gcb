@@ -37,7 +37,7 @@ const monthlyOverviewPage = (() => {
       showCurrentMonthLogChartLoading();
     }
 
-    // AppUtils.initSelect2(".chart-filters");
+    // Select2Module.init(".chart-filters");
 
     ChartModule.loadChart(
       "current_month_log",

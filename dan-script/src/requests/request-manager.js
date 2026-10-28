@@ -1,6 +1,7 @@
 const STORAGE_KEY = "gcb_request_manager_v1";
 const MAX_HISTORY = 50;
 const HOURS_BATCH_DELAY = 400;
+const STATUS_BATCH_DELAY = 400;
 
 const RequestManager = (() => {
   const handlers = new Map();
@@ -72,10 +73,19 @@ const RequestManager = (() => {
         payload: item.payload
           ? {
               ...item.payload,
+
               ...(Array.isArray(item.payload.records)
                 ? {
                     records: item.payload.records.map((record) => ({
                       ...record,
+                    })),
+                  }
+                : {}),
+
+              ...(Array.isArray(item.payload.operations)
+                ? {
+                    operations: item.payload.operations.map((operation) => ({
+                      ...operation,
                     })),
                   }
                 : {}),
@@ -128,6 +138,97 @@ const RequestManager = (() => {
     }
 
     return { client, records };
+  }
+
+  function normalizeStatusPayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Invalid status request payload.");
+    }
+
+    const clientName = String(payload.clientName ?? "").trim();
+    const spreadsheetId = String(payload.spreadsheetId ?? "").trim();
+    const sheetId = Number(payload.sheetId);
+
+    if (!clientName || !spreadsheetId || !Number.isInteger(sheetId)) {
+      throw new Error("Client and source sheet are required.");
+    }
+
+    if (!Array.isArray(payload.operations) || payload.operations.length === 0) {
+      throw new Error("At least one status operation is required.");
+    }
+
+    const operations = payload.operations.map((operation) => {
+      const normalized = {
+        ...operation,
+        clientName,
+        spreadsheetId,
+        sheetId,
+        rowIndex: Number(operation.rowIndex),
+        statusColumnIndex: Number(operation.statusColumnIndex),
+        newStatus: String(operation.newStatus ?? "")
+          .trim()
+          .toUpperCase(),
+      };
+
+      if (
+        !Number.isInteger(normalized.rowIndex) ||
+        normalized.rowIndex < 3 ||
+        normalized.statusColumnIndex !== 9 ||
+        !["INVOICED", "PAID", "UNPAID"].includes(normalized.newStatus)
+      ) {
+        throw new Error("A status operation contains invalid data.");
+      }
+
+      return normalized;
+    });
+
+    return {
+      clientName,
+      spreadsheetId,
+      sheetId,
+      operations,
+    };
+  }
+
+  function mergeStatusPayload(existingPayload, incomingPayload) {
+    const existing = normalizeStatusPayload(existingPayload);
+    const incoming = normalizeStatusPayload(incomingPayload);
+
+    if (
+      normalizeText(existing.clientName) !==
+        normalizeText(incoming.clientName) ||
+      existing.spreadsheetId !== incoming.spreadsheetId ||
+      existing.sheetId !== incoming.sheetId
+    ) {
+      return null;
+    }
+
+    const operations = existing.operations.map((operation) => ({
+      ...operation,
+    }));
+
+    incoming.operations.forEach((incomingOperation) => {
+      const match = operations.find(
+        (operation) =>
+          operation.rowIndex === incomingOperation.rowIndex &&
+          operation.statusColumnIndex === incomingOperation.statusColumnIndex,
+      );
+
+      if (match) {
+        // Preserve the original snapshot used for server validation.
+        // Only the intended final status changes.
+        match.newStatus = incomingOperation.newStatus;
+      } else {
+        operations.push({ ...incomingOperation });
+      }
+    });
+
+    return {
+      clientName: existing.clientName,
+      spreadsheetId: existing.spreadsheetId,
+      sheetId: existing.sheetId,
+      operations,
+    };
   }
 
   function mergeHoursPayload(existingPayload, incomingPayload) {
@@ -226,6 +327,43 @@ const RequestManager = (() => {
       payload = normalizedPayload;
     }
 
+    if (type === "update-client-record-status") {
+      const normalizedPayload = normalizeStatusPayload(payload);
+
+      const existing = state.queue.find(
+        (request) =>
+          request.type === "update-client-record-status" &&
+          ["pending", "paused"].includes(request.status) &&
+          normalizeText(request.payload?.clientName) ===
+            normalizeText(normalizedPayload.clientName) &&
+          request.payload?.spreadsheetId === normalizedPayload.spreadsheetId &&
+          Number(request.payload?.sheetId) === normalizedPayload.sheetId,
+      );
+
+      if (existing) {
+        existing.payload = mergeStatusPayload(
+          existing.payload,
+          normalizedPayload,
+        );
+
+        existing.title =
+          `Update statuses — ${existing.payload.clientName} ` +
+          `(${existing.payload.operations.length} operations)`;
+
+        existing.message =
+          "Additional status changes added to this pending request";
+
+        existing.updatedAt = Date.now();
+
+        notify();
+        scheduleProcessQueue(STATUS_BATCH_DELAY);
+
+        return existing.id;
+      }
+
+      payload = normalizedPayload;
+    }
+
     const request = {
       id: crypto.randomUUID(),
       type,
@@ -244,7 +382,13 @@ const RequestManager = (() => {
 
     // Give consecutive hour submissions a chance to merge.
     // Other request types retain immediate processing.
-    scheduleProcessQueue(type === "record-hours" ? HOURS_BATCH_DELAY : 0);
+    scheduleProcessQueue(
+      ["record-hours", "update-client-record-status"].includes(type)
+        ? type === "record-hours"
+          ? HOURS_BATCH_DELAY
+          : STATUS_BATCH_DELAY
+        : 0,
+    );
 
     return request.id;
   }
@@ -281,9 +425,18 @@ const RequestManager = (() => {
           break;
         }
 
-        if (request.type === "record-hours") {
+        if (
+          ["record-hours", "update-client-record-status"].includes(
+            request.type,
+          )
+        ) {
+          const batchDelay =
+            request.type === "record-hours"
+              ? HOURS_BATCH_DELAY
+              : STATUS_BATCH_DELAY;
+
           const remainingDelay =
-            HOURS_BATCH_DELAY - (Date.now() - request.updatedAt);
+            batchDelay - (Date.now() - request.updatedAt);
 
           if (remainingDelay > 0) {
             scheduleProcessQueue(remainingDelay);
@@ -319,7 +472,14 @@ const RequestManager = (() => {
 
           finishRequest(request, "completed", "Completed successfully", result);
         } catch (error) {
-          finishRequest(request, "failed", error?.message || "Request failed");
+          finishRequest(
+            request,
+            "failed",
+            error?.message || "Request failed",
+            error?.results
+              ? { results: error.results }
+              : null,
+          );
         }
       }
     } finally {

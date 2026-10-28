@@ -1,9 +1,14 @@
 const CLIENT_CREATION_JOURNAL = "ClientCreation_Operations";
 const CLIENT_CREATION_RETENTION_DAYS = 30;
 
-function getClientCreationJournal_() {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(CLIENT_CREATION_JOURNAL);
+function getClientCreationJournal_(spreadsheet) {
+  if (!spreadsheet) {
+    throw new Error(
+      "A manager spreadsheet is required for the client creation journal.",
+    );
+  }
+
+  let sheet = spreadsheet.getSheetByName(CLIENT_CREATION_JOURNAL);
 
   const headers = [
     "Created At",
@@ -17,7 +22,7 @@ function getClientCreationJournal_() {
   ];
 
   if (!sheet) {
-    sheet = ss.insertSheet(CLIENT_CREATION_JOURNAL);
+    sheet = spreadsheet.insertSheet(CLIENT_CREATION_JOURNAL);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   } else {
     // Validate the existing schema rather than silently overwriting it.
@@ -128,16 +133,29 @@ function cleanupClientCreationJournal_(sheet) {
 }
 
 function clientSheetExists(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   const name = Validation.sheetName(clientName, "Client name");
-  const ss = getSpreadsheet();
 
-  return ss.getSheetByName(name) !== null;
+  return spreadsheet.getSheetByName(name) !== null;
 }
 
-function getClientSheetsList() {
-  return getSpreadsheet()
+function getClientSheetsList(sessionId, signature) {
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
+
+  return getClientSheetsListFromSpreadsheet_(spreadsheet);
+}
+
+function getClientSheetsListFromSpreadsheet_(spreadsheet) {
+  return spreadsheet
     .getSheets()
     .filter((sheet) => {
       const sheetName = sheet.getName();
@@ -150,18 +168,28 @@ function getClientSheetsList() {
 }
 
 function syncClientSheetList(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.manage");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.manage",
+  );
 
-  const sheet = getSheetSafe("Client Names");
+  const sheet = spreadsheet.getSheetByName("Client Names");
 
   if (!sheet) {
-    logResponse('Missing "Client Names" sheet.');
-    return [];
+    throw new Error(
+      'The authenticated manager spreadsheet is missing the "Client Names" sheet.',
+    );
   }
 
-  const names = getClientSheetsList();
+  const names = getClientSheetsListFromSpreadsheet_(spreadsheet);
 
-  sheet.getRange("A2:A").clearContent();
+  // Clear existing values without clearing the entire column's formatting.
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow >= 2) {
+    sheet.getRange(2, 1, lastRow - 1, 1).clearContent();
+  }
 
   if (names.length) {
     sheet
@@ -169,21 +197,9 @@ function syncClientSheetList(sessionId, signature) {
       .setValues(names.map((name) => [name]));
   }
 
+  SpreadsheetApp.flush();
+
   return names;
-}
-
-function getSheetByPartialName(partial) {
-  const ss = getSpreadsheet();
-
-  const normalizedPartial = normalizeText(partial);
-
-  return (
-    ss
-      .getSheets()
-      .find((sheet) =>
-        normalizeText(sheet.getName()).includes(normalizedPartial),
-      ) || null
-  );
 }
 
 function getCellValueSafe(sheet, cellRange) {
@@ -196,8 +212,14 @@ function getCellValueSafe(sheet, cellRange) {
   }
 }
 
-function getDirectCellValueSafe(sheetName, cellRange) {
-  const sheet = getSheetSafe(sheetName);
+function getDirectCellValueSafe(sessionId, signature, sheetName, cellRange) {
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
+
+  const sheet = spreadsheet.getSheetByName(sheetName);
 
   if (!sheet) {
     throw new Error(`Sheet "${sheetName}" not found.`);
@@ -207,34 +229,42 @@ function getDirectCellValueSafe(sheetName, cellRange) {
 }
 
 function goToPresentClient(sessionId, signature, sheetName) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
-  const ss = getSpreadsheet();
-  const labSheet = getLabSheet();
+  const labSheet = spreadsheet.getSheetByName("Lab 3.0");
 
   if (!labSheet) {
     return "⚠️ Lab sheet not found";
   }
 
   if (!sheetName) {
-    sheetName = getLabCell("P24");
+    sheetName = labSheet.getRange("P24").getValue();
 
     if (!isNonEmptyString(sheetName)) {
       return "⚠️ No client name found in P24";
     }
   }
 
-  const sheet = getSheetSafe(sheetName);
+  const name = String(sheetName).trim();
+  const sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
-    return `⚠️ Sheet "${sheetName}" not found`;
+    return `⚠️ Sheet "${name}" not found in your operational spreadsheet`;
   }
 
-  return `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
+  return `${spreadsheet.getUrl()}#gid=${sheet.getSheetId()}`;
 }
 
 function getClientDataByStatus(sessionId, signature, status, customSheet) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   const config = CONFIG.DIALOGS.STATUS[status];
 
@@ -242,7 +272,13 @@ function getClientDataByStatus(sessionId, signature, status, customSheet) {
     return [];
   }
 
-  const sheet = getSheetSafe(customSheet || config.sheet);
+  const sheetName = String(customSheet || config.sheet).trim();
+
+  if (!sheetName) {
+    return [];
+  }
+
+  const sheet = spreadsheet.getSheetByName(sheetName);
 
   if (!sheet) {
     return [];
@@ -255,10 +291,14 @@ function getClientDataByStatus(sessionId, signature, status, customSheet) {
 }
 
 function getActiveClientsPaidOwed(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   try {
-    const sheet = getSheetSafe("Paid & Owed Log");
+    const sheet = spreadsheet.getSheetByName("Paid & Owed Log");
 
     if (!sheet) {
       throw new Error('Sheet "Paid & Owed Log" was not found.');
@@ -284,7 +324,10 @@ function getActiveClientsPaidOwed(sessionId, signature) {
           currentMonthOwed: Number(row[2]) || 0,
           totalPaid: Number(row[3]) || 0,
           today: row[4] ?? "",
-          paidOwedHistory: getClientPaidOwedDataHistoryInternal(client),
+          paidOwedHistory: getClientPaidOwedDataHistoryInternal(
+            spreadsheet,
+            String(client || "").trim(),
+          ),
         };
       });
   } catch (err) {
@@ -292,35 +335,37 @@ function getActiveClientsPaidOwed(sessionId, signature) {
   }
 }
 
-function getRoleFromSheet(name) {
-  try {
-    const sheet = getSheetSafe(name);
-
-    if (!sheet) {
-      return "";
-    }
-
-    return sheet.getRange("N17").getValue() || "";
-  } catch (err) {
-    return "";
-  }
-}
-
 function getClientHourLogData(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
-  const sheet = getSheetSafe(clientName);
+  const name = String(clientName || "").trim();
+
+  if (!name) {
+    throw new Error("A client must be selected.");
+  }
+
+  const sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
     return [];
   }
 
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 3) {
+    return [];
+  }
+
   const values = sheet
-    .getRange("E3:H")
+    .getRange(3, 5, lastRow - 2, 4)
     .getValues()
     .filter((row) => row.some(Boolean));
 
-  const timezone = getSpreadsheet().getSpreadsheetTimeZone();
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
 
   return values.map((row) => {
     const date = row[3];
@@ -334,25 +379,240 @@ function getClientHourLogData(sessionId, signature, clientName) {
   });
 }
 
-function getClientSheetUrl(sessionId, signature, name) {
-  requireCapability(sessionId, signature, "clients.view");
+function getClientRecordsData(sessionId, signature, clientName) {
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
-  if (!isNonEmptyString(name)) {
-    throw new Error("No sheet name provided");
+  const name = String(clientName || "").trim();
+
+  if (!name) {
+    throw new Error("A client must be selected.");
   }
 
-  const ss = getSpreadsheet();
-  const sheet = getSheetSafe(name);
+  const sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
-    throw new Error(`Sheet "${name}" not found`);
+    throw new Error(
+      `Client sheet "${name}" was not found in your operational spreadsheet.`,
+    );
+  }
+
+  const lastRow = sheet.getLastRow();
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+
+  const sheetUrl = `${spreadsheet.getUrl()}#gid=${sheet.getSheetId()}`;
+
+  if (lastRow < 3) {
+    return {
+      clientName: name,
+      spreadsheetId: spreadsheet.getId(),
+      sheetId: sheet.getSheetId(),
+      sheetUrl,
+      records: [],
+    };
+  }
+
+  const values = sheet.getRange(3, 5, lastRow - 2, 5).getValues();
+
+  const records = values
+    .map((row, index) => {
+      const [type, task, hours, date, status] = row;
+      const rowIndex = index + 3;
+
+      const formattedDate =
+        date instanceof Date
+          ? Utilities.formatDate(date, timezone, "MM/dd/yyyy")
+          : String(date ?? "").trim();
+
+      return {
+        // Visible fields
+        type: String(type ?? "").trim(),
+        task: String(task ?? "").trim(),
+        date: formattedDate,
+        status: String(status ?? "")
+          .trim()
+          .toUpperCase(),
+
+        // Retained for validation and safe updates
+        clientName: name,
+        spreadsheetId: spreadsheet.getId(),
+        sheetId: sheet.getSheetId(),
+        rowIndex,
+        statusColumnIndex: 9,
+        cellA1: `I${rowIndex}`,
+        hours: hours ?? "",
+        originalStatus: String(status ?? "").trim(),
+        expectedType: String(type ?? "").trim(),
+        expectedTask: String(task ?? "").trim(),
+        expectedHours: hours ?? "",
+        expectedDate:
+          date instanceof Date ? date.toISOString() : String(date ?? "").trim(),
+      };
+    })
+    .filter(
+      (record) =>
+        record.type ||
+        record.task ||
+        record.date ||
+        record.status ||
+        record.hours !== "",
+    );
+
+  return {
+    clientName: name,
+    spreadsheetId: spreadsheet.getId(),
+    sheetId: sheet.getSheetId(),
+    sheetUrl,
+    records,
+  };
+}
+
+function updateClientRecordStatus(sessionId, signature, payload) {
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.update_status",
+  );
+
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid status update payload.");
+  }
+
+  const clientName = String(payload.clientName || "").trim();
+  const rowIndex = Number(payload.rowIndex);
+  const statusColumnIndex = Number(payload.statusColumnIndex);
+  const newStatus = String(payload.newStatus || "")
+    .trim()
+    .toUpperCase();
+
+  const allowedStatuses = ["INVOICED", "PAID", "UNPAID"];
+
+  if (!clientName) {
+    throw new Error("Client name is required.");
+  }
+
+  if (!Number.isInteger(rowIndex) || rowIndex < 3 || statusColumnIndex !== 9) {
+    throw new Error("Invalid record coordinates.");
+  }
+
+  if (!allowedStatuses.includes(newStatus)) {
+    throw new Error(`Unsupported status: ${newStatus}`);
+  }
+
+  const lock = LockService.getScriptLock();
+
+  lock.waitLock(10000);
+
+  try {
+    const sheet = spreadsheet.getSheetByName(clientName);
+
+    if (!sheet) {
+      throw new Error("The client sheet could not be found.");
+    }
+
+    if (
+      sheet.getSheetId() !== Number(payload.sheetId) ||
+      sheet.getParent().getId() !== String(payload.spreadsheetId || "")
+    ) {
+      throw new Error("The source sheet changed. Reload the client records.");
+    }
+
+    if (rowIndex > sheet.getLastRow()) {
+      throw new Error("The record row no longer exists. Reload the records.");
+    }
+
+    // Read E:I again while holding the script lock.
+    const current = sheet.getRange(rowIndex, 5, 1, 5).getValues()[0];
+
+    const [type, task, hours, date, currentStatus] = current;
+
+    const normalize = (value) => String(value ?? "").trim();
+
+    const currentDate =
+      date instanceof Date ? date.toISOString() : normalize(date);
+
+    // Verify that the row still contains the original record.
+    if (
+      normalize(type) !== normalize(payload.expectedType) ||
+      normalize(task) !== normalize(payload.expectedTask) ||
+      normalize(hours) !== normalize(payload.expectedHours) ||
+      currentDate !== normalize(payload.expectedDate)
+    ) {
+      throw new Error(
+        "The record has changed or moved. Reload before updating.",
+      );
+    }
+
+    const currentStatusNormalized = normalize(currentStatus).toUpperCase();
+
+    const newStatusNormalized = newStatus;
+
+    // A prior attempt may have succeeded even if its response was lost.
+    // If the intended status is already present, treat it as success.
+    if (currentStatusNormalized === newStatusNormalized) {
+      return {
+        success: true,
+        unchanged: true,
+        rowIndex,
+        status: newStatus,
+      };
+    }
+
+    if (
+      currentStatusNormalized !==
+      normalize(payload.originalStatus).toUpperCase()
+    ) {
+      throw new Error(
+        "STATUS_CONFLICT: Another update changed this status. Reload the record.",
+      );
+    }
+
+    // Write only the status cell.
+    sheet.getRange(rowIndex, 9).setValue(newStatus);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      unchanged: false,
+      clientName,
+      rowIndex,
+      statusColumnIndex: 9,
+      cellA1: `I${rowIndex}`,
+      status: newStatus,
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getClientSheetUrl(sessionId, signature, name) {
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
+
+  if (!isNonEmptyString(name)) {
+    throw new Error("No sheet name provided.");
+  }
+
+  const sheet = spreadsheet.getSheetByName(name.trim());
+
+  if (!sheet) {
+    throw new Error(
+      `Sheet "${name}" was not found in your operational spreadsheet.`,
+    );
   }
 
   if (sheet.isSheetHidden()) {
     sheet.showSheet();
   }
 
-  return `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
+  return `${spreadsheet.getUrl()}#gid=${sheet.getSheetId()}`;
 }
 
 function createClientSheet(sessionId, signature, input, requestId) {
@@ -361,7 +621,12 @@ function createClientSheet(sessionId, signature, input, requestId) {
   let result;
 
   try {
-    requireCapability(sessionId, signature, "clients.create");
+    const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+      sessionId,
+      signature,
+      "clients.create",
+    );
+
     enforceUserRateLimit("client_sheet_creation", sessionId, 5, 60);
     enforceGlobalRateLimit("client_sheet_creation", 15, 60);
 
@@ -371,8 +636,6 @@ function createClientSheet(sessionId, signature, input, requestId) {
     requestId = Validation.requiredString(requestId, "Request ID", {
       maxLength: 200,
     });
-
-    const ss = getSpreadsheet();
     const operationKey = `${sessionId}:${requestId}`;
 
     const requestHash = Utilities.base64EncodeWebSafe(
@@ -386,7 +649,7 @@ function createClientSheet(sessionId, signature, input, requestId) {
     lock.waitLock(30000);
 
     try {
-      const journal = getClientCreationJournal_();
+      const journal = getClientCreationJournal_(ss);
 
       cleanupClientCreationJournal_(journal);
 
@@ -489,7 +752,7 @@ function createClientSheet(sessionId, signature, input, requestId) {
           );
         }
 
-        const template = getSheetSafe("BLANK");
+        const template = ss.getSheetByName("BLANK");
 
         if (!template) {
           throw new Error('Template sheet "BLANK" not found.');
@@ -634,9 +897,12 @@ function logClientSheetCreation_(
 }
 
 function getClientDirectoryData(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const session = requireCapability(sessionId, signature, "clients.view");
 
-  const analyticsSheet = getSheetSafe("Client Analytics");
+  const workspace = getManagerWorkspaceForSession_(session);
+  const managerSpreadsheet = workspace.spreadsheet;
+
+  const analyticsSheet = managerSpreadsheet.getSheetByName("Client Analytics");
 
   if (!analyticsSheet) {
     return [];
@@ -653,12 +919,16 @@ function getClientDirectoryData(sessionId, signature) {
     .getValues()
     .filter((row) => row[0] !== "" && row[0] !== null);
 
-  const externalClientMap = getExternalClientMap();
+  const externalClientMap = String(
+    workspace.externalSheetsFolderId || "",
+  ).trim()
+    ? getExternalClientMap(managerSpreadsheet)
+    : new Map();
 
   return analytics.map((row) => {
     const name = String(row[0] || "").trim();
 
-    const clientSheet = getSheetSafe(name);
+    const clientSheet = managerSpreadsheet.getSheetByName(name);
 
     const role = clientSheet
       ? String(clientSheet.getRange("N17").getValue() || "").trim()
@@ -666,9 +936,7 @@ function getClientDirectoryData(sessionId, signature) {
 
     return {
       name,
-
       role,
-
       paid: Number(row[1]) || 0,
       owed: Number(row[2]) || 0,
       netPaid: Number(row[3]) || 0,
@@ -676,21 +944,29 @@ function getClientDirectoryData(sessionId, signature) {
       hours: Number(row[5]) || 0,
       projects: Number(row[6]) || 0,
       debtExposure: Number(row[7]) || 0,
-
       externalUrl: externalClientMap.get(normalizeText(name)) || "",
     };
   });
 }
 
 function getClientPaidOwedDataHistory(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "clients.view");
+  const session = requireCapability(sessionId, signature, "clients.view");
+  const workspace = getManagerWorkspaceForSession_(session);
 
-  return getClientPaidOwedDataHistoryInternal(client);
+  return getClientPaidOwedDataHistoryInternal(
+    workspace.spreadsheet,
+    clientName,
+  );
 }
 
-function getClientPaidOwedDataHistoryInternal(clientName) {
+function getClientPaidOwedDataHistoryInternal(spreadsheet, clientName) {
   try {
-    const sheet = getSheetSafe(clientName);
+    if (!spreadsheet || !isNonEmptyString(clientName)) {
+      return [];
+    }
+
+    const sheet = spreadsheet.getSheetByName(clientName.trim());
+
     if (!sheet) return [];
 
     const lastRow = sheet.getLastRow();
@@ -702,71 +978,76 @@ function getClientPaidOwedDataHistoryInternal(clientName) {
     const currentYear = new Date().getFullYear();
     const previousYear = currentYear - 1;
 
-    const dataRange = sheet.getRange(51, 11, lastRow - 50, 4);
-
-    const values = dataRange.getValues();
+    const values = sheet.getRange(51, 11, lastRow - 50, 4).getValues();
 
     return values
-      .filter((r) => {
-        if (!r.some((v) => v !== "" && v !== null)) {
+      .filter((row) => {
+        if (!row.some((value) => value !== "" && value !== null)) {
           return false;
         }
 
-        const year = Number(r[0]);
+        const year = Number(row[0]);
 
         return year === currentYear || year === previousYear;
       })
-      .map((r) => ({
-        year: Number(r[0]),
-        hoursPaid: Number(r[1]) || 0,
-        hoursOwed: Number(r[2]) || 0,
-        netHours: Number(r[3]) || 0,
+      .map((row) => ({
+        year: Number(row[0]),
+        hoursPaid: Number(row[1]) || 0,
+        hoursOwed: Number(row[2]) || 0,
+        netHours: Number(row[3]) || 0,
       }));
-  } catch (e) {
-    console.warn("Failed to load sales for client:", clientName, e);
+  } catch (err) {
+    console.warn(
+      "Failed to load paid/owed history for client:",
+      clientName,
+      err,
+    );
 
     return [];
   }
 }
 
 function getClientActivityTrends(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
-  try {
-    const sheet = getSheetSafe("Other Analytics");
+  const sheet = spreadsheet.getSheetByName("Other Analytics");
 
-    if (!sheet) {
-      throw new Error("Other Analytics sheet not found.");
-    }
-
-    // P8:U8
-    // P = Active Clients
-    // Q = Hours Logged
-    // R = Tasks Completed
-    // S = Projects Active
-    // T = New Clients
-    // U = New Projects
-    const values = sheet.getRange("P8:U8").getValues()[0];
-
-    return {
-      activeClients: Number(values[0]) || 0,
-      hoursLogged: Number(values[1]) || 0,
-      tasksCompleted: Number(values[2]) || 0,
-      projectsActive: Number(values[3]) || 0,
-      newClients: Number(values[4]) || 0,
-      newProjects: Number(values[5]) || 0,
-    };
-  } catch (err) {
-    console.error("[getClientActivityTrends]", err);
-
-    throw new Error(err.message || "Failed to load client activity trends.");
+  if (!sheet) {
+    throw new Error(
+      'The "Other Analytics" sheet was not found in your operational spreadsheet.',
+    );
   }
+
+  // P = Active Clients
+  // Q = Hours Logged
+  // R = Tasks Completed
+  // S = Projects Active
+  // T = New Clients
+  // U = New Projects
+  const values = sheet.getRange("P8:U8").getValues()[0];
+
+  return {
+    activeClients: Number(values[0]) || 0,
+    hoursLogged: Number(values[1]) || 0,
+    tasksCompleted: Number(values[2]) || 0,
+    projectsActive: Number(values[3]) || 0,
+    newClients: Number(values[4]) || 0,
+    newProjects: Number(values[5]) || 0,
+  };
 }
 
 function getClientRankings(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
-  const sheet = getSheetSafe("Client Analytics");
+  const sheet = spreadsheet.getSheetByName("Client Analytics");
 
   if (!sheet) {
     return {
@@ -866,10 +1147,14 @@ function getClientRankings(sessionId, signature) {
 }
 
 function getLegacyClients(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   try {
-    const sheet = getSheetSafe("Legacy Clients");
+    const sheet = spreadsheet.getSheetByName("Legacy Clients");
 
     if (!sheet) {
       throw new Error('Sheet "Legacy Clients" not found.');
@@ -929,20 +1214,26 @@ function getLegacyClients(sessionId, signature) {
 }
 
 function getClientDetails(sessionId, signature, clientName) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   if (!isNonEmptyString(clientName)) {
     throw new Error("Client name cannot be empty.");
   }
 
   const name = clientName.trim();
-  const sheet = getSheetSafe(name);
+  const sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
-    throw new Error(`Client sheet "${name}" not found.`);
+    throw new Error(
+      `Client sheet "${name}" was not found in your operational spreadsheet.`,
+    );
   }
 
-  const timezone = getSpreadsheet().getSpreadsheetTimeZone();
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
 
   const profile = {
     name,
@@ -1109,7 +1400,11 @@ function updateClientInformation(
   field,
   value,
 ) {
-  requireCapability(sessionId, signature, "clients.edit");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.edit",
+  );
 
   const name = String(clientName || "").trim();
 
@@ -1129,7 +1424,7 @@ function updateClientInformation(
     throw new Error("Invalid client information field.");
   }
 
-  const sheet = getSheetSafe(name);
+  const sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
     throw new Error(`Client sheet not found: ${name}`);
@@ -1143,4 +1438,173 @@ function updateClientInformation(
     field,
     value: String(value ?? "").trim(),
   };
+}
+
+function getDailyActivityData(sessionId, signature) {
+  const session = requireCapability(sessionId, signature, "hours.view");
+
+  const workspace = getManagerWorkspaceForSession_(session);
+  const managerSS = workspace.spreadsheet;
+
+  // Refresh shared metrics only when needed.
+  refreshDailyActivityMetricsIfNeeded_(workspace);
+
+  const sheet = managerSS.getSheetByName("Client Tracker - Today");
+
+  if (!sheet) {
+    return [];
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  const values = sheet.getRange(2, 2, lastRow - 1, 6).getValues();
+
+  return values.filter((row) =>
+    row.some((value) => value !== "" && value != null),
+  );
+}
+
+function refreshDailyActivityMetrics_(workspace) {
+  const SOURCE_SPREADSHEET_ID =
+    PropertiesService.getScriptProperties().getProperty(
+      "DAILY_ACTIVITY_SOURCE_SPREADSHEET_ID",
+    );
+
+  const DESTINATION_SHEET_NAME = "Daily Activities Metrics";
+
+  if (!SOURCE_SPREADSHEET_ID) {
+    throw new Error(
+      'Missing Script Property: "DAILY_ACTIVITY_SOURCE_SPREADSHEET_ID".',
+    );
+  }
+
+  const managerName = String(workspace.managerName || "").trim();
+
+  if (!managerName) {
+    throw new Error("Unable to resolve the registered manager name.");
+  }
+
+  // Example: "PM DAN" -> "DAN"
+  const filterName = managerName.replace(/^PM\s+/i, "").trim();
+
+  if (!filterName) {
+    throw new Error(`Invalid manager name: "${managerName}".`);
+  }
+
+  // Example: "DAN" -> "DAN - CUSTOM FILTER"
+  const sourceFilterName = `${filterName} - CUSTOM FILTER`;
+
+  const managerSS = workspace.spreadsheet;
+  const destinationSheet = managerSS.getSheetByName(DESTINATION_SHEET_NAME);
+
+  if (!destinationSheet) {
+    throw new Error(`Sheet "${DESTINATION_SHEET_NAME}" was not found.`);
+  }
+
+  const sourceSS = SpreadsheetApp.openById(SOURCE_SPREADSHEET_ID);
+
+  let values;
+  const sourceFilterSheet = sourceSS.getSheetByName(sourceFilterName);
+
+  if (sourceFilterSheet) {
+    // Prefer the existing manager-specific filter sheet.
+    const lastRow = sourceFilterSheet.getLastRow();
+
+    values =
+      lastRow > 0
+        ? sourceFilterSheet.getRange(1, 1, lastRow, 6).getValues()
+        : [];
+  } else {
+    // No manager-specific filter sheet: find the appropriate year sheet.
+    const currentYear = new Date().getFullYear();
+
+    const yearSheet =
+      sourceSS.getSheetByName(String(currentYear)) ||
+      sourceSS.getSheetByName(String(currentYear - 1));
+
+    if (!yearSheet) {
+      throw new Error(
+        `No source sheet found. Neither "${currentYear}" nor ` +
+          `"${currentYear - 1}" exists in the source spreadsheet.`,
+      );
+    }
+
+    const firstRow = 12;
+    const lastRow = yearSheet.getLastRow();
+
+    if (lastRow < firstRow) {
+      values = [];
+    } else {
+      const sourceValues = yearSheet
+        .getRange(firstRow, 1, lastRow - firstRow + 1, 16)
+        .getDisplayValues();
+
+      // QUERY(..., 1) treats the first row of A12:P10013 as the header.
+      const headers = sourceValues[0];
+
+      // Source columns B, C, E, M, N, P.
+      const selectedColumns = [1, 2, 4, 12, 13, 15];
+
+      values = [
+        selectedColumns.map((column) => headers[column]),
+        ...sourceValues
+          .slice(1)
+          .filter((row) => String(row[9] ?? "").trim() === filterName)
+          .map((row) => selectedColumns.map((column) => row[column])),
+      ];
+    }
+  }
+
+  // Update imported values without clearing rows that will be overwritten.
+  const existingLastRow = destinationSheet.getLastRow();
+
+  if (values.length > 0) {
+    destinationSheet.getRange(1, 1, values.length, 6).setValues(values);
+  }
+
+  // Clear only stale rows left over from a previous, larger import.
+  if (existingLastRow > values.length) {
+    destinationSheet
+      .getRange(values.length + 1, 1, existingLastRow - values.length, 6)
+      .clearContent();
+  }
+}
+
+function refreshDailyActivityMetricsIfNeeded_(workspace) {
+  const spreadsheetId = workspace.spreadsheet.getId();
+  const cache = CacheService.getScriptCache();
+  const cacheKey = `daily_activity_metrics_${spreadsheetId}`;
+
+  // Reuse a recent successful refresh.
+  if (cache.get(cacheKey)) {
+    return;
+  }
+
+  const lock = LockService.getScriptLock();
+
+  // Don't let concurrent requests pile up waiting for the import.
+  if (!lock.tryLock(1000)) {
+    console.warn(
+      "[ActivityToday] Another refresh is in progress; using existing sheet data.",
+    );
+    return;
+  }
+
+  try {
+    // Another request may have completed while we waited for the lock.
+    if (cache.get(cacheKey)) {
+      return;
+    }
+
+    refreshDailyActivityMetrics_(workspace);
+
+    // Cache only after a successful refresh.
+    cache.put(cacheKey, "1", 120);
+  } finally {
+    lock.releaseLock();
+  }
 }

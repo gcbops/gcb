@@ -358,7 +358,7 @@ const ClientDirectory = (() => {
       <button
         type="button"
         class="app-profile-popover-action btn-transition btn btn-outline-link"
-        data-required-role="admin"
+        data-required-role="manager"
         data-profile-client-action="add-hours"
         data-client-name="${AppUtils.escapeHtml(client.name)}"
       >

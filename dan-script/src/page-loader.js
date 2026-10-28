@@ -49,6 +49,11 @@ const PageLoaderModule = (() => {
       desc: "Browse and manage all clients in one place.",
       icon: "pe-7s-users icon-gradient " + getGradientBg(0),
     },
+    clientRecords: {
+      title: "Client Records",
+      desc: "View client work records and manage invoiced, paid, and unpaid statuses.",
+      icon: "pe-7s-note2 icon-gradient " + getGradientBg(9),
+    },
     clientActivity: {
       title: "Client Activity",
       desc: "Monitor client activity and recent work in real time.",

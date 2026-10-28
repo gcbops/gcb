@@ -87,7 +87,7 @@ const GcbAuthModule = (() => {
               // );
             }
 
-            console.log("[GCB Auth] Session handoff completed.");
+            // console.log("[GCB Auth] Session handoff completed.");
 
             resolve(true);
           } catch (error) {
@@ -200,7 +200,7 @@ const GcbAuthModule = (() => {
          * Fresh OAuth login.
          */
         if (ticket) {
-          console.log("[GCB Auth] Exchanging authentication handoff ticket.");
+          // console.log("[GCB Auth] Exchanging authentication handoff ticket.");
           await exchangeTicket(ticket);
         }
 

@@ -1,5 +1,5 @@
 function addUpsellEntry(sessionId, signature, data) {
-  requireRole(sessionId, signature, "admin");
+  requireRole(sessionId, signature, "manager");
 
   Validation.requireObject(data, "Upsell data");
 

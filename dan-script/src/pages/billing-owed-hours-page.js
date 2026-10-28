@@ -165,7 +165,7 @@ const billingOwedHoursPage = (() => {
       select.value = "all";
     }
 
-    // AppUtils.initSelect2("#owed-hours-year-filter");
+    // Select2Module.init("#owed-hours-year-filter");
   }
 
   function applyFilters() {

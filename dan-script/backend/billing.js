@@ -1,28 +1,27 @@
-/**
- * Sync detailed billing records from all client sheets
- * into the centralized Billing Records sheet.
- *
- * Source columns on client sheets:
- * E = Type
- * F = Project
- * G = Hours Rendered
- * H = Date
- * I = Payment Status
- */
 function syncBillingRecords(sessionId, signature) {
-  requireCapability(sessionId, signature, "billing.manage");
+  const { workspace, spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.manage",
+  );
 
   try {
-    const ss = getSpreadsheet();
-
-    const billingSheetName = "Billing Records";
-    const clientNamesSheet = getSheetSafe("Client Names");
-
-    if (!clientNamesSheet) {
-      throw new Error('Sheet "Client Names" was not found.');
+    if (!ss) {
+      throw new Error(
+        "The authenticated manager's operational spreadsheet could not be resolved.",
+      );
     }
 
-    let billingSheet = getSheetSafe(billingSheetName);
+    const billingSheetName = "Billing Records";
+    const clientNamesSheet = ss.getSheetByName("Client Names");
+
+    if (!clientNamesSheet) {
+      throw new Error(
+        'Sheet "Client Names" was not found in the manager workspace.',
+      );
+    }
+
+    let billingSheet = ss.getSheetByName(billingSheetName);
 
     if (!billingSheet) {
       billingSheet = ss.insertSheet(billingSheetName);
@@ -41,25 +40,24 @@ function syncBillingRecords(sessionId, signature) {
       ],
     ];
 
-    /*
-     * Ensure the header exists.
-     */
+    // Ensure the header exists.
     billingSheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
 
-    /*
-     * Get canonical client sheet names.
-     */
+    // Get canonical client sheet names from this manager's workspace.
     const clientLastRow = clientNamesSheet.getLastRow();
 
     if (clientLastRow < 2) {
-      billingSheet
-        .getRange(2, 1, billingSheet.getMaxRows() - 1, 8)
-        .clearContent();
+      const rowsToClear = billingSheet.getMaxRows() - 1;
+
+      if (rowsToClear > 0) {
+        billingSheet.getRange(2, 1, rowsToClear, 8).clearContent();
+      }
 
       return {
         success: true,
         records: 0,
         clients: 0,
+        skipped: 0,
       };
     }
 
@@ -70,12 +68,7 @@ function syncBillingRecords(sessionId, signature) {
       .map((name) => String(name).trim())
       .filter(Boolean);
 
-    /*
-     * Build a sheet lookup once.
-     *
-     * This avoids repeatedly calling getSheetByName()
-     * while processing the client list.
-     */
+    // Build a sheet lookup once for this manager's spreadsheet.
     const sheetMap = new Map();
 
     ss.getSheets().forEach((sheet) => {
@@ -101,17 +94,13 @@ function syncBillingRecords(sessionId, signature) {
 
       const lastRow = sheet.getLastRow();
 
-      /*
-       * Client records begin at row 3.
-       */
+      // Client records begin at row 3.
       if (lastRow < 3) {
         clientsProcessed++;
         return;
       }
 
-      /*
-       * Read E:I in one operation.
-       */
+      // Read E:I in one operation.
       const values = sheet.getRange(3, 5, lastRow - 2, 5).getValues();
 
       values.forEach((row, index) => {
@@ -121,9 +110,7 @@ function syncBillingRecords(sessionId, signature) {
         const date = row[3];
         const paymentStatus = row[4];
 
-        /*
-         * Ignore completely empty records.
-         */
+        // Ignore completely empty records.
         if (
           type === "" &&
           project === "" &&
@@ -134,9 +121,7 @@ function syncBillingRecords(sessionId, signature) {
           return;
         }
 
-        /*
-         * Hours are required for a billing record.
-         */
+        // Hours are required for a billing record.
         if (hours === "" || hours === null) {
           return;
         }
@@ -162,18 +147,14 @@ function syncBillingRecords(sessionId, signature) {
       clientsProcessed++;
     });
 
-    /*
-     * Clear old records.
-     */
+    // Replace the previous synchronized dataset.
     const maxRows = billingSheet.getMaxRows();
 
     if (maxRows > 1) {
       billingSheet.getRange(2, 1, maxRows - 1, 8).clearContent();
     }
 
-    /*
-     * Write the entire synchronized dataset in one operation.
-     */
+    // Write the entire dataset in one operation.
     if (records.length > 0) {
       billingSheet.getRange(2, 1, records.length, 8).setValues(records);
 
@@ -184,15 +165,16 @@ function syncBillingRecords(sessionId, signature) {
       billingSheet.getRange(2, 4, records.length, 1).setNumberFormat("0.##");
     }
 
-    /*
-     * Basic formatting.
-     */
+    // Basic formatting.
     billingSheet.getRange(1, 1, 1, 8).setFontWeight("bold");
 
     billingSheet.setFrozenRows(1);
 
     logResponse(
-      `Billing Records synced. Records: ${records.length}, clients processed: ${clientsProcessed}, clients skipped: ${clientsSkipped}`,
+      `Billing Records synced for manager ${workspace.managerId || "unknown"}. ` +
+        `Records: ${records.length}, ` +
+        `clients processed: ${clientsProcessed}, ` +
+        `clients skipped: ${clientsSkipped}`,
     );
 
     return {
@@ -209,11 +191,14 @@ function syncBillingRecords(sessionId, signature) {
 }
 
 function getBillingAnalytics(sessionId, signature) {
-  requireCapability(sessionId, signature, "billing.view");
+  const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.view",
+  );
 
   try {
-    const ss = getSpreadsheet();
-    const sheet = getSheetSafe("Billing Analytics");
+    const sheet = ss.getSheetByName("Billing Analytics");
 
     if (!sheet) {
       throw new Error('Sheet "Billing Analytics" was not found.');
@@ -255,11 +240,14 @@ function getBillingAnalytics(sessionId, signature) {
 }
 
 function getBillingPaidHours(sessionId, signature) {
-  requireCapability(sessionId, signature, "billing.view");
+  const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.view",
+  );
 
   try {
-    const ss = getSpreadsheet();
-    const sheet = getSheetSafe("Billing Records");
+    const sheet = ss.getSheetByName("Billing Records");
 
     if (!sheet) {
       return {
@@ -398,11 +386,14 @@ function getBillingPaidHours(sessionId, signature) {
 }
 
 function getBillingOwedHours(sessionId, signature) {
-  requireCapability(sessionId, signature, "billing.view");
+  const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.view",
+  );
 
   try {
-    const ss = getSpreadsheet();
-    const sheet = getSheetSafe("Billing Records");
+    const sheet = ss.getSheetByName("Billing Records");
 
     const emptyResponse = {
       records: [],
@@ -538,11 +529,14 @@ function getBillingOwedHours(sessionId, signature) {
 }
 
 function getInvoiceStatus(sessionId, signature) {
-  requireCapability(sessionId, signature, "billing.view");
+  const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+  sessionId,
+  signature,
+  "billing.view",
+);
 
   try {
-    const ss = getSpreadsheet();
-    const sheet = getSheetSafe("Billing Records");
+    const sheet = ss.getSheetByName("Billing Records");
 
     const emptyResponse = {
       invoicedRecords: [],
@@ -697,14 +691,58 @@ function getInvoiceStatus(sessionId, signature) {
   }
 }
 
-function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
-  requireCapability(sessionId, signature, "billing.export");
+function getManagerBillingReportsFolder_(workspace) {
+  const folderId = String(workspace?.reportsFolderId || "").trim();
 
-  const { file } = getVerifiedBillingCSVExport_(fileId);
-  const emailTo = getNotificationEmail();
+  if (!folderId) {
+    throw new Error(
+      `No Reports Folder ID is configured for manager "${workspace?.managerId || "unknown"}".`,
+    );
+  }
+
+  let folder;
+
+  try {
+    folder = DriveApp.getFolderById(folderId);
+
+    if (folder.isTrashed()) {
+      throw new Error("The configured reports folder is in the trash.");
+    }
+
+    // Verify that the folder can be accessed.
+    folder.getName();
+  } catch (error) {
+    throw new Error(
+      `Unable to access the reports folder for manager "${workspace?.managerId || "unknown"}": ` +
+        `${error?.message || error}`,
+    );
+  }
+
+  return folder;
+}
+
+function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.export",
+  );
+
+  const { file } = getVerifiedBillingCSVExport_(workspace, fileId);
+
+  const propertyKey = getManagerIntegrationPropertyKey_(
+    workspace.managerId,
+    "NOTIFICATION_EMAIL",
+  );
+
+  const emailTo = String(
+    PropertiesService.getScriptProperties().getProperty(propertyKey) || "",
+  ).trim();
 
   if (!emailTo) {
-    throw new Error("No notification email configured.");
+    throw new Error(
+      `No notification email is configured for manager "${workspace.managerId}".`,
+    );
   }
 
   const formatted = formatDateSafe(new Date(), "MMMM dd, yyyy HH:mm:ss");
@@ -732,13 +770,27 @@ function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
 }
 
 function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
-  requireCapability(sessionId, signature, "billing.export");
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.export",
+  );
 
-  const { file } = getVerifiedBillingCSVExport_(fileId);
-  const webhookUrl = getDiscordWebhook();
+  const { file } = getVerifiedBillingCSVExport_(workspace, fileId);
+
+  const propertyKey = getManagerIntegrationPropertyKey_(
+    workspace.managerId,
+    "DISCORD_WEBHOOK_URL",
+  );
+
+  const webhookUrl = String(
+    PropertiesService.getScriptProperties().getProperty(propertyKey) || "",
+  ).trim();
 
   if (!webhookUrl) {
-    throw new Error("No Discord webhook configured.");
+    throw new Error(
+      `No Discord webhook is configured for manager "${workspace.managerId}".`,
+    );
   }
 
   const now = new Date();
@@ -773,7 +825,11 @@ function checkExistingBillingCSVExport(
   startDate,
   endDate,
 ) {
-  requireCapability(sessionId, signature, "billing.export");
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.export",
+  );
 
   if (!startDate || !endDate || startDate > endDate) {
     throw new Error("A valid billing CSV date range is required.");
@@ -781,7 +837,7 @@ function checkExistingBillingCSVExport(
 
   const expectedName = `Billing Records_${startDate}_to_${endDate}.csv`;
 
-  const folder = getReportFolder();
+  const folder = getManagerBillingReportsFolder_(workspace);
   const files = folder.getFiles();
 
   while (files.hasNext()) {
@@ -791,7 +847,6 @@ function checkExistingBillingCSVExport(
 
     const fileName = file.getName().trim();
 
-    // Match the displayed name, with or without the .csv extension.
     if (fileName === expectedName || fileName === `${expectedName}.csv`) {
       return {
         exists: true,
@@ -810,14 +865,17 @@ function checkExistingBillingCSVExport(
 }
 
 function getBillingRecordsForExport(sessionId, signature, startDate, endDate) {
-  requireCapability(sessionId, signature, "billing.export");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.export",
+  );
 
-  return getBillingRecordsForExportInternal(startDate, endDate);
+  return getBillingRecordsForExportInternal(spreadsheet, startDate, endDate);
 }
 
-function getBillingRecordsForExportInternal(startDate, endDate) {
-  const sheet =
-    getSpreadsheet().getSheetByName("Billing Records");
+function getBillingRecordsForExportInternal(spreadsheet, startDate, endDate) {
+  const sheet = spreadsheet.getSheetByName("Billing Records");
 
   if (!sheet) {
     throw new Error('Sheet "Billing Records" was not found.');
@@ -833,22 +891,19 @@ function getBillingRecordsForExportInternal(startDate, endDate) {
 
   const end = endDate ? new Date(`${endDate}T23:59:59`) : null;
 
+  const timeZone = spreadsheet.getSpreadsheetTimeZone();
+
   return values
     .slice(1)
     .filter((row) => {
       const date = row[4];
 
-      if (!(date instanceof Date)) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
         return false;
       }
 
-      if (start && date < start) {
-        return false;
-      }
-
-      if (end && date > end) {
-        return false;
-      }
+      if (start && date < start) return false;
+      if (end && date > end) return false;
 
       return true;
     })
@@ -857,49 +912,65 @@ function getBillingRecordsForExportInternal(startDate, endDate) {
       type: row[1] ?? "",
       project: row[2] ?? "",
       hours: row[3] ?? 0,
-      date: Utilities.formatDate(
-        row[4],
-        Session.getScriptTimeZone(),
-        "yyyy-MM-dd",
-      ),
+      date: Utilities.formatDate(row[4], timeZone, "yyyy-MM-dd"),
       paymentStatus: row[5] ?? "",
       sourceSheet: row[6] ?? "",
       sourceRow: row[7] ?? "",
     }));
 }
 
-function getVerifiedBillingCSVExport_(fileId) {
+function getVerifiedBillingCSVExport_(workspace, fileId) {
+  if (!workspace?.managerId || !workspace?.spreadsheet) {
+    throw new Error("A valid manager workspace is required.");
+  }
+
   const id = Validation.requiredString(fileId, "Billing CSV file ID", {
     maxLength: 200,
   });
 
-  const ss = getSpreadsheet();
+  const ss = workspace.spreadsheet;
   const logSheet = ss.getSheetByName("BillingRecordsExport_Log");
 
   if (!logSheet || logSheet.getLastRow() < 2) {
     throw new Error("No registered Billing CSV exports were found.");
   }
 
+  // The manager's export log stores nine columns.
   const rows = logSheet
-    .getRange(2, 1, logSheet.getLastRow() - 1, 7)
+    .getRange(2, 1, logSheet.getLastRow() - 1, 9)
     .getValues();
 
   // Columns: Date, Start Date, End Date, Record Count,
-  // File Name, File URL, File ID.
+  // File Name, File URL, File ID, Operation Key, Status.
   const loggedExport = rows.find((row) => String(row[6] || "").trim() === id);
 
   if (!loggedExport) {
-    throw new Error("This file is not a registered Billing CSV export.");
+    throw new Error(
+      "This file is not a registered Billing CSV export for your manager workspace.",
+    );
   }
 
   const expectedName = String(loggedExport[4] || "").trim();
   const expectedUrl = String(loggedExport[5] || "").trim();
+  const status = String(loggedExport[8] || "")
+    .trim()
+    .toUpperCase();
+
+  if (status !== "COMPLETED") {
+    throw new Error("The registered CSV export is not completed.");
+  }
 
   if (!expectedName || !expectedUrl) {
     throw new Error("The registered CSV export metadata is incomplete.");
   }
 
-  const file = DriveApp.getFileById(id);
+  let file;
+
+  try {
+    file = DriveApp.getFileById(id);
+  } catch (error) {
+    throw new Error("The registered CSV file could not be accessed.");
+  }
 
   if (file.isTrashed()) {
     throw new Error("The registered Billing CSV file is in the trash.");
@@ -917,7 +988,8 @@ function getVerifiedBillingCSVExport_(fileId) {
     throw new Error("The registered file is not a CSV file.");
   }
 
-  const expectedFolderId = getReportFolder().getId();
+  const expectedFolderId = getManagerBillingReportsFolder_(workspace).getId();
+
   const parents = file.getParents();
   let isInReportFolder = false;
 
@@ -930,7 +1002,7 @@ function getVerifiedBillingCSVExport_(fileId) {
 
   if (!isInReportFolder) {
     throw new Error(
-      "The CSV file is no longer in the configured report folder.",
+      "The CSV file is no longer in this manager's configured reports folder.",
     );
   }
 
@@ -949,7 +1021,11 @@ function saveBillingRecordsCSV(
   endDate,
   requestId,
 ) {
-  requireCapability(sessionId, signature, "billing.export");
+  const { workspace, spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.export",
+  );
 
   if (!startDate || !endDate) {
     throw new Error("A start date and end date are required.");
@@ -968,22 +1044,21 @@ function saveBillingRecordsCSV(
 
   const startedAt = Date.now();
 
-  // Keep older callers working, but only callers that reuse a stable
-  // requestId receive retry idempotency.
   const stableRequestId = requestId
     ? Validation.requiredString(requestId, "Request ID", {
         maxLength: 200,
       })
     : Utilities.getUuid();
 
-  // Scope the key to the authenticated session.
+  // Keep requests isolated by authenticated session.
   const operationKey = `${sessionId}:${stableRequestId}`;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
   try {
-    const logSheet = getBillingRecordsExportLogSheet_();
+    const logSheet = getBillingRecordsExportLogSheet_(spreadsheet);
+
     const existingRow = findBillingCSVOperationRow_(logSheet, operationKey);
 
     if (existingRow) {
@@ -994,24 +1069,25 @@ function saveBillingRecordsCSV(
         .toUpperCase();
 
       if (status === "COMPLETED") {
-        const fileId = String(existing[6] || "").trim();
+        const existingFileId = String(existing[6] || "").trim();
 
-        if (!fileId) {
+        if (!existingFileId) {
           throw new Error(
             "The previous CSV operation is marked completed, " +
               "but its file ID is missing. Verify the export log before retrying.",
           );
         }
 
-        // Verify the original file against the existing export registry.
-        const verified = getVerifiedBillingCSVExport_(fileId);
-        const file = verified.file;
+        const verified = getVerifiedBillingCSVExport_(
+          workspace,
+          existingFileId,
+        );
 
         return {
           success: true,
-          url: file.getUrl(),
-          fileId: file.getId(),
-          name: file.getName(),
+          url: verified.file.getUrl(),
+          fileId: verified.file.getId(),
+          name: verified.file.getName(),
           startDate: verified.startDate,
           endDate: verified.endDate,
           recordCount: verified.recordCount,
@@ -1022,8 +1098,8 @@ function saveBillingRecordsCSV(
       if (status === "PROCESSING") {
         throw new Error(
           "This CSV request is already processing or its previous outcome " +
-            "is uncertain. Check BillingRecordsExport_Log and Google Drive " +
-            "before attempting another export.",
+            "is uncertain. Check this manager's BillingRecordsExport_Log " +
+            "and Google Drive before attempting another export.",
         );
       }
 
@@ -1035,11 +1111,14 @@ function saveBillingRecordsCSV(
       }
     }
 
-    // Only a new operation or a known pre-file-creation failure reaches here.
     enforceUserRateLimit("billing_export", sessionId, 5, 60);
     enforceGlobalRateLimit("billing_export", 10, 60);
 
-    const records = getBillingRecordsForExportInternal(startDate, endDate);
+    const records = getBillingRecordsForExportInternal(
+      spreadsheet,
+      startDate,
+      endDate,
+    );
 
     if (!records.length) {
       throw new Error(
@@ -1050,12 +1129,15 @@ function saveBillingRecordsCSV(
     let folder;
 
     try {
-      folder = getReportFolder();
+      folder = getManagerBillingReportsFolder_(workspace);
     } catch (error) {
-      console.error("[Billing Export] Drive folder access failed:", error);
+      console.error(
+        "[Billing Export] Manager reports folder access failed:",
+        error,
+      );
 
       throw new Error(
-        "Google Drive authorization/access is required to save the Billing CSV. " +
+        "Google Drive access to this manager's reports folder is required. " +
           `Details: ${error?.message || error}`,
       );
     }
@@ -1090,11 +1172,11 @@ function saveBillingRecordsCSV(
       .join("\r\n");
 
     const fileName = `Billing Records_${startDate}_to_${endDate}.csv`;
+
     const blob = Utilities.newBlob(csvContent, "text/csv", fileName);
 
-    // Record the operation BEFORE attempting to create the Drive file.
-    // If execution becomes uncertain during file creation, the retry
-    // will see PROCESSING and will not blindly create another file.
+    // Register PROCESSING before attempting Drive file creation.
+    // An uncertain outcome must not trigger blind duplicate creation.
     let operationRow = existingRow;
 
     const processingRecord = [
@@ -1126,9 +1208,8 @@ function saveBillingRecordsCSV(
 
       const file = folder.createFile(blob);
 
-      // Updating the existing operation row registers this file as
-      // the result of this operation instead of adding a second row.
       logBillingRecordsCSV({
+        spreadsheet,
         file,
         startDate,
         endDate,
@@ -1155,13 +1236,20 @@ function saveBillingRecordsCSV(
         reusedExisting: false,
       };
     } catch (error) {
-      // Only mark FAILED when file creation was never attempted.
-      // Once the Drive operation begins, an exception cannot always
-      // prove that no file was created. Leave PROCESSING in that case.
+      // Once file creation has been attempted, the outcome may be uncertain.
+      // Leave PROCESSING in that case to prevent blind duplicate creation.
       if (!createAttempted) {
         logSheet.getRange(operationRow, 9).setValue("FAILED");
         SpreadsheetApp.flush();
       }
+
+      logBillingCSVGeneration_("FAILED", {
+        startedAt,
+        startDate,
+        endDate,
+        recordCount: records.length,
+        error,
+      });
 
       throw error;
     }
@@ -1170,9 +1258,15 @@ function saveBillingRecordsCSV(
   }
 }
 
-function getBillingRecordsExportLogSheet_() {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName("BillingRecordsExport_Log");
+function getBillingRecordsExportLogSheet_(spreadsheet) {
+  if (!spreadsheet) {
+    throw new Error(
+      "A manager spreadsheet is required for the billing export log.",
+    );
+  }
+
+  const sheetName = "BillingRecordsExport_Log";
+  let sheet = spreadsheet.getSheetByName(sheetName);
 
   const headers = [
     "Date",
@@ -1187,16 +1281,48 @@ function getBillingRecordsExportLogSheet_() {
   ];
 
   if (!sheet) {
-    sheet = ss.insertSheet("BillingRecordsExport_Log");
+    sheet = spreadsheet.insertSheet(sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+
     return sheet;
   }
 
-  // Preserve the existing seven-column log and add the new columns.
-  sheet.getRange(1, 8).setValue("Operation Key");
-  sheet.getRange(1, 9).setValue("Status");
+  // Preserve the existing seven columns and ensure the idempotency columns exist.
+  sheet.getRange(1, 8, 1, 2).setValues([["Operation Key", "Status"]]);
 
   return sheet;
+}
+
+function logBillingRecordsCSV({
+  spreadsheet,
+  file,
+  startDate,
+  endDate,
+  recordCount,
+  operationKey = "",
+  operationRow = 0,
+}) {
+  const sheet = getBillingRecordsExportLogSheet_(spreadsheet);
+
+  const row = [
+    new Date(),
+    startDate,
+    endDate,
+    recordCount,
+    file.getName(),
+    file.getUrl(),
+    file.getId(),
+    operationKey,
+    "COMPLETED",
+  ];
+
+  if (operationRow) {
+    sheet.getRange(operationRow, 1, 1, row.length).setValues([row]);
+  } else {
+    // Retained for compatibility with callers that append a new export.
+    sheet.appendRow(row);
+  }
 }
 
 function findBillingCSVOperationRow_(sheet, operationKey) {
@@ -1214,36 +1340,6 @@ function findBillingCSVOperationRow_(sheet, operationKey) {
   const index = keys.findIndex((key) => String(key).trim() === operationKey);
 
   return index === -1 ? 0 : index + 2;
-}
-
-function logBillingRecordsCSV({
-  file,
-  startDate,
-  endDate,
-  recordCount,
-  operationKey = "",
-  operationRow = 0,
-}) {
-  const sheet = getBillingRecordsExportLogSheet_();
-
-  const row = [
-    new Date(),
-    startDate,
-    endDate,
-    recordCount,
-    file.getName(),
-    file.getUrl(),
-    file.getId(),
-    operationKey,
-    "COMPLETED",
-  ];
-
-  if (operationRow) {
-    sheet.getRange(operationRow, 1, 1, row.length).setValues([row]);
-  } else {
-    // Backward compatibility for any other existing callers.
-    sheet.appendRow(row);
-  }
 }
 
 function logBillingCSVDelivery_(channel, status, file, error = null) {
@@ -1298,11 +1394,13 @@ function logBillingCSVGeneration_(
 }
 
 function getBillingRecordsCSVExportCount(sessionId, signature) {
-  requireCapability(sessionId, signature, "billing.view");
-
-  const sheet = getSpreadsheet().getSheetByName(
-    "BillingRecordsExport_Log",
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "billing.view",
   );
+
+  const sheet = spreadsheet.getSheetByName("BillingRecordsExport_Log");
 
   if (!sheet) {
     return 0;

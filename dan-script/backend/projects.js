@@ -1,7 +1,7 @@
 function getProjects(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const session = requireCapability(sessionId, signature, "clients.view");
 
-  const sheet = getSheetSafe("Projects");
+  const sheet = getManagerSheetSafeForSession_(session, "Projects");
 
   if (!sheet) {
     return [];
@@ -28,11 +28,13 @@ function getProjects(sessionId, signature) {
 }
 
 function getProjectRankings(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const session = requireCapability(sessionId, signature, "clients.view");
+
+  // Resolve the authorized manager's workspace before the catch block.
+  // Workspace authorization/configuration errors must not be swallowed.
+  const sheet = getManagerSheetSafeForSession_(session, "Projects");
 
   try {
-    const sheet = getSheetSafe("Projects");
-
     if (!sheet) {
       throw new Error('Sheet "Projects" not found.');
     }
@@ -232,10 +234,13 @@ function getProjectRankings(sessionId, signature) {
 }
 
 function syncClientProjects(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.manage");
+  const session = requireCapability(sessionId, signature, "clients.manage");
 
-  const clientsSheet = getSheetSafe("Client Names");
-  const projectsSheet = getSheetSafe("Projects");
+  const managerSpreadsheet = getManagerSpreadsheetForSession_(session);
+
+  const clientsSheet = managerSpreadsheet.getSheetByName("Client Names");
+
+  const projectsSheet = managerSpreadsheet.getSheetByName("Projects");
 
   if (!clientsSheet || !projectsSheet) {
     return;
@@ -257,7 +262,7 @@ function syncClientProjects(sessionId, signature) {
 
   clientNames.forEach((clientName) => {
     try {
-      const clientSheet = getSheetSafe(clientName);
+      const clientSheet = managerSpreadsheet.getSheetByName(clientName);
 
       if (!clientSheet) {
         return;
@@ -335,13 +340,8 @@ function syncClientProjects(sessionId, signature) {
   });
 
   // Clear existing project data.
-  // Projects now uses 6 columns:
-  // A = Project
-  // B = Total Hours
-  // C = Active (This Year)
-  // D = Active (This Month)
-  // E = Client
-  // F = Start Date
+  // A = Project, B = Total Hours, C = Active (This Year),
+  // D = Active (This Month), E = Client, F = Start Date.
   const maxRows = projectsSheet.getMaxRows();
 
   if (maxRows >= 2) {
@@ -372,4 +372,78 @@ function formatProjectDate(value) {
     Session.getScriptTimeZone(),
     "MM/dd/yyyy",
   );
+}
+
+function getTaskOptions(sessionId, signature, clientName) {
+  const session = requireCapability(sessionId, signature, "hours.view");
+
+  if (!clientName || !String(clientName).trim()) {
+    return [];
+  }
+
+  try {
+    const workspace = getManagerWorkspaceForSession_(session);
+    const managerSS = workspace.spreadsheet;
+    const normalizedClient = normalizeText(String(clientName).trim());
+
+    const tasks = new Set();
+
+    // 1. Collect tasks already available on the internal client sheet.
+    const clientSheet = managerSS
+      .getSheets()
+      .find((sheet) => normalizeText(sheet.getName()) === normalizedClient);
+
+    if (clientSheet) {
+      const lastRow = clientSheet.getLastRow();
+
+      if (lastRow >= 3) {
+        clientSheet
+          .getRange(3, 6, lastRow - 2, 1)
+          .getDisplayValues()
+          .flat()
+          .map((task) => String(task || "").trim())
+          .filter(Boolean)
+          .forEach((task) => tasks.add(task));
+      }
+    }
+
+    // 2. Look up the client in this manager's External Sheets registry.
+    const externalRegistry = managerSS.getSheetByName("External Sheets");
+
+    if (externalRegistry && externalRegistry.getLastRow() >= 2) {
+      const registryRows = externalRegistry
+        .getRange(2, 1, externalRegistry.getLastRow() - 1, 2)
+        .getDisplayValues();
+
+      const matchingRow = registryRows.find((row) => {
+        const spreadsheetId = String(row[0] || "").trim();
+
+        const registeredClients = String(row[1] || "")
+          .split(",")
+          .map((client) => normalizeText(client.trim()))
+          .filter(Boolean);
+
+        return spreadsheetId && registeredClients.includes(normalizedClient);
+      });
+
+      if (matchingRow) {
+        const externalSS = openSpreadsheetById(String(matchingRow[0]).trim());
+
+        // 3. Add project tab names directly from the external workbook.
+        getExternalProjectSheets_(externalSS).forEach((sheet) => {
+          const task = String(sheet.getName() || "").trim();
+
+          if (task) {
+            tasks.add(task);
+          }
+        });
+      }
+    }
+
+    // 4. Return the combined task list.
+    return [...tasks].sort((a, b) => a.localeCompare(b));
+  } catch (err) {
+    logResponse(`getTaskOptions error: ${err?.message || String(err)}`);
+    throw err;
+  }
 }

@@ -356,13 +356,15 @@ const ReportActions = (() => {
   };
 
   const handleEmailLatestReport = ($btn, reportType) => {
-    const loading = AppUtils.setButtonLoading($btn[0], false, true);
+    // const loading = AppUtils.setButtonLoading($btn[0], false, true);
+    const loading = false;
 
     emailLatestReport($btn, loading, reportType);
   };
 
   const handleSendDiscordNotification = ($btn, reportType) => {
-    const loading = AppUtils.setButtonLoading($btn[0], false, true);
+    // const loading = AppUtils.setButtonLoading($btn[0], false, true);
+    const loading = false;
 
     sendLatestReportToDiscord($btn, loading, reportType);
   };

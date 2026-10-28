@@ -236,7 +236,7 @@ const billingInvoiceStatusPage = (() => {
       select.value = "all";
     }
 
-    // AppUtils.initSelect2("#invoice-status-year-filter");
+    // Select2Module.init("#invoice-status-year-filter");
   }
 
   function applyFilters() {

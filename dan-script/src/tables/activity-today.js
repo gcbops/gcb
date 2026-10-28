@@ -11,8 +11,11 @@ import { DataTableModule } from "../components/data-table.js";
 const ActivityToday = (() => {
   const ACTIVITY_TABLE_ID = "#table";
   const ACTIVITY_CACHE_KEY = "cache_ActivityToday";
-  const REFRESH_INTERVAL = 10000;
-  const ERROR_REFRESH_INTERVAL = 30000;
+  
+  const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  const ERROR_REFRESH_INTERVAL = 3 * 60 * 1000; // 3 minutes
+  const REFRESH_LOCK_TIMEOUT = 60_000;
+
   const MAX_CLIENT_NAME_LENGTH = 100;
   const MAX_TYPE_LENGTH = 100;
   const MAX_TASK_LENGTH = 500;
@@ -45,7 +48,8 @@ const ActivityToday = (() => {
   let nextRequestId = 0;
   let refreshGeneration = 0;
 
-  const REFRESH_LOCK_TIMEOUT = 45000;
+  let pendingImmediateRefresh = false;
+  let pendingRefreshTable = null;
 
   /* ---------------------------------------------------------
    * FILTERS
@@ -282,7 +286,7 @@ const ActivityToday = (() => {
       .off("click.activityToday")
       .on("click.activityToday", handleTaskSubmit);
 
-    // AppUtils.initSelect2("#drawerManualAdd .drawer-content");
+    // Select2Module.init("#drawerManualAdd .drawer-content");
   }
 
   function setupClientSelector($selectClient, $taskForm) {
@@ -309,14 +313,6 @@ const ActivityToday = (() => {
       .toggleClass("drawer-grid-5", !$drawer.hasClass("drawer-grid-5"));
 
     $firstGroup.toggleClass("element-hidden");
-
-    // $icon
-    //   .toggleClass("fa-plus", function () {
-    //     return $(this).hasClass("fa-minus");
-    //   })
-    //   .toggleClass("fa-minus", function () {
-    //     return $(this).hasClass("fa-plus");
-    //   });
 
     AppUtils.openDrawer("#drawerManualAdd");
   }
@@ -472,7 +468,27 @@ const ActivityToday = (() => {
   }
 
   function refreshActivityTable(dataTable) {
+    if (!dataTable) {return;}
+
+    // Don't start overlapping requests. Queue one refresh instead.
+    if (activeRequestId !== null) {
+      pendingImmediateRefresh = true;
+      pendingRefreshTable = dataTable;
+      return;
+    }
+
+    pendingImmediateRefresh = false;
+    pendingRefreshTable = null;
+
     loadActivity(dataTable, null, true);
+  }
+
+  function refreshAfterSave() {
+    const activityTable = DataTableModule.getInstance(ACTIVITY_TABLE_ID);
+
+    if (activityTable) {
+      refreshActivityTable(activityTable);
+    }
   }
 
   function resetYearlyChartCaches(startYear = 2024) {
@@ -587,7 +603,7 @@ const ActivityToday = (() => {
           <button
             type="button"
             id="add-hours"
-            data-required-role="admin"
+            data-required-role="manager"
             class="dropdown-item add-hours"
           >
             <i class="pe-7s-plus me-2 text-primary"></i>
@@ -599,7 +615,7 @@ const ActivityToday = (() => {
               ? `
                 <button
                   type="button"
-                  data-required-role="admin"
+                  data-required-role="manager"
                   id="edit-today-hours"
                   class="dropdown-item edit-today-hours"
                 >
@@ -724,15 +740,26 @@ const ActivityToday = (() => {
   }
 
   function releaseRefreshLock(requestId) {
-    // An old request must never release a newer request's lock.
-    if (activeRequestId !== requestId) {
-      return false;
-    }
+    if (activeRequestId !== requestId) {return false;}
 
     clearTimeout(refreshLockTimer);
     refreshLockTimer = null;
-
     activeRequestId = null;
+
+    if (pendingImmediateRefresh && pendingRefreshTable) {
+      setTimeout(() => {
+        // Another request may have started before this callback runs.
+        if (activeRequestId !== null) {return;}
+        if (!pendingImmediateRefresh || !pendingRefreshTable) {return;}
+
+        const table = pendingRefreshTable;
+
+        pendingImmediateRefresh = false;
+        pendingRefreshTable = null;
+
+        refreshActivityTable(table);
+      }, 0);
+    }
 
     return true;
   }
@@ -812,8 +839,6 @@ const ActivityToday = (() => {
           }
 
           console.error("[ActivityToday] Refresh failed:", error);
-
-          AppUtils.showError(error);
 
           callback?.(false);
         },
@@ -938,6 +963,7 @@ const ActivityToday = (() => {
     clearClientCaches,
     resetYearlyChartCaches,
     refreshActivityTable,
+    refreshAfterSave,
   };
 })();
 

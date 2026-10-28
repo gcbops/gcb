@@ -5,7 +5,7 @@ function handleGcbOAuthCallback(e) {
   const startedAt = Date.now();
   const state = String(e?.parameter?.state || "").trim();
 
-  if (!validateGcbOAuthState(state)) {
+  if (!validateGcbOAuthState_(state)) {
     logGcbAuthEvent_({
       operation: "LOGIN",
       status: "FAILED",
@@ -37,9 +37,9 @@ function handleGcbOAuthCallback(e) {
   }
 
   try {
-    const identity = authenticateGcbGoogleCode(code);
+    const identity = authenticateGcbGoogleCode_(code);
 
-    const authorizedUser = getAuthorizedUserByGoogleIdentity(
+    const authorizedUser = getAuthorizedUserByGoogleIdentity_(
       identity.email,
       identity.sub,
     );
@@ -79,9 +79,9 @@ function handleGcbOAuthCallback(e) {
       });
     }
 
-    const gcbSession = createGcbSession(authorizedUser);
+    const gcbSession = createGcbSession_(authorizedUser);
 
-    const handoffTicket = createGcbSessionHandoff(gcbSession);
+    const handoffTicket = createGcbSessionHandoff_(gcbSession);
 
     logGcbAuthEvent_({
       operation: "LOGIN",
@@ -456,43 +456,7 @@ function buildGcbAuthResultPage({
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
-  const sheet = getAuthorizedUsersSheet();
-
-  if (!sheet) {
-    throw new Error("AUTHORIZED_USERS sheet was not found.");
-  }
-
-  const values = sheet.getDataRange().getValues();
-
-  if (values.length < 2) {
-    return null;
-  }
-
-  const headers = values[0];
-
-  const emailIndex = headers.indexOf("Email");
-
-  const subIndex = headers.indexOf("Google Sub");
-
-  const enabledIndex = headers.indexOf("Enabled");
-
-  const roleIndex = headers.indexOf("Role");
-
-  const capabilitiesIndex = headers.indexOf("Capabilities");
-
-  const notesIndex = headers.indexOf("Notes");
-
-  if (
-    emailIndex === -1 ||
-    subIndex === -1 ||
-    enabledIndex === -1 ||
-    roleIndex === -1 ||
-    capabilitiesIndex === -1
-  ) {
-    throw new Error("AUTHORIZED_USERS is missing required columns.");
-  }
-
+function getAuthorizedUserByGoogleIdentity_(googleEmail, googleSub) {
   const normalizedEmail = String(googleEmail || "")
     .trim()
     .toLowerCase();
@@ -503,26 +467,99 @@ function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
     return null;
   }
 
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
+  const lock = LockService.getScriptLock();
 
-    const rowEmail = String(row[emailIndex] || "")
-      .trim()
-      .toLowerCase();
+  if (!lock.tryLock(10000)) {
+    throw new Error(
+      "Authorization registry is busy. Please try signing in again.",
+    );
+  }
 
-    if (!rowEmail) {
-      continue;
+  try {
+    const sheet = getAuthorizedUsersSheet_();
+    const values = sheet.getDataRange().getValues();
+
+    if (values.length < 2) {
+      return null;
     }
 
-    if (rowEmail !== normalizedEmail) {
-      continue;
+    const headers = values[0];
+
+    const emailIndex = headers.indexOf("Email");
+    const subIndex = headers.indexOf("Google Sub");
+    const enabledIndex = headers.indexOf("Enabled");
+    const roleIndex = headers.indexOf("Role");
+    const capabilitiesIndex = headers.indexOf("Capabilities");
+    const notesIndex = headers.indexOf("Notes");
+
+    if (
+      emailIndex === -1 ||
+      subIndex === -1 ||
+      enabledIndex === -1 ||
+      roleIndex === -1 ||
+      capabilitiesIndex === -1
+    ) {
+      throw new Error("AUTHORIZED_USERS is missing required columns.");
     }
 
+    const seenEmails = new Set();
+    const seenSubs = new Set();
+    let matchedRow = -1;
+
+    // Validate uniqueness throughout the registry.
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      const rowEmail = String(row[emailIndex] || "")
+        .trim()
+        .toLowerCase();
+
+      const rowSub = String(row[subIndex] || "").trim();
+
+      if (rowEmail) {
+        if (seenEmails.has(rowEmail)) {
+          throw new Error(`Duplicate email in AUTHORIZED_USERS: ${rowEmail}`);
+        }
+
+        seenEmails.add(rowEmail);
+      }
+
+      if (rowSub) {
+        if (seenSubs.has(rowSub)) {
+          throw new Error("Duplicate Google Sub found in AUTHORIZED_USERS.");
+        }
+
+        seenSubs.add(rowSub);
+      }
+
+      if (rowEmail === normalizedEmail) {
+        matchedRow = i;
+      }
+    }
+
+    if (matchedRow === -1) {
+      return null;
+    }
+
+    const row = values[matchedRow];
     const rowSub = String(row[subIndex] || "").trim();
 
-    // Existing Google Sub must match.
+    // Never replace an existing Google identity binding.
     if (rowSub && rowSub !== normalizedSub) {
       return null;
+    }
+
+    // A Google identity must not already belong to another account.
+    const boundRow = values.findIndex(
+      (candidate, index) =>
+        index !== matchedRow &&
+        String(candidate[subIndex] || "").trim() === normalizedSub,
+    );
+
+    if (boundRow !== -1) {
+      throw new Error(
+        "This Google identity is already bound to another account.",
+      );
     }
 
     const enabled =
@@ -530,26 +567,37 @@ function getAuthorizedUserByGoogleIdentity(googleEmail, googleSub) {
         .trim()
         .toLowerCase() === "true";
 
-    // Only enabled accounts can establish a first-login binding.
-    if (!rowSub && enabled) {
-      sheet.getRange(i + 1, subIndex + 1).setValue(normalizedSub);
+    // Only enabled accounts may establish their initial identity binding.
+    if (!rowSub) {
+      if (!enabled) {
+        return {
+          email: normalizedEmail,
+          googleSub: normalizedSub,
+          enabled: false,
+          role: String(row[roleIndex] || "").trim(),
+          capabilities: String(row[capabilitiesIndex] || "").trim(),
+          notes: notesIndex !== -1 ? String(row[notesIndex] || "").trim() : "",
+        };
+      }
+
+      sheet.getRange(matchedRow + 1, subIndex + 1).setValue(normalizedSub);
     }
 
     return {
-      email: rowEmail,
+      email: normalizedEmail,
       googleSub: normalizedSub,
       enabled,
       role: String(row[roleIndex] || "").trim(),
       capabilities: String(row[capabilitiesIndex] || "").trim(),
       notes: notesIndex !== -1 ? String(row[notesIndex] || "").trim() : "",
     };
+  } finally {
+    lock.releaseLock();
   }
-
-  return null;
 }
 
-function getAuthorizedUserByGoogleSub(googleSub) {
-  const sheet = getAuthorizedUsersSheet();
+function getAuthorizedUserByGoogleSub_(googleSub) {
+  const sheet = getAuthorizedUsersSheet_();
 
   if (!sheet) {
     throw new Error("AUTHORIZED_USERS sheet was not found.");
@@ -605,19 +653,22 @@ function getAuthorizedUserByGoogleSub(googleSub) {
   return null;
 }
 
-function getAuthorizedUsersSheet() {
-  const spreadsheetId =
-    PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
+function getAuthorizedUsersSheet_() {
+  const spreadsheetId = PropertiesService.getScriptProperties().getProperty(
+    "MANAGER_REGISTRY_SPREADSHEET_ID",
+  );
 
   if (!spreadsheetId) {
-    throw new Error("SPREADSHEET_ID is not configured.");
+    throw new Error("MANAGER_REGISTRY_SPREADSHEET_ID is not configured.");
   }
 
-  const sheet =
-    SpreadsheetApp.openById(spreadsheetId).getSheetByName("AUTHORIZED_USERS");
+  const spreadsheet = openSpreadsheetById(spreadsheetId);
+  const sheet = spreadsheet.getSheetByName("AUTHORIZED_USERS");
 
   if (!sheet) {
-    throw new Error("AUTHORIZED_USERS sheet was not found.");
+    throw new Error(
+      'Sheet "AUTHORIZED_USERS" was not found in the central registry.',
+    );
   }
 
   return sheet;
@@ -650,7 +701,7 @@ function getCurrentGcbUser(sessionId, signature) {
   };
 }
 
-function createGcbSession(authorizedUser) {
+function createGcbSession_(authorizedUser) {
   if (!authorizedUser?.googleSub || !authorizedUser?.email) {
     throw new Error("A valid authorized user is required.");
   }
@@ -663,7 +714,7 @@ function createGcbSession(authorizedUser) {
   }
 
   // Remove a limited number of expired records before creating a session.
-  cleanupExpiredGcbSessions(20);
+  cleanupExpiredGcbSessions_(20);
 
   const createdAt = Date.now();
 
@@ -697,7 +748,7 @@ function createGcbSession(authorizedUser) {
   return session;
 }
 
-function validateGcbSession(sessionId, signature) {
+function validateGcbSession_(sessionId, signature) {
   if (
     typeof sessionId !== "string" ||
     !sessionId ||
@@ -782,7 +833,7 @@ function validateGcbSession(sessionId, signature) {
     return null;
   }
 
-  const authorizedUser = getAuthorizedUserByGoogleSub(session.googleSub);
+  const authorizedUser = getAuthorizedUserByGoogleSub_(session.googleSub);
 
   if (!authorizedUser || !authorizedUser.enabled) {
     return null;
@@ -799,7 +850,7 @@ function validateGcbSession(sessionId, signature) {
   };
 }
 
-function cleanupExpiredGcbSessions(maxDeletes = 20) {
+function cleanupExpiredGcbSessions_(maxDeletes = 20) {
   const props = PropertiesService.getScriptProperties();
   const allProperties = props.getProperties();
   const now = Date.now();
@@ -837,7 +888,7 @@ function cleanupExpiredGcbSessions(maxDeletes = 20) {
   return deleted;
 }
 
-function createGcbOAuthState() {
+function createGcbOAuthState_() {
   const state = Utilities.getUuid() + "-" + Utilities.getUuid();
 
   const cacheKey = `gcb_oauth_state_${state}`;
@@ -866,7 +917,7 @@ function createGcbLoginUrl() {
   const redirectUri =
     "https://script.google.com/macros/s/AKfycbwdipuZqlldoU7utdQ6gAK0XLsog96TMCg02MUYvNz8ix6LWsOt-cqX5R5YCvsQ4OnT/exec";
 
-  const state = createGcbOAuthState();
+  const state = createGcbOAuthState_();
 
   const params = {
     client_id: clientId,
@@ -891,7 +942,7 @@ function createGcbLoginUrl() {
   return url;
 }
 
-function createGcbSessionHandoff(session) {
+function createGcbSessionHandoff_(session) {
   if (!session?.sessionId || !session?.signature) {
     throw new Error("A valid GCB session is required for handoff.");
   }
@@ -913,7 +964,7 @@ function createGcbSessionHandoff(session) {
 }
 
 function requireAuthenticatedUser(sessionId, signature) {
-  const session = validateGcbSession(sessionId, signature);
+  const session = validateGcbSession_(sessionId, signature);
 
   if (!session) {
     throw new Error("Authentication required.");
@@ -1002,7 +1053,7 @@ function requireAllCapabilities(sessionId, signature, requiredCapabilities) {
   return session;
 }
 
-function validateGcbOAuthState(state) {
+function validateGcbOAuthState_(state) {
   if (!state) {
     return false;
   }
@@ -1055,7 +1106,7 @@ function validateGcbOAuthState(state) {
   }
 }
 
-function authenticateGcbGoogleCode(code) {
+function authenticateGcbGoogleCode_(code) {
   if (!code) {
     throw new Error("Google authorization code is missing.");
   }
@@ -1321,13 +1372,59 @@ function logGcbAuthEvent_({
   }
 }
 
-// testDriveAuthorization: Do not delete for now
-function testDriveAuthorization() {
-  const folder = DriveApp.getFolderById(
-    PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID"),
-  );
+// Re-authorize the Apps Script project for Google Drive
+function authorizeDrive() {
+  const properties = PropertiesService.getScriptProperties();
+
+  const backupFolderId = properties.getProperty("BACKUP_FOLDER_ID");
+  const templateId = properties.getProperty("EXTERNAL_SHEET_TEMPLATE_ID");
+
+  if (!backupFolderId) {
+    throw new Error("BACKUP_FOLDER_ID is not configured.");
+  }
+
+  if (!templateId) {
+    throw new Error("EXTERNAL_SHEET_TEMPLATE_ID is not configured.");
+  }
+
+  const folder = DriveApp.getFolderById(backupFolderId);
+  const template = DriveApp.getFileById(templateId);
 
   Logger.log("Drive authorization successful.");
   Logger.log("Backup folder: " + folder.getName());
   Logger.log("Folder URL: " + folder.getUrl());
+
+  let testCopy;
+
+  try {
+    // Verify DriveApp.File.makeCopy() authorization.
+    testCopy = template.makeCopy(
+      "__GCB_DRIVE_AUTH_TEST__" + Date.now(),
+      folder,
+    );
+
+    Logger.log("makeCopy authorization successful.");
+    Logger.log("Test copy ID: " + testCopy.getId());
+    Logger.log("Test copy URL: " + testCopy.getUrl());
+  } finally {
+    // Remove the temporary test copy, if one was created.
+    if (testCopy) {
+      testCopy.setTrashed(true);
+      Logger.log("Temporary test copy moved to Trash.");
+    }
+  }
+}
+
+// Re-authorize the Apps Script project: Running a function manually is the documented way to authorize newly required services when the script cannot prompt for authorization during an automated execution.
+function authorizeExternalRequests() {
+  const response = UrlFetchApp.fetch("https://www.google.com", {
+    muteHttpExceptions: true,
+  });
+
+  Logger.log("HTTP status: " + response.getResponseCode());
+}
+
+// Re-authorize the Apps Script project: Authorize without sending an actual email. This requests the MailApp authorization without sending an email.
+function authorizeEmailAccess() {
+  MailApp.getRemainingDailyQuota();
 }

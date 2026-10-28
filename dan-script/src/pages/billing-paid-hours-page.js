@@ -165,7 +165,7 @@ const billingPaidHoursPage = (() => {
       select.value = "all";
     }
 
-    // AppUtils.initSelect2("#paid-hours-year-filter");
+    // Select2Module.init("#paid-hours-year-filter");
   }
 
   function applyFilters() {

@@ -67,8 +67,14 @@ const AppPopoverModule = (() => {
 
       event.preventDefault();
 
-      if (activeTrigger === trigger && isVisible()) {
+      if (activeTrigger === trigger) {
         close();
+
+        setTimeout(() => {
+          if (!isVisible()) {
+            trigger.setAttribute("aria-expanded", "false");
+          }
+        }, 200);
       } else {
         open(trigger, options);
       }

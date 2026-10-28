@@ -1,16 +1,254 @@
-function getSpreadsheet() {
+const GCB_MANAGER_REGISTRY_PROPERTY = "MANAGER_REGISTRY_SPREADSHEET_ID";
+const GCB_MANAGER_REGISTRY_SHEET = "Managers";
+
+function getManagerWorkspaceForSession_(session) {
+  if (
+    !session ||
+    typeof session.email !== "string" ||
+    !session.email.trim() ||
+    typeof session.googleSub !== "string" ||
+    !session.googleSub.trim()
+  ) {
+    throw new Error("A valid authenticated session is required.");
+  }
+
+  const registryId = String(
+    PropertiesService.getScriptProperties().getProperty(
+      GCB_MANAGER_REGISTRY_PROPERTY,
+    ) || "",
+  ).trim();
+
+  if (!registryId) {
+    throw new Error("MANAGER_REGISTRY_SPREADSHEET_ID is not configured.");
+  }
+
+  const registrySpreadsheet = openSpreadsheetById(registryId);
+  const managersSheet = registrySpreadsheet.getSheetByName(
+    GCB_MANAGER_REGISTRY_SHEET,
+  );
+
+  if (!managersSheet) {
+    throw new Error('The manager registry is missing the "Managers" tab.');
+  }
+
+  const values = managersSheet.getDataRange().getValues();
+
+  if (values.length < 2) {
+    throw new Error("No manager assignments are configured.");
+  }
+
+  const headers = values[0].map((header) => String(header || "").trim());
+
+  const requiredHeaders = [
+    "Manager ID",
+    "Manager Name",
+    "Login Email",
+    "Enabled",
+    "Operational Spreadsheet ID",
+    "External Sheets Folder ID",
+    "Backup Folder ID",
+    "Reports Folder ID",
+    "Discord Webhook URL",
+  ];
+
+  const indexes = {};
+
+  for (const header of requiredHeaders) {
+    indexes[header] = headers.indexOf(header);
+
+    if (indexes[header] === -1) {
+      throw new Error(`The Managers tab is missing the "${header}" column.`);
+    }
+  }
+
+  const normalizedEmail = session.email.trim().toLowerCase();
+  const matchingRows = [];
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+
+    const rowEmail = String(row[indexes["Login Email"]] || "")
+      .trim()
+      .toLowerCase();
+
+    if (rowEmail === normalizedEmail) {
+      matchingRows.push({
+        row,
+        rowNumber: i + 1,
+      });
+    }
+  }
+
+  if (matchingRows.length === 0) {
+    throw new Error(
+      "No manager workspace is assigned to the authenticated account.",
+    );
+  }
+
+  if (matchingRows.length > 1) {
+    throw new Error(
+      "Multiple manager assignments exist for this account. Resolve the duplicate records.",
+    );
+  }
+
+  const { row, rowNumber } = matchingRows[0];
+
+  const enabledValue = row[indexes.Enabled];
+
+  const enabled =
+    enabledValue === true ||
+    String(enabledValue || "")
+      .trim()
+      .toLowerCase() === "true";
+
+  if (!enabled) {
+    throw new Error("The manager workspace assignment is disabled.");
+  }
+
+  const managerId = String(row[indexes["Manager ID"]] || "").trim();
+  const managerName = String(row[indexes["Manager Name"]] || "").trim();
+  const operationalSpreadsheetId = String(
+    row[indexes["Operational Spreadsheet ID"]] || "",
+  ).trim();
+  const externalSheetsFolderId = String(
+    row[indexes["External Sheets Folder ID"]] || "",
+  ).trim();
+  const backupFolderId = String(row[indexes["Backup Folder ID"]] || "").trim();
+
+  const reportsFolderId = String(
+    row[indexes["Reports Folder ID"]] || "",
+  ).trim();
+
+  const discordWebhookUrl = String(
+    row[indexes["Discord Webhook URL"]] || "",
+  ).trim();
+
+  if (!managerId || !operationalSpreadsheetId) {
+    throw new Error(
+      "The manager assignment is missing its ID or operational spreadsheet ID.",
+    );
+  }
+
+  if (operationalSpreadsheetId === registryId) {
+    throw new Error(
+      "The manager operational spreadsheet cannot be the central registry spreadsheet.",
+    );
+  }
+
+  /*
+   * An unconfigured folder must be blank.
+   * Reject placeholder text instead of treating it as a valid folder ID.
+   */
+  if (
+    externalSheetsFolderId &&
+    !/^[A-Za-z0-9_-]{20,}$/.test(externalSheetsFolderId)
+  ) {
+    throw new Error(
+      `The External Sheets Folder ID for manager "${managerId}" is invalid. ` +
+        "Enter the actual Google Drive folder ID or leave the cell blank.",
+    );
+  }
+
+  let operationalSpreadsheet;
+
+  try {
+    operationalSpreadsheet = openSpreadsheetById(operationalSpreadsheetId);
+  } catch (error) {
+    console.error(
+      `[Manager Workspace] Unable to open the assigned spreadsheet for manager ${managerId}.`,
+    );
+
+    throw new Error(
+      "The assigned manager spreadsheet could not be opened. Verify its ID and the deployment account's access.",
+    );
+  }
+
+  return {
+    managerId,
+    managerName,
+    email: normalizedEmail,
+    enabled,
+
+    externalSheetsFolderId,
+    backupFolderId,
+    reportsFolderId,
+    discordWebhookUrl,
+
+    registryRow: rowNumber,
+    spreadsheetId: operationalSpreadsheetId,
+    spreadsheet: operationalSpreadsheet,
+  };
+}
+
+function getManagerSpreadsheetForSession_(session) {
+  return getManagerWorkspaceForSession_(session).spreadsheet;
+}
+
+function getManagerWorkspaceForCapability_(sessionId, signature, capability) {
+  const session = requireCapability(sessionId, signature, capability);
+
+  const workspace = getManagerWorkspaceForSession_(session);
+
+  if (!workspace || !workspace.managerId || !workspace.spreadsheet) {
+    throw new Error(
+      "No operational spreadsheet is assigned to the authenticated manager.",
+    );
+  }
+
+  return {
+    session,
+    workspace,
+    spreadsheet: workspace.spreadsheet,
+  };
+}
+
+function getManagerSheetForSession_(session, sheetName) {
+  const name = String(sheetName || "").trim();
+
+  if (!name) {
+    throw new Error("A sheet name is required.");
+  }
+
+  const sheet = getManagerSpreadsheetForSession_(session).getSheetByName(name);
+
+  if (!sheet) {
+    throw new Error(`Required manager sheet "${name}" was not found.`);
+  }
+
+  return sheet;
+}
+
+function getManagerSheetSafeForSession_(session, sheetName) {
+  const name = String(sheetName || "").trim();
+
+  if (!name) {
+    throw new Error("A sheet name is required.");
+  }
+
+  return getManagerSpreadsheetForSession_(session).getSheetByName(name) || null;
+}
+
+function openSpreadsheetById(spreadsheetId) {
+  if (!spreadsheetId) {
+    throw new Error("Spreadsheet ID is required.");
+  }
+
+  return SpreadsheetApp.openById(spreadsheetId);
+}
+
+function getMainSpreadsheet() {
   const ssId =
     PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
 
   if (ssId) {
-    return SpreadsheetApp.openById(ssId);
+    return openSpreadsheetById(ssId);
   }
 
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
 function getSheet(name) {
-  return getSpreadsheet().getSheetByName(name);
+  return getMainSpreadsheet().getSheetByName(name);
 }
 
 function getSheetSafe(name) {
@@ -18,9 +256,24 @@ function getSheetSafe(name) {
 }
 
 function sheetExists(sessionId, signature, name) {
-  requireCapability(sessionId, signature, "clients.view");
+  const session = requireCapability(sessionId, signature, "clients.view");
 
-  return !!getSheet(name);
+  if (!name || !String(name).trim()) {
+    return false;
+  }
+
+  try {
+    const workspace = getManagerWorkspaceForSession_(session);
+    const managerSS = workspace.spreadsheet;
+    const normalizedName = normalizeText(String(name).trim());
+
+    return managerSS
+      .getSheets()
+      .some((sheet) => normalizeText(sheet.getName()) === normalizedName);
+  } catch (err) {
+    logResponse(`sheetExists error: ${err?.message || String(err)}`);
+    return false;
+  }
 }
 
 function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
@@ -47,7 +300,7 @@ function applyFormulaToMainSheets(sessionId, signature, cellRef, formula) {
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const ss = getSpreadsheet();
+    const ss = getMainSpreadsheet();
 
     const clientNamesSheet = ss.getSheetByName("Client Names");
 
@@ -107,12 +360,16 @@ function applyFormulaToExternalProjects(
 ) {
   requireRole(sessionId, signature, "admin");
 
+  const session = requireCapability(sessionId, signature, "clients.manage");
+
+  const workspace = getManagerWorkspaceForSession_(session);
+
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const externalSheets = getExternalSheetsInternal();
+    const externalSheets = getExternalSheetsInternal(workspace.spreadsheet);
 
     const spreadsheetIds = new Set();
 
@@ -138,7 +395,7 @@ function applyFormulaToExternalProjects(
 
     spreadsheetIds.forEach((spreadsheetId) => {
       try {
-        const externalSS = SpreadsheetApp.openById(spreadsheetId);
+        const externalSS = openSpreadsheetById(spreadsheetId);
 
         const projectsSheet = externalSS.getSheetByName("Projects");
 
@@ -167,7 +424,7 @@ function applyFormulaToExternalProjects(
     });
 
     return {
-      success: true,
+      success: failed === 0,
       cellRef,
       updated,
       failed,
@@ -189,12 +446,16 @@ function applyFormulaToExternalProjectSheets(
 ) {
   requireRole(sessionId, signature, "admin");
 
+  const session = requireCapability(sessionId, signature, "clients.manage");
+
+  const workspace = getManagerWorkspaceForSession_(session);
+
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
 
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const externalSheets = getExternalSheetsInternal();
+    const externalSheets = getExternalSheetsInternal(workspace.spreadsheet);
 
     const spreadsheetIds = new Set();
 
@@ -220,7 +481,7 @@ function applyFormulaToExternalProjectSheets(
 
     spreadsheetIds.forEach((spreadsheetId) => {
       try {
-        const externalSS = SpreadsheetApp.openById(spreadsheetId);
+        const externalSS = openSpreadsheetById(spreadsheetId);
 
         externalSS.getSheets().forEach((sheet) => {
           const sheetName = sheet.getName();
@@ -269,7 +530,7 @@ function applyFormulaToExternalProjectSheets(
     });
 
     return {
-      success: true,
+      success: failed === 0,
       cellRef,
       updated,
       failed,
@@ -282,7 +543,7 @@ function applyFormulaToExternalProjectSheets(
 }
 
 function reorderActiveClientSheets() {
-  const ss = getSpreadsheet();
+  const ss = getMainSpreadsheet();
   const clientNamesSheet = getSheetSafe("Client Names");
 
   if (!ss || !clientNamesSheet) {
