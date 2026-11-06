@@ -1,5 +1,9 @@
 function addUpsellEntry(sessionId, signature, data) {
-  requireRole(sessionId, signature, "manager");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.edit",
+  );
 
   Validation.requireObject(data, "Upsell data");
 
@@ -37,7 +41,7 @@ function addUpsellEntry(sessionId, signature, data) {
     { maxLength: 100 },
   );
 
-  const sheet = getSheetSafe("Upsells");
+  const sheet = spreadsheet.getSheetByName("Upsells");
 
   if (!sheet) {
     throw new Error('Sheet "Upsells" not found.');
@@ -66,10 +70,14 @@ function addUpsellEntry(sessionId, signature, data) {
 }
 
 function getUpsellSummary(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   try {
-    const sheet = getSheetSafe("Upsells");
+    const sheet = spreadsheet.getSheetByName("Upsells");
 
     if (!sheet) {
       throw new Error('Sheet "Upsells" not found.');
@@ -94,10 +102,14 @@ function getUpsellSummary(sessionId, signature) {
 }
 
 function getUpsellRecords(sessionId, signature) {
-  requireCapability(sessionId, signature, "clients.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "clients.view",
+  );
 
   try {
-    const sheet = getSheetSafe("Upsells");
+    const sheet = spreadsheet.getSheetByName("Upsells");
 
     if (!sheet) {
       throw new Error('Sheet "Upsells" not found.');
@@ -117,8 +129,8 @@ function getUpsellRecords(sessionId, signature) {
     return data
       .filter((row) => isNonEmptyString(row[0]))
       .map((row) => [
-        row[0], // Client
-        row[2], // Upsell Hours
+        row[0],
+        row[2],
         formatDateSafe(row[4], "MM/dd/yyyy") || row[4],
       ]);
   } catch (err) {

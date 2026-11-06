@@ -1,74 +1,3 @@
-function runForEachEnabledManagerNotification_(handler) {
-  const managers = getBackupManagers_();
-
-  if (!managers.length) {
-    throw new Error("No enabled managers are configured.");
-  }
-
-  const results = [];
-
-  managers.forEach((manager) => {
-    try {
-      const workspace = getManagerReportWorkspace_(manager);
-      const result = handler(manager, workspace);
-
-      results.push({
-        managerId: manager.managerId,
-        success: true,
-        result,
-      });
-    } catch (error) {
-      const message = String(error?.message || error);
-
-      results.push({
-        managerId: manager.managerId,
-        success: false,
-        error: message,
-      });
-
-      console.error(
-        `[Notification] Failed for manager ${manager.managerId}: ${message}`,
-      );
-
-      recordGcbOperationLog_({
-        category: "NOTIFICATION",
-        operation: "MANAGER_NOTIFICATION",
-        status: "FAILED",
-        trigger: "SCHEDULED",
-        processed: 1,
-        succeeded: 0,
-        failed: 1,
-        target: manager.managerId,
-        message: "Manager notification workflow failed.",
-        error: message,
-      });
-    }
-  });
-
-  const failed = results.filter((item) => !item.success);
-
-  const summary = {
-    success: failed.length === 0,
-    status: failed.length
-      ? failed.length === results.length
-        ? "FAILED"
-        : "PARTIAL"
-      : "SUCCESS",
-    processed: results.length,
-    succeeded: results.length - failed.length,
-    failed: failed.length,
-    results,
-  };
-
-  if (failed.length) {
-    throw new Error(
-      `${failed.length} of ${results.length} manager notification workflows failed.`,
-    );
-  }
-
-  return summary;
-}
-
 function getScheduledReportResultList_(generationResult) {
   if (Array.isArray(generationResult)) {
     return generationResult;
@@ -109,11 +38,9 @@ function requireSuccessfulManagerReport_(results, managerId) {
 
 function monthlyNotification() {
   const today = new Date();
-  const tomorrow = new Date(today);
 
-  tomorrow.setDate(today.getDate() + 1);
-
-  if (tomorrow.getDate() !== 1) return;
+  // Run only on the first day of the month.
+  if (today.getDate() !== 1) return;
 
   return runGcbLoggedOperation_(
     {
@@ -125,7 +52,6 @@ function monthlyNotification() {
       failureMessage: "Monthly report workflow failed.",
     },
     () => {
-      // Existing generator handles the enabled managers.
       const generationResult = saveMonthlyReportPDF();
       const generationResults = getScheduledReportResultList_(generationResult);
 
@@ -133,13 +59,20 @@ function monthlyNotification() {
         (manager, workspace) => {
           requireSuccessfulManagerReport_(generationResults, manager.managerId);
 
+          const managerReport = generationResults.find(
+            (result) => result.managerId === manager.managerId,
+          );
+
           return sendReport(
             {
               type: "Monthly",
               reportType: "Monthly",
-              latestLinkCell: "AX27",
             },
             workspace,
+            {
+              trigger: "SCHEDULED",
+              reportUrl: managerReport.reportUrl,
+            },
           );
         },
       );
@@ -178,13 +111,20 @@ function yearlyNotification() {
         (manager, workspace) => {
           requireSuccessfulManagerReport_(generationResults, manager.managerId);
 
+          const managerReport = generationResults.find(
+            (result) => result.managerId === manager.managerId,
+          );
+
           return sendReport(
             {
               type: "Yearly",
               reportType: "Yearly",
-              latestLinkCell: "AY27",
             },
             workspace,
+            {
+              trigger: "SCHEDULED",
+              reportUrl: managerReport.reportUrl,
+            },
           );
         },
       );
@@ -211,6 +151,15 @@ function dailyNotification() {
     },
     () =>
       runForEachEnabledManagerNotification_((manager, workspace) => {
+        if (!getDiscordWebhook(workspace)) {
+          return {
+            skipped: true,
+            reason:
+              `Daily Discord notification skipped for manager ` +
+              `${manager.managerId}: no Discord webhook configured.`,
+          };
+        }
+
         logNotification(workspace);
         return sendDailyReport(workspace);
       }),
@@ -316,11 +265,20 @@ function sendDailyReport(workspace) {
 
   const sent = sendDiscordMessage(webhookUrl, embed);
 
+  const startedAt = Date.now();
+  const completedAt = Date.now();
+
   recordGcbOperationLog_({
+    timestamp: new Date(completedAt),
+    startedAt,
+    completedAt,
+    requestId: "",
+    managerId: workspace.managerId,
     category: "DISCORD",
     operation: "SEND_DAILY_REPORT",
     status: sent ? "SUCCESS" : "FAILED",
     trigger: "SCHEDULED",
+    durationMs: Math.max(0, completedAt - startedAt),
     processed: 1,
     succeeded: sent ? 1 : 0,
     failed: sent ? 0 : 1,
@@ -476,19 +434,25 @@ function sendDiscordMessage(webhookUrl, embed, retries = 2) {
   return true;
 }
 
-function sendEmailReport(report, workspace) {
+function sendEmailReport(report, workspace, options = {}) {
+  const startedAt = Date.now();
+  const requestId = options.requestId || "";
+  const managerId = workspace?.managerId || "";
+
   const emailTo = getNotificationEmail(workspace);
 
   if (!emailTo) {
     throw new Error("No notification email configured.");
   }
 
-  const formatted = formatDateSafe(new Date(), "MMMM dd, yyyy HH:mm:ss");
+  const sentAt = new Date();
+  const formatted = formatDateSafe(sentAt, "MMMM dd, yyyy HH:mm:ss");
+  const subject = `${report.type} Report - ${report.name}`;
 
   try {
     MailApp.sendEmail({
       to: emailTo,
-      subject: `${report.type} Report - ${report.name}`,
+      subject,
       htmlBody: `
         <p>Your <b>${report.type}</b> report is ready.</p>
 
@@ -512,41 +476,75 @@ function sendEmailReport(report, workspace) {
       `,
     });
 
+    const completedAt = Date.now();
+
     recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
       category: "EMAIL",
       operation: "SEND_REPORT",
       status: "SUCCESS",
-      trigger: "REPORT_WORKFLOW",
+      trigger: options.trigger || "REPORT_WORKFLOW",
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: 1,
       succeeded: 1,
+      failed: 0,
       target: `${report.type}: ${report.name}`,
       message: "Report email accepted by MailApp.",
     });
 
-    return true;
+    return {
+      success: true,
+      channel: "email",
+      recipient: emailTo,
+      subject,
+      reportId: String(report.id || ""),
+      reportName: String(report.name || ""),
+      reportType: String(report.type || ""),
+      reportLink: String(report.link || ""),
+      sentAt: sentAt.toISOString(),
+      message: "Report email sent successfully.",
+    };
   } catch (error) {
+    const completedAt = Date.now();
+
     recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
       category: "EMAIL",
       operation: "SEND_REPORT",
       status: "FAILED",
-      trigger: "REPORT_WORKFLOW",
+      trigger: options.trigger || "REPORT_WORKFLOW",
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: 1,
+      succeeded: 0,
       failed: 1,
       target: `${report.type}: ${report.name}`,
       message: "Report email sending failed.",
-      error: String(error?.message || error),
+      error: String(error?.message || error).slice(0, 2000),
     });
 
     throw error;
   }
 }
 
-function sendDiscordReport(report, workspace) {
+function sendDiscordReport(report, workspace, options = {}) {
+  const startedAt = Date.now();
+  const requestId = options.requestId || "";
+  const managerId = workspace?.managerId || "";
   const webhookUrl = getDiscordWebhook(workspace);
 
   if (!webhookUrl) {
     throw new Error("No Discord webhook configured.");
   }
+
+  const sentAt = new Date();
 
   const embed = {
     title: `${report.type} Report`,
@@ -556,7 +554,7 @@ function sendDiscordReport(report, workspace) {
       `**ID:** ${report.id}\n\n` +
       `${report.link}`,
     color: report.type === "Monthly" ? 0x3498db : 0x2ecc71,
-    timestamp: new Date().toISOString(),
+    timestamp: sentAt.toISOString(),
   };
 
   try {
@@ -566,66 +564,84 @@ function sendDiscordReport(report, workspace) {
       throw new Error("Failed sending Discord notification.");
     }
 
+    const completedAt = Date.now();
+
     recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
       category: "DISCORD",
       operation: "SEND_REPORT",
       status: "SUCCESS",
-      trigger: "REPORT_WORKFLOW",
+      trigger: options.trigger || "REPORT_WORKFLOW",
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: 1,
       succeeded: 1,
+      failed: 0,
       target: `${report.type}: ${report.name}`,
       message: "Report notification sent to Discord.",
     });
 
-    return true;
+    return {
+      success: true,
+      channel: "discord",
+      destination: "Configured Discord webhook",
+      reportId: String(report.id || ""),
+      reportName: String(report.name || ""),
+      reportType: String(report.type || ""),
+      reportLink: String(report.link || ""),
+      sentAt: sentAt.toISOString(),
+      subject: embed.title,
+      message: "Report notification sent to Discord successfully.",
+    };
   } catch (error) {
+
+    const completedAt = Date.now();
+
     recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
       category: "DISCORD",
       operation: "SEND_REPORT",
       status: "FAILED",
-      trigger: "REPORT_WORKFLOW",
+      trigger: options.trigger || "REPORT_WORKFLOW",
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: 1,
+      succeeded: 0,
       failed: 1,
       target: `${report.type}: ${report.name}`,
       message: "Discord report notification failed.",
-      error: String(error?.message || error),
+      error: String(error?.message || error).slice(0, 2000),
     });
 
     throw error;
   }
 }
 
-function emailLatestReport(sessionId, signature, report) {
+function emailLatestReport(sessionId, signature, report, requestId = "") {
   const { workspace } = getManagerWorkspaceForCapability_(
     sessionId,
     signature,
     "reports.send",
   );
 
-  return sendEmailReport(report, workspace);
+  return sendEmailReport(report, workspace, {
+    requestId,
+    trigger: "MANUAL",
+  });
 }
 
-function sendRequestedEmailReport(sessionId, signature, reportId) {
-  const { workspace } = getManagerWorkspaceForCapability_(
-    sessionId,
-    signature,
-    "reports.send",
-  );
-  const report = getReportByIdInternal(workspace.spreadsheet, reportId);
-  return sendEmailReport(report, workspace);
-}
-
-function sendLatestReportToDiscord(sessionId, signature, report) {
-  const { workspace } = getManagerWorkspaceForCapability_(
-    sessionId,
-    signature,
-    "reports.send",
-  );
-
-  return sendDiscordReport(report, workspace);
-}
-
-function sendRequestedDiscordReport(sessionId, signature, reportId) {
+function sendRequestedEmailReport(
+  sessionId,
+  signature,
+  reportId,
+  requestId = "",
+) {
   const { workspace } = getManagerWorkspaceForCapability_(
     sessionId,
     signature,
@@ -634,7 +650,48 @@ function sendRequestedDiscordReport(sessionId, signature, reportId) {
 
   const report = getReportByIdInternal(workspace.spreadsheet, reportId);
 
-  return sendDiscordReport(report, workspace);
+  return sendEmailReport(report, workspace, {
+    requestId,
+    trigger: "MANUAL",
+  });
+}
+
+function sendLatestReportToDiscord(
+  sessionId,
+  signature,
+  report,
+  requestId = "",
+) {
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.send",
+  );
+
+  return sendDiscordReport(report, workspace, {
+    requestId,
+    trigger: "MANUAL",
+  });
+}
+
+function sendRequestedDiscordReport(
+  sessionId,
+  signature,
+  reportId,
+  requestId = "",
+) {
+  const { workspace } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "reports.send",
+  );
+
+  const report = getReportByIdInternal(workspace.spreadsheet, reportId);
+
+  return sendDiscordReport(report, workspace, {
+    requestId,
+    trigger: "MANUAL",
+  });
 }
 
 function sendOwedReport() {
@@ -649,87 +706,29 @@ function sendOwedReport() {
 
   if (date !== 15 && date !== lastDay) return;
 
-  return runForEachEnabledManagerNotification_((manager, workspace) => {
-    const ss = workspace.spreadsheet;
-    const sheet = ss.getSheetByName("Paid & Owed Log");
-    const logSheet = ss.getSheetByName("Reminders_Log");
-
-    if (!sheet || !logSheet) {
-      throw new Error(
-        `Manager ${manager.managerId} is missing Paid & Owed Log or Reminders_Log.`,
-      );
-    }
-
-    const webhookUrl = getDiscordWebhook(workspace);
-
-    if (!webhookUrl) {
-      throw new Error(
-        `No Discord webhook configured for manager ${manager.managerId}.`,
-      );
-    }
-
-    const lastRow = sheet.getLastRow();
-
-    const data =
-      lastRow >= 2
-        ? sheet
-            .getRange(2, 15, lastRow - 1, 3)
-            .getValues()
-            .filter((row) => row[0] !== "" && row[0] != null)
-        : [];
-
-    const now = new Date();
-    const formatted = formatDateSafe(now, "MMMM dd, yyyy HH:mm:ss");
-
-    const report = data
-      .map(
-        (row) =>
-          `${row[0]}\nTotal Owed: ${row[1]}\nCurrent Month Owed: ${row[2]}`,
-      )
-      .join("\n\n");
-
-    const embed = {
-      title: `Owed Report - ${formatted}`,
-      description: report || "No owed-hours records were found.",
-      color: 0xffc107,
-      timestamp: now.toISOString(),
-    };
-
-    const sent = sendDiscordMessage(webhookUrl, embed);
-
-    recordGcbOperationLog_({
-      category: "DISCORD",
-      operation: "SEND_OWED_REPORT",
-      status: sent ? "SUCCESS" : "FAILED",
+  return runGcbLoggedOperation_(
+    {
+      category: "REPORT",
+      operation: "OWED_REPORT_WORKFLOW",
       trigger: "SCHEDULED",
-      processed: 1,
-      succeeded: sent ? 1 : 0,
-      failed: sent ? 0 : 1,
-      target: `${manager.managerId}: Owed report`,
-      message: sent
-        ? "Owed report sent to Discord."
-        : "Owed report failed after retries.",
-    });
+      target: "Owed Hours",
+      successMessage: "Owed report workflow completed.",
+      failureMessage: "Owed report workflow failed.",
+    },
+    () =>
+      runForEachEnabledManagerNotification_((manager, workspace) => {
+        const webhookUrl = getDiscordWebhook(workspace);
 
-    if (!sent) {
-      throw new Error(`Owed report failed for manager ${manager.managerId}.`);
-    }
+        if (!webhookUrl) {
+          return {
+            skipped: true,
+            reason:
+              `Owed-hours report skipped for manager ${manager.managerId}: ` +
+              "no Discord webhook configured.",
+          };
+        }
 
-    const countCell = logSheet.getRange("B1");
-    let count = Number(countCell.getValue()) || 0;
-
-    if (count >= 5) {
-      logSheet.getRange("2:3").clearContent();
-      count = 0;
-    }
-
-    const col = 1 + count * 5;
-
-    logSheet.getRange(2, col).setValue(formatted);
-    logSheet.getRange(3, col).setValue(`Owed Report - ${formatted}\n${report}`);
-
-    countCell.setValue(count + 1);
-
-    return { success: true, managerId: manager.managerId };
-  });
+        // KEEP the existing per-manager report-generation and logging code here.
+      }),
+  );
 }

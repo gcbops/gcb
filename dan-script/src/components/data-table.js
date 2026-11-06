@@ -1,5 +1,5 @@
 import { AuthorizationUIModule } from "../auth/authorization-ui.js";
-import { manageUsersPage } from "../users/manage-users.js";
+import { manageUsersPage } from "../pages/manage-users-page.js";
 import { AppUtils } from "../utils/utils.js";
 import { ActivityToday } from "../tables/activity-today.js";
 
@@ -11,13 +11,7 @@ const DataTableModule = (() => {
   //   "outstanding accounts",
   // ]);
 
-  function init(
-    title,
-    tableId,
-    debug = false,
-    options = {},
-    callback = null,
-  ) {
+  function init(title, tableId, debug = false, options = {}, callback = null) {
     const log = (...args) => debug && console.log(...args);
     const error = (...args) => debug && console.error(...args);
 
@@ -37,6 +31,8 @@ const DataTableModule = (() => {
       error("Table not found:", tableId);
       return null;
     }
+
+    clearEmpty(tableId);
 
     /*
      * Stop previous Activity Today refresh.
@@ -163,6 +159,23 @@ const DataTableModule = (() => {
     if (cleanTitle === "activity today") {
       log("Initializing Activity Today");
 
+      // Client column
+      tableOptions.columnDefs.push({
+        targets: 0,
+        orderable: true,
+        render: ActivityToday.renderActivityClientCell,
+      });
+
+      // Asana column
+      tableOptions.columnDefs.push({
+        targets: 2,
+        className: "text-center",
+        orderable: false,
+        searchable: false,
+        render: ActivityToday.renderAsanaCell,
+      });
+
+      // Action column
       tableOptions.columnDefs.push({
         targets: -1,
         className: "action-btn-group",
@@ -727,50 +740,135 @@ const DataTableModule = (() => {
       .scrollTop(0);
   }
 
-  function showError(tableId, message = "Unable to load data.") {
+  function showError(tableId, options = {}) {
     const $table = $(tableId);
 
-    if (!$table.length) {
-      return;
-    }
+    if (!$table.length) {return;}
 
     destroy(tableId);
+
+    const settings =
+      typeof options === "string" ? { message: options } : options || {};
+
+    const {
+      icon = "pe-7s-attention",
+      title = "Unable to load data",
+      message = "Something went wrong while retrieving the records. Please try again.",
+      footer = "If the problem persists, please contact support.",
+    } = settings;
 
     const colCount = getColumnCount(tableId);
 
     $table.find("tbody").html(`
-    <tr class="dt-message-row">
-      <td
-        colspan="${colCount}"
-        class="text-center text-muted"
-      >
-        ${AppUtils.escapeHtml(message)}
-      </td>
-    </tr>
-  `);
+      <tr class="dt-message-row dt-error-state-row">
+        <td colspan="${colCount}">
+          <div class="dt-empty-state dt-error-state">
+            ${
+              icon
+                ? `<div class="dt-empty-icon">
+                    <i class="${AppUtils.escapeHtml(icon)}"></i>
+                  </div>`
+                : ""
+            }
+
+            ${
+              title
+                ? `<div class="dt-empty-title">
+                    ${AppUtils.escapeHtml(title)}
+                  </div>`
+                : ""
+            }
+
+            ${
+              message
+                ? `<div class="dt-empty-message">
+                    ${AppUtils.escapeHtml(message)}
+                  </div>`
+                : ""
+            }
+
+            ${
+              footer
+                ? `<div class="dt-empty-footer">
+                    <i class="pe-7s-info"></i>
+                    <span>${AppUtils.escapeHtml(footer)}</span>
+                  </div>`
+                : ""
+            }
+          </div>
+        </td>
+      </tr>
+    `);
+
+    $table.removeClass("dt-empty-state-table").addClass("dt-error-state-table");
   }
 
-  function showEmpty(tableId, message = "No records found.") {
+  function showEmpty(tableId, options = {}) {
     const $table = $(tableId);
 
-    if (!$table.length) {
-      return;
-    }
+    if (!$table.length) {return;}
 
     destroy(tableId);
+
+    const settings =
+      typeof options === "string" ? { title: options } : options || {};
+
+    const {
+      icon = "pe-7s-server",
+      title = "No records found",
+      message = "There are currently no records available to display. Records will appear here once data becomes available.",
+      footer = "Your table is ready for new records.",
+    } = settings;
 
     const colCount = getColumnCount(tableId);
 
     $table.find("tbody").html(`
     <tr class="dt-message-row">
-      <td
-        colspan="${colCount}"
-        class="text-center text-muted"
-      >
-        ${AppUtils.escapeHtml(message)}
+      <td colspan="${colCount}">
+        <div class="dt-empty-state">
+          ${
+            icon
+              ? `<div class="dt-empty-icon">
+                   <i class="${AppUtils.escapeHtml(icon)}"></i>
+                 </div>`
+              : ""
+          }
+          ${
+            title
+              ? `<div class="dt-empty-title">
+                   ${AppUtils.escapeHtml(title)}
+                 </div>`
+              : ""
+          }
+          ${
+            message
+              ? `<div class="dt-empty-message">
+                   ${AppUtils.escapeHtml(message)}
+                 </div>`
+              : ""
+          }
+          ${
+            footer
+              ? `<div class="dt-empty-footer">
+                   <i class="pe-7s-info"></i>
+                   <span>${AppUtils.escapeHtml(footer)}</span>
+                 </div>`
+              : ""
+          }
+        </div>
       </td>
     </tr>
   `);
+
+    $table.removeClass("dt-error-state-table").addClass("dt-empty-state-table");
+  }
+
+  function clearEmpty(tableId) {
+    const $table = $(tableId);
+
+    if (!$table.length) {return;}
+
+    $table.removeClass("dt-empty-state-table dt-error-state-table");
   }
 
   function renderRows(tableId, data, rowRenderer) {

@@ -28,13 +28,14 @@ import { billingInvoiceStatusPage } from "./pages/billing-invoice-status-page.js
 import { performanceOverviewPage } from "./pages/performance-overview.js";
 import { performanceProductivityPage } from "./pages/performance-productivity-page.js";
 import { clientDetailsPage } from "./pages/client-details-page.js";
-import { manageUsersPage } from "./users/manage-users.js";
+import { manageUsersPage } from "./pages/manage-users-page.js";
 import { AppPopoverModule } from "./components/app-popover.js";
 import { ClientRecordsPage } from "./pages/client-records-page.js";
 import { Select2Module } from "./components/select2.js";
 
 const RouterModule = (() => {
   let currentPage = "home";
+  let previousPage = null;
   let currentModule = null;
   let pageToken = 0;
 
@@ -252,7 +253,6 @@ const RouterModule = (() => {
          * ------------------------------------------------
          */
         go(initialPage, false);
-        
 
         return true;
       } catch (error) {
@@ -359,7 +359,9 @@ const RouterModule = (() => {
      * Cleanup BEFORE replacing page DOM
      * ------------------------------------------------
      */
+    AppUtils.clearDashboardToasts();
     AppUtils.closeAllDrawers();
+    AppUtils.closeModal();
     DataTableModule.destroyAll();
     ChartModule.destroyAllCharts();
     Select2Module.destroyAll();
@@ -369,9 +371,13 @@ const RouterModule = (() => {
 
     /*
      * ------------------------------------------------
-     * Store current page
+     * Store previous and current page
      * ------------------------------------------------
      */
+    if (resolvedPageName !== currentPage) {
+      previousPage = currentPage;
+    }
+
     setCurrentPage(resolvedPageName);
 
     /*
@@ -403,12 +409,35 @@ const RouterModule = (() => {
     });
   }
 
+  /**
+   * Return to the previously visited page.
+   */
+  function returnLastPage() {
+    if (!isValidRoute(previousPage)) {
+      returnHomePage();
+      return;
+    }
+
+    const targetPage = previousPage;
+
+    go(targetPage);
+  }
+
+  /**
+   * Return directly to the homepage.
+   */
+  function returnHomePage() {
+    go("home");
+  }
+
   return {
     go,
     init,
     setCurrentPage,
     getCurrentPage,
     getPageToken,
+    returnLastPage,
+    returnHomePage,
   };
 })();
 

@@ -285,7 +285,7 @@ RequestManager.registerHandler(
       ),
     ];
 
-    // Only verify with the server if the cache misses a requested task.
+    // Verify with the server only when the cache misses a requested task.
     const missingFromCache = requestedTasks.filter(
       (task) => !existingTasks.has(normalizeProjectName(task)),
     );
@@ -310,12 +310,8 @@ RequestManager.registerHandler(
               .filter(Boolean)
           : [];
 
-        // Merge server results with the existing cache.
-        for (const task of serverTasks) {
-          existingTasks.add(task);
-        }
+        serverTasks.forEach((task) => existingTasks.add(task));
 
-        // Refresh the cache with the authoritative server response.
         const mergedTasks = [
           ...new Set([
             ...(Array.isArray(cachedTasks) ? cachedTasks : []),
@@ -325,11 +321,6 @@ RequestManager.registerHandler(
 
         AppUtils.cacheSet(cacheKey, mergedTasks);
       } catch (error) {
-        console.error(
-          "[RequestHandlers] Unable to verify existing projects:",
-          error,
-        );
-
         throw new Error(
           "Unable to verify existing projects. No hours were saved. Please try again.",
           { cause: error },
@@ -530,15 +521,22 @@ RequestManager.registerHandler(
       throw new Error("Missing request ID for email delivery.");
     }
 
+    const isLatestReport = payload?.isLatestReport === true;
     const reportId = String(payload?.reportId || "").trim();
 
-    if (!reportId) {
+    if (isLatestReport) {
+      if (!payload?.report || typeof payload.report !== "object") {
+        throw new Error("The latest report details are missing.");
+      }
+    } else if (!reportId) {
       throw new Error("The report ID is missing.");
     }
 
-    const serverFunction = payload.isDataExport
-      ? "sendBillingRecordsCSVEmail"
-      : "sendRequestedEmailReport";
+    const serverFunction = isLatestReport
+      ? "emailLatestReport"
+      : payload.isDataExport
+        ? "sendBillingRecordsCSVEmail"
+        : "sendRequestedEmailReport";
 
     updateProgress("Authorizing email delivery");
 
@@ -546,21 +544,29 @@ RequestManager.registerHandler(
 
     updateProgress("Sending report by email");
 
-    const result = await callGScriptAsync(serverFunction, [
-      sessionId,
-      signature,
-      reportId,
-    ]);
+    const args = isLatestReport
+      ? [sessionId, signature, payload.report]
+      : payload.isDataExport
+        ? [sessionId, signature, reportId, requestId]
+        : [sessionId, signature, reportId];
+
+    const result = await callGScriptAsync(serverFunction, args);
 
     if (result?.success === false) {
       throw new Error(result.message || "Report email delivery failed.");
     }
 
     return {
-      reportId,
-      reportType: payload.reportType,
-      channel: "email",
       ...(result && typeof result === "object" ? result : {}),
+      reportId: String(
+        result?.reportId ||
+          (isLatestReport
+            ? payload.report?.id || payload.report?.reportId || ""
+            : reportId),
+      ),
+      reportType: result?.reportType || payload.reportType || "",
+      channel: "email",
+      isLatestReport,
     };
   },
 );
@@ -573,15 +579,22 @@ RequestManager.registerHandler(
       throw new Error("Missing request ID for Discord delivery.");
     }
 
+    const isLatestReport = payload?.isLatestReport === true;
     const reportId = String(payload?.reportId || "").trim();
 
-    if (!reportId) {
+    if (isLatestReport) {
+      if (!payload?.report || typeof payload.report !== "object") {
+        throw new Error("The latest report details are missing.");
+      }
+    } else if (!reportId) {
       throw new Error("The report ID is missing.");
     }
 
-    const serverFunction = payload.isDataExport
-      ? "sendBillingRecordsCSVDiscord"
-      : "sendRequestedDiscordReport";
+    const serverFunction = isLatestReport
+      ? "sendLatestReportToDiscord"
+      : payload.isDataExport
+        ? "sendBillingRecordsCSVDiscord"
+        : "sendRequestedDiscordReport";
 
     updateProgress("Authorizing Discord delivery");
 
@@ -589,21 +602,29 @@ RequestManager.registerHandler(
 
     updateProgress("Sending report to Discord");
 
-    const result = await callGScriptAsync(serverFunction, [
-      sessionId,
-      signature,
-      reportId,
-    ]);
+    const args = isLatestReport
+      ? [sessionId, signature, payload.report]
+      : payload.isDataExport
+        ? [sessionId, signature, reportId, requestId]
+        : [sessionId, signature, reportId];
+
+    const result = await callGScriptAsync(serverFunction, args);
 
     if (result?.success === false) {
       throw new Error(result.message || "Report Discord delivery failed.");
     }
 
     return {
-      reportId,
-      reportType: payload.reportType,
-      channel: "discord",
       ...(result && typeof result === "object" ? result : {}),
+      reportId: String(
+        result?.reportId ||
+          (isLatestReport
+            ? payload.report?.id || payload.report?.reportId || ""
+            : reportId),
+      ),
+      reportType: result?.reportType || payload.reportType || "",
+      channel: "discord",
+      isLatestReport,
     };
   },
 );
@@ -685,7 +706,7 @@ RequestManager.registerHandler(
 // update-client-record-status
 RequestManager.registerHandler(
   "update-client-record-status",
-  async (payload, { updateProgress }) => {
+  async (payload, { requestId, updateProgress }) => {
     const clientName = String(payload?.clientName || "").trim();
     const operations = payload?.operations;
 
@@ -693,7 +714,7 @@ RequestManager.registerHandler(
       throw new Error("A client name is required.");
     }
 
-    if (!Array.isArray(operations) || operations.length === 0) {
+    if (!Array.isArray(operations) || !operations.length) {
       throw new Error("At least one status update is required.");
     }
 
@@ -701,48 +722,27 @@ RequestManager.registerHandler(
 
     const [sessionId, signature] = await getAuthArgs();
 
-    const results = [];
+    updateProgress(`Processing ${operations.length} status updates`);
 
-    for (let index = 0; index < operations.length; index++) {
-      const operation = operations[index];
+    const response = await callGScriptAsync(
+      "updateClientRecordStatuses",
+      [
+        sessionId,
+        signature,
+        {
+          clientName,
+          spreadsheetId: payload.spreadsheetId,
+          sheetId: payload.sheetId,
+          operations,
+          requestId,
+        },
+      ],
+    );
 
-      updateProgress(
-        `Updating record ${index + 1} of ${operations.length}`,
-      );
-
-      try {
-        const result = await callGScriptAsync(
-          "updateClientRecordStatus",
-          [
-            sessionId,
-            signature,
-            {
-              ...operation,
-              clientName,
-              spreadsheetId: payload.spreadsheetId,
-              sheetId: payload.sheetId,
-            },
-          ],
-        );
-
-        results.push({
-          rowIndex: operation.rowIndex,
-          success: true,
-          result,
-        });
-      } catch (error) {
-        results.push({
-          rowIndex: operation.rowIndex,
-          success: false,
-          message: error?.message || "Status update failed.",
-        });
-      }
-    }
-
+    const results = response?.results || [];
     const failed = results.filter((item) => !item.success);
 
-    // Preserve individual outcomes in Request Manager history.
-    if (failed.length) {
+    if (!response?.success || failed.length) {
       const error = new Error(
         `${failed.length} of ${operations.length} status update(s) failed. ` +
           "Review the operation results before retrying.",
@@ -756,10 +756,7 @@ RequestManager.registerHandler(
 
     document.dispatchEvent(
       new CustomEvent("gcb:client-record-status-updated", {
-        detail: {
-          clientName,
-          results,
-        },
+        detail: { clientName, results },
       }),
     );
 

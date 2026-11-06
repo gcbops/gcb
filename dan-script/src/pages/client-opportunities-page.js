@@ -329,10 +329,7 @@ const clientOpportunitiesPage = (() => {
         <form id="upsellOpportunityForm">
 
           <div class="position-relative form-group">
-            <label for="opportunity-clientName">
-              Client Name
-            </label>
-
+            <label for="opportunity-clientName">Client Name</label>
             <input
               type="text"
               id="opportunity-clientName"
@@ -342,10 +339,7 @@ const clientOpportunitiesPage = (() => {
           </div>
 
           <div class="position-relative form-group">
-            <label for="opportunity-screenshot">
-              Screenshot
-            </label>
-
+            <label for="opportunity-screenshot">Screenshot</label>
             <input
               type="text"
               id="opportunity-screenshot"
@@ -354,10 +348,7 @@ const clientOpportunitiesPage = (() => {
           </div>
 
           <div class="position-relative form-group">
-            <label for="opportunity-upsellHours">
-              Upsell Hours
-            </label>
-
+            <label for="opportunity-upsellHours">Upsell Hours</label>
             <input
               type="number"
               id="opportunity-upsellHours"
@@ -368,10 +359,7 @@ const clientOpportunitiesPage = (() => {
           </div>
 
           <div class="position-relative form-group">
-            <label for="opportunity-totalHours">
-              Orasan Hours
-            </label>
-
+            <label for="opportunity-totalHours">Orasan Hours</label>
             <input
               type="number"
               id="opportunity-totalHours"
@@ -381,10 +369,7 @@ const clientOpportunitiesPage = (() => {
           </div>
 
           <div class="position-relative form-group">
-            <label for="opportunity-orasanDate">
-              Orasan Date
-            </label>
-
+            <label for="opportunity-orasanDate">Orasan Date</label>
             <input
               type="text"
               id="opportunity-orasanDate"
@@ -393,10 +378,7 @@ const clientOpportunitiesPage = (() => {
           </div>
 
           <div class="position-relative form-group">
-            <label for="opportunity-reportedDate">
-              Reported Date
-            </label>
-
+            <label for="opportunity-reportedDate">Reported Date</label>
             <input
               type="text"
               id="opportunity-reportedDate"
@@ -446,6 +428,7 @@ const clientOpportunitiesPage = (() => {
     `,
 
       footer: `
+      <!-- APP-MODAL-MAIN-ACTIONS -->
       <div id="upsell-form-footer">
         <button
           type="button"
@@ -456,16 +439,17 @@ const clientOpportunitiesPage = (() => {
 
         <button
           type="button"
-          class="btn btn-primary btn-save"
+          class="btn btn-primary btn-review"
         >
-          Save Upsell
+          Review Upsell
         </button>
       </div>
 
+      <!-- APP-MODAL-REVIEW-ACTIONS -->
       <div id="upsell-review-footer" class="d-none">
         <button
           type="button"
-          class="btn btn-secondary btn-back"
+          class="btn btn-secondary btn-modal-back"
         >
           Back
         </button>
@@ -479,30 +463,55 @@ const clientOpportunitiesPage = (() => {
       </div>
     `,
 
+      review: {
+        enabled: true,
+
+        selectors: {
+          main: "#upsell-form-body, #upsell-form-footer",
+          review: "#upsell-review-body, #upsell-review-footer",
+          trigger: ".btn-review",
+          back: ".btn-modal-back",
+          proceed: ".btn-proceed",
+        },
+
+        getData($modal) {
+          return getUpsellFormData($modal);
+        },
+
+        onReview($modal, data) {
+          $modal.find("#upsell-review-client").text(data.clientName);
+
+          $modal.find("#upsell-review-hours").text(`${data.upsellHours} hrs`);
+
+          $modal
+            .find("#upsell-review-total-hours")
+            .text(
+              data.totalHours === ""
+                ? "Not provided"
+                : `${data.totalHours} hrs`,
+            );
+
+          $modal
+            .find("#upsell-review-orasan-date")
+            .text(data.orasanDate || "Not provided");
+
+          $modal.find("#upsell-review-reported-date").text(data.reportedDate);
+
+          $modal
+            .find("#upsell-review-screenshot")
+            .text(data.screenshot || "Not provided");
+        },
+
+        onProceed($modal, data, $button, controls) {
+          return submitUpsellToServer($modal, data, $button, controls);
+        },
+      },
+
       onOpen($modal) {
         $modal
           .off(UPSELL_MODAL_NS)
           .on(`click${UPSELL_MODAL_NS}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
-          })
-          .on(`click${UPSELL_MODAL_NS}`, ".btn-save", () => {
-            submitUpsell($modal);
-          })
-          .on(`click${UPSELL_MODAL_NS}`, ".btn-back", () => {
-            $modal
-              .find("#upsell-review-body, #upsell-review-footer")
-              .addClass("d-none");
-
-            $modal
-              .find("#upsell-form-body, #upsell-form-footer")
-              .removeClass("d-none");
-          })
-          .on(`click${UPSELL_MODAL_NS}`, ".btn-proceed", () => {
-            const data = $modal.data("upsell-data");
-            const $button = $modal.find(".btn-proceed");
-            AppUtils.lockModal(MODAL_ID);
-
-            submitUpsellToServer($modal, data, $button);
           });
       },
 
@@ -512,11 +521,11 @@ const clientOpportunitiesPage = (() => {
     });
   }
 
-  function submitUpsell($modal) {
+  function getUpsellFormData($modal) {
     const $form = $modal.find("#upsellOpportunityForm");
 
     if (!$form.length) {
-      return;
+      return null;
     }
 
     const clientNameResult = ValidationModule.requiredString(
@@ -527,7 +536,7 @@ const clientOpportunitiesPage = (() => {
 
     if (!clientNameResult.valid) {
       AppUtils.showError(clientNameResult.message);
-      return;
+      return null;
     }
 
     const screenshot = String(
@@ -542,7 +551,7 @@ const clientOpportunitiesPage = (() => {
 
     if (!upsellHoursResult.valid) {
       AppUtils.showError(upsellHoursResult.message);
-      return;
+      return null;
     }
 
     const totalHoursRaw = String(
@@ -558,7 +567,7 @@ const clientOpportunitiesPage = (() => {
 
       if (!result.valid) {
         AppUtils.showError(result.message);
-        return;
+        return null;
       }
 
       totalHours = result.value;
@@ -576,10 +585,10 @@ const clientOpportunitiesPage = (() => {
 
     if (!reportedDateResult.valid) {
       AppUtils.showError(reportedDateResult.message);
-      return;
+      return null;
     }
 
-    const data = {
+    return {
       clientName: clientNameResult.value,
       screenshot,
       upsellHours: upsellHoursResult.value,
@@ -587,25 +596,9 @@ const clientOpportunitiesPage = (() => {
       orasanDate,
       reportedDate: reportedDateResult.value,
     };
-
-    // Populate review
-    $modal.find("#upsell-review-client").text(data.clientName);
-    $modal.find("#upsell-review-hours").text(`${data.upsellHours} hrs`);
-    $modal.find("#upsell-review-total-hours").text(`${data.totalHours} hrs`);
-    $modal.find("#upsell-review-orasan-date").text(data.orasanDate);
-    $modal.find("#upsell-review-reported-date").text(data.reportedDate);
-    $modal.find("#upsell-review-screenshot").text(data.screenshot);
-
-    $modal.data("upsell-data", data);
-
-    $modal.find("#upsell-form-body, #upsell-form-footer").addClass("d-none");
-
-    $modal
-      .find("#upsell-review-body, #upsell-review-footer")
-      .removeClass("d-none");
   }
 
-  function submitUpsellToServer($modal, data, $submitBtn) {
+  function submitUpsellToServer($modal, data, $submitBtn, controls = {}) {
     AppUtils.submitForm({
       gscriptFunc: "addUpsellEntry",
       data,
@@ -614,6 +607,17 @@ const clientOpportunitiesPage = (() => {
 
       onSuccess: () => {
         handleUpsellSaveSuccess();
+      },
+
+      onError: (error) => {
+        console.error("addUpsellEntry failed:", error);
+
+        controls.release?.();
+
+        AppUtils.showDashboardToast(
+          error?.message || "Failed to save upsell opportunity.",
+          "error",
+        );
       },
     });
   }
@@ -817,6 +821,7 @@ const clientOpportunitiesPage = (() => {
     `,
 
       footer: `
+      <!-- APP-MODAL-MAIN-ACTIONS -->
       <div id="hourly-form-footer">
         <button
           type="button"
@@ -827,16 +832,17 @@ const clientOpportunitiesPage = (() => {
 
         <button
           type="button"
-          class="btn btn-primary btn-save"
+          class="btn btn-primary btn-review"
         >
-          Save Total
+          Review Total
         </button>
       </div>
 
+      <!-- APP-MODAL-REVIEW-ACTIONS -->
       <div id="hourly-review-footer" class="d-none">
         <button
           type="button"
-          class="btn btn-secondary btn-back"
+          class="btn btn-secondary btn-modal-back"
         >
           Back
         </button>
@@ -850,31 +856,55 @@ const clientOpportunitiesPage = (() => {
       </div>
     `,
 
+      review: {
+        enabled: true,
+
+        selectors: {
+          main: "#hourly-form-body, #hourly-form-footer",
+          review: "#hourly-review-body, #hourly-review-footer",
+          trigger: ".btn-review",
+          back: ".btn-modal-back",
+          proceed: ".btn-proceed",
+        },
+
+        getData($modal) {
+          const $input = $modal.find("#opportunity-hourly-value");
+
+          const result = ValidationModule.number(
+            $input.val(),
+            "Current month total",
+            { min: Number.EPSILON },
+          );
+
+          if (!result.valid) {
+            AppUtils.showError(result.message);
+            return null;
+          }
+
+          return {
+            value: result.value,
+          };
+        },
+
+        onReview($modal, data) {
+          $modal.find("#hourly-review-value").text(data.value.toFixed(2));
+        },
+
+        onProceed($modal, data, $button, controls) {
+          return submitHourlyTotalToServer(
+            $modal,
+            data.value,
+            $button,
+            controls,
+          );
+        },
+      },
+
       onOpen($modal) {
         $modal
           .off(HOURLY_MODAL_NS)
           .on(`click${HOURLY_MODAL_NS}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
-          })
-          .on(`click${HOURLY_MODAL_NS}`, ".btn-save", () => {
-            submitHourlyTotal($modal);
-          })
-          .on(`click${HOURLY_MODAL_NS}`, ".btn-back", () => {
-            $modal
-              .find("#hourly-review-body, #hourly-review-footer")
-              .addClass("d-none");
-
-            $modal
-              .find("#hourly-form-body, #hourly-form-footer")
-              .removeClass("d-none");
-          })
-          .on(`click${HOURLY_MODAL_NS}`, ".btn-proceed", () => {
-            const value = $modal.data("hourly-total-value");
-            const $button = $modal.find(".btn-proceed");
-
-            AppUtils.lockModal(MODAL_ID);
-
-            submitHourlyTotalToServer($modal, value, $button);
           });
       },
 
@@ -884,34 +914,7 @@ const clientOpportunitiesPage = (() => {
     });
   }
 
-  function submitHourlyTotal($modal) {
-    const $input = $modal.find("#opportunity-hourly-value");
-
-    const result = ValidationModule.number(
-      $input.val(),
-      "Current month total",
-      { min: Number.EPSILON },
-    );
-
-    if (!result.valid) {
-      AppUtils.showError(result.message);
-      return;
-    }
-
-    const numericValue = result.value;
-
-    $modal.find("#hourly-review-value").text(numericValue.toFixed(2));
-
-    $modal.data("hourly-total-value", numericValue);
-
-    $modal.find("#hourly-form-body, #hourly-form-footer").addClass("d-none");
-
-    $modal
-      .find("#hourly-review-body, #hourly-review-footer")
-      .removeClass("d-none");
-  }
-
-  function submitHourlyTotalToServer($modal, value, $submitBtn) {
+  function submitHourlyTotalToServer($modal, value, $submitBtn, controls = {}) {
     AppUtils.submitForm({
       gscriptFunc: "addCurrMthTotalHrly",
       data: value,
@@ -925,6 +928,17 @@ const clientOpportunitiesPage = (() => {
 
         loadHourlyChart(true);
         loadTotalHourlyHours();
+      },
+
+      onError: (error) => {
+        console.error("addCurrMthTotalHrly failed:", error);
+
+        controls.release?.();
+
+        AppUtils.showDashboardToast(
+          error?.message || "Failed to save current month total.",
+          "error",
+        );
       },
     });
   }

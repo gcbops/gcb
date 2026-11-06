@@ -8,6 +8,7 @@ const AuthorizationUIModule = (() => {
     },
     clientActivity: {
       capability: "clients.view",
+      role: "manager",
     },
     clientRankings: {
       capability: "clients.view",

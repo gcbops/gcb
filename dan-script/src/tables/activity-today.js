@@ -11,7 +11,7 @@ import { DataTableModule } from "../components/data-table.js";
 const ActivityToday = (() => {
   const ACTIVITY_TABLE_ID = "#table";
   const ACTIVITY_CACHE_KEY = "cache_ActivityToday";
-  
+
   const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
   const ERROR_REFRESH_INTERVAL = 3 * 60 * 1000; // 3 minutes
   const REFRESH_LOCK_TIMEOUT = 60_000;
@@ -468,7 +468,9 @@ const ActivityToday = (() => {
   }
 
   function refreshActivityTable(dataTable) {
-    if (!dataTable) {return;}
+    if (!dataTable) {
+      return;
+    }
 
     // Don't start overlapping requests. Queue one refresh instead.
     if (activeRequestId !== null) {
@@ -516,6 +518,82 @@ const ActivityToday = (() => {
     keys.forEach((key) => {
       AppUtils.cacheClear(key);
     });
+  }
+
+  function renderAsanaCell(data, type) {
+    const rawValue = String(data ?? "").trim();
+
+    // Handle existing HTML if the cell originated from rendered markup.
+    const urlMatch = rawValue.match(/data-asana-url=["']([^"']*)["']/i);
+    const url = urlMatch ? urlMatch[1] : rawValue;
+
+    if (!url) {
+      return type === "display" ? '<span class="text-muted">—</span>' : "";
+    }
+
+    let parsed;
+
+    try {
+      parsed = new URL(url);
+    } catch {
+      return type === "display" ? '<span class="text-muted">—</span>' : url;
+    }
+
+    const isValidAsanaUrl =
+      parsed.protocol === "https:" &&
+      (parsed.hostname === "asana.com" ||
+        parsed.hostname.endsWith(".asana.com"));
+
+    if (!isValidAsanaUrl) {
+      return type === "display" ? '<span class="text-muted">—</span>' : url;
+    }
+
+    // Keep original URL for sorting, filtering, and other DataTables operations.
+    if (type !== "display") {
+      return parsed.href;
+    }
+
+    const safeUrl = AppUtils.escapeHtml(parsed.href);
+
+    return `
+    <button
+      type="button"
+      class="asana-link-trigger"
+      title="View Asana task"
+      aria-label="View Asana task"
+      data-asana-url="${safeUrl}"
+    >
+      <img
+        src="https://s15.gifyu.com/images/bWDTF.png"
+        alt="Asana"
+        class="asana-icon"
+      >
+    </button>
+  `;
+  }
+
+  function renderActivityClientCell(data, type, row) {
+    const clientName = String(data ?? "").trim();
+
+    if (!clientName) {
+      return "";
+    }
+
+    // Preserve the raw value for sorting and filtering.
+    if (type !== "display") {
+      return clientName;
+    }
+
+    const asanaUrl = String(row?.[2] ?? "").trim();
+
+    return `
+    <span
+      class="client-profile-trigger client-action-name"
+      data-client-name="${AppUtils.escapeHtml(clientName)}"
+      data-profile-click-popover=""
+      data-asana-url="${AppUtils.escapeHtml(asanaUrl)}"
+    >${AppUtils.escapeHtml(clientName)}</span>
+  `;
   }
 
   /* ---------------------------------------------------------
@@ -708,7 +786,7 @@ const ActivityToday = (() => {
      * Its callback or watchdog must release the lock.
      */
   }
-  
+
   function acquireRefreshLock(callback, requestGeneration) {
     if (activeRequestId !== null) {
       return null;
@@ -725,9 +803,7 @@ const ActivityToday = (() => {
         return;
       }
 
-      console.warn(
-        "[ActivityToday] Refresh lock timed out after 45 seconds.",
-      );
+      console.warn("[ActivityToday] Refresh lock timed out after 45 seconds.");
 
       releaseRefreshLock(requestId);
 
@@ -740,7 +816,9 @@ const ActivityToday = (() => {
   }
 
   function releaseRefreshLock(requestId) {
-    if (activeRequestId !== requestId) {return false;}
+    if (activeRequestId !== requestId) {
+      return false;
+    }
 
     clearTimeout(refreshLockTimer);
     refreshLockTimer = null;
@@ -749,8 +827,12 @@ const ActivityToday = (() => {
     if (pendingImmediateRefresh && pendingRefreshTable) {
       setTimeout(() => {
         // Another request may have started before this callback runs.
-        if (activeRequestId !== null) {return;}
-        if (!pendingImmediateRefresh || !pendingRefreshTable) {return;}
+        if (activeRequestId !== null) {
+          return;
+        }
+        if (!pendingImmediateRefresh || !pendingRefreshTable) {
+          return;
+        }
 
         const table = pendingRefreshTable;
 
@@ -779,10 +861,7 @@ const ActivityToday = (() => {
      * `force` intentionally does not bypass the lock.
      * Manual refreshes must follow the same concurrency rules.
      */
-    const requestId = acquireRefreshLock(
-      callback,
-      requestGeneration,
-    );
+    const requestId = acquireRefreshLock(callback, requestGeneration);
 
     if (requestId === null) {
       callback?.(false);
@@ -964,6 +1043,8 @@ const ActivityToday = (() => {
     resetYearlyChartCaches,
     refreshActivityTable,
     refreshAfterSave,
+    renderAsanaCell,
+    renderActivityClientCell,
   };
 })();
 

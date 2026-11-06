@@ -102,6 +102,10 @@ const Select2Module = (() => {
         closeOnSelect: !isMultiple,
         matcher: createPrioritizedMatcher(),
         sorter: sortResults,
+
+        selectionCssClass: $el.hasClass("select2-sm") ? "select2-sm" : "",
+        dropdownCssClass: $el.hasClass("select2-sm") ? "select2-sm" : "",
+
         ...options,
       };
 

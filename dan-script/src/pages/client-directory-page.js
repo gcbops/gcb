@@ -105,10 +105,7 @@ const clientDirectoryPage = (() => {
           <form id="addClientForm">
 
             <div class="form-group mb-3">
-              <label
-                for="sheet_name"
-                class="form-label"
-              >
+              <label for="sheet_name" class="form-label">
                 Client Name
               </label>
 
@@ -121,7 +118,6 @@ const clientDirectoryPage = (() => {
                 autocomplete="off"
                 required
               >
-
             </div>
 
           </form>
@@ -129,21 +125,25 @@ const clientDirectoryPage = (() => {
 
         <div id="review-modal-body" class="d-none">
           <h5 class="modal-title mb-2">
-            <strong>Do you want to proceed?</strong>
+            <strong>Review Client Creation</strong>
           </h5>
 
-          <p>
-            Please review the client information
-            before creating the client sheet.
+          <p class="text-muted">
+            Please verify the client information before creating the client sheet.
           </p>
+
+          <div class="border rounded p-3">
+            <div class="small text-muted">Client Name</div>
+            <div
+              id="reviewClientName"
+              class="font-weight-bold"
+            ></div>
+          </div>
         </div>
       `,
 
       footer: `
-        <div
-          id="main-modal-footer"
-          class="d-flex gap-2"
-        >
+        <div id="main-modal-footer" class="d-flex gap-2">
           <button
             type="button"
             class="btn btn-secondary btn-cancel"
@@ -153,17 +153,14 @@ const clientDirectoryPage = (() => {
 
           <button
             type="button"
-            class="btn btn-primary btn-add"
+            class="btn btn-primary btn-review"
           >
             <i class="fa fa-plus me-1"></i>
             Add Client
           </button>
         </div>
 
-        <div
-          id="review-modal-footer"
-          class="d-flex gap-2 d-none"
-        >
+        <div id="review-modal-footer" class="d-flex gap-2 d-none">
           <button
             type="button"
             class="btn btn-secondary btn-modal-back"
@@ -180,42 +177,53 @@ const clientDirectoryPage = (() => {
         </div>
       `,
 
+      review: {
+        enabled: true,
+
+        getData($modal) {
+          const form = $modal.find("#addClientForm")[0];
+
+          if (!form) {
+            return null;
+          }
+
+          if (!form.checkValidity()) {
+            form.reportValidity();
+            return null;
+          }
+
+          const result = ValidationModule.sheetName(
+            $modal.find("#sheet_name").val(),
+            "Client name",
+          );
+
+          if (!result.valid) {
+            AppUtils.showDashboardToast(result.message, "error");
+            return null;
+          }
+
+          return {
+            clientName: result.value,
+          };
+        },
+
+        onReview($modal, data) {
+          $modal.find("#reviewClientName").text(data.clientName);
+        },
+
+        onProceed($modal, data, $btn) {
+          return submitAddClient($modal, $btn, data);
+        },
+      },
+
       onOpen($modal) {
         const namespace = ".addClientModal";
 
-        $modal
-          .off(namespace)
+        $modal.off(namespace);
 
-          /*
-           * Cancel
-           */
-          .on(`click${namespace}`, ".btn-cancel", () => {
-            AppUtils.closeModal(MODAL_ID);
-          })
-
-          /*
-           * Form -> Review
-           */
-          .on(`click${namespace}`, ".btn-add", () => {
-            validateAndShowReview($modal, "#addClientForm");
-          })
-
-          /*
-           * Review -> Form
-           */
-          .on(`click${namespace}`, ".btn-modal-back", () => {
-            showFormStep($modal);
-          })
-
-          /*
-           * Create client
-           */
-          .on(`click${namespace}`, ".btn-proceed", () => {
-            const $button = $modal.find(".btn-proceed");
-            AppUtils.lockModal(MODAL_ID);
-
-            submitAddClient($modal, $button);
-          });
+        $modal.on(`click${namespace}`, ".btn-cancel", () => {
+          AppUtils.closeModal(MODAL_ID);
+        });
       },
 
       onClose($modal) {
@@ -224,33 +232,15 @@ const clientDirectoryPage = (() => {
     });
   }
 
-  async function submitAddClient($modal, $button) {
-    const form = $modal.find("#addClientForm")[0];
+  function submitAddClient($modal, $button, data) {
+    const clientName = data?.clientName;
 
-    if (!form) {
-      return;
+    if (!clientName) {
+      return false;
     }
 
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
-
-    const clientNameResult = ValidationModule.sheetName(
-      $modal.find("#sheet_name").val(),
-      "Client name",
-    );
-
-    if (!clientNameResult.valid) {
-      AppUtils.showDashboardToast(clientNameResult.message, "error");
-      return;
-    }
-
-    const clientName = clientNameResult.value;
-
-    // Prevent repeated submissions while the request is being enqueued.
     if ($button.data("requestEnqueued")) {
-      return;
+      return false;
     }
 
     $button.data("requestEnqueued", true);
@@ -263,7 +253,7 @@ const clientDirectoryPage = (() => {
 
     if (!requestId) {
       $button.removeData("requestEnqueued");
-      return;
+      return false;
     }
 
     AppUtils.closeModal(MODAL_ID);
@@ -289,7 +279,6 @@ const clientDirectoryPage = (() => {
           "success",
         );
 
-        // Keep the existing client synchronization workflow.
         syncClientSheetList();
       } else if (finishedRequest.status === "failed") {
         AppUtils.showError(
@@ -297,9 +286,9 @@ const clientDirectoryPage = (() => {
             `Unable to create client sheet "${clientName}".`,
         );
       }
-
-      // Cancelled/interrupted requests are handled by RequestManager.
     });
+
+    return true;
   }
 
   /*
@@ -320,10 +309,7 @@ const clientDirectoryPage = (() => {
           <form id="externalSheetForm">
 
             <div class="form-group mb-3">
-              <label
-                for="externalClientName"
-                class="form-label"
-              >
+              <label for="externalClientName" class="form-label">
                 Client Name
               </label>
 
@@ -339,10 +325,7 @@ const clientDirectoryPage = (() => {
             </div>
 
             <div class="form-group mb-3">
-              <label
-                for="externalProjects"
-                class="form-label"
-              >
+              <label for="externalProjects" class="form-label">
                 Projects
               </label>
 
@@ -366,21 +349,38 @@ const clientDirectoryPage = (() => {
 
         <div id="review-modal-body" class="d-none">
           <h5 class="modal-title mb-2">
-            <strong>Do you want to proceed?</strong>
+            <strong>Review External Sheet</strong>
           </h5>
 
-          <p>
-            Please review the external sheet
-            configuration before provisioning.
+          <p class="text-muted">
+            Please verify the external sheet configuration before provisioning.
           </p>
+
+          <div class="border rounded p-3">
+
+            <div class="mb-3">
+              <div class="small text-muted">Client Name</div>
+              <div
+                id="reviewExternalClientName"
+                class="font-weight-bold"
+              ></div>
+            </div>
+
+            <div>
+              <div class="small text-muted mb-1">Projects</div>
+              <div
+                id="reviewExternalProjects"
+                class="font-weight-bold"
+                style="white-space:pre-wrap; overflow-wrap:anywhere;"
+              ></div>
+            </div>
+
+          </div>
         </div>
       `,
 
       footer: `
-        <div
-          id="main-modal-footer"
-          class="d-flex gap-2"
-        >
+        <div id="main-modal-footer" class="d-flex gap-2">
           <button
             type="button"
             class="btn btn-secondary btn-cancel"
@@ -390,17 +390,14 @@ const clientDirectoryPage = (() => {
 
           <button
             type="button"
-            class="btn btn-primary btn-create"
+            class="btn btn-primary btn-review"
           >
             <i class="fa fa-plus me-1"></i>
             Create External Sheet
           </button>
         </div>
 
-        <div
-          id="review-modal-footer"
-          class="d-flex gap-2 d-none"
-        >
+        <div id="review-modal-footer" class="d-flex gap-2 d-none">
           <button
             type="button"
             class="btn btn-secondary btn-modal-back"
@@ -417,43 +414,69 @@ const clientDirectoryPage = (() => {
         </div>
       `,
 
+      review: {
+        enabled: true,
+
+        getData($modal) {
+          const form = $modal.find("#externalSheetForm")[0];
+
+          if (!form) {
+            return null;
+          }
+
+          if (!form.checkValidity()) {
+            form.reportValidity();
+            return null;
+          }
+
+          const clientNameResult = ValidationModule.sheetName(
+            $modal.find("#externalClientName").val(),
+            "Client name",
+          );
+
+          if (!clientNameResult.valid) {
+            AppUtils.showDashboardToast(clientNameResult.message, "error");
+            return null;
+          }
+
+          const projectsResult = ValidationModule.requiredString(
+            $modal.find("#externalProjects").val(),
+            "Projects",
+            {
+              maxLength: 5000,
+            },
+          );
+
+          if (!projectsResult.valid) {
+            AppUtils.showDashboardToast(projectsResult.message, "error");
+            return null;
+          }
+
+          return {
+            clientName: clientNameResult.value,
+            projects: projectsResult.value,
+          };
+        },
+
+        onReview($modal, data) {
+          $modal.find("#reviewExternalClientName").text(data.clientName);
+
+          $modal.find("#reviewExternalProjects").text(data.projects);
+        },
+
+        onProceed($modal, data, $btn) {
+          return createExternalSheet($modal, $btn, data);
+        },
+      },
+
       onOpen($modal) {
         const namespace = ".externalClientModal";
 
-        $modal
-          .off(namespace)
+        $modal.off(namespace);
 
-          /*
-           * Cancel
-           */
-          .on(`click${namespace}`, ".btn-cancel", () => {
-            AppUtils.closeModal(MODAL_ID);
-          })
-
-          /*
-           * Form -> Review
-           */
-          .on(`click${namespace}`, ".btn-create", () => {
-            validateAndShowReview($modal, "#externalSheetForm");
-          })
-
-          /*
-           * Review -> Form
-           */
-          .on(`click${namespace}`, ".btn-modal-back", () => {
-            showFormStep($modal);
-          })
-
-          /*
-           * Create external sheet
-           */
-          .on(`click${namespace}`, ".btn-proceed", () => {
-            const $button = $modal.find(".btn-proceed");
-
-            AppUtils.lockModal(MODAL_ID);
-
-            createExternalSheet($modal, $button);
-          });
+        $modal.on(`click${namespace}`, ".btn-cancel", () => {
+          AppUtils.closeModal(MODAL_ID);
+        });
       },
 
       onClose($modal) {
@@ -462,51 +485,16 @@ const clientDirectoryPage = (() => {
     });
   }
 
-  function createExternalSheet($modal, $btn) {
-    const form = $modal.find("#externalSheetForm")[0];
-
-    if (!form) {
-      return;
-    }
-
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
-
-    const clientNameResult = ValidationModule.sheetName(
-      $modal.find("#externalClientName").val(),
-      "Client name",
-    );
-
-    if (!clientNameResult.valid) {
-      AppUtils.showDashboardToast(clientNameResult.message, "error");
-      return;
-    }
-
-    const projectsResult = ValidationModule.requiredString(
-      $modal.find("#externalProjects").val(),
-      "Projects",
-      {
-        maxLength: 5000,
-      },
-    );
-
-    if (!projectsResult.valid) {
-      AppUtils.showDashboardToast(projectsResult.message, "error");
-      return;
-    }
-
-    const clientName = clientNameResult.value;
-    const projects = projectsResult.value;
+  function createExternalSheet($modal, $btn, data) {
+    const clientName = data?.clientName;
+    const projects = data?.projects;
 
     if (!clientName || !projects) {
-      return;
+      return false;
     }
 
-    // Prevent duplicate enqueue attempts from this modal.
     if ($btn.data("requestEnqueued")) {
-      return;
+      return false;
     }
 
     $btn.data("requestEnqueued", true);
@@ -522,7 +510,7 @@ const clientDirectoryPage = (() => {
 
     if (!requestId) {
       $btn.removeData("requestEnqueued");
-      return;
+      return false;
     }
 
     AppUtils.closeModal(MODAL_ID);
@@ -550,10 +538,8 @@ const clientDirectoryPage = (() => {
           "success",
         );
 
-        // Invalidate the existing Client Directory cache.
         AppUtils.cacheClear("clientDirectoryData");
 
-        // Preserve the existing client synchronization workflow.
         syncClientSheetList();
       } else if (finishedRequest.status === "failed") {
         AppUtils.showError(
@@ -562,6 +548,8 @@ const clientDirectoryPage = (() => {
         );
       }
     });
+
+    return true;
   }
 
   async function syncClientSheetList() {
@@ -597,37 +585,6 @@ const clientDirectoryPage = (() => {
 
       AppUtils.showError(error?.message || "Unable to sync client sheet list.");
     }
-  }
-
-  /*
-   * ============================================================
-   * Shared Modal Steps
-   * ============================================================
-   */
-
-  function validateAndShowReview($modal, formSelector) {
-    const form = $modal.find(formSelector)[0];
-
-    if (!form) {
-      return;
-    }
-
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
-
-    $modal.find("#main-modal-body, #main-modal-footer").addClass("d-none");
-
-    $modal
-      .find("#review-modal-body, #review-modal-footer")
-      .removeClass("d-none");
-  }
-
-  function showFormStep($modal) {
-    $modal.find("#review-modal-body, #review-modal-footer").addClass("d-none");
-
-    $modal.find("#main-modal-body, #main-modal-footer").removeClass("d-none");
   }
 
   return {

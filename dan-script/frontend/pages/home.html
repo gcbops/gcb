@@ -159,11 +159,52 @@
             </div>
             <div class="tab-content">
                 <div class="tab-pane fade active show" id="tab-monthly-curr-year">
+                    <div class="position-absolute pt-1 pt-md-2 pe-1 pe-md-2 end-0 z-1">
+
+                        <div class="admin-chart-filters d-flex align-items-stretch gap-2 ml-md-auto me-2 mt-2" data-admin-chart="monthly" data-required-role="admin" data-admin-chart-filters="">
+
+                            <select class="custom-select js-select2 select2-sm admin-chart-mode">
+                                <option value="overall">Overall</option>
+                                <option value="manager">Individual Manager</option>
+                                <option value="comparison">Compare Managers</option>
+                            </select>
+
+                            <select class="custom-select js-select2 select2-sm admin-chart-manager d-none">
+                                <option value="">Select Manager</option>
+                            </select>
+
+                        </div>
+
+                    </div>
                     <div class="widget-chart p-3">
-                        <div id="chart-monthly" style="height:440px;">
-                            <div class="bar-loader">
-                                <span></span><span></span><span></span>
+                        <div class="chart-loading-container">
+
+                            <div
+                                id="chart-monthly-loading"
+                                class="chart-loading-overlay d-none"
+                            >
+                                <div class="chart-loading-content">
+
+                                    <div class="chart-loading-spinner"></div>
+
+                                    <div class="chart-loading-text">
+                                        Updating chart...
+                                    </div>
+
+                                </div>
                             </div>
+
+                            <div
+                                id="chart-monthly"
+                                style="height:440px;"
+                            >
+                                <div class="bar-loader">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                            </div>
+
                         </div>
                         <div class="widget-chart-content text-center mt-5">
                             <div class="widget-description mt-0">
@@ -313,11 +354,50 @@
                     </div>
                 </div>
                 <div class="tab-pane fade" id="tab-monthly-prev-year">
+                    <div class="position-absolute pt-1 pt-md-2 pe-1 pe-md-2 end-0 z-1">
+
+                        <div class="admin-chart-filters d-flex align-items-stretch gap-2 ml-md-auto me-2 mt-2" data-admin-chart="monthly-prev-merged" data-required-role="admin" data-admin-chart-filters="">
+
+                            <select class="custom-select js-select2 select2-sm admin-chart-mode">
+                                <option value="overall">Overall</option>
+                                <option value="manager">Individual Manager</option>
+                                <option value="comparison">Compare Managers</option>
+                            </select>
+
+                            <select class="custom-select js-select2 select2-sm admin-chart-manager d-none">
+                                <option value="">Select Manager</option>
+                            </select>
+
+                        </div>
+
+                    </div>
                     <div class="widget-chart p-3">
-                        <div id="chart-monthly-prev-merged"  style="height:45dvh;">
-                            <div class="bar-loader">
-                                <span></span><span></span><span></span>
+                        <div class="chart-loading-container">
+
+                            <div
+                                id="chart-monthly-prev-merged-loading"
+                                class="chart-loading-overlay d-none"
+                            >
+                                <div class="chart-loading-content">
+                                    <div class="chart-loading-spinner"></div>
+
+                                    <div class="chart-loading-text">
+                                        Updating chart...
+                                    </div>
+                                </div>
                             </div>
+
+                            <div
+                                id="chart-monthly-prev-merged"
+                                style="height:440px;"
+                            >
+                                <div class="bar-loader">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                            </div>
+
                         </div>
                         <div class="widget-chart-content text-center mt-5">
                             <div class="widget-description mt-0">

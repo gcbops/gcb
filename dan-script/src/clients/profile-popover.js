@@ -16,6 +16,8 @@ const ProfilePopoverModule = (() => {
   let clientData = new Map();
   let profileBuilder = null;
 
+  let activeTrigger = null;
+
   const SHOW_DELAY = 180;
   const HIDE_DELAY = 180;
 
@@ -61,6 +63,19 @@ const ProfilePopoverModule = (() => {
 
     if (action === "open-sheet") {
       openClientSheet(clientName);
+    }
+
+    if (action === "view-asana") {
+      const taskUrl = button.dataset.asanaUrl;
+
+      if (!taskUrl) {
+        AppUtils.showDashboardToast("Asana task URL not found.", "warning");
+        return;
+      }
+
+      openAsanaModal(taskUrl);
+      hide();
+      return;
     }
   }
 
@@ -155,6 +170,577 @@ const ProfilePopoverModule = (() => {
     }
   }
 
+  function openAsanaModal(url) {
+    if (!url) {return;}
+
+    let parsedUrl;
+
+    try {
+      parsedUrl = new URL(url);
+
+      if (
+        parsedUrl.protocol !== "https:" ||
+        !(
+          parsedUrl.hostname === "asana.com" ||
+          parsedUrl.hostname.endsWith(".asana.com")
+        )
+      ) {
+        AppUtils.showError("Invalid Asana link.");
+        return;
+      }
+    } catch (error) {
+      AppUtils.showError("Invalid Asana link.", error);
+      return;
+    }
+
+    const ns = ".profilePopoverAsana";
+
+    AppUtils.openModal("#app-modal", {
+      size: "lg",
+      placement: "center",
+
+      header: `
+        <div class="d-flex align-items-center gap-2">
+          <i class="pe-7s-comment"></i>
+          <strong>Asana Conversation</strong>
+          <span class="badge bg-light text-dark ms-1">
+            Last 7 days
+          </span>
+        </div>
+      `,
+
+      body: `
+        <div class="asana-comments-container">
+          <div class="asana-comments-loading text-center py-5">
+            <div class="bar-loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <div class="small text-muted mt-3">
+              Fetching recent comments and replies...
+            </div>
+          </div>
+        </div>
+      `,
+
+      footer: `
+        <div class="d-flex gap-2 w-100">
+          <button
+            type="button"
+            class="btn btn-secondary btn-close-asana"
+          >
+            Close
+          </button>
+
+          <a
+            href="${AppUtils.escapeHtml(parsedUrl.href)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-gc flex-grow-1"
+          >
+            <i class="pe-7s-share me-1"></i>
+            Open in Asana
+          </a>
+        </div>
+      `,
+
+      onOpen($modal) {
+        $modal.off(ns);
+
+        $modal.on(`click${ns}`, ".btn-close-asana", () => {
+          AppUtils.closeModal("#app-modal");
+        });
+
+        $modal.on(`click${ns}`, "[data-asana-day-toggle]", function () {
+          const $button = $(this);
+          const target = $button.attr("data-asana-day-toggle");
+          const $content = $modal.find(`[data-asana-day-content="${target}"]`);
+
+          const isExpanded = $button.attr("aria-expanded") === "true";
+
+          $button.attr("aria-expanded", String(!isExpanded));
+          $content.stop(true, true).slideToggle(180);
+          $button
+            .find(".asana-day-chevron")
+            .toggleClass("is-expanded", !isExpanded);
+        });
+
+        loadAsanaComments(parsedUrl.href, $modal);
+      },
+
+      onClose($modal) {
+        $modal.off(ns);
+      },
+    });
+  }
+
+  async function loadAsanaComments(url, $modal) {
+    const $container = $modal.find(".asana-comments-container");
+
+    try {
+      const [sessionId, signature] = await getAuthArgs();
+
+      AppUtils.gScriptRun({
+        gscriptFunc: "getAsanaTaskComments",
+        args: [sessionId, signature, url],
+
+        onSuccess: (response) => {
+          if (!$modal.is(":visible")) {return;}
+
+          if (!response?.success) {
+            renderAsanaCommentError(
+              $container,
+              "Unable to load Asana comments.",
+            );
+            return;
+          }
+
+          renderAsanaCommentTimeline($container, response);
+        },
+
+        onError: (error) => {
+          if (handleInvalidSessionError(error)) {return;}
+
+          console.error(
+            "[ProfilePopover] Failed to load Asana comments:",
+            error,
+          );
+
+          renderAsanaCommentError(
+            $container,
+            error?.message || "Unable to load Asana comments.",
+          );
+        },
+      });
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {return;}
+
+      renderAsanaCommentError(
+        $container,
+        error?.message || "Unable to load Asana comments.",
+      );
+    }
+  }
+  
+  function renderAsanaCommentMessage(comment) {
+    const htmlText = String(comment?.htmlText || "").trim();
+    const plainText = String(comment?.text || "");
+
+    const allowedTags = new Set([
+      "P",
+      "BR",
+      "STRONG",
+      "B",
+      "EM",
+      "I",
+      "U",
+      "S",
+      "UL",
+      "OL",
+      "LI",
+      "BLOCKQUOTE",
+      "CODE",
+      "PRE",
+      "A",
+    ]);
+
+    const escape = (value) => AppUtils.escapeHtml(String(value || ""));
+
+    const renderNode = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return escape(node.textContent);
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return "";
+      }
+
+      const tag = node.tagName;
+      const children = Array.from(node.childNodes).map(renderNode).join("");
+
+      if (!allowedTags.has(tag)) {
+        return children;
+      }
+
+      if (tag === "BR") {
+        return "<br>";
+      }
+
+      if (tag === "A") {
+        const href = String(node.getAttribute("href") || "").trim();
+
+        try {
+          const parsedUrl = new URL(href);
+
+          if (!["https:", "http:", "mailto:"].includes(parsedUrl.protocol)) {
+            return children;
+          }
+
+          return `<a href="${escape(parsedUrl.href)}" target="_blank" rel="noopener noreferrer">${children}</a>`;
+        } catch (error) {
+          console.error(error);
+          return children;
+        }
+      }
+
+      return `<${tag.toLowerCase()}>${children}</${tag.toLowerCase()}>`;
+    };
+
+    // Prefer Asana's formatted HTML.
+    if (htmlText) {
+      const parser = new DOMParser();
+      const parsedDocument = parser.parseFromString(htmlText, "text/html");
+
+      const hasStructuredFormatting = parsedDocument.body.querySelector(
+        "p, div, ul, ol, li, blockquote, pre",
+      );
+
+      const safeHtml = Array.from(parsedDocument.body.childNodes)
+        .map(renderNode)
+        .join("");
+
+      // Preserve existing structured formatting.
+      if (hasStructuredFormatting) {
+        return safeHtml;
+      }
+
+      // Convert plain HTML text and line breaks without splitting anchor tags.
+      const lines = [];
+      let currentLine = "";
+
+      const collectLines = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const parts = (node.textContent || "").split(/\r\n?|\n/);
+
+          parts.forEach((part, index) => {
+            currentLine += escape(part);
+
+            if (index < parts.length - 1) {
+              lines.push(currentLine);
+              currentLine = "";
+            }
+          });
+
+          return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return;
+        }
+
+        if (node.tagName === "BR") {
+          lines.push(currentLine);
+          currentLine = "";
+          return;
+        }
+
+        const rendered = renderNode(node);
+        currentLine += rendered;
+      };
+
+      Array.from(parsedDocument.body.childNodes).forEach(collectLines);
+      lines.push(currentLine);
+
+      return lines
+        .map((line) => line.trim())
+        .reduce((output, line) => {
+          if (!line) {
+            return output + "<br>";
+          }
+
+          return (
+            output + (output && !output.endsWith("<br>") ? "<br>" : "") + line
+          );
+        }, "");
+    }
+
+    // Fallback: preserve plain-text comments and linkify URLs.
+    const linkify = (value) => {
+      const escaped = escape(value);
+
+      return escaped.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
+        let cleanUrl = url;
+        let trailing = "";
+
+        while (/[.,!?;:)]+$/.test(cleanUrl)) {
+          trailing = cleanUrl.slice(-1) + trailing;
+          cleanUrl = cleanUrl.slice(0, -1);
+        }
+
+        try {
+          const parsedUrl = new URL(cleanUrl);
+
+          if (!["https:", "http:"].includes(parsedUrl.protocol)) {
+            return url;
+          }
+
+          return `<a href="${escape(parsedUrl.href)}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>${trailing}`;
+        } catch (error) {
+          console.error(error);
+          return url;
+        }
+      });
+    };
+
+    return plainText
+      .split(/\r\n?|\n/)
+      .map((line) => linkify(line))
+      .join("<br>");
+  }
+
+  function renderAsanaCommentTimeline($container, response) {
+    const comments = Array.isArray(response.comments) ? response.comments : [];
+
+    if (!comments.length) {
+      $container.html(`
+      <div class="asana-empty-state text-center py-5">
+        <div class="asana-empty-icon mb-3">
+          <i class="pe-7s-chat"></i>
+        </div>
+
+        <h6 class="mb-1">No recent conversations</h6>
+
+        <p class="text-muted small mb-0">
+          No comments or replies were found in the last 7 days.
+        </p>
+      </div>
+    `);
+
+      return;
+    }
+
+    const taskGid = String(response.taskGid || "");
+    const commentGids = new Set(
+      comments.map((comment) => comment.commentGid).filter(Boolean),
+    );
+
+    const repliesByParent = {};
+    const topLevelComments = [];
+
+    comments.forEach((comment) => {
+      const parentGid = comment.anchorGid;
+
+      if (parentGid && parentGid !== taskGid && commentGids.has(parentGid)) {
+        if (!repliesByParent[parentGid]) {
+          repliesByParent[parentGid] = [];
+        }
+
+        repliesByParent[parentGid].push(comment);
+      } else {
+        // Also keeps a recent reply visible if its parent comment
+        // is older than the seven-day window.
+        topLevelComments.push(comment);
+      }
+    });
+
+    const dateKey = (value) => {
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return "unknown";
+      }
+
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    };
+
+    const todayKey = dateKey(new Date());
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const yesterdayKey = dateKey(yesterday);
+
+    const groups = {};
+
+    topLevelComments.forEach((comment) => {
+      const key = dateKey(comment.createdAt);
+
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+
+      groups[key].push(comment);
+    });
+
+    const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+    const formatDay = (key) => {
+      if (key === todayKey) {return "Today";}
+      if (key === yesterdayKey) {return "Yesterday";}
+
+      if (key === "unknown") {return "Other";}
+
+      const date = new Date(`${key}T00:00:00`);
+
+      return date.toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      });
+    };
+
+    const formatTime = (value) => {
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {return "";}
+
+      return date.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    };
+
+    const escape = (value) => AppUtils.escapeHtml(String(value || ""));
+
+    const renderComment = (comment, isReply = false) => {
+      const replies = isReply ? [] : repliesByParent[comment.commentGid] || [];
+
+      const sortedReplies = replies
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+
+      const messageHtml = renderAsanaCommentMessage(comment);
+
+      return `
+      <div class="asana-comment ${isReply ? "is-reply" : ""}">
+        <div class="asana-comment-avatar">
+          ${escape((comment.author || "?").charAt(0).toUpperCase())}
+        </div>
+
+        <div class="asana-comment-content">
+          <div class="asana-comment-meta">
+            <strong>${escape(comment.author)}</strong>
+            <span>${escape(formatTime(comment.createdAt))}</span>
+          </div>
+
+          <div class="asana-comment-message">
+            ${messageHtml || '<span class="text-muted">No text available.</span>'}
+          </div>
+
+          ${
+            sortedReplies.length
+              ? `
+                <div class="asana-replies">
+                  ${sortedReplies
+                    .map((reply) => renderComment(reply, true))
+                    .join("")}
+                </div>
+              `
+              : ""
+          }
+        </div>
+      </div>
+    `;
+    };
+
+    const timelineHtml = sortedDates
+      .map((key, index) => {
+        const dayComments = groups[key]
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+
+        const totalCount = dayComments.reduce(
+          (total, comment) =>
+            total + 1 + (repliesByParent[comment.commentGid] || []).length,
+          0,
+        );
+
+        const expanded =
+          key === todayKey ||
+          (index === 0 && key !== "unknown" && !groups[todayKey]);
+
+        const sectionId = `asana-day-${index}`;
+
+        return `
+      <section class="asana-day-group">
+        <button
+          type="button"
+          class="asana-day-toggle"
+          data-asana-day-toggle="${sectionId}"
+          aria-expanded="${expanded}"
+        >
+          <span class="asana-day-heading">
+            <i class="pe-7s-angle-right asana-day-chevron ${
+              expanded ? "is-expanded" : ""
+            }"></i>
+
+            <span>${escape(formatDay(key))}</span>
+
+            <span class="asana-day-count">${totalCount}</span>
+          </span>
+        </button>
+
+        <div
+          class="asana-day-content"
+          data-asana-day-content="${sectionId}"
+          style="${expanded ? "" : "display:none;"}"
+        >
+          ${dayComments.map((comment) => renderComment(comment)).join("")}
+        </div>
+      </section>
+    `;
+      })
+      .join("");
+
+    $container.html(`
+    <div class="asana-conversation-summary">
+      <div>
+        <div class="asana-summary-title">Recent activity</div>
+        <div class="asana-summary-subtitle">
+          Comments and replies from the last 7 days
+        </div>
+      </div>
+
+      <div class="asana-summary-count">
+        <strong>${comments.length}</strong>
+        <span>messages</span>
+      </div>
+    </div>
+
+    <div class="asana-timeline">
+      ${timelineHtml}
+    </div>
+
+    ${
+      response.hasMore
+        ? `
+          <div class="small text-muted text-center pt-3">
+            Some older results within this period may not be displayed.
+          </div>
+        `
+        : ""
+    }
+  `);
+  }
+
+  function renderAsanaCommentError($container, message) {
+    $container.html(`
+    <div class="asana-empty-state text-center py-5">
+      <div class="asana-empty-icon text-danger mb-3">
+        <i class="pe-7s-attention"></i>
+      </div>
+
+      <h6 class="mb-1">Unable to load conversation</h6>
+
+      <p class="text-muted small mb-0">
+        ${AppUtils.escapeHtml(message)}
+      </p>
+    </div>
+  `);
+  }
+
   function setClientData(data = []) {
     clientData = new Map();
 
@@ -237,8 +823,24 @@ const ProfilePopoverModule = (() => {
     }
   }
 
+  function toggle(trigger, options = {}) {
+    if (!trigger) {
+      return;
+    }
+
+    if (activeTrigger === trigger) {
+      hide();
+      return;
+    }
+
+    activeTrigger = trigger;
+    show(trigger, options);
+  }
+
   function show(trigger, options = {}) {
     clearTimers();
+
+    activeTrigger = trigger;
 
     showTimer = setTimeout(() => {
       render(trigger, options);
@@ -261,7 +863,13 @@ const ProfilePopoverModule = (() => {
     }
 
     const builderOptions =
-      profileBuilder && client ? profileBuilder(client) : {};
+      profileBuilder && (client || options.name)
+        ? profileBuilder({
+            ...(client || {}),
+            ...options,
+            name: options.name || client?.name || clientName,
+          })
+        : {};
 
     const data = {
       ...(client || {}),
@@ -303,11 +911,11 @@ const ProfilePopoverModule = (() => {
     const initials = getInitials(data.name);
 
     return `
-    <div class="app-profile-popover-banner bg-gc-gradient">
+    <div class="app-profile-popover-banner bg-vicious-stance">
 
       <div class="app-profile-popover-banner-content">
 
-        <div class="app-profile-popover-avatar bg-gc-gradient">
+        <div class="app-profile-popover-avatar bg-light">
           ${escapeHtml(initials)}
         </div>
 
@@ -451,6 +1059,8 @@ const ProfilePopoverModule = (() => {
   function hide() {
     clearTimers();
 
+    activeTrigger = null;
+
     if (!popover) {
       return;
     }
@@ -490,12 +1100,14 @@ const ProfilePopoverModule = (() => {
 
   return {
     init,
+    toggle,
     show,
     hide,
     setClientData,
     getClientData,
     setProfileBuilder,
     openClientDetails,
+    openAsanaModal,
   };
 })();
 

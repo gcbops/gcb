@@ -748,6 +748,46 @@ function createGcbSession_(authorizedUser) {
   return session;
 }
 
+/**
+ * Permanently revokes all active sessions belonging to a Google identity.
+ *
+ * Uses the existing session property prefix.
+ */
+function revokeGcbSessionsForGoogleSub_(googleSub) {
+  const normalizedSub = String(googleSub || "").trim();
+
+  if (!normalizedSub) {
+    return 0;
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const properties = props.getProperties();
+
+  let revokedCount = 0;
+
+  Object.entries(properties).forEach(([key, value]) => {
+    if (!key.startsWith(GCB_SESSION_PROPERTY_PREFIX)) {
+      return;
+    }
+
+    try {
+      const session = JSON.parse(value);
+
+      if (
+        session &&
+        String(session.googleSub || "").trim() === normalizedSub
+      ) {
+        props.deleteProperty(key);
+        revokedCount++;
+      }
+    } catch (error) {
+      // Ignore malformed session records.
+    }
+  });
+
+  return revokedCount;
+}
+
 function validateGcbSession_(sessionId, signature) {
   if (
     typeof sessionId !== "string" ||
@@ -1353,18 +1393,23 @@ function logGcbAuthEvent_({
   error = "",
 } = {}) {
   try {
+    const completedAt = Date.now();
+
     recordGcbOperationLog_({
       category: "AUTH",
       operation,
       status,
       trigger: "OAUTH",
-      durationMs: Math.max(0, Date.now() - startedAt),
+
+      startedAt,
+      completedAt,
+      durationMs: Math.max(0, completedAt - startedAt),
+
       target: email || "Unknown user",
       message,
       error: String(error || "").slice(0, 500),
     });
   } catch (logError) {
-    // Authentication must not fail because logging failed.
     console.error(
       "[GCB Auth] Failed to record authentication event:",
       logError?.message || "Unknown logging error",
@@ -1372,59 +1417,284 @@ function logGcbAuthEvent_({
   }
 }
 
-// Re-authorize the Apps Script project for Google Drive
-function authorizeDrive() {
-  const properties = PropertiesService.getScriptProperties();
-
-  const backupFolderId = properties.getProperty("BACKUP_FOLDER_ID");
-  const templateId = properties.getProperty("EXTERNAL_SHEET_TEMPLATE_ID");
-
-  if (!backupFolderId) {
-    throw new Error("BACKUP_FOLDER_ID is not configured.");
-  }
-
-  if (!templateId) {
-    throw new Error("EXTERNAL_SHEET_TEMPLATE_ID is not configured.");
-  }
-
-  const folder = DriveApp.getFolderById(backupFolderId);
-  const template = DriveApp.getFileById(templateId);
-
-  Logger.log("Drive authorization successful.");
-  Logger.log("Backup folder: " + folder.getName());
-  Logger.log("Folder URL: " + folder.getUrl());
-
-  let testCopy;
+/**
+ * Authorize Google Slides access.
+ *
+ * Run manually once after adding this function.
+ */
+function authorizeSlidesAccess() {
+  const startedAt = Date.now();
+  let presentation = null;
 
   try {
-    // Verify DriveApp.File.makeCopy() authorization.
+    Logger.log("[AUTH][SLIDES] Starting authorization...");
+
+    presentation = SlidesApp.create(
+      "__GCB_SLIDES_AUTH_TEST__" + Date.now(),
+    );
+
+    Logger.log("[AUTH][SLIDES] Slides authorization successful.");
+    Logger.log("[AUTH][SLIDES] Test presentation created.");
+    Logger.log("[AUTH][SLIDES] Presentation ID: " + presentation.getId());
+
+    return {
+      success: true,
+      service: "Google Slides",
+      presentationId: presentation.getId(),
+    };
+
+  } catch (error) {
+    Logger.log(
+      "[AUTH][SLIDES][ERROR] " +
+        String(error?.message || error),
+    );
+
+    throw error;
+
+  } finally {
+    if (presentation) {
+      try {
+        DriveApp.getFileById(presentation.getId()).setTrashed(true);
+        Logger.log("[AUTH][SLIDES] Temporary presentation moved to Trash.");
+
+      } catch (cleanupError) {
+        Logger.log(
+          "[AUTH][SLIDES][CLEANUP ERROR] " +
+            String(cleanupError?.message || cleanupError),
+        );
+      }
+    }
+
+    Logger.log(
+      `[AUTH][SLIDES] Finished in ${Date.now() - startedAt}ms.`,
+    );
+  }
+}
+
+/**
+ * Re-authorize and verify Google Drive access.
+ */
+function authorizeDrive() {
+  const startedAt = Date.now();
+  const properties = PropertiesService.getScriptProperties();
+
+  let testCopy = null;
+
+  try {
+    Logger.log("[AUTH][DRIVE] Starting authorization...");
+
+    const backupFolderId = properties.getProperty("ADMIN_COMBINED_BACKUP_FOLDER_ID");
+    const templateId = properties.getProperty("EXTERNAL_SHEET_TEMPLATE_ID");
+
+    if (!backupFolderId) {
+      throw new Error("ADMIN_COMBINED_BACKUP_FOLDER_ID is not configured.");
+    }
+
+    if (!templateId) {
+      throw new Error("EXTERNAL_SHEET_TEMPLATE_ID is not configured.");
+    }
+
+    const folder = DriveApp.getFolderById(backupFolderId);
+    const template = DriveApp.getFileById(templateId);
+
+    Logger.log("[AUTH][DRIVE] Drive access successful.");
+    Logger.log("[AUTH][DRIVE] Backup folder: " + folder.getName());
+    Logger.log("[AUTH][DRIVE] Template: " + template.getName());
+
+    // Verify the ability to create a copy.
     testCopy = template.makeCopy(
       "__GCB_DRIVE_AUTH_TEST__" + Date.now(),
       folder,
     );
 
-    Logger.log("makeCopy authorization successful.");
-    Logger.log("Test copy ID: " + testCopy.getId());
-    Logger.log("Test copy URL: " + testCopy.getUrl());
+    Logger.log("[AUTH][DRIVE] makeCopy authorization successful.");
+    Logger.log("[AUTH][DRIVE] Test copy ID: " + testCopy.getId());
+
+    return {
+      success: true,
+      service: "Google Drive",
+      folderName: folder.getName(),
+      templateName: template.getName(),
+    };
+
+  } catch (error) {
+    Logger.log(
+      "[AUTH][DRIVE][ERROR] " +
+        String(error?.message || error),
+    );
+
+    throw error;
+
   } finally {
-    // Remove the temporary test copy, if one was created.
     if (testCopy) {
-      testCopy.setTrashed(true);
-      Logger.log("Temporary test copy moved to Trash.");
+      try {
+        testCopy.setTrashed(true);
+        Logger.log("[AUTH][DRIVE] Temporary test copy moved to Trash.");
+
+      } catch (cleanupError) {
+        Logger.log(
+          "[AUTH][DRIVE][CLEANUP ERROR] " +
+            String(cleanupError?.message || cleanupError),
+        );
+      }
     }
+
+    Logger.log(
+      `[AUTH][DRIVE] Finished in ${Date.now() - startedAt}ms.`,
+    );
   }
 }
 
-// Re-authorize the Apps Script project: Running a function manually is the documented way to authorize newly required services when the script cannot prompt for authorization during an automated execution.
+/**
+ * Authorize external HTTP requests.
+ */
 function authorizeExternalRequests() {
-  const response = UrlFetchApp.fetch("https://www.google.com", {
-    muteHttpExceptions: true,
-  });
+  const startedAt = Date.now();
 
-  Logger.log("HTTP status: " + response.getResponseCode());
+  try {
+    Logger.log("[AUTH][URLFETCH] Starting authorization...");
+
+    const response = UrlFetchApp.fetch("https://www.google.com", {
+      muteHttpExceptions: true,
+      followRedirects: true,
+    });
+
+    const status = response.getResponseCode();
+
+    Logger.log("[AUTH][URLFETCH] External request authorization successful.");
+    Logger.log("[AUTH][URLFETCH] HTTP status: " + status);
+
+    return {
+      success: true,
+      service: "UrlFetchApp",
+      httpStatus: status,
+    };
+
+  } catch (error) {
+    Logger.log(
+      "[AUTH][URLFETCH][ERROR] " +
+        String(error?.message || error),
+    );
+
+    throw error;
+
+  } finally {
+    Logger.log(
+      `[AUTH][URLFETCH] Finished in ${Date.now() - startedAt}ms.`,
+    );
+  }
 }
 
-// Re-authorize the Apps Script project: Authorize without sending an actual email. This requests the MailApp authorization without sending an email.
+/**
+ * Authorize MailApp access without sending an email.
+ */
 function authorizeEmailAccess() {
-  MailApp.getRemainingDailyQuota();
+  const startedAt = Date.now();
+
+  try {
+    Logger.log("[AUTH][EMAIL] Starting authorization...");
+
+    const remainingQuota = MailApp.getRemainingDailyQuota();
+
+    Logger.log("[AUTH][EMAIL] MailApp authorization successful.");
+    Logger.log(
+      "[AUTH][EMAIL] Remaining daily recipient quota: " +
+        remainingQuota,
+    );
+
+    return {
+      success: true,
+      service: "MailApp",
+      remainingDailyQuota: remainingQuota,
+    };
+
+  } catch (error) {
+    Logger.log(
+      "[AUTH][EMAIL][ERROR] " +
+        String(error?.message || error),
+    );
+
+    throw error;
+
+  } finally {
+    Logger.log(
+      `[AUTH][EMAIL] Finished in ${Date.now() - startedAt}ms.`,
+    );
+  }
+}
+
+/**
+ * Authorize and verify Google Sheets access.
+ *
+ * Run manually once from the Apps Script editor
+ * using the account that deploys the web app.
+ */
+function authorizeSpreadsheetAccess() {
+  const startedAt = Date.now();
+  let testSpreadsheet = null;
+
+  try {
+    Logger.log("[AUTH][SPREADSHEETS] Starting authorization...");
+
+    // Create a temporary spreadsheet to trigger the required scope.
+    testSpreadsheet = SpreadsheetApp.create(
+      "__GCB_SPREADSHEETS_AUTH_TEST__" + Date.now(),
+    );
+
+    Logger.log("[AUTH][SPREADSHEETS] Test spreadsheet created.");
+    Logger.log(
+      "[AUTH][SPREADSHEETS] Spreadsheet ID: " +
+        testSpreadsheet.getId(),
+    );
+
+    // Explicitly verify the operation that failed in the OAuth callback.
+    const spreadsheet = SpreadsheetApp.openById(
+      testSpreadsheet.getId(),
+    );
+
+    const sheets = spreadsheet.getSheets();
+
+    Logger.log("[AUTH][SPREADSHEETS] openById authorization successful.");
+    Logger.log("[AUTH][SPREADSHEETS] Spreadsheet name: " + spreadsheet.getName());
+    Logger.log("[AUTH][SPREADSHEETS] Sheet count: " + sheets.length);
+
+    Logger.log("[AUTH][SPREADSHEETS] Authorization successful.");
+
+    return {
+      success: true,
+      service: "Google Sheets",
+      spreadsheetId: spreadsheet.getId(),
+      spreadsheetName: spreadsheet.getName(),
+      sheetCount: sheets.length,
+    };
+
+  } catch (error) {
+    Logger.log(
+      "[AUTH][SPREADSHEETS][ERROR] " +
+        String(error?.message || error),
+    );
+
+    throw error;
+
+  } finally {
+    if (testSpreadsheet) {
+      try {
+        DriveApp.getFileById(testSpreadsheet.getId()).setTrashed(true);
+
+        Logger.log(
+          "[AUTH][SPREADSHEETS] Temporary spreadsheet moved to Trash.",
+        );
+
+      } catch (cleanupError) {
+        Logger.log(
+          "[AUTH][SPREADSHEETS][CLEANUP ERROR] " +
+            String(cleanupError?.message || cleanupError),
+        );
+      }
+    }
+
+    Logger.log(
+      `[AUTH][SPREADSHEETS] Finished in ${Date.now() - startedAt}ms.`,
+    );
+  }
 }

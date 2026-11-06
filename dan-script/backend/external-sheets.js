@@ -211,16 +211,25 @@ function getExternalSheetsInternal(managerSpreadsheet) {
 }
 
 function getExternalProjectSheets_(externalSS) {
+  if (!externalSS) {
+    throw new Error("External spreadsheet is required.");
+  }
+
   const excludedSheetNames = new Set([
     "Projects",
     "BLANK",
-    GCB_HOURS_REQUEST_LEDGER_CONFIG.sheetName,
-    GCB_TODAY_HOURS_OPERATION_LEDGER.sheetName,
+    "__GCB_HOURS_REQUEST_LEDGER",
+    "__GCB_TODAY_HOURS_OPS",
   ]);
 
-  return externalSS
-    .getSheets()
-    .filter((sheet) => !excludedSheetNames.has(sheet.getName()));
+  const allSheets = externalSS.getSheets();
+
+  const projectSheets = allSheets.filter((sheet) => {
+    const sheetName = String(sheet.getName() || "").trim();
+    return !excludedSheetNames.has(sheetName);
+  });
+
+  return projectSheets;
 }
 
 function getExternalCreationJournal_(spreadsheet) {

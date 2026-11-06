@@ -39,7 +39,7 @@ const clientDetailsPage = (() => {
 
     if (!clientName) {
       console.error("No client selected.");
-      RouterModule.go("home");
+      returnToWorkingPage();
       return;
     }
 
@@ -87,6 +87,7 @@ const clientDetailsPage = (() => {
       const [sessionId, signature] = await getAuthArgs();
 
       if (pageToken !== RouterModule.getPageToken()) {
+        returnToWorkingPage();
         return;
       }
 
@@ -96,6 +97,7 @@ const clientDetailsPage = (() => {
 
         onSuccess: (exists) => {
           if (pageToken !== RouterModule.getPageToken()) {
+            returnToWorkingPage();
             return;
           }
 
@@ -111,7 +113,7 @@ const clientDetailsPage = (() => {
               "error",
             );
 
-            RouterModule.go("home");
+            returnToWorkingPage();
             return;
           }
 
@@ -121,10 +123,7 @@ const clientDetailsPage = (() => {
 
         onError: (error) => {
           console.error("[Client Details] Existence check failed:", error);
-
-          AppUtils.showError(
-            error?.message || "Failed to verify client sheet.",
-          );
+          returnToWorkingPage();
         },
       });
     } catch (error) {
@@ -736,6 +735,39 @@ const clientDetailsPage = (() => {
 
   function showError(message) {
     AppUtils.showError(message);
+  }
+
+  function returnToWorkingPage() {
+    const ns = "client-not-found";
+    const title = "Client Not Found";
+    const message =
+      "The selected or requested client could not be found. It may have been deleted, renamed, or is no longer available. Would you like to return to the homepage or go back to the previous page?";
+
+    AppUtils.openConfirmationModal({
+      ns,
+      title,
+      message,
+
+      showDefaultActions: false,
+
+      showBackButton: true,
+      showProceedButton: false,
+
+      showCloseButton: false,
+
+      customActions: [
+        {
+          label: "Go to Clients Page",
+          icon: "pe-7s-users",
+          className: "btn-gc",
+          onClick: () => {
+            AppUtils.closeModal("#app-modal");
+
+            RouterModule.go("clientDirectory");
+          },
+        },
+      ],
+    });
   }
 
   return {

@@ -27,10 +27,12 @@ const TodayHoursEditor = (() => {
     AppUtils.openModal(MODAL_ID, {
       size: "xl",
       placement: "center",
+      scrollable: true,
 
       header: "<strong>Edit Today's Hours</strong>",
 
       body: `
+      <div id="today-hours-main-body">
         <input
           type="hidden"
           id="${CLIENT_ID.slice(1)}"
@@ -42,26 +44,71 @@ const TodayHoursEditor = (() => {
             Loading today's records...
           </div>
         </div>
-      `,
+      </div>
+
+      <div id="today-hours-review-body" style="display: none;">
+        <div class="alert alert-info">
+          <i class="fa fa-info-circle me-1"></i>
+          Review the changes below before adding them to the request queue.
+        </div>
+
+        <div id="today-hours-review-content"></div>
+      </div>
+    `,
 
       footer: `
+      <!-- APP-MODAL-MAIN-ACTIONS -->
+      <div id="today-hours-main-footer" class="d-flex gap-2">
         <button type="button" class="btn btn-secondary btn-cancel">
           Cancel
         </button>
 
-        <button type="button" class="btn btn-gc btn-save">
-          Save Changes
+        <button type="button" class="btn btn-gc btn-review">
+          <i class="pe-7s-check me-1"></i>
+          Review Changes
         </button>
-      `,
+      </div>
+
+      <!-- APP-MODAL-REVIEW-ACTIONS -->
+      <div id="today-hours-review-footer" class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-modal-back">
+          Back
+        </button>
+
+        <button type="button" class="btn btn-gc btn-proceed">
+          <i class="pe-7s-plus me-1"></i>
+          Add to Request Queue
+        </button>
+      </div>
+    `,
+
+      review: {
+        enabled: true,
+
+        selectors: {
+          main: "#today-hours-main-body, #today-hours-main-footer",
+          review: "#today-hours-review-body, #today-hours-review-footer",
+          trigger: ".btn-review",
+          back: ".btn-modal-back",
+          proceed: ".btn-proceed",
+        },
+
+        getData: ($modal) => collectChanges($modal),
+
+        onReview: ($modal, data) => {
+          renderReview(data, $modal);
+        },
+
+        onProceed: ($modal, data) => {
+          return queueChanges(data);
+        },
+      },
 
       onOpen($modal) {
         $modal
           .off(ns)
           .on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
-          })
-          .on(`click${ns}`, ".btn-save", () => {
-            save($modal);
           })
           .on(`click${ns}`, ".btn-delete-today-hours", function () {
             markForDelete($(this));
@@ -74,6 +121,147 @@ const TodayHoursEditor = (() => {
         $modal.off(ns);
       },
     });
+  }
+
+  function collectChanges($modal) {
+    const clientName = String($modal.find(CLIENT_ID).val() || "").trim();
+
+    if (!clientName) {
+      AppUtils.showDashboardToast("Client is required.", "error");
+      return null;
+    }
+
+    const records = [];
+    let validationError = null;
+
+    $modal.find(".today-hours-record").each(function () {
+      const $row = $(this);
+
+      // Skip records that already have an active RequestManager operation.
+      if ($row.attr("data-pending-request-id")) {
+        return;
+      }
+
+      const sourceRowValue = $row.attr("data-source-row");
+
+      const record = {
+        row: Number($row.attr("data-row")),
+        action: $row.attr("data-action") === "delete" ? "delete" : "update",
+        sourceSheet: String($row.attr("data-source-sheet") || "").trim(),
+        sourceRow:
+          sourceRowValue === undefined || sourceRowValue === ""
+            ? null
+            : Number(sourceRowValue),
+        originalType: $row.attr("data-original-type"),
+        originalTask: $row.attr("data-original-task"),
+        originalHours: $row.attr("data-original-hours"),
+        originalDate: $row.attr("data-original-date"),
+      };
+
+      if (record.action !== "delete") {
+        record.type = String($row.find(".today-hours-type").val() || "").trim();
+
+        record.task = String($row.find(".today-hours-task").val() || "").trim();
+
+        record.hours = $row.find(".today-hours-hours").val();
+      }
+
+      const validation = todayHoursRecord(record);
+
+      if (!validation.valid) {
+        validationError = validation.message;
+        return false;
+      }
+
+      records.push(validation.value);
+    });
+
+    if (validationError) {
+      AppUtils.showDashboardToast(validationError, "error");
+      return null;
+    }
+
+    if (!records.length) {
+      AppUtils.showDashboardToast("No changes to save.", "info");
+      return null;
+    }
+
+    return {
+      client: clientName,
+      records,
+    };
+  }
+
+  function renderReview(data, $modal) {
+    const $container = $modal.find("#today-hours-review-content");
+
+    $container.empty();
+
+    $("<div>")
+      .addClass("fw-semibold mb-3")
+      .text(`Client: ${data.client}`)
+      .appendTo($container);
+
+    data.records.forEach((record, index) => {
+      const isDelete = record.action === "delete";
+
+      const $card = $("<div>").addClass("border rounded p-3 mb-3");
+
+      const $header = $("<div>").addClass(
+        "d-flex justify-content-between align-items-center gap-2 mb-2",
+      );
+
+      $("<strong>")
+        .text(`Record ${index + 1}`)
+        .appendTo($header);
+
+      $("<span>")
+        .addClass(`badge ${isDelete ? "bg-danger" : "bg-primary"}`)
+        .text(isDelete ? "Delete" : "Update")
+        .appendTo($header);
+
+      $card.append($header);
+
+      const addDetail = (label, value) => {
+        const $row = $("<div>").addClass(
+          "d-flex justify-content-between align-items-start gap-3 py-1",
+        );
+
+        $("<span>")
+          .addClass("text-muted flex-shrink-0")
+          .text(label)
+          .appendTo($row);
+
+        $("<span>")
+          .addClass("text-end text-break")
+          .text(
+            value === undefined || value === null || value === ""
+              ? "Not provided"
+              : String(value),
+          )
+          .appendTo($row);
+
+        $card.append($row);
+      };
+
+      addDetail("Date", record.originalDate);
+      addDetail("Type", isDelete ? record.originalType : record.type);
+      addDetail("Task / Project", isDelete ? record.originalTask : record.task);
+      addDetail("Hours", isDelete ? record.originalHours : record.hours);
+
+      if (record.sourceSheet) {
+        addDetail("Source sheet", record.sourceSheet);
+      }
+
+      $container.append($card);
+    });
+
+    $("<div>")
+      .addClass("small text-muted mt-2")
+      .text(
+        `${data.records.length} record(s) will be added to the request queue.`,
+      )
+      .appendTo($container);
   }
 
   function isModalAvailable($modal) {
@@ -443,85 +631,15 @@ const TodayHoursEditor = (() => {
       .addClass("btn-secondary");
   }
 
-  function save($modal) {
-    const $saveButton = $modal.find(".btn-save");
-    const clientName = String($modal.find(CLIENT_ID).val() || "").trim();
-
-    if (!clientName) {
-      AppUtils.showDashboardToast("Client is required.", "error");
-      return;
-    }
-
-    if ($saveButton.prop("disabled")) {
-      return;
-    }
-
-    const records = [];
-    let validationError = null;
-
-    $modal.find(".today-hours-record").each(function () {
-      const $row = $(this);
-
-      // This record already has an active RequestManager operation.
-      if ($row.attr("data-pending-request-id")) {
-        return;
-      }
-
-      const sourceRowValue = $row.attr("data-source-row");
-
-      const record = {
-        row: Number($row.attr("data-row")),
-        action: $row.attr("data-action") === "delete" ? "delete" : "update",
-        sourceSheet: String($row.attr("data-source-sheet") || "").trim(),
-        sourceRow:
-          sourceRowValue === undefined || sourceRowValue === ""
-            ? null
-            : Number(sourceRowValue),
-        originalType: $row.attr("data-original-type"),
-        originalTask: $row.attr("data-original-task"),
-        originalHours: $row.attr("data-original-hours"),
-        originalDate: $row.attr("data-original-date"),
-      };
-
-      if (record.action !== "delete") {
-        record.type = String($row.find(".today-hours-type").val() || "").trim();
-
-        record.task = String($row.find(".today-hours-task").val() || "").trim();
-
-        record.hours = $row.find(".today-hours-hours").val();
-      }
-
-      const validation = todayHoursRecord(record);
-
-      if (!validation.valid) {
-        validationError = validation.message;
-        return false;
-      }
-
-      records.push(validation.value);
-    });
-
-    if (validationError) {
-      AppUtils.showDashboardToast(validationError, "error");
-      return;
-    }
-
-    if (!records.length) {
-      AppUtils.showDashboardToast("No changes to save.", "info");
-      return;
-    }
-
+  function queueChanges(data) {
     try {
-      // Prevent duplicate submissions while enqueueing.
-      $saveButton.prop("disabled", true);
-
       RequestManager.enqueue(
         "edit-today-hours",
         {
-          client: clientName,
-          records,
+          client: data.client,
+          records: data.records,
         },
-        `Edit today's hours — ${clientName}`,
+        `Edit today's hours — ${data.client}`,
       );
 
       AppUtils.closeModal(MODAL_ID);
@@ -530,15 +648,17 @@ const TodayHoursEditor = (() => {
         "Today's hours changes added to the request queue.",
         "success",
       );
-    } catch (error) {
-      $saveButton.prop("disabled", false);
 
+      return true;
+    } catch (error) {
       console.error("[TodayHoursEditor] Unable to queue changes:", error);
 
       AppUtils.showDashboardToast(
         error?.message || "Unable to queue today's changes.",
         "error",
       );
+
+      return false;
     }
   }
 

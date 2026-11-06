@@ -5,7 +5,7 @@ const STATUS_PROPERTY_IDS = [
 ];
 
 function getPropertyStatus(sessionId, signature, propertyId) {
-  requireRole(sessionId, signature, "manager");
+  getManagerIntegrationContext_(sessionId, signature);
 
   const allowedPropertyId = Validation.enumValue(
     propertyId,
@@ -29,17 +29,13 @@ function getIntegrationStatus(sessionId, signature) {
 
   const properties = PropertiesService.getScriptProperties();
 
-  const notificationEmail = getManagerIntegrationValue_(
-    workspace.managerId,
-    "NOTIFICATION_EMAIL",
-  );
+  const notificationEmail = String(workspace.email || "").trim();
+  const discordWebhook = String(workspace.discordWebhookUrl || "").trim();
+  const asanaAccessToken = String(workspace.asanaAccessToken || "").trim();
 
-  const discordWebhook = getManagerIntegrationValue_(
-    workspace.managerId,
-    "DISCORD_WEBHOOK_URL",
-  );
-
-  const templateId = properties.getProperty("EXTERNAL_SHEET_TEMPLATE_ID");
+  const templateId = String(
+    properties.getProperty(EXTERNAL_SHEETS_CONFIG.templateProperty) || "",
+  ).trim();
 
   const getAuthorization = (integration) => {
     try {
@@ -66,6 +62,7 @@ function getIntegrationStatus(sessionId, signature) {
         configured: Boolean(notificationEmail),
         masked: notificationEmail ? maskSecret(notificationEmail) : null,
       },
+      readOnly: true,
     },
 
     discord: {
@@ -73,6 +70,18 @@ function getIntegrationStatus(sessionId, signature) {
       notifDiscord: {
         configured: Boolean(discordWebhook),
         masked: discordWebhook ? maskSecret(discordWebhook) : null,
+      },
+    },
+
+    asana: {
+      authorization: {
+        authorized: true,
+        service: "asana",
+        message: "Asana uses a manager-specific access token.",
+      },
+      asanaAccessToken: {
+        configured: Boolean(asanaAccessToken),
+        masked: asanaAccessToken ? maskSecret(asanaAccessToken) : null,
       },
     },
 
@@ -92,10 +101,10 @@ function getIntegrationStatus(sessionId, signature) {
 
     drive: {
       authorization: getAuthorization("drive"),
-      reportsFolderId: {
-        configured: Boolean(workspace.reportsFolderId),
-        masked: workspace.reportsFolderId
-          ? maskSecret(workspace.reportsFolderId)
+      externalSheetsFolderId: {
+        configured: Boolean(workspace.externalSheetsFolderId),
+        masked: workspace.externalSheetsFolderId
+          ? maskSecret(workspace.externalSheetsFolderId)
           : null,
       },
       backupFolderId: {
@@ -104,10 +113,10 @@ function getIntegrationStatus(sessionId, signature) {
           ? maskSecret(workspace.backupFolderId)
           : null,
       },
-      externalSheetsFolderId: {
-        configured: Boolean(workspace.externalSheetsFolderId),
-        masked: workspace.externalSheetsFolderId
-          ? maskSecret(workspace.externalSheetsFolderId)
+      reportsFolderId: {
+        configured: Boolean(workspace.reportsFolderId),
+        masked: workspace.reportsFolderId
+          ? maskSecret(workspace.reportsFolderId)
           : null,
       },
     },
@@ -125,7 +134,6 @@ function getIntegrationStatus(sessionId, signature) {
 
 function getIntegrationConfigStatus(sessionId, signature, integration) {
   const { workspace } = getManagerIntegrationContext_(sessionId, signature);
-
   const properties = PropertiesService.getScriptProperties();
 
   const integrationType = Validation.enumValue(integration, "integration", [
@@ -133,43 +141,54 @@ function getIntegrationConfigStatus(sessionId, signature, integration) {
     "discord",
     "sheets",
     "drive",
+    "asana",
   ]);
 
   switch (integrationType) {
     case "gmail": {
-      const value = getManagerIntegrationValue_(
-        workspace.managerId,
-        "NOTIFICATION_EMAIL",
-      );
+      const email = String(workspace.email || "").trim();
 
       return {
         fields: {
           notifEmail: {
-            configured: Boolean(value),
-            masked: value ? maskSecret(value) : null,
+            configured: Boolean(email),
+            masked: email ? maskSecret(email) : null,
+          },
+        },
+        readOnly: true,
+      };
+    }
+
+    case "discord": {
+      const webhook = String(workspace.discordWebhookUrl || "").trim();
+
+      return {
+        fields: {
+          notifDiscord: {
+            configured: Boolean(webhook),
+            masked: webhook ? maskSecret(webhook) : null,
           },
         },
       };
     }
 
-    case "discord": {
-      const value = getManagerIntegrationValue_(
-        workspace.managerId,
-        "DISCORD_WEBHOOK_URL",
-      );
+    case "asana": {
+      const token = String(workspace.asanaAccessToken || "").trim();
 
       return {
         fields: {
-          notifDiscord: {
-            configured: Boolean(value),
-            masked: value ? maskSecret(value) : null,
+          asanaAccessToken: {
+            configured: Boolean(token),
+            masked: token ? maskSecret(token) : null,
           },
         },
       };
     }
 
     case "sheets": {
-      const templateId = properties.getProperty("EXTERNAL_SHEET_TEMPLATE_ID");
+      const templateId = String(
+        properties.getProperty(EXTERNAL_SHEETS_CONFIG.templateProperty) || "",
+      ).trim();
 
       return {
         fields: {
@@ -191,10 +210,10 @@ function getIntegrationConfigStatus(sessionId, signature, integration) {
     case "drive":
       return {
         fields: {
-          reportFolderId: {
-            configured: Boolean(workspace.reportsFolderId),
-            masked: workspace.reportsFolderId
-              ? maskSecret(workspace.reportsFolderId)
+          externalSheetsFolderId: {
+            configured: Boolean(workspace.externalSheetsFolderId),
+            masked: workspace.externalSheetsFolderId
+              ? maskSecret(workspace.externalSheetsFolderId)
               : null,
           },
           backupFolderId: {
@@ -203,7 +222,13 @@ function getIntegrationConfigStatus(sessionId, signature, integration) {
               ? maskSecret(workspace.backupFolderId)
               : null,
           },
-          mainSheetsFolderId: {
+          reportsFolderId: {
+            configured: Boolean(workspace.reportsFolderId),
+            masked: workspace.reportsFolderId
+              ? maskSecret(workspace.reportsFolderId)
+              : null,
+          },
+          operationalSpreadsheetId: {
             configured: Boolean(workspace.spreadsheetId),
             masked: workspace.spreadsheetId
               ? maskSecret(workspace.spreadsheetId)
@@ -226,6 +251,7 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
     "discord",
     "sheets",
     "drive",
+    "asana",
   ]);
 
   switch (integrationType) {
@@ -236,12 +262,19 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
         message: "Discord does not require Google authorization.",
       };
 
+    case "asana":
+      return {
+        authorized: true,
+        service: "asana",
+        message: "Asana uses a manager-specific access token.",
+      };
+
     case "drive": {
       try {
         const folders = [
-          workspace.reportsFolderId,
-          workspace.backupFolderId,
           workspace.externalSheetsFolderId,
+          workspace.backupFolderId,
+          workspace.reportsFolderId,
         ].filter(Boolean);
 
         for (const folderId of folders) {
@@ -279,7 +312,7 @@ function getIntegrationAuthorizationStatus(sessionId, signature, integration) {
       }
 
       try {
-        const spreadsheet = getMainSpreadsheet(workspace.spreadsheetId);
+        const spreadsheet = openSpreadsheetById(workspace.spreadsheetId);
 
         return {
           authorized: true,
@@ -357,12 +390,13 @@ function getIntegrationAuthorizationMessage(integration, authorized) {
 }
 
 function getIntegrationAuthorizationUrl(sessionId, signature, integration) {
-  requireRole(sessionId, signature, "manager");
+  getManagerIntegrationContext_(sessionId, signature);
 
   const integrationType = Validation.enumValue(integration, "integration", [
     "gmail",
     "sheets",
     "drive",
+    "asana",
   ]);
 
   const scopeMap = {
@@ -371,10 +405,8 @@ function getIntegrationAuthorizationUrl(sessionId, signature, integration) {
     drive: "https://www.googleapis.com/auth/drive",
   };
 
-  const scope = scopeMap[integrationType];
-
   const authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL, [
-    scope,
+    scopeMap[integrationType],
   ]);
 
   if (
@@ -388,15 +420,15 @@ function getIntegrationAuthorizationUrl(sessionId, signature, integration) {
     };
   }
 
-  const authorizationUrl = authInfo.getAuthorizationUrl();
+  const url = authInfo.getAuthorizationUrl();
 
-  if (!authorizationUrl) {
+  if (!url) {
     throw new Error("Google authorization URL could not be generated.");
   }
 
   return {
     authorized: false,
-    url: authorizationUrl,
+    url,
     integration: integrationType,
   };
 }
@@ -421,13 +453,13 @@ function verifyDriveFolderAccess(folderId, label) {
 }
 
 function verifySpreadsheetAccess(spreadsheetId, label) {
-  Validation.spreadsheetId(spreadsheetId, label);
+  const validatedId = Validation.spreadsheetId(spreadsheetId, label);
 
   try {
-    const spreadsheet = getMainSpreadsheet(spreadsheetId);
+    const spreadsheet = openSpreadsheetById(validatedId);
 
     return {
-      id: spreadsheetId,
+      id: validatedId,
       name: spreadsheet.getName(),
       accessible: true,
     };
@@ -439,76 +471,170 @@ function verifySpreadsheetAccess(spreadsheetId, label) {
   }
 }
 
-function saveIntegration(sessionId, signature, integration, value) {
+function saveManagerDiscordWebhookProperty_(managerId, webhookUrl) {
+  const normalizedManagerId = String(managerId || "").trim();
+
+  if (!/^[A-Za-z0-9_-]+$/.test(normalizedManagerId)) {
+    throw new Error("Invalid manager ID.");
+  }
+
+  const normalizedWebhookUrl = String(webhookUrl || "").trim();
+
+  if (!normalizedWebhookUrl) {
+    throw new Error("A Discord webhook URL is required.");
+  }
+
+  const propertyKey = getManagerIntegrationPropertyKey_(
+    normalizedManagerId,
+    "DISCORD_WEBHOOK_URL",
+  );
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      propertyKey,
+      normalizedWebhookUrl,
+    );
+
+    return {
+      managerId: normalizedManagerId,
+      updated: true,
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveIntegration(
+  sessionId,
+  signature,
+  integration,
+  value,
+  requestId = "",
+) {
   const { workspace } = getManagerIntegrationContext_(sessionId, signature);
 
   const startedAt = Date.now();
-  const properties = PropertiesService.getScriptProperties();
+  const managerId = workspace.managerId || "";
 
-  const integrationType = Validation.enumValue(integration, "integration", [
-    "gmail",
-    "discord",
-    "sheets",
-    "drive",
-  ]);
+  let integrationType = "UNKNOWN";
+  let updatedSettings = [];
 
-  if (!["gmail", "discord"].includes(integrationType)) {
-    throw new Error(
-      "This integration is managed centrally or through the manager registry and cannot be changed here.",
-    );
+  try {
+    integrationType = Validation.enumValue(integration, "integration", [
+      "gmail",
+      "discord",
+      "sheets",
+      "drive",
+      "asana",
+    ]);
+
+    if (integrationType === "gmail") {
+      throw new Error(
+        "The Gmail recipient is managed by the manager registry Login Email and cannot be changed here.",
+      );
+    }
+
+    if (!["discord", "asana"].includes(integrationType)) {
+      throw new Error(
+        "This integration is assigned through the manager registry and cannot be changed here.",
+      );
+    }
+
+    const cleanValue = Validation.requiredString(value, "Configuration value", {
+      maxLength: 500,
+    });
+
+    if (integrationType === "discord") {
+      const validatedValue = Validation.discordWebhook(
+        cleanValue,
+        "Discord webhook",
+      );
+
+      saveManagerDiscordWebhookProperty_(managerId, validatedValue);
+
+      updatedSettings = ["Discord Webhook URL"];
+    }
+
+    if (integrationType === "asana") {
+      saveManagerAsanaAccessTokenProperty_(managerId, cleanValue);
+
+      updatedSettings = ["Asana Access Token"];
+    }
+
+    logIntegrationSave_({
+      integration: integrationType,
+      updatedSettings,
+      startedAt,
+      requestId,
+      managerId,
+      status: "SUCCESS",
+    });
+
+    return {
+      success: true,
+      integration: integrationType,
+      managerId,
+    };
+  } catch (error) {
+    logIntegrationSave_({
+      integration: integrationType,
+      updatedSettings,
+      startedAt,
+      requestId,
+      managerId,
+      status: "FAILED",
+      error,
+    });
+
+    throw error;
   }
-
-  const cleanValue = Validation.requiredString(value, "Configuration value", {
-    maxLength: 500,
-  });
-
-  let propertyName;
-  let validatedValue;
-
-  if (integrationType === "gmail") {
-    validatedValue = Validation.email(cleanValue, "Notification email");
-
-    propertyName = getManagerIntegrationPropertyKey_(
-      workspace.managerId,
-      "NOTIFICATION_EMAIL",
-    );
-  } else {
-    validatedValue = Validation.discordWebhook(cleanValue, "Discord webhook");
-
-    propertyName = getManagerIntegrationPropertyKey_(
-      workspace.managerId,
-      "DISCORD_WEBHOOK_URL",
-    );
-  }
-
-  properties.setProperty(propertyName, validatedValue);
-
-  logIntegrationSave_(integrationType, [propertyName], startedAt);
-
-  return {
-    success: true,
-    integration: integrationType,
-    managerId: workspace.managerId,
-  };
 }
 
-function logIntegrationSave_(integration, updatedSettings, startedAt) {
-  recordGcbOperationLog_({
-    timestamp: new Date(),
-    category: "INTEGRATION",
-    operation: "SAVE_INTEGRATION",
-    status: "SUCCESS",
-    trigger: "MANUAL",
-    durationMs: Date.now() - startedAt,
-    processed: updatedSettings.length,
-    succeeded: updatedSettings.length,
-    failed: 0,
-    target: integration,
-    message: updatedSettings.length
-      ? `Updated settings: ${updatedSettings.join(", ")}.`
-      : "Integration save completed; no settings were changed.",
-    error: "",
-  });
+function logIntegrationSave_({
+  integration = "UNKNOWN",
+  updatedSettings = [],
+  startedAt = Date.now(),
+  requestId = "",
+  managerId = "",
+  status = "UNKNOWN",
+  error = null,
+} = {}) {
+  try {
+    const completedAt = Date.now();
+
+    const settings = Array.isArray(updatedSettings) ? updatedSettings : [];
+
+    recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
+      category: "INTEGRATION",
+      operation: "SAVE_INTEGRATION",
+      status,
+      trigger: "MANUAL",
+      durationMs: Math.max(0, completedAt - startedAt),
+      processed: 1,
+      succeeded: status === "SUCCESS" ? 1 : 0,
+      failed: status === "FAILED" ? 1 : 0,
+      target: integration,
+      message: settings.length
+        ? `Updated settings: ${settings.join(", ")}.`
+        : status === "FAILED"
+          ? "Integration configuration update failed."
+          : "Integration save completed; no settings were changed.",
+      error: error ? String(error.message || error).slice(0, 2000) : "",
+    });
+  } catch (logError) {
+    console.error(
+      "[Integration] Failed to write operation log:",
+      logError?.message || logError,
+    );
+  }
 }
 
 function getManagerIntegrationContext_(sessionId, signature) {
@@ -532,17 +658,86 @@ function getManagerIntegrationPropertyKey_(managerId, setting) {
     throw new Error("Invalid manager ID.");
   }
 
-  const allowedSettings = ["NOTIFICATION_EMAIL", "DISCORD_WEBHOOK_URL"];
+  const allowedSettings = [
+    "NOTIFICATION_EMAIL",
+    "DISCORD_WEBHOOK_URL",
+    "ASANA_ACCESS_TOKEN",
+  ];
 
   if (!allowedSettings.includes(setting)) {
     throw new Error("Unsupported manager integration setting.");
   }
 
-  return `GCB_MANAGER_${id}_${setting}`;
+  return `MANAGER_${id}_${setting}`;
 }
 
 function getManagerIntegrationValue_(managerId, setting) {
-  const key = getManagerIntegrationPropertyKey_(managerId, setting);
+  const normalizedManagerId = String(managerId || "").trim();
 
-  return PropertiesService.getScriptProperties().getProperty(key);
+  if (!/^[A-Za-z0-9_-]+$/.test(normalizedManagerId)) {
+    throw new Error("Invalid manager ID.");
+  }
+
+  const managers = getManagers_();
+
+  const matches = managers.filter(
+    (manager) => manager.managerId === normalizedManagerId,
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      matches.length === 0
+        ? `Enabled manager ${normalizedManagerId} was not found.`
+        : `Manager ${normalizedManagerId} appears more than once.`,
+    );
+  }
+
+  const manager = matches[0];
+
+  switch (setting) {
+    case "NOTIFICATION_EMAIL":
+      return String(manager.email || "").trim();
+
+    case "DISCORD_WEBHOOK_URL":
+      return String(manager.discordWebhookUrl || "").trim();
+
+    default:
+      throw new Error("Unsupported manager integration setting.");
+  }
+}
+
+function saveManagerAsanaAccessTokenProperty_(managerId, accessToken) {
+  const normalizedManagerId = String(managerId || "").trim();
+
+  if (!/^[A-Za-z0-9_-]+$/.test(normalizedManagerId)) {
+    throw new Error("Invalid manager ID.");
+  }
+
+  const normalizedAccessToken = String(accessToken || "").trim();
+
+  if (!normalizedAccessToken) {
+    throw new Error("An Asana access token is required.");
+  }
+
+  const propertyKey = getManagerIntegrationPropertyKey_(
+    normalizedManagerId,
+    "ASANA_ACCESS_TOKEN",
+  );
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      propertyKey,
+      normalizedAccessToken,
+    );
+
+    return {
+      managerId: normalizedManagerId,
+      updated: true,
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }

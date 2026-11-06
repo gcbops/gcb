@@ -7,6 +7,7 @@ import {
   handleInvalidSessionError,
 } from "../auth/auth-error-handler.js";
 import { RouterModule } from "../routers.js";
+import { ProfilePopoverModule } from "../clients/profile-popover.js";
 
 const TableModule = (() => {
   /* ============================================================
@@ -70,6 +71,45 @@ const TableModule = (() => {
           }
         },
       );
+
+    $tbody
+      .off("click.activityProfile")
+      .on(
+        "click.activityProfile",
+        "[data-profile-click-popover]",
+        function (e) {
+          e.preventDefault();
+
+          const $td = $(this);
+
+          const clientName = String($td.attr("data-client-name") || "").trim();
+
+          const asanaUrl = String($td.attr("data-asana-url") || "").trim();
+
+          if (!clientName) {
+            return;
+          }
+
+          ProfilePopoverModule.toggle(this, {
+            name: clientName,
+            asanaUrl: asanaUrl,
+          });
+        },
+      );
+
+    /*
+     * Asana link modal
+     */
+    $tbody
+      .off("click.activityAsana")
+      .on("click.activityAsana", ".asana-link-trigger", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const url = String($(this).attr("data-asana-url") || "").trim();
+
+        ProfilePopoverModule.openAsanaModal(url);
+      });
   }
 
   /* ============================================================

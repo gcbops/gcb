@@ -30,15 +30,9 @@
                         class="integration-status"
                     ></span>
 
-                    <button
-                        type="button"
-                        class="btn btn-outline-gc btn-sm"
-                        data-required-role="manager"
-                        data-integration-configure
-                        data-integration="gmail"
-                    >
-                        Configure
-                    </button>
+                    <span class="integration-managed-label">
+                        Managed in registry
+                    </span>
                 </div>
 
             </div>
@@ -75,15 +69,9 @@
                         class="integration-status"
                     ></span>
 
-                    <button
-                        type="button"
-                        class="btn btn-outline-gc btn-sm"
-                        data-required-role="manager"
-                        data-integration-configure
-                        data-integration="drive"
-                    >
-                        Configure
-                    </button>
+                    <span class="integration-managed-label">
+                        Managed in registry
+                    </span>
                 </div>
 
             </div>
@@ -120,15 +108,9 @@
                         class="integration-status"
                     ></span>
 
-                    <button
-                        type="button"
-                        class="btn btn-outline-gc btn-sm"
-                        data-required-role="manager"
-                        data-integration-configure
-                        data-integration="sheets"
-                    >
-                        Configure
-                    </button>
+                    <span class="integration-managed-label">
+                        Managed in registry
+                    </span>
                 </div>
 
             </div>
@@ -164,12 +146,10 @@
 
                     <button
                         type="button"
-                        class="btn btn-outline-gc btn-sm"
-                        data-required-role="manager"
-                        data-integration-configure
-                        data-integration="calendar"
+                        class="btn btn-outline-secondary btn-sm"
+                        disabled
                     >
-                        Configure
+                        Coming Soon
                     </button>
                 </div>
 
@@ -213,6 +193,51 @@
                         data-required-role="manager"
                         data-integration-configure
                         data-integration="discord"
+                    >
+                        Configure
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ASANA -->
+    <div class="col-md-6 col-xl-4">
+        <div class="card skeleton-target integration-card">
+            <div class="card-body">
+
+                <div class="integration-card-header">
+                    <div class="integration-logo">
+                        <img
+                            src="https://s15.gifyu.com/images/bWDTF.png"
+                            alt="Asana"
+                        >
+                    </div>
+
+                    <div class="integration-info">
+                        <h5 class="integration-title">
+                            Asana
+                        </h5>
+
+                        <p class="integration-description">
+                            Connect Asana to retrieve task details and comments.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="integration-card-footer">
+                    <span
+                        id="asanaIntegrationStatus"
+                        class="integration-status"
+                    ></span>
+
+                    <button
+                        type="button"
+                        class="btn btn-outline-gc btn-sm"
+                        data-required-role="manager"
+                        data-integration-configure
+                        data-integration="asana"
                     >
                         Configure
                     </button>

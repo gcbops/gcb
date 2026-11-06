@@ -426,17 +426,14 @@ const RequestManager = (() => {
         }
 
         if (
-          ["record-hours", "update-client-record-status"].includes(
-            request.type,
-          )
+          ["record-hours", "update-client-record-status"].includes(request.type)
         ) {
           const batchDelay =
             request.type === "record-hours"
               ? HOURS_BATCH_DELAY
               : STATUS_BATCH_DELAY;
 
-          const remainingDelay =
-            batchDelay - (Date.now() - request.updatedAt);
+          const remainingDelay = batchDelay - (Date.now() - request.updatedAt);
 
           if (remainingDelay > 0) {
             scheduleProcessQueue(remainingDelay);
@@ -460,12 +457,7 @@ const RequestManager = (() => {
           });
 
           if (result?.cancelled === true) {
-            finishRequest(
-              request,
-              "cancelled",
-              "Cancelled by user",
-              result,
-            );
+            finishRequest(request, "cancelled", "Cancelled by user", result);
 
             continue;
           }
@@ -476,9 +468,7 @@ const RequestManager = (() => {
             request,
             "failed",
             error?.message || "Request failed",
-            error?.results
-              ? { results: error.results }
-              : null,
+            error?.results ? { results: error.results } : null,
           );
         }
       }

@@ -1,6 +1,5 @@
 import { ReportService } from "./service";
 import { AppUtils } from "../utils/utils.js";
-import { ReportGenerator } from "./generator";
 import { ValidationModule } from "../utils/validations.js";
 import { RequestManager } from "../requests/request-manager.js";
 import {
@@ -141,7 +140,7 @@ const ReportActions = (() => {
         {
           reportId: String(reportId),
           reportType,
-          isBillingReport,
+          isDataExport: isBillingReport,
         },
         isBillingReport ? "Email Billing Records CSV" : "Email report",
       );
@@ -151,6 +150,11 @@ const ReportActions = (() => {
         "success",
       );
     } catch (error) {
+      console.error(
+        "[Email] Failed to queue latest report email:",
+        error,
+      );
+
       AppUtils.showError(error?.message || "Unable to queue report email.");
     }
   };
@@ -171,7 +175,7 @@ const ReportActions = (() => {
         {
           reportId: String(reportId),
           reportType,
-          isBillingReport,
+          isDataExport: isBillingReport,
         },
         isBillingReport
           ? "Send Billing Records CSV to Discord"
@@ -183,13 +187,34 @@ const ReportActions = (() => {
         "success",
       );
     } catch (error) {
-      AppUtils.showError(error?.message || "Unable to queue Discord delivery.");
+      console.error(
+        "[Discord] Failed to queue latest report on discord:",
+        error,
+      );
+
+      AppUtils.showError(error?.message || "Unable to queue latest report on discord.");
+    }
+  };
+
+  const queueReportGeneration = (payload, label) => {
+    try {
+      RequestManager.enqueue("generate-report", payload, label);
+
+      AppUtils.showDashboardToast(
+        `${label} added to the request queue.`,
+        "success",
+      );
+    } catch (error) {
+      console.error("[Reports] Failed to queue report generation:", error);
+
+      AppUtils.showError(
+        error?.message || `Unable to queue ${label.toLowerCase()}.`,
+      );
     }
   };
 
   const handleBtnGenerateYearlyReport = async ($btn) => {
     const selectYear = $("#yearly-report-year");
-    const type = "yearly";
 
     const yearResult = ValidationModule.number(
       selectYear.val(),
@@ -207,62 +232,10 @@ const ReportActions = (() => {
 
     const year = yearResult.value;
 
-    selectYear.prop("disabled", true);
-
-    const loading = AppUtils.setButtonLoading(
-      $btn[0],
-      "Analyzing Report Request...",
+    queueReportGeneration(
+      { type: "yearly", year },
+      `Generate annual report — ${year}`,
     );
-
-    try {
-      const [sessionId, signature] = await getAuthArgs();
-
-      AppUtils.gScriptRun({
-        gscriptFunc: "validateCustomYearlyReport",
-        args: [sessionId, signature, year],
-
-        onSuccess: (result) => {
-
-          ReportGenerator.setGenerateState(type, false, loading);
-
-          if (!result.valid) {
-            AppUtils.showDashboardToast(result.message, "warning");
-
-            return;
-          }
-
-          RequestManager.enqueue(
-            "generate-report",
-            { type: "yearly", year },
-            `Generate annual report — ${year}`,
-          );
-        },
-
-        onError: (err) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-
-          console.error(err);
-
-          AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error",
-          );
-        },
-      });
-    } catch (error) {
-      ReportGenerator.setGenerateState(type, false, loading);
-
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
-
-      console.error(error);
-
-      AppUtils.showDashboardToast(
-        error?.message || "Unable to validate custom yearly report.",
-        "error",
-      );
-    }
   };
 
   const handleBtnGenerateMonthlyReport = async ($btn) => {
@@ -296,77 +269,77 @@ const ReportActions = (() => {
 
     const month = monthResult.value;
     const year = yearResult.value;
-    const type = "monthly";
 
-    selectMonth.prop("disabled", true);
-    selectYear.prop("disabled", true);
-
-    const loading = AppUtils.setButtonLoading(
-      $btn[0],
-      "Analyzing Report Request...",
+    queueReportGeneration(
+      { type: "monthly", month, year },
+      `Generate monthly report — ${month} ${year}`,
     );
+  };
+
+  const handleEmailLatestReport = ($btn, reportType) => {
+    const report = getLatestReport(reportType);
+
+    if (!report) {
+      AppUtils.showError("No latest report is available to email.");
+      return;
+    }
 
     try {
-      const [sessionId, signature] = await getAuthArgs();
-
-      AppUtils.gScriptRun({
-        gscriptFunc: "validateCustomMonthlyReport",
-        args: [sessionId, signature, month, year],
-
-        onSuccess: (result) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-          
-          if (!result.valid) {
-            AppUtils.showDashboardToast(result.message, "warning");
-            return;
-          }
-
-          RequestManager.enqueue(
-            "generate-report",
-            { type: "monthly", month, year },
-            `Generate monthly report — ${month} ${year}`,
-          );
+      RequestManager.enqueue(
+        "send-report-email",
+        {
+          isLatestReport: true,
+          report,
+          reportType,
+          isDataExport: false,
         },
-
-        onError: (err) => {
-          ReportGenerator.setGenerateState(type, false, loading);
-
-          console.error(err);
-
-          AppUtils.showDashboardToast(
-            err.message || "Something went wrong.",
-            "error",
-          );
-        },
-      });
-    } catch (error) {
-      ReportGenerator.setGenerateState(type, false, loading);
-
-      console.error(error);
-
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
+        `Email latest ${reportType} report`,
+      );
 
       AppUtils.showDashboardToast(
-        error?.message || "Unable to validate custom monthly report.",
-        "error",
+        "Latest report email added to the request queue.",
+        "success",
+      );
+    } catch (error) {
+      console.error("[Email] Failed to queue latest report email:", error);
+      
+      AppUtils.showError(
+        error?.message || "Unable to queue latest report email.",
       );
     }
   };
 
-  const handleEmailLatestReport = ($btn, reportType) => {
-    // const loading = AppUtils.setButtonLoading($btn[0], false, true);
-    const loading = false;
-
-    emailLatestReport($btn, loading, reportType);
-  };
-
   const handleSendDiscordNotification = ($btn, reportType) => {
-    // const loading = AppUtils.setButtonLoading($btn[0], false, true);
-    const loading = false;
+    const report = getLatestReport(reportType);
 
-    sendLatestReportToDiscord($btn, loading, reportType);
+    if (!report) {
+      AppUtils.showError("No latest report is available to send.");
+      return;
+    }
+
+    try {
+      RequestManager.enqueue(
+        "send-report-discord",
+        {
+          isLatestReport: true,
+          report,
+          reportType,
+          isDataExport: false,
+        },
+        `Send latest ${reportType} report to Discord`,
+      );
+
+      AppUtils.showDashboardToast(
+        "Latest report Discord delivery added to the request queue.",
+        "success",
+      );
+    } catch (error) {
+      console.error("[Discord] Failed to queue latest report on discord:", error);
+
+      AppUtils.showError(
+        error?.message || "Unable to queue latest report on discord.",
+      );
+    }
   };
 
   return {

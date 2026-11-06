@@ -319,6 +319,7 @@ const AppUtils = (() => {
     log = false,
     reset = false,
     expiry = CACHE_EXPIRY.DAY,
+    onFreshData = null,
   ) {
     const cached = cacheGet(cacheKey, expiry);
 
@@ -371,6 +372,10 @@ const AppUtils = (() => {
 
         if (typeof callback === "function") {
           callback(data);
+        }
+
+        if (typeof onFreshData === "function") {
+          onFreshData(data);
         }
       },
 
@@ -708,6 +713,14 @@ const AppUtils = (() => {
      */
     if (duration > 0) {
       window.setTimeout(removeToast, duration);
+    }
+  }
+
+  function clearDashboardToasts() {
+    const container = document.getElementById("dashboard-toast-container");
+
+    if (container) {
+      container.remove();
     }
   }
 
@@ -1056,6 +1069,7 @@ const AppUtils = (() => {
       closable = true,
       scrollable = false,
       centered = false,
+      review = null,
       onOpen = null,
       onClose = null,
     } = options;
@@ -1385,8 +1399,192 @@ const AppUtils = (() => {
       },
     );
 
-    if ($modal.find("select.js-select2, select.js-select2-dynamic").length) {
-      Select2Module.init($modal);
+    /*
+     * ------------------------------------------------------------
+     * Centralized modal review workflow
+     * ------------------------------------------------------------
+     */
+
+    let reviewedData = null;
+    let reviewSubmitting = false;
+
+    if (review?.enabled) {
+      const selectors = {
+        main: "#main-modal-body, #main-modal-footer",
+        review: "#review-modal-body, #review-modal-footer",
+        trigger: ".btn-review",
+        back: ".btn-modal-back",
+        proceed: ".btn-proceed",
+        ...review.selectors,
+      };
+
+      const $reviewButtons = () => $modal.find(selectors.proceed);
+
+      const showStep = (step) => {
+        const isReview = step === "review";
+
+        const $main = $modal.find(selectors.main);
+        const $review = $modal.find(selectors.review);
+
+        $main.toggleClass("d-none", isReview).toggle(!isReview);
+
+        $review.toggleClass("d-none", !isReview).toggle(isReview);
+      };
+
+      /*
+       * Release the submission guard.
+       *
+       * Used only when the operation was not accepted.
+       */
+      const releaseSubmission = () => {
+        reviewSubmitting = false;
+
+        $reviewButtons()
+          .prop("disabled", false)
+          .removeAttr("aria-disabled")
+          .removeClass("disabled");
+
+        unlockModal(`#${modalEl.id}`);
+      };
+
+      /*
+       * Main form -> Review.
+       */
+      $modal.on("click.AppUtilsModal", selectors.trigger, function (event) {
+        event.preventDefault();
+
+        if (reviewSubmitting) {
+          return;
+        }
+
+        if (typeof review.getData !== "function") {
+          console.error(
+            "AppUtils.openModal: review.getData must be a function.",
+          );
+          return;
+        }
+
+        const data = review.getData($modal);
+
+        // Returning null or false prevents proceeding to review.
+        if (data === null || data === false) {
+          return;
+        }
+
+        reviewedData = data;
+
+        if (typeof review.onReview === "function") {
+          review.onReview($modal, reviewedData);
+        }
+
+        showStep("review");
+      });
+
+      /*
+       * Review -> Main form.
+       */
+      $modal.on("click.AppUtilsModal", selectors.back, function (event) {
+        event.preventDefault();
+
+        if (reviewSubmitting) {
+          return;
+        }
+
+        const previousData = reviewedData;
+
+        reviewedData = null;
+
+        if (typeof review.onBack === "function") {
+          review.onBack($modal, previousData);
+        }
+
+        showStep("main");
+      });
+
+      /*
+       * Confirm and proceed.
+       */
+      $modal.on("click.AppUtilsModal", selectors.proceed, function (event) {
+        event.preventDefault();
+
+        // Prevent duplicate submissions.
+        if (reviewSubmitting) {
+          return;
+        }
+
+        if (reviewedData === null) {
+          console.warn(
+            "AppUtils.openModal: Review must be completed before proceeding.",
+          );
+
+          showStep("main");
+          return;
+        }
+
+        if (typeof review.onProceed !== "function") {
+          console.error(
+            "AppUtils.openModal: review.onProceed must be a function.",
+          );
+          return;
+        }
+
+        reviewSubmitting = true;
+
+        const $btn = $(this);
+
+        $reviewButtons()
+          .prop("disabled", true)
+          .attr("aria-disabled", "true")
+          .addClass("disabled");
+
+        /*
+         * Lock the modal against accidental dismissal.
+         */
+        lockModal(`#${modalEl.id}`);
+
+        let result;
+
+        try {
+          result = review.onProceed($modal, reviewedData, $btn, {
+            release: releaseSubmission,
+          });
+        } catch (error) {
+          console.error("AppUtils.openModal: Review submission failed.", error);
+
+          releaseSubmission();
+          return;
+        }
+
+        /*
+         * Support synchronous and asynchronous callbacks.
+         *
+         * false = operation rejected; release the guard.
+         * undefined / true = accepted; keep the modal locked.
+         */
+        if (result && typeof result.then === "function") {
+          result
+            .then((accepted) => {
+              if (accepted === false) {
+                releaseSubmission();
+              }
+            })
+            .catch((error) => {
+              console.error(
+                "AppUtils.openModal: Review submission failed.",
+                error,
+              );
+
+              releaseSubmission();
+            });
+        } else if (result === false) {
+          releaseSubmission();
+        }
+      });
+
+      $modal.find(review.selectors.main).show();
+      $modal.find(review.selectors.review).hide();
+
+      showStep("main");
     }
 
     /*
@@ -1398,6 +1596,10 @@ const AppUtils = (() => {
      */
     if (typeof onOpen === "function") {
       onOpen($modal, $dialog, $content);
+    }
+
+    if ($modal.find("select.js-select2, select.js-select2-dynamic").length) {
+      Select2Module.init($modal);
     }
 
     /*
@@ -1436,13 +1638,13 @@ const AppUtils = (() => {
      * Use Bootstrap's native data API.
      */
     const $trigger = $(`
-    <button
-      type="button"
-      class="d-none"
-      data-bs-toggle="modal"
-      data-bs-target="#${modalEl.id}">
-    </button>
-  `);
+      <button
+        type="button"
+        class="d-none"
+        data-bs-toggle="modal"
+        data-bs-target="#${modalEl.id}">
+      </button>
+    `);
 
     $("body").append($trigger);
 
@@ -1494,7 +1696,7 @@ const AppUtils = (() => {
   //   ],
   // },
 
-  function closeModal(modalSelector) {
+  function closeModal(modalSelector = "#app-modal") {
     const $modal = $(modalSelector);
 
     if (!$modal.length) {
@@ -1503,44 +1705,33 @@ const AppUtils = (() => {
 
     const modalEl = $modal[0];
 
-    /*
-     * Destroy Select2 instances before Bootstrap
-     * hides and clears the modal content.
-     */
+    // Destroy Select2 instances before hiding.
     Select2Module.destroy($modal);
 
+    // Remove the review submission lock.
+    unlockModal(modalSelector);
+
+    // Remove focus from elements inside the modal.
     const focusedInside = modalEl.querySelector(":focus");
 
     if (focusedInside) {
       focusedInside.blur();
     }
 
-    document.body.focus();
+    // Restore focus to the document.
+    document.activeElement?.blur();
 
-    /*
-     * DashboardPack bundles Bootstrap internally but does not expose
-     * window.bootstrap.
-     *
-     * Use Bootstrap's native data API instead of bootstrap.Modal.
-     */
+    // Close through Bootstrap's existing jQuery data API.
     const $closeTrigger = $(`
-    <button
-      type="button"
-      class="d-none"
-      data-bs-dismiss="modal">
-    </button>
-  `);
+      <button
+        type="button"
+        class="d-none"
+        data-bs-dismiss="modal">
+      </button>
+    `);
 
     $modal.append($closeTrigger);
-
-    /*
-     * Let DashboardPack's Bootstrap instance hide the modal.
-     */
     $closeTrigger.trigger("click");
-
-    /*
-     * The temporary trigger is no longer needed.
-     */
     $closeTrigger.remove();
   }
 
@@ -1592,6 +1783,9 @@ const AppUtils = (() => {
     onProceed,
     onBack,
     customActions = [],
+    showBackButton = true,
+    showProceedButton = true,
+    showCloseButton = true,
   }) {
     const eventNs = ns
       ? `.AppUtilsConfirmation${ns.startsWith(".") ? ns : `.${ns}`}`
@@ -1702,42 +1896,55 @@ const AppUtils = (() => {
         size: "md",
         placement: "center",
 
+        closable: showCloseButton,
+
         header: "<div></div>",
 
         body: `
-        <div id="review-modal-body">
-          <h5 class="modal-title mb-2">
-            <strong>${title}</strong>
-          </h5>
+          <div id="review-modal-body">
+            <h5 class="modal-title mb-2">
+              <strong>${title}</strong>
+            </h5>
 
-          <p>${message}</p>
-        </div>
-      `,
+            <p>${message}</p>
+          </div>
+        `,
 
         footer: `
-        <div
-          id="review-modal-footer"
-          class="d-flex gap-2 flex-wrap justify-content-center"
-        >
-
-          ${buildCustomActions()}
-
-          <button
-            type="button"
-            class="btn btn-secondary btn-modal-back"
+          <div
+            id="review-modal-footer"
+            class="d-flex gap-2 flex-wrap justify-content-center"
           >
-            Cancel
-          </button>
 
-          <button
-            type="button"
-            class="btn btn-gc btn-proceed"
-          >
-            Proceed
-          </button>
+            ${
+              showBackButton
+                ? `
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-modal-back"
+                >
+                  Cancel
+                </button>
+              `
+                : ""
+            }
 
-        </div>
-      `,
+            ${
+              showProceedButton
+                ? `
+                  <button
+                    type="button"
+                    class="btn btn-gc btn-proceed"
+                  >
+                    Proceed
+                  </button>
+                `
+                : ""
+            }
+
+            ${buildCustomActions()}
+          </div>
+        `,
       });
 
       /*
@@ -1748,30 +1955,34 @@ const AppUtils = (() => {
       /*
        * Cancel / Back.
        */
-      $appModal.on(`click${eventNs}`, ".btn-modal-back", function (event) {
-        event.preventDefault();
+      if (showBackButton) {
+        $appModal.on(`click${eventNs}`, ".btn-modal-back", function (event) {
+          event.preventDefault();
 
-        $appModal.off(".AppUtilsConfirmation");
+          $appModal.off(".AppUtilsConfirmation");
 
-        if (typeof onBack === "function") {
-          onBack($appModal);
-        } else {
-          AppUtils.closeModal("#app-modal");
-        }
-      });
+          if (typeof onBack === "function") {
+            onBack($appModal);
+          } else {
+            AppUtils.closeModal("#app-modal");
+          }
+        });
+      }
 
       /*
        * Proceed.
        */
-      $appModal.on(`click${eventNs}`, ".btn-proceed", function (event) {
-        event.preventDefault();
+      if (showProceedButton) {
+        $appModal.on(`click${eventNs}`, ".btn-proceed", function (event) {
+          event.preventDefault();
 
-        const $btn = $(this);
+          const $btn = $(this);
 
-        if (typeof onProceed === "function") {
-          onProceed($appModal, $btn);
-        }
-      });
+          if (typeof onProceed === "function") {
+            onProceed($appModal, $btn);
+          }
+        });
+      }
 
       /*
        * Custom actions.
@@ -1801,7 +2012,7 @@ const AppUtils = (() => {
           action.onClick($appModal, $btn);
         }
       });
-    };
+    };;
 
     /*
      * If #app-modal is currently open, wait until Bootstrap
@@ -1912,6 +2123,7 @@ const AppUtils = (() => {
     checkScreen,
 
     showDashboardToast,
+    clearDashboardToasts,
     submitForm,
     setButtonLoading,
 

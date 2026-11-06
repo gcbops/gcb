@@ -12,6 +12,7 @@ const ReportGenerator = (() => {
 
   const REPORT_MAX_ATTEMPTS = 30;
   const REPORT_CHECK_INTERVAL = 5000;
+  const REPORT_PROGRESS_POLL_INTERVAL = 1500;
 
   const CONFIG = {
     yearly: {
@@ -225,7 +226,6 @@ const ReportGenerator = (() => {
     prepareReportGeneration("yearly", btn, { year }, loading);
   }
 
-  
   function callGScriptAsync(gscriptFunc, args) {
     return new Promise((resolve, reject) => {
       AppUtils.gScriptRun({
@@ -276,6 +276,8 @@ const ReportGenerator = (() => {
 
       AppUtils.openModal("#app-modal", {
         placement: "center",
+
+        closable: false,
 
         header: "<div></div>",
 
@@ -414,16 +416,65 @@ const ReportGenerator = (() => {
       }
     }
 
-    updateProgress("Generating and saving PDF");
+    updateProgress("Starting report generation");
 
-    const savedReport = await callGScriptAsync("generateCustomReportPDF", [
+    const reportArgs = {
       sessionId,
       signature,
       type,
-      type === "monthly" ? month : "",
+      month: type === "monthly" ? month : "",
       year,
       requestId,
-    ]);
+      updateProgress,
+    };
+
+    let savedReport;
+
+    try {
+      savedReport = await generateReportWithProgress(reportArgs);
+    } catch (error) {
+      if (!isReportExecutionTimeout(error)) {
+        console.error("[Reports] Generation failed:", {
+          type,
+          month,
+          year,
+          requestId,
+          error: error?.message || error,
+        });
+
+        throw error;
+      }
+
+      console.warn("[Reports] Generation timed out. Attempting recovery.", {
+        type,
+        month,
+        year,
+        requestId,
+        error,
+      });
+
+      savedReport = await recoverTimedOutReport(reportArgs);
+    }
+
+    // // TEMPORARY: Normalize JSON-string responses from Apps Script.
+    // if (typeof savedReport === "string") {
+    //   try {
+    //     savedReport = JSON.parse(savedReport);
+    //   } catch (error) {
+    //     console.warning("[Reports] Invalid JSON server response:", savedReport);
+    //     console.error(
+    //       "[Reports] The server returned an invalid report response.",
+    //       error,
+    //     );
+    //   }
+    // }
+
+    if (!savedReport?.success || !savedReport?.reportUrl) {
+      throw new Error(
+        `${type} report was not saved successfully. ` +
+          `Server status: ${savedReport?.status || "UNKNOWN"}.`,
+      );
+    }
 
     if (!savedReport?.success || !savedReport.reportUrl) {
       throw new Error("The report was not saved successfully.");
@@ -456,6 +507,184 @@ const ReportGenerator = (() => {
       ...(savedReport.reportId ? { reportId: savedReport.reportId } : {}),
       ...(savedReport.reusedExisting ? { reusedExisting: true } : {}),
     };
+  }
+
+  function isReportExecutionTimeout(error) {
+    const message = [
+      error?.message,
+      error?.details,
+      error?.error,
+      error?.cause?.message,
+      error?.cause,
+      error,
+    ]
+      .filter(Boolean)
+      .map((value) => (typeof value === "string" ? value : String(value)))
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      message.includes("maximum execution time") ||
+      message.includes("maximum execution") ||
+      message.includes("maximum na oras ng execution") ||
+      message.includes("lumagpas sa maximum") ||
+      message.includes("execution time exceeded") ||
+      message.includes("exceeded maximum execution time") ||
+      message.includes("execution expired")
+    );
+  }
+
+  function waitForReportProgress(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function generateReportWithProgress({
+    sessionId,
+    signature,
+    type,
+    month,
+    year,
+    requestId,
+    updateProgress,
+  }) {
+    let lastStage = "";
+
+    const generationPromise = callGScriptAsync("generateCustomReportPDF", [
+      sessionId,
+      signature,
+      type,
+      month,
+      year,
+      requestId,
+    ]).then(
+      (value) => ({ success: true, value }),
+      (error) => ({ success: false, error }),
+    );
+
+    while (true) {
+      // Check generation before waiting for progress.
+      const generationResult = await Promise.race([
+        generationPromise,
+        waitForReportProgress(0).then(() => null),
+      ]);
+
+      if (generationResult) {
+        if (!generationResult.success) {
+          throw generationResult.error;
+        }
+        return generationResult.value;
+      }
+
+      // Poll progress, but never let a slow poll block generation failure.
+      const pollResult = await Promise.race([
+        callGScriptAsync("getCustomReportProgress", [
+          sessionId,
+          signature,
+          type,
+          requestId,
+        ]).then(
+          (progress) => ({ type: "progress", progress }),
+          (error) => ({ type: "poll-error", error }),
+        ),
+        generationPromise.then((result) => ({
+          type: "generation",
+          result,
+        })),
+      ]);
+
+      if (pollResult.type === "generation") {
+        if (!pollResult.result.success) {
+          throw pollResult.result.error;
+        }
+
+        return pollResult.result.value;
+      }
+
+      if (pollResult.type === "progress") {
+        const stage = String(pollResult.progress?.progressStage || "").trim();
+
+        if (stage && stage !== lastStage) {
+          updateProgress(stage);
+          lastStage = stage;
+        }
+      } else {
+        console.warn("[Reports] Progress check failed:", pollResult.error);
+      }
+
+      const nextResult = await Promise.race([
+        generationPromise,
+        waitForReportProgress(REPORT_PROGRESS_POLL_INTERVAL).then(() => null),
+      ]);
+
+      if (nextResult) {
+        if (!nextResult.success) {
+          throw nextResult.error;
+        }
+
+        return nextResult.value;
+      }
+    }
+  }
+
+  async function recoverTimedOutReport({
+    sessionId,
+    signature,
+    type,
+    month,
+    year,
+    requestId,
+    updateProgress,
+  }) {
+    updateProgress("Checking whether your report was already saved…");
+
+    const reconciliation = await callGScriptAsync(
+      "reconcileTimedOutCustomReportPDF",
+      [sessionId, signature, type, requestId],
+    );
+
+    // The PDF was saved before the original execution ended.
+    if (reconciliation?.success && reconciliation?.reportUrl) {
+      const reportUrl = getSafeReportUrl(reconciliation.reportUrl);
+
+      if (!reportUrl) {
+        throw new Error("The recovered report URL is invalid.");
+      }
+
+      updateProgress("Your saved report was recovered successfully.");
+
+      return {
+        ...reconciliation,
+        reportUrl,
+        reusedExisting: true,
+      };
+    }
+
+    if (reconciliation?.status !== "RETRYABLE") {
+      throw new Error(
+        reconciliation?.message || "The report could not be safely reconciled.",
+      );
+    }
+
+    updateProgress("Previous execution ended. Retrying report generation…");
+
+    // Retry using the SAME request ID and existing operation row.
+    const retriedReport = await generateReportWithProgress({
+      sessionId,
+      signature,
+      type,
+      month,
+      year,
+      requestId,
+      updateProgress,
+    });
+
+    if (!retriedReport?.success || !retriedReport.reportUrl) {
+      throw new Error("The report retry did not complete successfully.");
+    }
+
+    updateProgress("Report generated successfully.");
+
+    return retriedReport;
   }
 
   return {

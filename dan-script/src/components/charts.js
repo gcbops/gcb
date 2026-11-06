@@ -89,6 +89,12 @@ const ChartModule = (() => {
 
   let tabEventsBound = false;
 
+  const adminChartState = {
+    managers: [],
+
+    charts: {},
+  };
+
   function bindTabEvents() {
     if (tabEventsBound) {
       return;
@@ -190,7 +196,14 @@ const ChartModule = (() => {
           if (!hasChartData) {
             logMessage("No chart data found.");
 
-            chartDiv.innerText = "No data found.";
+            if (chartType === "daily") {
+              showEmptyState(chartDiv, {
+                icon: "",
+                message: "",
+              });
+            } else {
+              showEmptyState(chartDiv);
+            }
 
             if (typeof onComplete === "function") {
               onComplete();
@@ -318,7 +331,7 @@ const ChartModule = (() => {
     debug = false,
     animated = false,
     chartOpts = {},
-    onComplete
+    onComplete,
   ) {
     const chartDiv = document.getElementById(`chart-${type}`);
 
@@ -329,6 +342,8 @@ const ChartModule = (() => {
     if (debug) {
       console.log(`[ChartModule] Drawing ${type}`, data);
     }
+
+    clearEmptyState(chartDiv);
 
     destroyChart(type);
 
@@ -356,19 +371,37 @@ const ChartModule = (() => {
         return drawLineChart(ctx, type, data, animated, chartOpts, onComplete);
 
       case "monthly_hours_by_year":
-        return drawMonthlyHoursByYearChart(ctx, type, data, animated, onComplete);
+        return drawMonthlyHoursByYearChart(
+          ctx,
+          type,
+          data,
+          animated,
+          onComplete,
+        );
 
       case "daily_overview":
         return drawDailyOverviewChart(ctx, type, data, animated, onComplete);
 
       case "client_hours_month":
-        return drawClientMonthlyHoursChart(ctx, type, data, animated, onComplete);
+        return drawClientMonthlyHoursChart(
+          ctx,
+          type,
+          data,
+          animated,
+          onComplete,
+        );
 
       case "client_daily_hours":
         return drawClientDailyHoursChart(ctx, type, data, animated, onComplete);
 
       case "client_paid_owed":
-        return drawClientPaidOwedHistoryChart(ctx, type, data, animated, onComplete);
+        return drawClientPaidOwedHistoryChart(
+          ctx,
+          type,
+          data,
+          animated,
+          onComplete,
+        );
 
       default:
         return AppUtils.showError(`Unknown chart type: ${type}`);
@@ -838,7 +871,13 @@ const ChartModule = (() => {
   // MONTHLY COMPARISON
   // --------------------------------------------------
 
-  function drawMonthlyComparisonChart(ctx, type, data, animated = false, onComplete) {
+  function drawMonthlyComparisonChart(
+    ctx,
+    type,
+    data,
+    animated = false,
+    onComplete,
+  ) {
     const prev = fillMonthlyData(data?.prevYear || []);
     const current = fillMonthlyData(data?.currentYear || []);
     const prevPeakIndex = getPeakIndex(prev);
@@ -850,68 +889,70 @@ const ChartModule = (() => {
       data: {
         labels: REPORT_MONTHS,
 
-        datasets: [
-          {
-            label: "Previous Year",
-            data: prev,
+        datasets: Array.isArray(data?.datasets)
+          ? data.datasets
+          : [
+              {
+                label: "Previous Year",
+                data: prev,
 
-            backgroundColor: prev.map((value, index) =>
-              index === prevPeakIndex
-                ? "rgba(249, 115, 22, 1)"
-                : createGradient(
-                    ctx,
-                    "rgba(249, 115, 22, 0.9)",
-                    "rgba(249, 115, 22, 0.5)",
-                  ),
-            ),
+                backgroundColor: prev.map((value, index) =>
+                  index === prevPeakIndex
+                    ? "rgba(249, 115, 22, 1)"
+                    : createGradient(
+                        ctx,
+                        "rgba(249, 115, 22, 0.9)",
+                        "rgba(249, 115, 22, 0.5)",
+                      ),
+                ),
 
-            borderColor: "#f97316",
-            borderWidth: prev.map((value, index) =>
-              index === prevPeakIndex ? 2 : 1,
-            ),
+                borderColor: "#f97316",
+                borderWidth: prev.map((value, index) =>
+                  index === prevPeakIndex ? 2 : 1,
+                ),
 
-            borderRadius: 6,
-            borderSkipped: false,
+                borderRadius: 6,
+                borderSkipped: false,
 
-            barPercentage: 0.8,
-            categoryPercentage: 0.75,
+                barPercentage: 0.8,
+                categoryPercentage: 0.75,
 
-            hoverBackgroundColor: "rgba(249, 115, 22, 1)",
-            hoverBorderColor: "#ea580c",
-            hoverBorderWidth: 1,
-          },
+                hoverBackgroundColor: "rgba(249, 115, 22, 1)",
+                hoverBorderColor: "#ea580c",
+                hoverBorderWidth: 1,
+              },
 
-          {
-            label: "Current Year",
-            data: current,
+              {
+                label: "Current Year",
+                data: current,
 
-            // Lighter, related orange/amber for current year
-            backgroundColor: current.map((value, index) =>
-              index === currentPeakIndex
-                ? "rgba(251, 146, 60, 1)"
-                : createGradient(
-                    ctx,
-                    "rgba(251, 146, 60, 0.9)",
-                    "rgba(251, 146, 60, 0.5)",
-                  ),
-            ),
+                // Lighter, related orange/amber for current year
+                backgroundColor: current.map((value, index) =>
+                  index === currentPeakIndex
+                    ? "rgba(251, 146, 60, 1)"
+                    : createGradient(
+                        ctx,
+                        "rgba(251, 146, 60, 0.9)",
+                        "rgba(251, 146, 60, 0.5)",
+                      ),
+                ),
 
-            borderColor: "#fb923c",
-            borderWidth: current.map((value, index) =>
-              index === currentPeakIndex ? 2 : 1,
-            ),
+                borderColor: "#fb923c",
+                borderWidth: current.map((value, index) =>
+                  index === currentPeakIndex ? 2 : 1,
+                ),
 
-            borderRadius: 6,
-            borderSkipped: false,
+                borderRadius: 6,
+                borderSkipped: false,
 
-            barPercentage: 0.8,
-            categoryPercentage: 0.75,
+                barPercentage: 0.8,
+                categoryPercentage: 0.75,
 
-            hoverBackgroundColor: "rgba(251, 146, 60, 1)",
-            hoverBorderColor: "#f97316",
-            hoverBorderWidth: 1,
-          },
-        ],
+                hoverBackgroundColor: "rgba(251, 146, 60, 1)",
+                hoverBorderColor: "#f97316",
+                hoverBorderWidth: 1,
+              },
+            ],
       },
 
       options: {
@@ -1015,7 +1056,13 @@ const ChartModule = (() => {
     }
   }
 
-  function drawMonthlyHoursByYearChart(ctx, type, data, animated = false, onComplete) {
+  function drawMonthlyHoursByYearChart(
+    ctx,
+    type,
+    data,
+    animated = false,
+    onComplete,
+  ) {
     const yearColors = [
       {
         base: "rgba(14, 165, 233, 0.85)",
@@ -1200,7 +1247,13 @@ const ChartModule = (() => {
     }
   }
 
-  function drawDailyOverviewChart(ctx, type, data, animated = false, onComplete) {
+  function drawDailyOverviewChart(
+    ctx,
+    type,
+    data,
+    animated = false,
+    onComplete,
+  ) {
     const labels = data.map(([client]) => client);
 
     const values = data.map(([, hours]) => Number(hours) || 0);
@@ -1363,7 +1416,14 @@ const ChartModule = (() => {
   // DAILY / MONTHLY LINE
   // --------------------------------------------------
 
-  function drawLineChart(ctx, type, data, animated = false, chartOpts = {}, onComplete) {
+  function drawLineChart(
+    ctx,
+    type,
+    data,
+    animated = false,
+    chartOpts = {},
+    onComplete,
+  ) {
     const {
       showLabel = true,
       showPoints = true,
@@ -1610,7 +1670,7 @@ const ChartModule = (() => {
     yearlyData,
     animated = false,
     chartOpts = {},
-    onComplete
+    onComplete,
   ) {
     const {
       showLabel = true,
@@ -1906,7 +1966,13 @@ const ChartModule = (() => {
     });
   }
 
-  function drawClientMonthlyHoursChart(ctx, type, data, animated = false, onComplete) {
+  function drawClientMonthlyHoursChart(
+    ctx,
+    type,
+    data,
+    animated = false,
+    onComplete,
+  ) {
     const years = Object.keys(data || {});
 
     const year = years[0];
@@ -1969,7 +2035,13 @@ const ChartModule = (() => {
     }
   }
 
-  function drawClientDailyHoursChart(ctx, type, data, animated = false, onComplete) {
+  function drawClientDailyHoursChart(
+    ctx,
+    type,
+    data,
+    animated = false,
+    onComplete,
+  ) {
     const labels = data.map((row) => String(row[0]));
     const values = data.map((row) => Number(row[1]) || 0);
 
@@ -2096,6 +2168,84 @@ const ChartModule = (() => {
     return canvas;
   }
 
+  // --------------------------------------------------
+  // EMPTY STATE
+  // --------------------------------------------------
+
+  function showEmptyState(
+    chartType,
+    {
+      title = "Nothing to visualize yet",
+      message = "There isn't enough recorded data to generate this chart. Once activity is recorded, your analytics will appear here.",
+      icon = "pe-7s-graph",
+      footer = "Chart data will appear automatically",
+    } = {},
+  ) {
+    const chartDiv =
+      typeof chartType === "string"
+        ? document.getElementById(
+            chartType.startsWith("chart-") ? chartType : `chart-${chartType}`,
+          )
+        : chartType;
+
+    if (!chartDiv) {
+      return;
+    }
+
+    // Destroy any existing chart.
+    const chartId = chartDiv.id.replace(/^chart-/, "");
+
+    destroyChart(chartId);
+
+    chartDiv.innerHTML = `
+      <div class="chart-empty-state">
+
+        ${
+          icon
+            ? `
+              <div class="chart-empty-icon">
+                <i class="${icon}"></i>
+              </div>
+            `
+            : ""
+        }
+
+        ${title ? `<div class="chart-empty-title">${title}</div>` : ""}
+
+        ${message ? `<div class="chart-empty-message">${message}</div>` : ""}
+
+        ${
+          footer
+            ? `
+              <div class="chart-empty-footer">
+                <i class="pe-7s-info"></i>
+                <span>${footer}</span>
+              </div>
+            `
+            : ""
+        }
+
+      </div>
+    `;
+
+    chartDiv.classList.add("chart-empty-container");
+  }
+
+  function clearEmptyState(chartType) {
+    const chartDiv =
+      typeof chartType === "string"
+        ? document.getElementById(
+            chartType.startsWith("chart-") ? chartType : `chart-${chartType}`,
+          )
+        : chartType;
+
+    if (!chartDiv) {
+      return;
+    }
+
+    chartDiv.classList.remove("chart-empty-container");
+  }
+
   function destroyChart(type) {
     if (!chartInstances[type]) {
       return;
@@ -2117,6 +2267,759 @@ const ChartModule = (() => {
     });
   }
 
+  // admin
+
+  function getAdminChartState(chartType) {
+    if (!adminChartState.charts[chartType]) {
+      adminChartState.charts[chartType] = {
+        mode: "overall",
+        managerId: "",
+        data: null,
+      };
+    }
+
+    return adminChartState.charts[chartType];
+  }
+
+  function updateAdminManagers(managers) {
+    if (!Array.isArray(managers)) {return;}
+
+    const current = JSON.stringify(adminChartState.managers);
+    const incoming = JSON.stringify(managers);
+
+    if (current === incoming) {return;}
+
+    adminChartState.managers = managers;
+
+    // Update manager options in every admin chart filter.
+    document.querySelectorAll(".admin-chart-filters").forEach((container) => {
+      populateAdminChartFilters(container.dataset.adminChart);
+    });
+  }
+
+  async function loadAdminChartData(chartType, serverFunction, cacheKey) {
+    const cached = AppUtils.cacheGet(cacheKey);
+
+    // Cache available: render immediately, then refresh in background.
+    if (cached && isValidAdminChartData(chartType, cached)) {
+      updateAdminChartData(chartType, cached);
+
+      refreshAdminChartDataInBackground(
+        chartType,
+        serverFunction,
+        cacheKey,
+        cached,
+      );
+
+      return;
+    }
+
+    // No cache: show loader and fetch initial data.
+    showAdminChartLoading(chartType);
+
+    fetchAdminChartData(chartType, serverFunction, cacheKey);
+  }
+
+  async function fetchAdminChartData(chartType, serverFunction, cacheKey) {
+    try {
+      const [sessionId, signature] = await getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        serverFunction,
+        [sessionId, signature],
+        (data) => {
+          if (!isValidAdminChartData(chartType, data)) {
+            console.error(
+              `[Admin Chart] Invalid ${chartType} chart data.`,
+              data,
+            );
+
+            hideAdminChartLoading(chartType);
+            return;
+          }
+
+          updateAdminChartData(chartType, data);
+          hideAdminChartLoading(chartType);
+        },
+      );
+    } catch (error) {
+      hideAdminChartLoading(chartType);
+
+      if (handleInvalidSessionError(error)) {return;}
+
+      console.error(`[Admin Chart] Failed to load ${chartType}:`, error);
+
+      AppUtils.showError(
+        error?.message || `Failed to load admin ${chartType} chart.`,
+      );
+    }
+  }
+
+  async function refreshAdminChartDataInBackground(
+    chartType,
+    serverFunction,
+    cacheKey,
+    cached,
+  ) {
+    try {
+      const [sessionId, signature] = await getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        cacheKey,
+        serverFunction,
+        [sessionId, signature],
+        (data) => {
+          if (!isValidAdminChartData(chartType, data)) {
+            return;
+          }
+
+          const previousChartData = {
+            labels: cached.labels,
+            managers: cached.managers,
+            overall: cached.overall,
+          };
+
+          const freshChartData = {
+            labels: data.labels,
+            managers: data.managers,
+            overall: data.overall,
+          };
+
+          if (
+            JSON.stringify(previousChartData) === JSON.stringify(freshChartData)
+          ) {
+            return;
+          }
+
+          updateAdminChartData(chartType, data);
+        },
+        false,
+        true,
+      );
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {return;}
+
+      console.error(
+        `[Admin Chart] Background refresh failed for ${chartType}:`,
+        error,
+      );
+    }
+  }
+
+  function updateAdminChartData(chartType, data) {
+    const state = getAdminChartState(chartType);
+
+    state.data = data;
+
+    updateAdminManagers(data.managers || []);
+
+    bindAdminChartEvents();
+    populateAdminChartFilters(chartType);
+
+    renderAdminChart(chartType);
+  }
+
+  function loadAdminMonthlyChart() {
+    loadAdminChartData(
+      "monthly",
+      "getAdminMonthlyChartData",
+      "adminChartData_monthly",
+    );
+  }
+
+  function loadAdminMonthlyComparisonChart() {
+    loadAdminChartData(
+      "monthly-prev-merged",
+      "getAdminMonthlyComparisonChartData",
+      "adminChartData_monthly_prev_merged",
+    );
+  }
+
+  function populateAdminChartFilters(chartType) {
+    const container = document.querySelector(
+      `.admin-chart-filters[data-admin-chart="${chartType}"]`,
+    );
+
+    if (!container) {return;}
+
+    const state = getAdminChartState(chartType);
+
+    const modeSelect = container.querySelector(".admin-chart-mode");
+    const managerSelect = container.querySelector(".admin-chart-manager");
+
+    if (!modeSelect || !managerSelect) {return;}
+
+    const managers = adminChartState.managers;
+
+    const previousManagerId = state.managerId;
+
+    managerSelect.replaceChildren(new Option("Select Manager", ""));
+
+    managers.forEach((manager) => {
+      managerSelect.add(new Option(manager.managerName, manager.managerId));
+    });
+
+    state.managerId = managers.some(
+      (manager) => manager.managerId === previousManagerId,
+    )
+      ? previousManagerId
+      : "";
+
+    modeSelect.value = state.mode;
+    managerSelect.value = state.managerId;
+
+    // Refresh existing Select2 displays.
+    $(modeSelect).trigger("change.select2");
+    $(managerSelect).trigger("change.select2");
+
+    updateAdminChartFilterVisibility(container, state);
+  }
+
+  function bindAdminChartEvents() {
+    document.querySelectorAll(".admin-chart-filters").forEach((container) => {
+      if (container.dataset.eventsBound === "true") {return;}
+
+      const chartType = container.dataset.adminChart;
+
+      if (!chartType) {return;}
+
+      const modeSelect = container.querySelector(".admin-chart-mode");
+      const managerSelect = container.querySelector(".admin-chart-manager");
+
+      if (!modeSelect || !managerSelect) {return;}
+
+      // Select2-compatible change handler.
+      $(modeSelect)
+        .off("change.adminChart")
+        .on("change.adminChart", function () {
+          const state = getAdminChartState(chartType);
+
+          state.mode = this.value;
+
+          updateAdminChartFilterVisibility(container, state);
+          renderAdminChart(chartType);
+        });
+
+      // Manager selection handler.
+      $(managerSelect)
+        .off("change.adminChart")
+        .on("change.adminChart", function () {
+          const state = getAdminChartState(chartType);
+
+          state.managerId = this.value;
+
+          renderAdminChart(chartType);
+        });
+
+      container.dataset.eventsBound = "true";
+    });
+  }
+
+  function updateAdminChartFilterVisibility(container, state) {
+    const managerSelect = container.querySelector(".admin-chart-manager");
+
+    if (!managerSelect) {
+      return;
+    }
+
+    const isVisible = state.mode === "manager";
+
+    // Original select
+    managerSelect.classList.toggle("d-none", !isVisible);
+
+    // Select2 generated element
+    const select2Container = $(managerSelect).next(".select2-container");
+
+    select2Container.toggleClass("d-none", !isVisible);
+  }
+
+  function renderAdminMonthlyChart() {
+    const state = getAdminChartState("monthly");
+    const data = state.data;
+
+    if (!data) {
+      return;
+    }
+
+    const chartDiv = document.getElementById("chart-monthly");
+
+    if (!chartDiv) {
+      return;
+    }
+
+    const { labels, managers, overall } = data;
+
+    destroyChart("adminMonthly");
+
+    if (!labels?.length) {
+      showEmptyState(chartDiv, {
+        title: "No monthly data available",
+        message:
+          "Monthly hours will appear here when managers have recorded activity.",
+      });
+      return;
+    }
+
+    let datasets = [];
+
+    const canvas = createChartCanvas(chartDiv, "adminMonthly");
+
+    if (!canvas) {
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+
+    if (state.mode === "overall") {
+      datasets = [
+        {
+          label: "Combined Hours",
+          data: overall || [],
+          borderColor: "#22c55e",
+          backgroundColor: "rgba(34, 197, 94, 0.12)",
+          pointBackgroundColor: "#22c55e",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: true,
+        },
+      ];
+    } else if (state.mode === "manager") {
+      const manager = managers.find(
+        (item) => item.managerId === state.managerId,
+      );
+
+      if (!manager) {
+        showEmptyState(chartDiv, {
+          title: "Select a manager",
+          message: "Choose a manager to view their monthly hours.",
+        });
+        return;
+      }
+
+      datasets = [createAdminMonthlyDataset(manager, 0, ctx)];
+    } else if (state.mode === "comparison") {
+      datasets = managers.map((manager, index) =>
+        createAdminMonthlyDataset(manager, index, ctx),
+      );
+    }
+
+    if (!datasets.length) {
+      showEmptyState(chartDiv, {
+        title: "No manager data available",
+        message: "There are no manager datasets to display.",
+      });
+      return;
+    }
+
+    clearEmptyState(chartDiv);
+
+    chartInstances.adminMonthly = new Chart(ctx, {
+      type: "line",
+
+      data: {
+        labels,
+        datasets,
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        animation: false,
+
+        interaction: {
+          mode: "index",
+          axis: "x",
+          intersect: false,
+        },
+
+        plugins: {
+          legend: {
+            display: datasets.length > 1,
+            position: "top",
+          },
+
+          tooltip: {
+            enabled: true,
+            mode: "index",
+            axis: "x",
+            intersect: false,
+
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            titleColor: "#111827",
+            bodyColor: "#374151",
+            borderColor: "#e5e7eb",
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8,
+
+            callbacks: {
+              label(context) {
+                const value = Number(context.parsed.y) || 0;
+
+                return `${context.dataset.label}: ${value.toLocaleString()} hrs`;
+              },
+            },
+          },
+        },
+
+        scales: {
+          x: {
+            grid: {
+              color: gridColor,
+            },
+
+            ticks: {
+              font: {
+                size: 10,
+              },
+            },
+
+            border: {
+              display: false,
+            },
+          },
+
+          y: {
+            beginAtZero: true,
+
+            grid: {
+              color: gridColor,
+            },
+
+            ticks: {
+              font: {
+                size: 10,
+              },
+
+              callback: (value) => Number(value).toLocaleString(),
+            },
+
+            border: {
+              display: false,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  function renderAdminMonthlyComparisonChart() {
+    const state = getAdminChartState("monthly-prev-merged");
+    const data = state.data;
+
+    if (!data) {return;}
+
+    const chartDiv = document.getElementById("chart-monthly-prev-merged");
+
+    if (!chartDiv) {return;}
+
+    const { managers, overall } = data;
+
+    if (state.mode === "overall") {
+      if (!overall) {return;}
+
+      destroyChart("monthly-prev-merged");
+
+      drawChart(
+        "monthly-prev-merged",
+        {
+          prevYear: overall.prevYear || [],
+          currentYear: overall.currentYear || [],
+        },
+        false,
+        false,
+      );
+
+      return;
+    }
+
+    if (state.mode === "manager") {
+      const manager = managers.find(
+        (item) => item.managerId === state.managerId,
+      );
+
+      if (!manager) {
+        destroyChart("monthly-prev-merged");
+
+        showEmptyState(chartDiv, {
+          title: "Select a manager",
+          message: "Choose a manager to view their yearly comparison.",
+        });
+
+        return;
+      }
+
+      clearEmptyState(chartDiv);
+
+      drawChart(
+        "monthly-prev-merged",
+        {
+          prevYear: manager.prevYear || [],
+          currentYear: manager.currentYear || [],
+        },
+        false,
+        false,
+      );
+
+      return;
+    }
+
+    if (state.mode === "comparison") {
+      destroyChart("monthly-prev-merged");
+
+      clearEmptyState(chartDiv);
+
+      const canvas = createChartCanvas(chartDiv, "monthly-prev-merged");
+
+      if (!canvas) {
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
+
+      const datasets = [];
+
+      managers.forEach((manager, index) => {
+        datasets.push(
+          ...createAdminYearComparisonDatasets(manager, index, ctx),
+        );
+      });
+
+      if (!datasets.length) {
+        destroyChart("monthly-prev-merged");
+
+        showEmptyState(chartDiv, {
+          title: "No manager data available",
+          message: "There are no manager datasets to compare.",
+        });
+
+        return;
+      }
+
+      drawMonthlyComparisonChart(
+        ctx,
+        "monthly-prev-merged",
+        { datasets },
+        false,
+      );
+    }
+  }
+
+  function createAdminMonthlyDataset(manager, index, ctx) {
+    const colors = [
+      "#0ea5e9",
+      "#8b5cf6",
+      "#10b981",
+      "#f59e0b",
+      "#ec4899",
+      "#ef4444",
+      "#64748b",
+      "#14b8a6",
+    ];
+
+    const color = colors[index % colors.length];
+
+    const rgb = color
+      .match(/\w\w/g)
+      .slice(0, 3)
+      .map((value) => parseInt(value, 16));
+
+    const gradient = createGradient(
+      ctx,
+      `rgba(${rgb.join(", ")}, 0.30)`,
+      `rgba(${rgb.join(", ")}, 0.02)`,
+    );
+
+    return {
+      label: manager.managerName,
+      data: manager.data || [],
+
+      borderColor: color,
+      backgroundColor: gradient,
+
+      pointBackgroundColor: color,
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 2,
+
+      pointRadius: 3,
+      pointHoverRadius: 6,
+
+      borderWidth: 2,
+      tension: 0.35,
+      fill: true,
+    };
+  }
+
+  function createAdminYearComparisonDatasets(manager, index, ctx) {
+    const colors = [
+      {
+        previous: "#0ea5e9",
+        current: "#38bdf8",
+      },
+      {
+        previous: "#8b5cf6",
+        current: "#a78bfa",
+      },
+      {
+        previous: "#10b981",
+        current: "#34d399",
+      },
+      {
+        previous: "#f59e0b",
+        current: "#fbbf24",
+      },
+      {
+        previous: "#ec4899",
+        current: "#f472b6",
+      },
+      {
+        previous: "#ef4444",
+        current: "#f87171",
+      },
+      {
+        previous: "#64748b",
+        current: "#94a3b8",
+      },
+      {
+        previous: "#14b8a6",
+        current: "#2dd4bf",
+      },
+    ];
+
+    const palette = colors[index % colors.length];
+
+    const previous = fillMonthlyData(manager.prevYear || []);
+    const current = fillMonthlyData(manager.currentYear || []);
+
+    const previousPeak = getPeakIndex(previous);
+    const currentPeak = getPeakIndex(current);
+
+    function makeDataset(label, values, color, peakIndex) {
+      const rgba = color
+        .match(/\w\w/g)
+        .slice(0, 3)
+        .map((value) => parseInt(value, 16));
+
+      return {
+        label,
+        data: values,
+
+        backgroundColor: values.map((value, i) =>
+          i === peakIndex
+            ? color
+            : createGradient(
+                ctx,
+                `rgba(${rgba.join(", ")}, 0.9)`,
+                `rgba(${rgba.join(", ")}, 0.5)`,
+              ),
+        ),
+
+        borderColor: color,
+
+        borderWidth: values.map((value, i) => (i === peakIndex ? 2 : 1)),
+
+        borderRadius: 6,
+        borderSkipped: false,
+
+        barPercentage: 0.8,
+        categoryPercentage: 0.75,
+
+        hoverBackgroundColor: color,
+        hoverBorderColor: color,
+        hoverBorderWidth: 1,
+      };
+    }
+
+    return [
+      makeDataset(
+        `${manager.managerName} — Previous Year`,
+        previous,
+        palette.previous,
+        previousPeak,
+      ),
+
+      makeDataset(
+        `${manager.managerName} — Current Year`,
+        current,
+        palette.current,
+        currentPeak,
+      ),
+    ];
+  }
+
+  function renderAdminChart(chartType) {
+    switch (chartType) {
+      case "monthly":
+        renderAdminMonthlyChart();
+        break;
+
+      case "monthly-prev-merged":
+        renderAdminMonthlyComparisonChart();
+        break;
+
+      case "daily":
+        // renderAdminDailyChart();
+        break;
+    }
+  }
+
+  function showAdminChartLoading(chartType) {
+    animateChart(chartType, true, 1800);
+
+    $(`#chart-${chartType}-loading`).removeClass("d-none");
+
+    const filters = document.querySelector(
+      `.admin-chart-filters[data-admin-chart="${chartType}"]`,
+    );
+
+    if (filters) {
+      $(filters).find("select").prop("disabled", true);
+      $(filters).find("select").trigger("change.select2");
+    }
+  }
+
+  function hideAdminChartLoading(chartType) {
+    animateChart(chartType, false);
+
+    $(`#chart-${chartType}-loading`).addClass("d-none");
+
+    const filters = document.querySelector(
+      `.admin-chart-filters[data-admin-chart="${chartType}"]`,
+    );
+
+    if (filters) {
+      $(filters).find("select").prop("disabled", false);
+      $(filters).find("select").trigger("change.select2");
+    }
+  }
+
+  function isValidAdminChartData(chartType, data) {
+    if (!data || typeof data !== "object") {
+      return false;
+    }
+
+    if (chartType === "monthly") {
+      return Array.isArray(data.labels);
+    }
+
+    if (chartType === "monthly-prev-merged") {
+      return (
+        data.overall &&
+        Array.isArray(data.overall.prevYear) &&
+        Array.isArray(data.overall.currentYear) &&
+        Array.isArray(data.managers)
+      );
+    }
+
+    return false;
+  }
+
   return {
     loadChart,
     loadPrevYearCombinedChart,
@@ -2126,8 +3029,14 @@ const ChartModule = (() => {
     drawChart,
     resizeAllCharts,
     animateChart,
+    showEmptyState,
 
     destroyAllCharts,
+
+    // admin
+
+    loadAdminMonthlyChart,
+    loadAdminMonthlyComparisonChart,
   };
 })();
 

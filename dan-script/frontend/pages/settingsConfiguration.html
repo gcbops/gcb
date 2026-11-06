@@ -236,151 +236,42 @@
 
 
                     <!-- Master Spreadsheet Formula Deployment -->
-                    <div data-required-role="admin" class="pipeline-group border-bottom">
-
-                        <div
-                            class="pipeline-row d-flex align-items-center justify-content-between p-3 transition-all"
-                        >
-                            <div class="d-flex align-items-center me-3">
-
-                                <div
-                                    class="icon-square-wrapper d-flex align-items-center justify-content-center bg-light text-muted rounded p-2 me-3"
-                                    style="width: 42px; height: 42px; min-width: 42px"
-                                >
-                                    <i
-                                        class="fa fa-calculator font-size-md"
-                                        id="icon-btnAddMasterFormula"
-                                    ></i>
-                                </div>
-
-                                <div>
-                                    <div class="font-weight-bold text-dark font-size-sm mb-0">
-                                        Master Spreadsheet Formula Deployment
-                                    </div>
-
-                                    <div class="text-muted font-size-xs">
-                                        Injects the latest Google Sheets formula into the main spreadsheet and all registered client sheets, replacing outdated versions to keep calculations consistent across the workbook.
-                                    </div>
-                                </div>
+                    <div
+                        data-required-role="admin"
+                        class="pipeline-row d-flex align-items-center justify-content-between p-3 border-bottom transition-all"
+                    >
+                        <div class="d-flex align-items-center me-3">
+                            <div
+                                class="icon-square-wrapper d-flex align-items-center justify-content-center bg-light text-muted rounded p-2 me-3"
+                                style="width: 42px; height: 42px; min-width: 42px"
+                            >
+                                <i
+                                    class="fa fa-calculator font-size-md"
+                                    id="icon-btnOpenFormulaInjection"
+                                ></i>
                             </div>
 
-                            <div class="action-control-zone">
-                                <button
-                                    type="button"
-                                    class="btn btn-sm btn-link text-secondary font-weight-bold px-3"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#formulaDeploymentOptions"
-                                    aria-expanded="false"
-                                    aria-controls="formulaDeploymentOptions"
-                                >
-                                    <i class="fa fa-chevron-down me-1"></i>
-                                </button>
+                            <div>
+                                <div class="font-weight-bold text-dark font-size-sm mb-0">
+                                    Formula Injection
+                                </div>
+
+                                <div class="text-muted font-size-xs">
+                                    Deploy or update Google Sheets formulas across main sheets,
+                                    external client sheets, or individual sheet tabs.
+                                </div>
                             </div>
                         </div>
 
-
-                        <!-- Formula Deployment Sub Options -->
-                        <div
-                            class="collapse"
-                            id="formulaDeploymentOptions"
-                        >
-                            <div class="px-3 pb-3">
-
-                                <!-- Main Sheet -->
-                                <div
-                                    class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
-                                >
-                                    <div class="d-flex align-items-center me-3">
-
-                                        <div class="text-muted me-3">
-                                            <i class="fa fa-folder-open"></i>
-                                        </div>
-
-                                        <div>
-                                            <div class="font-weight-bold text-dark font-size-sm">
-                                                Main Sheet Formula Deployment
-                                            </div>
-
-                                            <div class="text-muted font-size-xs">
-                                                Injects the current formula into the main sheet, replacing older versions to keep everything in sync.
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
-                                        id="btnAddMasterFormula"
-                                    >
-                                        Deploy
-                                    </button>
-                                </div>
-
-
-                                <!-- External Main Sheet -->
-                                <div
-                                    class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light mb-2"
-                                >
-                                    <div class="d-flex align-items-center me-3">
-
-                                        <div class="text-muted me-3">
-                                            <i class="fa fa-folder-open"></i>
-                                        </div>
-
-                                        <div>
-                                            <div class="font-weight-bold text-dark font-size-sm">
-                                                External Projects Main Sheet Formula Deployment
-                                            </div>
-
-                                            <div class="text-muted font-size-xs">
-                                                Injects the current formula into the main sheet for external projects, replacing older versions to keep everything in sync.
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
-                                        id="btnDeployExternalProjectsMainSheetFormula"
-                                    >
-                                        Deploy
-                                    </button>
-                                </div>
-
-
-                                <!-- External Sub Sheets -->
-                                <div
-                                    class="sub-action-row d-flex align-items-center justify-content-between p-3 rounded bg-light"
-                                >
-                                    <div class="d-flex align-items-center me-3">
-
-                                        <div class="text-muted me-3">
-                                            <i class="fa fa-copy"></i>
-                                        </div>
-
-                                        <div>
-                                            <div class="font-weight-bold text-dark font-size-sm">
-                                                External Projects Internal Sheet Formula Deployment
-                                            </div>
-
-                                            <div class="text-muted font-size-xs">
-                                                Injects the current formula into the internal sheets for external projects, replacing older versions to keep everything in sync.
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-secondary btn-sm font-weight-bold px-3"
-                                        id="btnDeployExternalProjectsInternalSheetFormula"
-                                    >
-                                        Deploy
-                                    </button>
-                                </div>
-
-                            </div>
+                        <div class="action-control-zone">
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm font-weight-bold px-3 btn-action-trigger"
+                                id="btnOpenFormulaInjection"
+                            >
+                                Inject Formula
+                            </button>
                         </div>
-
                     </div>
 
 
@@ -542,6 +433,28 @@
                 </div>
                 <div class="integration-list-arrow">
                 <i class="pe-7s-angle-right"></i>
+                </div>
+            </div>
+
+            <!-- ASANA -->
+            <div
+                class="integration-list-item"
+                data-integration="asana"
+            >
+                <div class="integration-list-icon">
+                    <img
+                        src="https://s15.gifyu.com/images/bWDTF.png"
+                        alt="Asana"
+                    >
+                </div>
+                <div class="integration-list-content">
+                    <div class="integration-list-title">Asana</div>
+                    <div class="integration-list-desc">
+                        Connect and manage Asana tasks and project links.
+                    </div>
+                </div>
+                <div class="integration-list-arrow">
+                    <i class="pe-7s-angle-right"></i>
                 </div>
             </div>
 

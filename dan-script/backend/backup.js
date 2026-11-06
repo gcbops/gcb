@@ -19,97 +19,6 @@ function getAdminCombinedBackupFolder_() {
   return DriveApp.getFolderById(folderId);
 }
 
-function getBackupManagers_() {
-  const registryId = PropertiesService.getScriptProperties().getProperty(
-    BACKUP_CONFIG.registryProperty,
-  );
-
-  if (!registryId) {
-    throw new Error(
-      `Missing Script Property: ${BACKUP_CONFIG.registryProperty}`,
-    );
-  }
-
-  const registry = openSpreadsheetById(registryId);
-  const sheet = registry.getSheetByName("Managers");
-
-  if (!sheet) {
-    throw new Error('The central registry is missing the "Managers" sheet.');
-  }
-
-  const values = sheet.getDataRange().getValues();
-
-  if (values.length < 2) {
-    return [];
-  }
-
-  const headers = values[0].map((value) => String(value).trim().toLowerCase());
-
-  const requiredHeaders = [
-    "manager id",
-    "manager name",
-    "enabled",
-    "operational spreadsheet id",
-    "external sheets folder id",
-    "backup folder id",
-    "reports folder id",
-  ];
-
-  const columns = {};
-
-  requiredHeaders.forEach((header) => {
-    const index = headers.indexOf(header);
-
-    if (index === -1) {
-      throw new Error(`Managers registry is missing the "${header}" column.`);
-    }
-
-    columns[header] = index;
-  });
-
-  return values.slice(1).flatMap((row, index) => {
-    const enabledValue = row[columns.enabled];
-    const enabled =
-      enabledValue === true ||
-      ["true", "1", "yes"].includes(String(enabledValue).trim().toLowerCase());
-
-    const managerId = String(row[columns["manager id"]] || "").trim();
-    const spreadsheetId = String(
-      row[columns["operational spreadsheet id"]] || "",
-    ).trim();
-    const externalFolderId = String(
-      row[columns["external sheets folder id"]] || "",
-    ).trim();
-    const backupFolderId = String(
-      row[columns["backup folder id"]] || "",
-    ).trim();
-    const reportsFolderId = String(
-      row[columns["reports folder id"]] || "",
-    ).trim();
-
-    if (!enabled) {
-      return [];
-    }
-
-    if (!managerId || !spreadsheetId || !backupFolderId || !reportsFolderId) {
-      throw new Error(
-        `Enabled manager on registry row ${index + 2} is missing a manager ID, operational spreadsheet ID, backup folder ID, or reports folder ID.`,
-      );
-    }
-
-    return [
-      {
-        managerId,
-        managerName: String(row[columns["manager name"]] || managerId).trim(),
-        spreadsheetId,
-        externalFolderId,
-        backupFolderId,
-        reportsFolderId,
-      },
-    ];
-  });
-}
-
 function getManagerBackupFolder_(manager) {
   return DriveApp.getFolderById(manager.backupFolderId);
 }
@@ -288,9 +197,12 @@ function backupAllSheets(sessionId, signature) {
   return backupAllManagersCombinedInternal_();
 }
 
-function backupAllSheetsInternal_(manager, triggerType = "SCHEDULED") {
+function backupAllSheetsInternal_(
+  manager,
+  triggerType = "SCHEDULED",
+  requestId = "",
+) {
   const startedAt = Date.now();
-  const timestamp = new Date();
 
   let backupName = "";
   let destinationFolderId = "";
@@ -298,36 +210,58 @@ function backupAllSheetsInternal_(manager, triggerType = "SCHEDULED") {
   let backedUp = 0;
   let skipped = 0;
   let zipResult = null;
+  let operationLogged = false;
 
   const failedFiles = [];
+
+  const logBackupOperation = (status, details = {}) => {
+    const completedAt = Date.now();
+
+    recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId: manager.managerId,
+      category: "BACKUP",
+      operation: "CREATE_MANAGER_BACKUP",
+      status,
+      trigger: triggerType,
+      durationMs: Math.max(0, completedAt - startedAt),
+      processed,
+      succeeded: details.succeeded ?? 0,
+      failed: details.failed ?? 0,
+      target: `${manager.managerId}: ${backupName || destinationFolderId}`,
+      message: details.message || "",
+      error: details.error || "",
+    });
+
+    operationLogged = true;
+  };
 
   try {
     const sourceFiles = getManagerBackupSourceFiles_(manager);
     const backupFolder = getManagerBackupFolder_(manager);
 
     const formattedTimestamp = Utilities.formatDate(
-      timestamp,
+      new Date(),
       Session.getScriptTimeZone(),
       "yyyy-MM-dd HH-mm-ss",
     );
 
-    backupName =
-      `${BACKUP_CONFIG.backupFolderPrefix}${manager.managerId} - ${formattedTimestamp}`;
+    backupName = `${BACKUP_CONFIG.backupFolderPrefix}${manager.managerId} - ${formattedTimestamp}`;
 
     const destinationFolder = backupFolder.createFolder(backupName);
     destinationFolderId = destinationFolder.getId();
 
-    zipResult = createBackupZip_(
-      destinationFolder,
-      sourceFiles,
-      backupName,
-    );
+    zipResult = createBackupZip_(destinationFolder, sourceFiles, backupName);
 
     setBackupFolderMetadata_(destinationFolder, zipResult);
 
     processed = zipResult.processedFiles;
     backedUp = zipResult.created ? 1 : 0;
     skipped = zipResult.failedFiles;
+
     failedFiles.push(...zipResult.failedFileDetails);
 
     const status = !zipResult.created
@@ -350,17 +284,9 @@ function backupAllSheetsInternal_(manager, triggerType = "SCHEDULED") {
       zip: zipResult,
     };
 
-    recordGcbOperationLog_({
-      timestamp,
-      category: "BACKUP",
-      operation: "CREATE_MANAGER_BACKUP",
-      status,
-      trigger: triggerType,
-      durationMs: Date.now() - startedAt,
-      processed,
+    logBackupOperation(status, {
       succeeded: zipResult.exportedFiles,
       failed: skipped,
-      target: `${manager.managerId}: ${backupName}`,
       message:
         `Manager ${manager.managerId}; processed ${processed}; ` +
         `exported ${zipResult.exportedFiles}; failed ${skipped}; ` +
@@ -375,25 +301,17 @@ function backupAllSheetsInternal_(manager, triggerType = "SCHEDULED") {
 
     if (status === "FAILED") {
       throw new Error(
-        `Backup failed for manager ${manager.managerId}: ${zipResult.overallZipError || "No files were successfully exported."}`,
+        `Backup failed for manager ${manager.managerId}: ` +
+          `${zipResult.overallZipError || "No files were successfully exported."}`,
       );
     }
 
     return result;
   } catch (error) {
-    // Avoid duplicating the operation log if the backup result was already logged.
-    if (!zipResult) {
-      recordGcbOperationLog_({
-        timestamp,
-        category: "BACKUP",
-        operation: "CREATE_MANAGER_BACKUP",
-        status: "FAILED",
-        trigger: triggerType,
-        durationMs: Date.now() - startedAt,
-        processed,
-        succeeded: backedUp,
+    if (!operationLogged) {
+      logBackupOperation("FAILED", {
+        succeeded: zipResult?.exportedFiles || 0,
         failed: skipped,
-        target: `${manager.managerId}: ${backupName || destinationFolderId}`,
         message: "Manager backup execution stopped unexpectedly.",
         error: String(error?.message || error),
       });
@@ -403,18 +321,45 @@ function backupAllSheetsInternal_(manager, triggerType = "SCHEDULED") {
   }
 }
 
-function backupAllManagersCombinedInternal_() {
+function backupAllManagersCombinedInternal_(requestId = "") {
   const startedAt = Date.now();
-  const timestamp = new Date();
 
   let backupName = "";
   let destinationFolderId = "";
   let zipResult = null;
+  let processed = 0;
+  let operationLogged = false;
+
+  const collectionErrors = [];
+
+  const logCombinedBackupOperation = (status, details = {}) => {
+    const completedAt = Date.now();
+
+    recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId: "",
+      category: "BACKUP",
+      operation: "CREATE_ADMIN_COMBINED_BACKUP",
+      status,
+      trigger: "MANUAL",
+      durationMs: Math.max(0, completedAt - startedAt),
+      processed,
+      succeeded: details.succeeded ?? 0,
+      failed: details.failed ?? 0,
+      target: backupName || destinationFolderId || "Admin combined backup",
+      message: details.message || "",
+      error: details.error || "",
+    });
+
+    operationLogged = true;
+  };
 
   try {
-    const managers = getBackupManagers_();
+    const managers = getManagers_();
     const filesById = new Map();
-    const collectionErrors = [];
 
     managers.forEach((manager) => {
       try {
@@ -440,27 +385,23 @@ function backupAllManagersCombinedInternal_() {
     const backupFolder = getAdminCombinedBackupFolder_();
 
     const formattedTimestamp = Utilities.formatDate(
-      timestamp,
+      new Date(),
       Session.getScriptTimeZone(),
       "yyyy-MM-dd HH-mm-ss",
     );
 
-    backupName =
-      `${BACKUP_CONFIG.backupFolderPrefix}ADMIN COMBINED - ${formattedTimestamp}`;
+    backupName = `${BACKUP_CONFIG.backupFolderPrefix}ADMIN COMBINED - ${formattedTimestamp}`;
 
     const destinationFolder = backupFolder.createFolder(backupName);
     destinationFolderId = destinationFolder.getId();
 
-    // false = do not create individual ZIPs for this admin backup.
-    zipResult = createBackupZip_(
-      destinationFolder,
-      sourceFiles,
-      backupName,
-    );
+    zipResult = createBackupZip_(destinationFolder, sourceFiles, backupName);
 
     setBackupFolderMetadata_(destinationFolder, zipResult, {
       collectionErrors,
     });
+
+    processed = zipResult.processedFiles;
 
     const totalFailures = zipResult.failedFiles + collectionErrors.length;
 
@@ -476,7 +417,7 @@ function backupAllManagersCombinedInternal_() {
       backupFolderId: destinationFolderId,
       backupFolderName: backupName,
       managerCount: managers.length,
-      processed: zipResult.processedFiles,
+      processed,
       exportedFiles: zipResult.exportedFiles,
       skipped: totalFailures,
       failedFiles: zipResult.failedFileDetails,
@@ -484,23 +425,20 @@ function backupAllManagersCombinedInternal_() {
       zip: zipResult,
     };
 
-    recordGcbOperationLog_({
-      timestamp,
-      category: "BACKUP",
-      operation: "CREATE_ADMIN_COMBINED_BACKUP",
-      status,
-      trigger: "MANUAL",
-      durationMs: Date.now() - startedAt,
-      processed: zipResult.processedFiles,
+    logCombinedBackupOperation(status, {
       succeeded: zipResult.exportedFiles,
-      failed: zipResult.failedFiles,
-      target: backupName || destinationFolderId,
+      failed: totalFailures,
       message:
         `Combined backup for ${managers.length} enabled managers; ` +
-        `exported ${zipResult.exportedFiles}; failed ${zipResult.failedFiles}; ` +
+        `exported ${zipResult.exportedFiles}; ` +
+        `ZIP failures ${zipResult.failedFiles}; ` +
+        `collection failures ${collectionErrors.length}; ` +
         `overall ZIP ${zipResult.created ? "created" : "failed"}.`,
       error: zipResult.failedFileDetails
         .map((item) => `${item.name}: ${item.error}`)
+        .concat(
+          collectionErrors.map((item) => `${item.managerId}: ${item.error}`),
+        )
         .concat(zipResult.overallZipError || [])
         .join("\n"),
     });
@@ -509,24 +447,17 @@ function backupAllManagersCombinedInternal_() {
 
     if (status === "FAILED") {
       throw new Error(
-        `Admin combined backup failed: ${zipResult.overallZipError || "No spreadsheets were successfully exported."}`,
+        `Admin combined backup failed: ` +
+          `${zipResult.overallZipError || "No spreadsheets were successfully exported."}`,
       );
     }
 
     return result;
   } catch (error) {
-    if (!zipResult) {
-      recordGcbOperationLog_({
-        timestamp,
-        category: "BACKUP",
-        operation: "CREATE_ADMIN_COMBINED_BACKUP",
-        status: "FAILED",
-        trigger: "MANUAL",
-        durationMs: Date.now() - startedAt,
-        processed: 0,
-        succeeded: 0,
-        failed: 0,
-        target: backupName || destinationFolderId,
+    if (!operationLogged) {
+      logCombinedBackupOperation("FAILED", {
+        succeeded: zipResult?.exportedFiles || 0,
+        failed: (zipResult?.failedFiles || 0) + collectionErrors.length,
         message: "Admin combined backup execution stopped unexpectedly.",
         error: String(error?.message || error),
       });
@@ -781,7 +712,7 @@ function scheduledBackup() {
     };
   }
 
-  const managers = getBackupManagers_();
+  const managers = getManagers_();
   const results = [];
   const cleanupResults = [];
   const errors = [];

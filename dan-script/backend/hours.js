@@ -349,10 +349,6 @@ function fingerprintHoursRequest_(sheet, data, clientName) {
   return Utilities.base64Encode(digest);
 }
 
-/**
- * Gets the hours request ledger from the main GCB spreadsheet.
- * Uses the project's customized getMainSpreadsheet() helper.
- */
 function getGcbHoursRequestLedgerSheet_(spreadsheet) {
   if (!spreadsheet || typeof spreadsheet.getId !== "function") {
     throw new Error("The destination operational spreadsheet is required.");
@@ -856,14 +852,14 @@ function recordExternalClientHoursBatchFromForm(
 }
 
 function recordExternalClientHoursBatchFromForm_(formData, workspace) {
-  if (!workspace || !workspace.spreadsheet || !workspace.managerId) {
+  if (!workspace?.spreadsheet || !workspace.managerId) {
     throw new Error("A valid manager workspace is required.");
   }
 
   const batch = validateHoursBatchFormData_(formData);
   const managerSS = workspace.spreadsheet;
 
-  // Resolve this manager's External Sheets registry only.
+  // Resolve this manager's External Sheets registry.
   const registrySheet = managerSS.getSheetByName(
     EXTERNAL_SHEETS_CONFIG.registrySheet,
   );
@@ -899,41 +895,56 @@ function recordExternalClientHoursBatchFromForm_(formData, workspace) {
   try {
     externalSS = openSpreadsheetById(spreadsheetId);
   } catch (error) {
-    console.error(
-      `[External Hours] Cannot open spreadsheet for manager ${workspace.managerId}, client ${batch.client}.`,
-      error,
-    );
-
     throw new Error(
       `Unable to access the external spreadsheet for "${batch.client}".`,
+      { cause: error },
     );
   }
 
-  // Validate every destination against the manager's valid project sheets
-  // before writing any records.
-  const validProjectSheets = new Map(
-    getExternalProjectSheets_(externalSS).map((sheet) => [
-      sheet.getName(),
-      sheet,
-    ]),
-  );
+  // Resolve valid project sheets.
+  const projectSheets = getExternalProjectSheets_(externalSS);
 
+  if (!Array.isArray(projectSheets)) {
+    throw new Error("Unable to resolve the external project's sheets.");
+  }
+
+  const validProjectSheets = new Map();
+
+  projectSheets.forEach((sheet) => {
+    const normalizedName = normalizeText(sheet.getName());
+
+    if (!normalizedName) return;
+
+    if (validProjectSheets.has(normalizedName)) {
+      throw new Error(
+        `Duplicate project sheet name detected after normalization: "${sheet.getName()}".`,
+      );
+    }
+
+    validProjectSheets.set(normalizedName, sheet);
+  });
+
+  // Validate every destination before writing any records.
   const resolvedRecords = batch.records.map((record, index) => {
-    const projectSheet = validProjectSheets.get(record.task);
+    const requestedTask = String(record.task || "").trim();
+
+    const projectSheet = validProjectSheets.get(normalizeText(requestedTask));
 
     if (!projectSheet) {
       throw new Error(
-        `Valid project sheet "${record.task}" was not found for client "${batch.client}".`,
+        `Project sheet "${requestedTask}" was not found for client "${batch.client}".`,
       );
     }
 
     return {
       ...record,
+      task: projectSheet.getName(),
       projectSheet,
       entryId: `${batch.requestId}:${index + 1}`,
     };
   });
 
+  // Record validated entries with idempotency protection.
   const results = [];
   const reservedRowsBySheet = new Map();
 
@@ -966,7 +977,7 @@ function recordExternalClientHoursBatchFromForm_(formData, workspace) {
     results.push(result);
   });
 
-  // Rebuild the external Projects summary first.
+  // Rebuild the external Projects summary.
   SpreadsheetApp.flush();
 
   const aggregation = combineExternalSheetData_(spreadsheetId);
@@ -2599,3 +2610,69 @@ function getGrowthComparisonSummary(
     },
   };
 }
+
+// admin
+
+function getAdminHoursSummary(sessionId, signature) {
+  requireAdminSession_(sessionId, signature);
+
+  const managers = getAdminDashboardManagers_();
+
+  const overall = {
+    totalHours: 0,
+    totalPaid: 0,
+    owedHours: 0,
+    netHours: 0,
+    lifetimePercent: null,
+    collectionRate: 0,
+    debtExposureRate: 0,
+    netHoursYield: 0,
+  };
+
+  let successfulManagerCount = 0;
+  const errors = [];
+
+  managers.forEach((manager) => {
+    try {
+      const managerSS = openSpreadsheetById(manager.spreadsheetId);
+      const sheet = managerSS.getSheetByName("Other Analytics");
+
+      if (!sheet) {
+        throw new Error('Missing "Other Analytics" sheet.');
+      }
+
+      const values = sheet.getRange("A2:I2").getValues()[0];
+
+      overall.totalHours += toHoursNumber_(values[1]);
+      overall.totalPaid += toHoursNumber_(values[2]);
+      overall.owedHours += toHoursNumber_(values[3]);
+      overall.netHours += toHoursNumber_(values[4]);
+
+      successfulManagerCount++;
+    } catch (error) {
+      console.error(
+        `[Admin Dashboard] Failed to read ${manager.managerId}: ${error.message}`,
+      );
+
+      errors.push(manager.managerId);
+    }
+  });
+
+  // Calculate combined percentages.
+  if (overall.totalHours > 0) {
+    overall.collectionRate = (overall.totalPaid / overall.totalHours) * 100;
+
+    overall.debtExposureRate = (overall.owedHours / overall.totalHours) * 100;
+
+    overall.netHoursYield = (overall.netHours / overall.totalHours) * 100;
+
+    overall.lifetimePercent = overall.totalHours > 0 ? 100 : 0;
+  }
+
+  console.log(
+    `[Admin Dashboard] Hours summary: ${successfulManagerCount}/${managers.length} managers loaded. Failed: ${errors.length}.`,
+  );
+
+  return overall;
+}
+

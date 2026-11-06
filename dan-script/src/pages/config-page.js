@@ -9,8 +9,6 @@ import { DataTableModule } from "../components/data-table.js";
 
 const settingsConfigurationPage = (() => {
   let initialized = false;
-  let masterFormulaOperationId = 0;
-  let masterFormulaTimer = null;
   const MODAL_ID = "#app-modal";
 
   const BACKUP_HISTORY_CACHE_KEY = "backup_history";
@@ -25,21 +23,28 @@ const settingsConfigurationPage = (() => {
   const OPERATION_LOGS_LIMIT = 200;
   let operationLogsAllRecords = [];
 
+  const SETTINGS_CLICK_SELECTOR = [
+    "[data-settings-action]",
+    "#btnClearCache",
+    "#btnSyncClient",
+    "#btnSyncProjectLists",
+    "#btnBackupAllSheets",
+    "#btnSyncExternalClients",
+    "#btnRefreshOperationLogs",
+    "#btnOpenFormulaInjection",
+  ].join(", ");
+
   const tabHandlers = {
     "#backups-tab-content": loadBackupHistory,
     "#logs-tab-content": loadOperationLogs,
   };
 
   function handleClick(e) {
-    const btn = e.target.closest(
-      "[data-settings-action], " +
-      "#btnClearCache, #btnSyncClient, #btnSyncProjectLists, " +
-        "#btnBackupAllSheets, #btnAddMasterFormula, " +
-        "#btnDeployExternalProjectsMainSheetFormula, " +
-        "#btnDeployExternalProjectsInternalSheetFormula, " +
-        "#btnSyncExternalClients, " +
-        "#btnRefreshOperationLogs",
-    );
+    if (RouterModule.getCurrentPage() !== "settingsConfiguration") {
+      return;
+    }
+    
+    const btn = e.target.closest(SETTINGS_CLICK_SELECTOR);
 
     if (!btn) {
       return;
@@ -105,13 +110,8 @@ const settingsConfigurationPage = (() => {
 
         break;
 
-      case "btnAddMasterFormula":
-        openMasterFormulaModal();
-        break;
-
-      case "btnDeployExternalProjectsMainSheetFormula":
-      case "btnDeployExternalProjectsInternalSheetFormula":
-        openMasterFormulaModal(el_id);
+      case "btnOpenFormulaInjection":
+        openFormulaInjectionModal();
         break;
 
       case "create-manual-backup":
@@ -391,9 +391,9 @@ const settingsConfigurationPage = (() => {
         "getBackupHistory",
         [sessionId, signature],
         (result) => {
-          console.log("[BackupHistory] Backend result:", result);
-          console.log("[BackupHistory] Result success:", result?.success);
-          console.log("[BackupHistory] Backups:", result?.backups?.length);
+          // console.log("[BackupHistory] Backend result:", result);
+          // console.log("[BackupHistory] Result success:", result?.success);
+          // console.log("[BackupHistory] Backups:", result?.backups?.length);
 
           if (!result?.success || !Array.isArray(result.backups)) {
             AppUtils.showDashboardToast(
@@ -429,7 +429,7 @@ const settingsConfigurationPage = (() => {
       return;
     }
 
-    console.log("[BackupHistory] Rendering", backups?.length, "records");
+    // console.log("[BackupHistory] Rendering", backups?.length, "records");
 
     DataTableModule.hideTableOverlay(BACKUP_HISTORY_TABLE_ID);
 
@@ -966,287 +966,299 @@ const settingsConfigurationPage = (() => {
     RouterModule.go("integrationsConfiguration");
   }
 
-  function startMasterFormulaOperation() {
-    masterFormulaOperationId++;
-
-    if (masterFormulaTimer) {
-      clearTimeout(masterFormulaTimer);
-      masterFormulaTimer = null;
-    }
-
-    return masterFormulaOperationId;
-  }
-
-  function isMasterFormulaOperationActive(operationId) {
-    return operationId === masterFormulaOperationId;
-  }
-
-  function cancelMasterFormulaOperation() {
-    masterFormulaOperationId++;
-
-    if (masterFormulaTimer) {
-      clearTimeout(masterFormulaTimer);
-      masterFormulaTimer = null;
-    }
-  }
-
-  function getMasterFormulaFormData($modal) {
-    const cellRefResult = ValidationModule.cellReference(
-      $modal.find("#masterFormulaCell").val(),
-      "Cell reference",
-    );
-
-    if (!cellRefResult.valid) {
-      AppUtils.showDashboardToast(cellRefResult.message, "error");
-      return null;
-    }
-
-    const formulaResult = ValidationModule.formula(
-      $modal.find("#masterFormulaValue").val(),
-      "Formula",
-    );
-
-    if (!formulaResult.valid) {
-      AppUtils.showDashboardToast(formulaResult.message, "error");
-      return null;
-    }
-
-    return {
-      cellRef: cellRefResult.value,
-      formula: formulaResult.value,
-    };
-  }
-
-  function openMasterFormulaModal(isNotMain = false) {
-    const ns = ".masterFormula";
+  function openFormulaInjectionModal() {
+    const ns = ".formulaInjection";
 
     AppUtils.openModal(MODAL_ID, {
       size: "md",
       placement: "center",
 
-      header: "<div></div>",
+      header: `
+        <div>
+          <div class="font-weight-bold">Formula Injection</div>
+          <div class="text-muted small">
+            Deploy formulas to selected Google Sheets.
+          </div>
+        </div>
+      `,
 
       body: `
-      <!-- STEP 1: MAIN FORM BODY -->
-      <div id="main-modal-body">
-        <div class="mb-3">
-          <label for="masterFormulaCell" class="form-label">
-            Cell Reference
-          </label>
+        <!-- STEP 1: CONFIGURATION -->
+        <div id="formula-injection-main">
 
-          <input
-            type="text"
-            class="form-none control"
-            id="masterFormulaCell"
-            placeholder="B39"
-            autocomplete="off"
+          <div class="mb-3">
+            <label for="formulaInjectionTarget" class="form-label">
+              Spreadsheet Target
+            </label>
+
+            <select
+              id="formulaInjectionTarget"
+              class="form-control js-select2"
+              data-placeholder="Select spreadsheet target"
+            >
+              <option value=""></option>
+              <option value="main">Main Sheets</option>
+              <option value="external-main">External Client Sheets</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-block">
+              Deployment Scope
+            </label>
+
+            <div
+              id="formulaInjectionScopeOptions"
+              class="d-flex flex-column gap-2"
+            >
+              <!-- Options are rendered according to the selected target. -->
+            </div>
+          </div>
+
+          <div
+            class="mb-3 d-none"
+            id="formulaIndividualSheetGroup"
           >
+            <label
+              for="formulaIndividualSheetName"
+              class="form-label"
+            >
+              Sheet Tab Name
+            </label>
 
-          <div class="form-text">
-            Example: B39, N18, or AB25.
+            <input
+              type="text"
+              class="form-control"
+              id="formulaIndividualSheetName"
+              placeholder="Enter exact sheet tab name"
+              maxlength="100"
+              autocomplete="off"
+            >
+
+            <div class="form-text">
+              The exact tab name will be matched across the applicable spreadsheets.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="formulaInjectionCell"
+              class="form-label"
+            >
+              Cell Reference
+            </label>
+
+            <input
+              type="text"
+              class="form-control"
+              id="formulaInjectionCell"
+              placeholder="B39"
+              autocomplete="off"
+            >
+
+            <div class="form-text">
+              Example: B39, N18, or AB25.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="formulaInjectionValue"
+              class="form-label"
+            >
+              Formula
+            </label>
+
+            <textarea
+              class="form-control"
+              id="formulaInjectionValue"
+              rows="8"
+              style="height: 200px;"
+              placeholder='=COUNTIF(B41:B,"<>")'
+            ></textarea>
+          </div>
+
+          <div class="small text-muted">
+            Review the deployment target and formula carefully before proceeding.
           </div>
         </div>
 
-        <div class="mb-3">
-          <label for="masterFormulaValue" class="form-label">
-            Formula
-          </label>
+        <!-- STEP 2: REVIEW -->
+        <div id="formula-injection-review" class="d-none">
 
-          <textarea
-            class="form-control"
-            id="masterFormulaValue"
-            rows="10"
-            style="height: 200px;"
-            placeholder='=COUNTIF(B41:B,"<>")'
-          ></textarea>
+          <h5 class="modal-title mb-2">
+            <strong>Review Formula Injection</strong>
+          </h5>
+
+          <p class="text-muted">
+            Please verify the following details before applying the formula.
+          </p>
+
+          <div class="border rounded p-3 mb-3">
+            <div class="mb-3">
+              <div class="small text-muted">Spreadsheet Target</div>
+              <div
+                class="font-weight-bold"
+                id="formulaReviewTarget"
+              ></div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">Deployment Scope</div>
+              <div
+                class="font-weight-bold"
+                id="formulaReviewScope"
+              ></div>
+            </div>
+
+            <div
+              class="mb-3 d-none"
+              id="formulaReviewSheetGroup"
+            >
+              <div class="small text-muted">Sheet Tab Name</div>
+              <div
+                class="font-weight-bold"
+                id="formulaReviewSheet"
+              ></div>
+            </div>
+
+            <div class="mb-3">
+              <div class="small text-muted">Cell Reference</div>
+              <div
+                class="font-weight-bold"
+                id="formulaReviewCell"
+              ></div>
+            </div>
+
+            <div>
+              <div class="small text-muted mb-1">Formula</div>
+              <pre
+                id="formulaReviewValue"
+                class="bg-light rounded p-2 mb-0 scroll-area-sm"
+                style="white-space: pre-wrap; overflow-wrap: anywhere;"
+              ></pre>
+            </div>
+          </div>
+
+          <div class="alert alert-warning small mb-0">
+            This operation may update multiple spreadsheets. Make sure the
+            target and formula are correct before continuing.
+          </div>
         </div>
-
-        <div class="small text-muted">
-          The formula will be applied to the applicable sheets.
-        </div>
-      </div>
-
-      <!-- STEP 2: REVIEW / CONFIRMATION BODY -->
-      <div id="review-modal-body" class="d-none">
-        <h5 class="modal-title mb-2">
-          <strong>Do you want to proceed?</strong>
-        </h5>
-
-        <p>
-          Please review the details before updating the spreadsheets.
-        </p>
-      </div>
-    `,
+      `,
 
       footer: `
-      <!-- STEP 1: MAIN FOOTER -->
-      <div
-        id="main-modal-footer"
-        class="d-flex gap-2"
-      >
-        <!-- APP-MODAL-MAIN-ACTIONS -->
-
-        <button
-          type="button"
-          class="btn btn-secondary btn-cancel"
+        <!-- STEP 1 ACTIONS -->
+        <div
+          id="formula-injection-main-footer"
+          class="d-flex gap-2"
         >
-          Cancel
-        </button>
+          <button
+            type="button"
+            class="btn btn-secondary btn-cancel"
+          >
+            Cancel
+          </button>
 
-        <button
-          type="button"
-          class="btn btn-gc btn-save"
+          <button
+            type="button"
+            class="btn btn-gc btn-review-formula"
+          >
+            Review Formula
+          </button>
+        </div>
+
+        <!-- STEP 2 ACTIONS -->
+        <div
+          id="formula-injection-review-footer"
+          class="d-flex gap-2 d-none"
         >
-          Apply Formula
-        </button>
-      </div>
+          <button
+            type="button"
+            class="btn btn-secondary btn-modal-back"
+          >
+            Back
+          </button>
 
-      <!-- STEP 2: REVIEW FOOTER -->
-      <div
-        id="review-modal-footer"
-        class="d-flex gap-2 d-none"
-      >
-        <!-- APP-MODAL-REVIEW-ACTIONS -->
+          <button
+            type="button"
+            class="btn btn-success btn-proceed"
+          >
+            Proceed
+          </button>
+        </div>
+      `,
 
-        <button
-          type="button"
-          class="btn btn-secondary btn-modal-back"
-        >
-          Back
-        </button>
+      review: {
+        enabled: true,
 
-        <button
-          type="button"
-          class="btn btn-success btn-proceed"
-        >
-          Proceed
-        </button>
-      </div>
-    `,
+        selectors: {
+          main: "#formula-injection-main, #formula-injection-main-footer",
+          review: "#formula-injection-review, #formula-injection-review-footer",
+          trigger: ".btn-review-formula",
+          back: ".btn-modal-back",
+          proceed: ".btn-proceed",
+        },
 
-      /*
-       * ----------------------------------------------------------
-       * OPTIONAL CUSTOM ACTIONS
-       * ----------------------------------------------------------
-       */
-      footerActions: {
-        review: [
-          {
-            label: "Apply to External Main Sheet",
-            icon: "pe-7s-shuffle",
-            onClick: ($modal, $btn) => {
-              AppUtils.lockModal(MODAL_ID);
-              applyFormulaToExternalProjectsFromModal(
-                $modal,
-                $(MODAL_ID).find(".btn-proceed"),
-              );
-            },
-          },
+        // Validate and capture the exact values being reviewed.
+        getData($modal) {
+          return getFormulaInjectionFormData($modal);
+        },
 
-          {
-            label: "Apply to External Internal Sheets",
-            icon: "pe-7s-shuffle",
-            onClick: ($modal, $btn) => {
-              AppUtils.lockModal(MODAL_ID);
-              applyFormulaToExternalProjectSheetsFromModal(
-                $modal,
-                $(MODAL_ID).find(".btn-proceed"),
-              );
-            },
-          },
-        ],
+        // Populate the review screen.
+        onReview($modal, data) {
+          const targetLabels = {
+            main: "Main Sheets",
+            "external-main": "External Client Sheets",
+          };
+
+          const scopeLabels = {
+            all:
+              data.target === "external-main"
+                ? "All Client Sheets (Internal Tabs)"
+                : "All Client Sheets",
+            project: "Project Tab",
+            individual: "Specific Sheet Tab",
+          };
+
+          $modal
+            .find("#formulaReviewTarget")
+            .text(targetLabels[data.target] || data.target);
+
+          $modal
+            .find("#formulaReviewScope")
+            .text(scopeLabels[data.scope] || data.scope);
+
+          $modal
+            .find("#formulaReviewSheetGroup")
+            .toggleClass("d-none", data.scope !== "individual");
+
+          $modal.find("#formulaReviewSheet").text(data.sheetName || "");
+          $modal.find("#formulaReviewCell").text(data.cellRef);
+          $modal.find("#formulaReviewValue").text(data.formula);
+        },
+
+        onProceed($modal, data, $btn, controls) {
+          return submitFormulaInjection($modal, $btn, data, controls);
+        },
       },
 
       onOpen($modal) {
-        $modal
-          .off(ns)
+        $modal.off(ns);
 
-          /*
-           * STEP 1
-           * ------------------------------------------------------
-           */
+        renderFormulaInjectionScopes($modal);
 
-          .on(`click${ns}`, ".btn-cancel", () => {
-            AppUtils.closeModal(MODAL_ID);
-          })
+        $modal.on("change" + ns, "#formulaInjectionTarget", () => {
+          renderFormulaInjectionScopes($modal);
+        });
 
-          .on(`click${ns}`, ".btn-save", () => {
-            const $cellInput = $modal.find("#masterFormulaCell");
+        $modal.on("change" + ns, '[name="formulaInjectionScope"]', () =>
+          syncFormulaInjectionScope($modal),
+        );
 
-            const $formulaValue = $modal.find("#masterFormulaValue");
-
-            /*
-             * Remove previous validation styling.
-             */
-            $cellInput.removeClass("is-invalid");
-            $formulaValue.removeClass("is-invalid");
-
-            let isValid = true;
-
-            const cellRefResult = ValidationModule.cellReference(
-              $cellInput.val(),
-              "Cell reference",
-            );
-
-            const formulaResult = ValidationModule.formula(
-              $formulaValue.val(),
-              "Formula",
-            );
-
-            if (!cellRefResult.valid) {
-              $cellInput.addClass("is-invalid");
-              isValid = false;
-            }
-
-            if (!formulaResult.valid) {
-              $formulaValue.addClass("is-invalid");
-              isValid = false;
-            }
-
-            /*
-             * Only show review if valid.
-             */
-            if (isValid) {
-              $modal
-                .find("#main-modal-body, #main-modal-footer")
-                .addClass("d-none");
-
-              $modal
-                .find("#review-modal-body, #review-modal-footer")
-                .removeClass("d-none");
-            }
-          })
-
-          /*
-           * STEP 2
-           * ------------------------------------------------------
-           */
-
-          .on(`click${ns}`, ".btn-back", () => {
-            $modal
-              .find("#review-modal-body, #review-modal-footer")
-              .addClass("d-none");
-
-            $modal
-              .find("#main-modal-body, #main-modal-footer")
-              .removeClass("d-none");
-          })
-
-          .on(`click${ns}`, ".btn-proceed", () => {
-            const $btn = $modal.find(".btn-proceed");
-
-            AppUtils.lockModal(MODAL_ID);
-
-            if (isNotMain === "btnDeployExternalProjectsInternalSheetFormula") {
-              applyFormulaToExternalProjectSheetsFromModal($modal, $btn);
-            } else if (
-              isNotMain === "btnDeployExternalProjectsMainSheetFormula"
-            ) {
-              applyFormulaToExternalProjectsFromModal($modal, $btn);
-            } else {
-              applyMasterFormula($modal, $btn);
-            }
-          });
+        $modal.on(`click${ns}`, ".btn-cancel", () => {
+          AppUtils.closeModal(MODAL_ID);
+        });
       },
 
       onClose($modal) {
@@ -1255,303 +1267,254 @@ const settingsConfigurationPage = (() => {
     });
   }
 
-  async function applyMasterFormula($modal, $btn) {
-    const data = getMasterFormulaFormData($modal);
+  function renderFormulaInjectionScopes($modal) {
+    const target = String(
+      $modal.find("#formulaInjectionTarget").val() || "",
+    ).trim();
 
-    if (!data) {
-      return;
+    const $options = $modal.find("#formulaInjectionScopeOptions");
+    const currentScope = String(
+      $modal.find('[name="formulaInjectionScope"]:checked').val() || "",
+    );
+
+    const scopeOptions = {
+      main: [
+        {
+          value: "all",
+          label: "All Client Sheets",
+        },
+        {
+          value: "individual",
+          label: "Specific Sheet Tab",
+        },
+      ],
+
+      "external-main": [
+        {
+          value: "all",
+          label: "All Client Sheets (Internal Tabs)",
+        },
+        {
+          value: "project",
+          label: "Project Tab",
+        },
+        {
+          value: "individual",
+          label: "Specific Sheet Tab",
+        },
+      ],
+    };
+
+    const options = scopeOptions[target] || [];
+
+    $options.html(
+      options
+        .map(
+          (option, index) => `
+          <div class="custom-control custom-radio">
+            <input
+              type="radio"
+              class="custom-control-input"
+              id="formulaScope${option.value}"
+              name="formulaInjectionScope"
+              value="${option.value}"
+              ${currentScope === option.value || (!options.some((item) => item.value === currentScope) && index === 0) ? "checked" : ""}
+            >
+            <label
+              class="custom-control-label"
+              for="formulaScope${option.value}"
+            >
+              ${option.label}
+            </label>
+          </div>
+        `,
+        )
+        .join(""),
+    );
+
+    syncFormulaInjectionScope($modal);
+  }
+
+  function syncFormulaInjectionScope($modal) {
+    const scope = String(
+      $modal.find('[name="formulaInjectionScope"]:checked').val() || "",
+    );
+
+    const $sheetGroup = $modal.find("#formulaIndividualSheetGroup");
+
+    $sheetGroup.toggleClass("d-none", scope !== "individual");
+
+    if (scope !== "individual") {
+      $modal.find("#formulaIndividualSheetName").removeClass("is-invalid");
+    }
+  }
+
+  function getFormulaInjectionFormData($modal) {
+    const $target = $modal.find("#formulaInjectionTarget");
+    const $sheetName = $modal.find("#formulaIndividualSheetName");
+    const $cellRef = $modal.find("#formulaInjectionCell");
+    const $formula = $modal.find("#formulaInjectionValue");
+
+    const target = String($target.val() || "").trim();
+
+    const scope = String(
+      $modal.find('[name="formulaInjectionScope"]:checked').val() || "",
+    ).trim();
+
+    const sheetName = String($sheetName.val() || "").trim();
+
+    $target.removeClass("is-invalid");
+    $sheetName.removeClass("is-invalid");
+    $cellRef.removeClass("is-invalid");
+    $formula.removeClass("is-invalid");
+
+    const validScopes = {
+      main: ["all", "individual"],
+      "external-main": ["all", "project", "individual"],
+    };
+
+    let isValid = true;
+    let errorMessage = "";
+
+    if (!Object.prototype.hasOwnProperty.call(validScopes, target)) {
+      $target.addClass("is-invalid");
+      isValid = false;
+      errorMessage = "Please select a spreadsheet target.";
+    } else if (!validScopes[target].includes(scope)) {
+      isValid = false;
+      errorMessage = "Please select a valid deployment scope.";
     }
 
-    const { cellRef, formula } = data;
-
-    const operationId = startMasterFormulaOperation();
-
-    const loading = AppUtils.setButtonLoading($btn[0], "Applying Formula");
-
-    try {
-      const [sessionId, signature] = await getAuthArgs();
-
-      AppUtils.gScriptRun({
-        gscriptFunc: "applyFormulaToMainSheets",
-
-        args: [sessionId, signature, cellRef, formula],
-
-        onSuccess: (result) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-
-          loading.setSuccess("Formula Applied");
-
-          AppUtils.showDashboardToast(
-            "Formula applied to the main spreadsheet.",
-            "success",
-          );
-
-          AppUtils.closeModal(MODAL_ID);
-
-          masterFormulaTimer = setTimeout(() => {
-            masterFormulaTimer = null;
-
-            if (!isMasterFormulaOperationActive(operationId)) {
-              return;
-            }
-
-            openExternalProjectsConfirmation(cellRef, formula, operationId);
-          }, 1000);
-        },
-
-        onError: (err) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-
-          console.error("applyFormulaToMainSheets failed:", err);
-
-          loading.restore();
-
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to apply formula to the main spreadsheet.",
-            "error",
-          );
-        },
-      });
-    } catch (error) {
-      loading.restore();
-
-      if (handleInvalidSessionError(error)) {
-        return;
+    if (scope === "individual") {
+      if (!sheetName) {
+        $sheetName.addClass("is-invalid");
+        isValid = false;
+        errorMessage ||= "Please enter the exact sheet tab name.";
+      } else if (sheetName.length > 100) {
+        $sheetName.addClass("is-invalid");
+        isValid = false;
+        errorMessage ||= "Sheet tab name cannot exceed 100 characters.";
       }
-
-      AppUtils.showDashboardToast(
-        error?.message || "Failed to apply formula to the main sheets.",
-        "error",
-      );
-    }
-  }
-
-  function openExternalProjectsConfirmation(cellRef, formula, operationId) {
-    if (!isMasterFormulaOperationActive(operationId)) {
-      return;
     }
 
-    AppUtils.openConfirmationModal({
-      ns: "externalProjects",
+    const cellRefResult = ValidationModule.cellReference(
+      $cellRef.val(),
+      "Cell reference",
+    );
 
-      title: "Update External Projects?",
+    if (!cellRefResult.valid) {
+      $cellRef.addClass("is-invalid");
+      isValid = false;
+      errorMessage ||= cellRefResult.message;
+    }
 
-      message:
-        "This will apply the formula to the Projects sheet of every registered external spreadsheet, including the external template. This may take some time.",
+    const formulaResult = ValidationModule.formula($formula.val(), "Formula");
 
-      onProceed: ($modal, $btn) => {
-        applyFormulaToExternalProjects(cellRef, formula, $btn[0], operationId);
-      },
+    if (!formulaResult.valid) {
+      $formula.addClass("is-invalid");
+      isValid = false;
+      errorMessage ||= formulaResult.message;
+    }
 
-      onBack: () => {
-        cancelMasterFormulaOperation();
-        AppUtils.closeModal(MODAL_ID);
-      },
-    });
+    if (!isValid) {
+      AppUtils.showDashboardToast(errorMessage, "error");
+      return null;
+    }
+
+    return {
+      target,
+      scope,
+      sheetName: scope === "individual" ? sheetName : "",
+      cellRef: cellRefResult.value,
+      formula: formulaResult.value,
+    };
   }
 
-  function applyFormulaToExternalProjectsFromModal($modal, $btn) {
-    const data = getMasterFormulaFormData($modal);
-
+  async function submitFormulaInjection($modal, $btn, data, controls = {}) {
     if (!data) {
-      return;
+      return false;
     }
 
-    const { cellRef, formula } = data;
-
-    const operationId = startMasterFormulaOperation();
-
-    applyFormulaToExternalProjects(cellRef, formula, $btn[0], operationId);
-  }
-
-  async function applyFormulaToExternalProjects(
-    cellRef,
-    formula,
-    btn,
-    operationId,
-  ) {
-    if (!isMasterFormulaOperationActive(operationId)) {
-      return;
-    }
-
-    const loading = AppUtils.setButtonLoading(btn, "Updating Projects");
+    const loading = AppUtils.setButtonLoading($btn[0], "Injecting Formula");
 
     try {
       const [sessionId, signature] = await getAuthArgs();
 
       AppUtils.gScriptRun({
-        gscriptFunc: "applyFormulaToExternalProjects",
+        gscriptFunc: "applyFormulaInjection",
 
-        args: [sessionId, signature, cellRef, formula],
+        args: [
+          sessionId,
+          signature,
+          data.target,
+          data.scope,
+          data.sheetName,
+          data.cellRef,
+          data.formula,
+        ],
 
         onSuccess: (result) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
+          const updated = Number(result?.updated || 0);
+          const failed = Number(result?.failed || 0);
 
-          loading.setSuccess("Formula Applied");
+          // if (Array.isArray(result?.results)) {
+          //   console.table(result.results); 
+          // }
 
-          AppUtils.showDashboardToast(
-            `External Projects updated successfully: ${result.updated} spreadsheet(s).`,
-            "success",
-          );
+          if (result?.success && failed === 0) {
+            loading.setSuccess("Formula Applied");
 
-          masterFormulaTimer = setTimeout(() => {
-            masterFormulaTimer = null;
-
-            if (!isMasterFormulaOperationActive(operationId)) {
-              return;
-            }
-
-            openExternalProjectSheetsConfirmation(
-              cellRef,
-              formula,
-              operationId,
+            AppUtils.showDashboardToast(
+              `Formula successfully applied to ${updated} sheet(s).`,
+              "success",
             );
-          }, 1000);
-        },
 
-        onError: (err) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
+            AppUtils.closeModal(MODAL_ID);
             return;
           }
 
-          console.error("applyFormulaToExternalProjects failed:", err);
-
           loading.restore();
 
+          const message =
+            failed > 0
+              ? `Formula injection completed with errors. Updated: ${updated}, Failed: ${failed}. Check the console for details.`
+              : "Formula injection completed, but no sheets were updated.";
+
+          AppUtils.showDashboardToast(message, "error");
+
+          // Do not automatically retry partial deployments.
+          AppUtils.closeModal(MODAL_ID);
+        },
+
+        onError: (error) => {
+          console.error("applyFormulaInjection failed:", error);
+
+          loading.restore();
+          controls.release?.();
+
           AppUtils.showDashboardToast(
-            err?.message || "Failed to update External Projects.",
+            error?.message || "Failed to inject the formula.",
             "error",
           );
         },
       });
+
+      return true;
     } catch (error) {
       loading.restore();
 
       if (handleInvalidSessionError(error)) {
-        return;
+        return false;
       }
 
-      AppUtils.showDashboardToast(
-        error?.message || "Failed to update external projects.",
-        "error",
-      );
-    }
-  }
-
-  function openExternalProjectSheetsConfirmation(
-    cellRef,
-    formula,
-    operationId,
-  ) {
-    if (!isMasterFormulaOperationActive(operationId)) {
-      return;
-    }
-
-    AppUtils.openConfirmationModal({
-      ns: "externalProjectSheets",
-
-      title: "Update External Project Sheets?",
-
-      message:
-        "This will apply the formula to the individual project sheets inside every registered external spreadsheet, including the external template. This may take some time.",
-
-      onProceed: ($modal, $btn) => {
-        applyFormulaToExternalProjectSheets(
-          cellRef,
-          formula,
-          $btn[0],
-          operationId,
-        );
-      },
-
-      onBack: () => {
-        cancelMasterFormulaOperation();
-        AppUtils.closeModal(MODAL_ID);
-      },
-    });
-  }
-
-  function applyFormulaToExternalProjectSheetsFromModal($modal, $btn) {
-    const data = getMasterFormulaFormData($modal);
-
-    if (!data) {
-      return;
-    }
-
-    const { cellRef, formula } = data;
-
-    const operationId = startMasterFormulaOperation();
-
-    applyFormulaToExternalProjectSheets(cellRef, formula, $btn[0], operationId);
-  }
-
-  async function applyFormulaToExternalProjectSheets(
-    cellRef,
-    formula,
-    btn,
-    operationId,
-  ) {
-    if (!isMasterFormulaOperationActive(operationId)) {
-      return;
-    }
-
-    const loading = AppUtils.setButtonLoading(btn, "Updating Sheets");
-
-    try {
-      const [sessionId, signature] = await getAuthArgs();
-
-      AppUtils.gScriptRun({
-        gscriptFunc: "applyFormulaToExternalProjectSheets",
-
-        args: [sessionId, signature, cellRef, formula],
-
-        onSuccess: (result) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-
-          loading.setSuccess("Sheets Updated");
-
-          AppUtils.showDashboardToast(
-            `External project sheets updated successfully: ${result.updated} sheet(s).`,
-            "success",
-          );
-
-          cancelMasterFormulaOperation();
-        },
-
-        onError: (err) => {
-          if (!isMasterFormulaOperationActive(operationId)) {
-            return;
-          }
-
-          console.error("applyFormulaToExternalProjectSheets failed:", err);
-
-          loading.restore();
-
-          AppUtils.showDashboardToast(
-            err?.message || "Failed to update external project sheets.",
-            "error",
-          );
-        },
-      });
-    } catch (error) {
-      loading.restore();
-
-      if (handleInvalidSessionError(error)) {
-        return;
-      }
+      console.error("Formula injection authentication failed:", error);
 
       AppUtils.showDashboardToast(
-        error?.message || "Failed to update external project sheets.",
+        error?.message || "Failed to authenticate formula injection.",
         "error",
       );
+
+      return false;
     }
   }
 

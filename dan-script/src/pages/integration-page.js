@@ -43,6 +43,23 @@ const integrationsConfigurationPage = (() => {
       logo: "https://s13.gifyu.com/images/bnmHv.png",
     },
 
+    asana: {
+      title: "Asana",
+      description:
+        "Configure the Asana access token for your manager workspace.",
+      authorizationRequired: false,
+      fields: [
+        {
+          name: "asanaAccessToken",
+          label: "Personal Access Token",
+          type: "password",
+          placeholder: "Enter Asana personal access token",
+          help: "Used by this manager workspace to retrieve Asana task details and comments.",
+        },
+      ],
+      logo: "https://s15.gifyu.com/images/bWDTF.png",
+    },
+
     sheets: {
       title: "Google Sheets",
       description:
@@ -142,7 +159,7 @@ const integrationsConfigurationPage = (() => {
       .off("click.integrationPage")
       .on(
         "click.integrationPage",
-        "[data-integration-configure]",
+        "[data-integration-configure][data-integration]",
         handleConfigure,
       );
   };
@@ -160,7 +177,7 @@ const integrationsConfigurationPage = (() => {
 
     if (config?.unavailable) {
       AppUtils.showDashboardToast(
-        "Google Calendar integration is not available yet.",
+        `${config.title} integration is not available yet.`,
         "info",
       );
       return;
@@ -460,11 +477,12 @@ const integrationsConfigurationPage = (() => {
 
   function openIntegrationModal(integration) {
     const config = getIntegrationConfig(integration);
+
     if (!config) {
       return;
     }
 
-    const ns = `.integrationConfig`;
+    const ns = ".integrationConfig";
 
     AppUtils.openModal(MODAL_ID, {
       size: "md",
@@ -473,68 +491,139 @@ const integrationsConfigurationPage = (() => {
       header: buildHeaderHtml(integration, config),
 
       body: `
-      <!-- CONFIGURATION FORM ENTRY -->
       <div id="main-modal-body">
         ${buildBodyHtml(config)}
       </div>
 
-      <!-- REVIEW / CONFIRMATION ALERT -->
       <div id="review-modal-body" class="d-none">
-        <h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>
-        <p>Please review the integration settings before applying the updates.</p>
+        <h5 class="modal-title mb-2">
+          <strong>Review Integration Settings</strong>
+        </h5>
+
+        <p>
+          Please review the following changes before applying them.
+        </p>
+
+        <div id="integration-review-fields" class="text-start"></div>
       </div>
     `,
 
       footer: `
-      <!-- INITIAL SUBMIT FOOTER -->
+      <!-- APP-MODAL-MAIN-ACTIONS -->
       <div id="main-modal-footer" class="d-flex gap-2">
         ${buildFooterHtml(config)}
       </div>
 
-      <!-- REVIEW ACTION FOOTER -->
+      <!-- APP-MODAL-REVIEW-ACTIONS -->
       <div id="review-modal-footer" class="d-flex gap-2 d-none">
-        <button type="button" class="btn btn-secondary btn-modal-back">
+        <button
+          type="button"
+          class="btn btn-secondary btn-modal-back"
+        >
           Back
         </button>
-        <button type="button" class="btn btn-success btn-proceed">
+
+        <button
+          type="button"
+          class="btn btn-gc btn-proceed"
+        >
           Proceed
         </button>
       </div>
     `,
+
+      review: {
+        enabled: !config.readOnly,
+
+        selectors: {
+          main: "#main-modal-body, #main-modal-footer",
+          review: "#review-modal-body, #review-modal-footer",
+          trigger: ".btn-save",
+          back: ".btn-modal-back",
+          proceed: ".btn-proceed",
+        },
+
+        getData($modal) {
+          const values = {};
+
+          config.fields.forEach((field) => {
+            values[field.name] = String(
+              $modal.find(`#integrationConfigValue-${field.name}`).val() || "",
+            ).trim();
+          });
+
+          const hasValue = Object.values(values).some((item) => item !== "");
+
+          if (!hasValue) {
+            AppUtils.showDashboardToast(
+              "Please enter at least one value.",
+              "error",
+            );
+
+            return null;
+          }
+
+          return { values };
+        },
+
+        onReview($modal, data) {
+          const $container = $modal.find("#integration-review-fields");
+
+          $container.empty();
+
+          config.fields.forEach((field) => {
+            const value = data.values[field.name] || "";
+            const sensitive = isSensitiveIntegrationField(field);
+
+            let displayValue;
+
+            if (sensitive) {
+              displayValue = value
+                ? "••••••••••••"
+                : "Keep existing credential";
+            } else {
+              displayValue = value || "Not provided";
+            }
+
+            const $row = $("<div>", {
+              class: "mb-3",
+            });
+
+            $("<div>", {
+              class: "fw-semibold mb-1",
+              text: field.label,
+            }).appendTo($row);
+
+            $("<div>", {
+              class: "text-muted text-break",
+              text: displayValue,
+            }).appendTo($row);
+
+            if (sensitive) {
+              $("<small>", {
+                class: "text-muted",
+                text: value
+                  ? "A new credential will replace the existing one."
+                  : "The existing credential will be retained.",
+              }).appendTo($row);
+            }
+
+            $container.append($row);
+          });
+        },
+
+        onProceed($modal, data, $button, controls) {
+          return saveIntegration(integration, $modal, $button, data, controls);
+        },
+      },
 
       onOpen($modal) {
         $modal.data("integration", integration);
 
         $modal
           .off(ns)
-          // Cancel Click -> Dismisses modal layout context
           .on(`click${ns}`, ".btn-cancel", () => {
             AppUtils.closeModal(MODAL_ID);
-          })
-          // Save Click -> Toggles UI to confirmation step
-          .on(`click${ns}`, ".btn-save", (e) => {
-            $modal
-              .find("#main-modal-body, #main-modal-footer")
-              .addClass("d-none");
-            $modal
-              .find("#review-modal-body, #review-modal-footer")
-              .removeClass("d-none");
-          })
-          // Back Click -> Returns view back to configuration form fields
-          .on(`click${ns}`, ".btn-back", () => {
-            $modal
-              .find("#review-modal-body, #review-modal-footer")
-              .addClass("d-none");
-            $modal
-              .find("#main-modal-body, #main-modal-footer")
-              .removeClass("d-none");
-          })
-          // Proceed Click -> Runs original integration submission engine
-          .on(`click${ns}`, ".btn-proceed", () => {
-            const $btn = $modal.find(".btn-proceed");
-
-            AppUtils.lockModal(MODAL_ID);
-            saveIntegration(integration, $modal, $btn);
           })
           .on(`click${ns}`, "#integration-authorize-button", () => {
             authorizeIntegration(integration, $modal);
@@ -623,7 +712,7 @@ const integrationsConfigurationPage = (() => {
 
             return `
               <div class="position-relative form-group mb-3">
-                <label for="integrationConfigValue-${fieldName}">
+                <label for="integrationConfigValue-${fieldName}" class="form-label">
                   ${fieldLabel}
                 </label>
 
@@ -686,8 +775,7 @@ const integrationsConfigurationPage = (() => {
 
     <button
       type="button"
-      data-required-role="manager"
-      class="btn btn-primary btn-save"
+      class="btn btn-gc btn-save"
     >
       Save Changes
     </button>
@@ -799,53 +887,57 @@ const integrationsConfigurationPage = (() => {
     }
   }
 
-  async function saveIntegration(integration, $modal, $btn) {
+  function isSensitiveIntegrationField(field) {
+    return (
+      field.type === "password" ||
+      /token|password|secret|api.?key|credential/i.test(field.name)
+    );
+  }
+
+  async function saveIntegration(
+    integration,
+    $modal,
+    $btn,
+    reviewData,
+    controls = {},
+  ) {
     const config = getIntegrationConfig(integration);
+
+    if (!config) {
+      controls.release?.();
+      return false;
+    }
 
     if (config.readOnly) {
       AppUtils.showDashboardToast(
         "This integration is managed centrally.",
         "info",
       );
-      return;
+
+      controls.release?.();
+      return false;
     }
 
-    const title = config?.title || "Integration";
+    const title = config.title || "Integration";
+    const value = reviewData?.values;
 
-    if (!config) {
-      return;
-    }
-
-    const value = {};
-
-    config.fields.forEach((field) => {
-      value[field.name] = String(
-        $modal.find(`#integrationConfigValue-${field.name}`).val() || "",
-      ).trim();
-    });
-
-    const hasValue = Object.values(value).some(
-      (item) => String(item || "").trim() !== "",
-    );
-
-    if (!hasValue) {
-      AppUtils.showDashboardToast("Please enter at least one value.", "error");
-
-      return;
+    if (!value) {
+      controls.release?.();
+      return false;
     }
 
     /*
-     * Single-field integrations still send a scalar value
-     * because the existing backend expects:
+     * Preserve existing backend payload expectations:
      *
+     * Single field:
      *   gmail   -> string
      *   discord -> string
      *
-     * Multi-field integrations send the full object:
-     *
-     *   sheets -> { spreadsheetId, externalSheetTemplateId }
-     *   drive  -> { reportFolderId, backupFolderId, mainSheetsFolderId }
+     * Multiple fields:
+     *   sheets -> object
+     *   drive  -> object
      */
+
     const payload =
       config.fields.length === 1 ? value[config.fields[0].name] : value;
 
@@ -887,19 +979,25 @@ const integrationsConfigurationPage = (() => {
         onError: (err) => {
           console.error("saveIntegration failed:", err);
 
+          loading.restore();
+
+          controls.release?.();
+
           AppUtils.showDashboardToast(
             err?.message || "Failed to save integration configuration.",
             "error",
           );
-
-          loading.restore();
         },
       });
+
+      return true;
     } catch (error) {
       loading.restore();
 
+      controls.release?.();
+
       if (handleInvalidSessionError(error)) {
-        return;
+        return false;
       }
 
       console.error("Authentication required for saveIntegration:", error);
@@ -909,6 +1007,7 @@ const integrationsConfigurationPage = (() => {
         "error",
       );
 
+      return false;
     }
   }
 

@@ -133,7 +133,7 @@ const growthComparisonOverviewPage = (() => {
         [sessionId, signature, currentYear, comparisonYear],
         (data) => {
           if (!data) {
-            AppUtils.showError(
+            console.info(
               `No growth comparison data found for ${currentYear} vs ${comparisonYear}.`,
             );
 

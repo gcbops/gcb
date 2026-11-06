@@ -396,7 +396,7 @@ const HourSummary = (() => {
           // console.log("[HoursSummary] Yearly summary response:", data);
 
           if (!data) {
-            AppUtils.showError("No yearly analytics found.");
+            console.info("No yearly analytics found.");
             return;
           }
 
@@ -826,12 +826,46 @@ const HourSummary = (() => {
     })} hrs/day`;
   }
 
+  // admin
+
+  async function loadAdminHoursSummary(containerSelector, callback) {
+    try {
+      const [sessionId, signature] = await getAuthArgs();
+
+      AppUtils.cachedGScriptCall(
+        "adminHoursSummary",
+        "getAdminHoursSummary",
+        [sessionId, signature],
+        (data) => {
+          if (!data) {
+            AppUtils.showError("No admin metrics found");
+            return;
+          }
+
+          renderHoursSummary(containerSelector, data, callback);
+        },
+      );
+    } catch (error) {
+      if (handleInvalidSessionError(error)) {
+        return;
+      }
+
+      AppUtils.showError(
+        error?.message || "Failed to load admin hours summary.",
+      );
+    }
+  }
+
   return {
     loadHoursSummary,
     loadYearHoursSummary,
     loadMonthlyHoursSummary,
     loadDailyOverviewSummary,
     loadTodayChargedHours,
+
+    // admin
+
+    loadAdminHoursSummary,
   };
 })();
 

@@ -1,8 +1,7 @@
 const SCHEDULED_TRIGGERS = {
   dailyNotification: {
     functionName: "dailyNotification",
-
-    required: () => Boolean(getDiscordWebhook()),
+    required: () => hasEnabledManagerNotificationConfig_("discord"),
 
     create: () => {
       ScriptApp.newTrigger("dailyNotification")
@@ -15,13 +14,11 @@ const SCHEDULED_TRIGGERS = {
 
   monthlyNotification: {
     functionName: "monthlyNotification",
-
-    required: () => Boolean(getDiscordWebhook() || getNotificationEmail()),
-
+    required: () => hasEnabledManagerNotificationConfig_("either"),
     create: () => {
       ScriptApp.newTrigger("monthlyNotification")
         .timeBased()
-        .everyDays(1)
+        .onMonthDay(1)
         .atHour(18)
         .create();
     },
@@ -29,8 +26,7 @@ const SCHEDULED_TRIGGERS = {
 
   sendOwedReport: {
     functionName: "sendOwedReport",
-
-    required: () => Boolean(getDiscordWebhook()),
+    required: () => hasEnabledManagerNotificationConfig_("discord"),
 
     create: () => {
       ScriptApp.newTrigger("sendOwedReport")
@@ -43,8 +39,7 @@ const SCHEDULED_TRIGGERS = {
 
   yearlyNotification: {
     functionName: "yearlyNotification",
-
-    required: () => Boolean(getDiscordWebhook() || getNotificationEmail()),
+    required: () => hasEnabledManagerNotificationConfig_("either"),
 
     create: () => {
       ScriptApp.newTrigger("yearlyNotification")
@@ -215,4 +210,3 @@ function reconcileScheduledTriggersInternal() {
 
   return results;
 }
-

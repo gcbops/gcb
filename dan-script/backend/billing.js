@@ -1,9 +1,17 @@
-function syncBillingRecords(sessionId, signature) {
+function syncBillingRecords(sessionId, signature, requestId = "") {
   const { workspace, spreadsheet: ss } = getManagerWorkspaceForCapability_(
     sessionId,
     signature,
     "billing.manage",
   );
+
+  const startedAt = Date.now();
+  const managerId = workspace.managerId || "";
+
+  let recordsProcessed = 0;
+  let clientsProcessed = 0;
+  let clientsSkipped = 0;
+  let operationLogged = false;
 
   try {
     if (!ss) {
@@ -53,6 +61,29 @@ function syncBillingRecords(sessionId, signature) {
         billingSheet.getRange(2, 1, rowsToClear, 8).clearContent();
       }
 
+      const completedAt = Date.now();
+
+      recordGcbOperationLog_({
+        timestamp: new Date(completedAt),
+        startedAt,
+        completedAt,
+        requestId,
+        managerId,
+        category: "BILLING",
+        operation: "SYNC_BILLING_RECORDS",
+        status: "SUCCESS",
+        trigger: "MANUAL",
+        durationMs: Math.max(0, completedAt - startedAt),
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        target: "Billing Records",
+        message:
+          "Billing Records synchronized. No client records were available.",
+      });
+
+      operationLogged = true;
+
       return {
         success: true,
         records: 0,
@@ -76,8 +107,6 @@ function syncBillingRecords(sessionId, signature) {
     });
 
     const records = [];
-    let clientsProcessed = 0;
-    let clientsSkipped = 0;
 
     clientNames.forEach((clientName) => {
       if (clientName === "BLANK") {
@@ -154,6 +183,8 @@ function syncBillingRecords(sessionId, signature) {
       billingSheet.getRange(2, 1, maxRows - 1, 8).clearContent();
     }
 
+    recordsProcessed = records.length;
+
     // Write the entire dataset in one operation.
     if (records.length > 0) {
       billingSheet.getRange(2, 1, records.length, 8).setValues(records);
@@ -167,8 +198,34 @@ function syncBillingRecords(sessionId, signature) {
 
     // Basic formatting.
     billingSheet.getRange(1, 1, 1, 8).setFontWeight("bold");
-
     billingSheet.setFrozenRows(1);
+
+    const completedAt = Date.now();
+    const status = clientsSkipped > 0 ? "PARTIAL" : "SUCCESS";
+
+    recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
+      category: "BILLING",
+      operation: "SYNC_BILLING_RECORDS",
+      status,
+      trigger: "MANUAL",
+      durationMs: Math.max(0, completedAt - startedAt),
+      processed: clientsProcessed + clientsSkipped,
+      succeeded: clientsProcessed,
+      failed: clientsSkipped,
+      target: "Billing Records",
+      message:
+        `Billing Records sync completed. ` +
+        `Records: ${recordsProcessed}; ` +
+        `clients processed: ${clientsProcessed}; ` +
+        `clients skipped: ${clientsSkipped}.`,
+    });
+
+    operationLogged = true;
 
     logResponse(
       `Billing Records synced for manager ${workspace.managerId || "unknown"}. ` +
@@ -185,6 +242,29 @@ function syncBillingRecords(sessionId, signature) {
     };
   } catch (err) {
     logResponse(`syncBillingRecords failed: ${err.message}`);
+
+    if (!operationLogged) {
+      const completedAt = Date.now();
+
+      recordGcbOperationLog_({
+        timestamp: new Date(completedAt),
+        startedAt,
+        completedAt,
+        requestId,
+        managerId,
+        category: "BILLING",
+        operation: "SYNC_BILLING_RECORDS",
+        status: "FAILED",
+        trigger: "MANUAL",
+        durationMs: Math.max(0, completedAt - startedAt),
+        processed: recordsProcessed,
+        succeeded: 0,
+        failed: 1,
+        target: "Billing Records",
+        message: "Billing Records synchronization failed.",
+        error: String(err?.message || err),
+      });
+    }
 
     throw new Error(`Failed to sync Billing Records: ${err.message}`);
   }
@@ -530,10 +610,10 @@ function getBillingOwedHours(sessionId, signature) {
 
 function getInvoiceStatus(sessionId, signature) {
   const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
-  sessionId,
-  signature,
-  "billing.view",
-);
+    sessionId,
+    signature,
+    "billing.view",
+  );
 
   try {
     const sheet = ss.getSheetByName("Billing Records");
@@ -721,7 +801,14 @@ function getManagerBillingReportsFolder_(workspace) {
   return folder;
 }
 
-function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
+function sendBillingRecordsCSVEmail(
+  sessionId,
+  signature,
+  fileId,
+  requestId = "",
+) {
+  const startedAt = Date.now();
+
   const { workspace } = getManagerWorkspaceForCapability_(
     sessionId,
     signature,
@@ -745,31 +832,59 @@ function sendBillingRecordsCSVEmail(sessionId, signature, fileId) {
     );
   }
 
-  const formatted = formatDateSafe(new Date(), "MMMM dd, yyyy HH:mm:ss");
+  const sentAt = new Date();
+  const formatted = formatDateSafe(sentAt, "MMMM dd, yyyy HH:mm:ss");
+  const subject = `Billing Records Export - ${file.getName()}`;
+  const reportLink = file.getUrl();
 
   try {
     MailApp.sendEmail({
       to: emailTo,
-      subject: `Billing Records Export - ${file.getName()}`,
+      subject,
       htmlBody: `
         <p>Your <b>Billing Records</b> export is ready.</p>
         <p>
-          <a href="${file.getUrl()}">View Billing Records CSV</a>
+          <a href="${reportLink}">View Billing Records CSV</a>
         </p>
         <p>Generated on ${formatted}</p>
       `,
     });
 
-    logBillingCSVDelivery_("EMAIL", "SUCCESS", file);
+    logBillingCSVDelivery_("EMAIL", "SUCCESS", file, null, {
+      startedAt,
+      requestId,
+      managerId: workspace.managerId,
+    });
   } catch (error) {
-    logBillingCSVDelivery_("EMAIL", "FAILED", file, error);
+    logBillingCSVDelivery_("EMAIL", "FAILED", file, error, {
+      startedAt,
+      requestId,
+      managerId: workspace.managerId,
+    });
+
     throw error;
   }
 
-  return { success: true };
+  return {
+    success: true,
+    channel: "email",
+    recipient: emailTo,
+    subject,
+    reportName: file.getName(),
+    reportLink,
+    sentAt: sentAt.toISOString(),
+    message: "Billing Records CSV email sent successfully.",
+  };
 }
 
-function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
+function sendBillingRecordsCSVDiscord(
+  sessionId,
+  signature,
+  fileId,
+  requestId = "",
+) {
+  const startedAt = Date.now();
+
   const { workspace } = getManagerWorkspaceForCapability_(
     sessionId,
     signature,
@@ -778,14 +893,7 @@ function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
 
   const { file } = getVerifiedBillingCSVExport_(workspace, fileId);
 
-  const propertyKey = getManagerIntegrationPropertyKey_(
-    workspace.managerId,
-    "DISCORD_WEBHOOK_URL",
-  );
-
-  const webhookUrl = String(
-    PropertiesService.getScriptProperties().getProperty(propertyKey) || "",
-  ).trim();
+  const webhookUrl = String(workspace.discordWebhookUrl || "").trim();
 
   if (!webhookUrl) {
     throw new Error(
@@ -810,9 +918,18 @@ function sendBillingRecordsCSVDiscord(sessionId, signature, fileId) {
       throw new Error("Failed to send Billing Records CSV to Discord.");
     }
 
-    logBillingCSVDelivery_("DISCORD", "SUCCESS", file);
+    logBillingCSVDelivery_("DISCORD", "SUCCESS", file, null, {
+      startedAt,
+      requestId,
+      managerId: workspace.managerId,
+    });
   } catch (error) {
-    logBillingCSVDelivery_("DISCORD", "FAILED", file, error);
+    logBillingCSVDelivery_("DISCORD", "FAILED", file, error, {
+      startedAt,
+      requestId,
+      managerId: workspace.managerId,
+    });
+
     throw error;
   }
 
@@ -1223,6 +1340,8 @@ function saveBillingRecordsCSV(
         startDate,
         endDate,
         recordCount: records.length,
+        requestId,
+        managerId: workspace.managerId,
       });
 
       return {
@@ -1249,6 +1368,8 @@ function saveBillingRecordsCSV(
         endDate,
         recordCount: records.length,
         error,
+        requestId,
+        managerId: workspace.managerId,
       });
 
       throw error;
@@ -1342,22 +1463,46 @@ function findBillingCSVOperationRow_(sheet, operationKey) {
   return index === -1 ? 0 : index + 2;
 }
 
-function logBillingCSVDelivery_(channel, status, file, error = null) {
+function logBillingCSVDelivery_(
+  channel,
+  status,
+  file,
+  error = null,
+  options = {},
+) {
   try {
+    const completedAt = Date.now();
+    const startedAt = options.startedAt || completedAt;
+
+    const succeeded = status === "SUCCESS" ? 1 : 0;
+    const failed = status === "FAILED" ? 1 : 0;
+
+    let fileName = "Billing CSV";
+
+    try {
+      fileName = file?.getName() || fileName;
+    } catch (_) {}
+
     recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId: options.requestId || "",
+      managerId: options.managerId || "",
       category: channel,
       operation: "SEND_BILLING_CSV",
       status,
-      trigger: "REPORT_WORKFLOW",
+      trigger: options.trigger || "REPORT_WORKFLOW",
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: 1,
-      succeeded: status === "SUCCESS" ? 1 : 0,
-      failed: status === "FAILED" ? 1 : 0,
-      target: file?.getName() || "Billing CSV",
+      succeeded,
+      failed,
+      target: fileName,
       message:
         status === "SUCCESS"
           ? `Billing CSV ${channel.toLowerCase()} delivery succeeded.`
-          : `Billing CSV ${channel.toLowerCase()} delivery failed.`,
-      ...(error ? { error: String(error.message || error) } : {}),
+          : `Billing CSV ${channel.toLowerCase()} delivery ${status.toLowerCase()}.`,
+      error: error ? String(error.message || error).slice(0, 2000) : "",
     });
   } catch (logError) {
     console.error("[Billing CSV] Operation logging failed:", logError);
@@ -1366,24 +1511,40 @@ function logBillingCSVDelivery_(channel, status, file, error = null) {
 
 function logBillingCSVGeneration_(
   status,
-  { startedAt, startDate, endDate, recordCount = 0, error = null } = {},
+  {
+    startedAt = Date.now(),
+    startDate = "",
+    endDate = "",
+    recordCount = 0,
+    error = null,
+    requestId = "",
+    managerId = "",
+    trigger = "MANUAL",
+  } = {},
 ) {
   try {
+    const completedAt = Date.now();
+
     recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
       category: "REPORT",
-      operation: "GENERATE_CSV",
+      operation: "GENERATE_BILLING_CSV",
       status,
-      trigger: "MANUAL",
-      durationMs: Date.now() - startedAt,
+      trigger,
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: recordCount,
       succeeded: status === "SUCCESS" ? 1 : 0,
       failed: status === "FAILED" ? 1 : 0,
       target: "BILLING_RECORDS",
       message:
         status === "SUCCESS"
-          ? `Billing Records CSV generated successfully (${startDate} to ${endDate}).`
-          : "Billing Records CSV generation failed.",
-      ...(error ? { error: String(error.message || error).slice(0, 500) } : {}),
+          ? `Billing Records CSV generated successfully (${startDate} to ${endDate}); ${recordCount} records processed.`
+          : `Billing Records CSV generation ${status.toLowerCase()} (${startDate} to ${endDate}).`,
+      error: error ? String(error.message || error).slice(0, 2000) : "",
     });
   } catch (logError) {
     console.error(

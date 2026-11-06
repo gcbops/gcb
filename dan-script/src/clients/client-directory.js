@@ -353,6 +353,7 @@ const ClientDirectory = (() => {
   function getClientProfilePopoverOptions(client) {
     return {
       profileButton: true,
+      showDetails: true,
 
       actions: `
       <button

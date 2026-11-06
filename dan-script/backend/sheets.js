@@ -1,233 +1,3 @@
-const GCB_MANAGER_REGISTRY_PROPERTY = "MANAGER_REGISTRY_SPREADSHEET_ID";
-const GCB_MANAGER_REGISTRY_SHEET = "Managers";
-
-function getManagerWorkspaceForSession_(session) {
-  if (
-    !session ||
-    typeof session.email !== "string" ||
-    !session.email.trim() ||
-    typeof session.googleSub !== "string" ||
-    !session.googleSub.trim()
-  ) {
-    throw new Error("A valid authenticated session is required.");
-  }
-
-  const registryId = String(
-    PropertiesService.getScriptProperties().getProperty(
-      GCB_MANAGER_REGISTRY_PROPERTY,
-    ) || "",
-  ).trim();
-
-  if (!registryId) {
-    throw new Error("MANAGER_REGISTRY_SPREADSHEET_ID is not configured.");
-  }
-
-  const registrySpreadsheet = openSpreadsheetById(registryId);
-  const managersSheet = registrySpreadsheet.getSheetByName(
-    GCB_MANAGER_REGISTRY_SHEET,
-  );
-
-  if (!managersSheet) {
-    throw new Error('The manager registry is missing the "Managers" tab.');
-  }
-
-  const values = managersSheet.getDataRange().getValues();
-
-  if (values.length < 2) {
-    throw new Error("No manager assignments are configured.");
-  }
-
-  const headers = values[0].map((header) => String(header || "").trim());
-
-  const requiredHeaders = [
-    "Manager ID",
-    "Manager Name",
-    "Login Email",
-    "Enabled",
-    "Operational Spreadsheet ID",
-    "External Sheets Folder ID",
-    "Backup Folder ID",
-    "Reports Folder ID",
-    "Discord Webhook URL",
-  ];
-
-  const indexes = {};
-
-  for (const header of requiredHeaders) {
-    indexes[header] = headers.indexOf(header);
-
-    if (indexes[header] === -1) {
-      throw new Error(`The Managers tab is missing the "${header}" column.`);
-    }
-  }
-
-  const normalizedEmail = session.email.trim().toLowerCase();
-  const matchingRows = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-
-    const rowEmail = String(row[indexes["Login Email"]] || "")
-      .trim()
-      .toLowerCase();
-
-    if (rowEmail === normalizedEmail) {
-      matchingRows.push({
-        row,
-        rowNumber: i + 1,
-      });
-    }
-  }
-
-  if (matchingRows.length === 0) {
-    throw new Error(
-      "No manager workspace is assigned to the authenticated account.",
-    );
-  }
-
-  if (matchingRows.length > 1) {
-    throw new Error(
-      "Multiple manager assignments exist for this account. Resolve the duplicate records.",
-    );
-  }
-
-  const { row, rowNumber } = matchingRows[0];
-
-  const enabledValue = row[indexes.Enabled];
-
-  const enabled =
-    enabledValue === true ||
-    String(enabledValue || "")
-      .trim()
-      .toLowerCase() === "true";
-
-  if (!enabled) {
-    throw new Error("The manager workspace assignment is disabled.");
-  }
-
-  const managerId = String(row[indexes["Manager ID"]] || "").trim();
-  const managerName = String(row[indexes["Manager Name"]] || "").trim();
-  const operationalSpreadsheetId = String(
-    row[indexes["Operational Spreadsheet ID"]] || "",
-  ).trim();
-  const externalSheetsFolderId = String(
-    row[indexes["External Sheets Folder ID"]] || "",
-  ).trim();
-  const backupFolderId = String(row[indexes["Backup Folder ID"]] || "").trim();
-
-  const reportsFolderId = String(
-    row[indexes["Reports Folder ID"]] || "",
-  ).trim();
-
-  const discordWebhookUrl = String(
-    row[indexes["Discord Webhook URL"]] || "",
-  ).trim();
-
-  if (!managerId || !operationalSpreadsheetId) {
-    throw new Error(
-      "The manager assignment is missing its ID or operational spreadsheet ID.",
-    );
-  }
-
-  if (operationalSpreadsheetId === registryId) {
-    throw new Error(
-      "The manager operational spreadsheet cannot be the central registry spreadsheet.",
-    );
-  }
-
-  /*
-   * An unconfigured folder must be blank.
-   * Reject placeholder text instead of treating it as a valid folder ID.
-   */
-  if (
-    externalSheetsFolderId &&
-    !/^[A-Za-z0-9_-]{20,}$/.test(externalSheetsFolderId)
-  ) {
-    throw new Error(
-      `The External Sheets Folder ID for manager "${managerId}" is invalid. ` +
-        "Enter the actual Google Drive folder ID or leave the cell blank.",
-    );
-  }
-
-  let operationalSpreadsheet;
-
-  try {
-    operationalSpreadsheet = openSpreadsheetById(operationalSpreadsheetId);
-  } catch (error) {
-    console.error(
-      `[Manager Workspace] Unable to open the assigned spreadsheet for manager ${managerId}.`,
-    );
-
-    throw new Error(
-      "The assigned manager spreadsheet could not be opened. Verify its ID and the deployment account's access.",
-    );
-  }
-
-  return {
-    managerId,
-    managerName,
-    email: normalizedEmail,
-    enabled,
-
-    externalSheetsFolderId,
-    backupFolderId,
-    reportsFolderId,
-    discordWebhookUrl,
-
-    registryRow: rowNumber,
-    spreadsheetId: operationalSpreadsheetId,
-    spreadsheet: operationalSpreadsheet,
-  };
-}
-
-function getManagerSpreadsheetForSession_(session) {
-  return getManagerWorkspaceForSession_(session).spreadsheet;
-}
-
-function getManagerWorkspaceForCapability_(sessionId, signature, capability) {
-  const session = requireCapability(sessionId, signature, capability);
-
-  const workspace = getManagerWorkspaceForSession_(session);
-
-  if (!workspace || !workspace.managerId || !workspace.spreadsheet) {
-    throw new Error(
-      "No operational spreadsheet is assigned to the authenticated manager.",
-    );
-  }
-
-  return {
-    session,
-    workspace,
-    spreadsheet: workspace.spreadsheet,
-  };
-}
-
-function getManagerSheetForSession_(session, sheetName) {
-  const name = String(sheetName || "").trim();
-
-  if (!name) {
-    throw new Error("A sheet name is required.");
-  }
-
-  const sheet = getManagerSpreadsheetForSession_(session).getSheetByName(name);
-
-  if (!sheet) {
-    throw new Error(`Required manager sheet "${name}" was not found.`);
-  }
-
-  return sheet;
-}
-
-function getManagerSheetSafeForSession_(session, sheetName) {
-  const name = String(sheetName || "").trim();
-
-  if (!name) {
-    throw new Error("A sheet name is required.");
-  }
-
-  return getManagerSpreadsheetForSession_(session).getSheetByName(name) || null;
-}
-
 function openSpreadsheetById(spreadsheetId) {
   if (!spreadsheetId) {
     throw new Error("Spreadsheet ID is required.");
@@ -287,68 +57,324 @@ function getFirstEmptyRow(sheet, col = 1, startRow = 1) {
     .getRange(startRow, col, lastRow - startRow + 1, 1)
     .getValues();
 
-  const index = values.findIndex((row) => !row[0]);
+  const index = values.findIndex(([value]) => value === "" || value == null);
 
   return index >= 0 ? index + startRow : lastRow + 1;
+}
+
+function reorderActiveClientSheets() {
+  const managers = getManagers_();
+  const results = [];
+
+  const processedSpreadsheetIds = new Set();
+
+  managers.forEach((manager) => {
+    const spreadsheetId = String(manager?.spreadsheetId || "").trim();
+
+    if (!manager?.managerId || !spreadsheetId) {
+      results.push({
+        managerId: manager?.managerId || null,
+        success: false,
+        error: "Manager ID or operational spreadsheet ID is missing.",
+      });
+      return;
+    }
+
+    if (processedSpreadsheetIds.has(spreadsheetId)) {
+      results.push({
+        managerId: manager.managerId,
+        success: false,
+        error: "Operational spreadsheet ID is assigned more than once.",
+      });
+      return;
+    }
+
+    processedSpreadsheetIds.add(spreadsheetId);
+
+    try {
+      const ss = openSpreadsheetById(spreadsheetId);
+      const clientNamesSheet = ss.getSheetByName("Client Names");
+
+      if (!clientNamesSheet) {
+        throw new Error('Sheet "Client Names" was not found.');
+      }
+
+      const lastRow = clientNamesSheet.getLastRow();
+
+      if (lastRow < 2) {
+        results.push({
+          managerId: manager.managerId,
+          success: true,
+          reorderedCount: 0,
+          message: "No client names found.",
+        });
+        return;
+      }
+
+      const readNames = (column) => [
+        ...new Set(
+          clientNamesSheet
+            .getRange(2, column, lastRow - 1, 1)
+            .getDisplayValues()
+            .flat()
+            .map((name) => name.trim())
+            .filter(Boolean),
+        ),
+      ];
+
+      const clientNames = readNames(1);
+      const activeClientNames = readNames(9);
+      const clientSheetNames = new Set(clientNames);
+
+      const sheets = ss.getSheets();
+      const sheetsByName = new Map(
+        sheets.map((sheet) => [sheet.getName(), sheet]),
+      );
+
+      // Preserve the relative order of non-client/system sheets.
+      const systemSheets = sheets.filter(
+        (sheet) => !clientSheetNames.has(sheet.getName()),
+      );
+
+      let targetIndex = systemSheets.length + 1;
+      let reorderedCount = 0;
+      let missingSheetCount = 0;
+
+      activeClientNames.forEach((clientName) => {
+        const sheet = sheetsByName.get(clientName);
+
+        if (!sheet) {
+          missingSheetCount++;
+
+          console.warn(
+            `[Client Sheets][${manager.managerId}] Sheet not found: ${clientName}`,
+          );
+
+          return;
+        }
+
+        ss.setActiveSheet(sheet);
+        ss.moveActiveSheet(targetIndex++);
+        reorderedCount++;
+      });
+
+      results.push({
+        managerId: manager.managerId,
+        success: missingSheetCount === 0,
+        reorderedCount,
+        missingSheetCount,
+      });
+    } catch (error) {
+      results.push({
+        managerId: manager.managerId,
+        success: false,
+        error: String(error?.message || error).slice(0, 300),
+      });
+    }
+  });
+
+  return {
+    success: results.every((result) => result.success),
+    results,
+  };
+}
+
+function getExternalSheetTemplate_() {
+  const templateId = String(
+    PropertiesService.getScriptProperties().getProperty(
+      "EXTERNAL_SHEET_TEMPLATE_ID",
+    ) || "",
+  ).trim();
+
+  if (!templateId) {
+    throw new Error("EXTERNAL_SHEET_TEMPLATE_ID is not configured.");
+  }
+
+  return {
+    spreadsheetId: templateId,
+    spreadsheet: openSpreadsheetById(templateId),
+  };
 }
 
 function applyFormulaToMainSheets(sessionId, signature, cellRef, formula) {
   requireRole(sessionId, signature, "admin");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
-
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const ss = getMainSpreadsheet();
+    let updated = 0;
+    let failed = 0;
+    const results = [];
 
-    const clientNamesSheet = ss.getSheetByName("Client Names");
+    /**
+     * Apply the formula to actual client sheets and BLANK.
+     */
+    function applyToSpreadsheet(ss, managerId = null, spreadsheetId = "") {
+      const clientNames = new Set(getClientSheetsListFromSpreadsheet_(ss));
 
-    if (!clientNamesSheet) {
-      throw new Error('Sheet "Client Names" was not found.');
+      let spreadsheetUpdated = 0;
+      let spreadsheetFailed = 0;
+
+      ss.getSheets().forEach((sheet) => {
+        const name = sheet.getName();
+
+        if (!clientNames.has(name) && name !== "BLANK") {
+          return;
+        }
+
+        try {
+          sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+          updated++;
+          spreadsheetUpdated++;
+        } catch (error) {
+          failed++;
+          spreadsheetFailed++;
+
+          console.warn(
+            `[Main Sheets] Unable to update ${managerId || "Template"} → ` +
+              `${name}!${validatedCellRef}:`,
+            error,
+          );
+        }
+      });
+
+      results.push({
+        target: managerId ? "manager" : "template",
+        managerId,
+        spreadsheetId,
+        success: spreadsheetFailed === 0,
+        updated: spreadsheetUpdated,
+        failed: spreadsheetFailed,
+      });
+
+      return {
+        updated: spreadsheetUpdated,
+        failed: spreadsheetFailed,
+      };
     }
 
-    const lastRow = clientNamesSheet.getLastRow();
+    // ---------------------------------------------------------
+    // 1. Update manager operational spreadsheets
+    // ---------------------------------------------------------
 
-    const clientNames =
-      lastRow >= 2
-        ? clientNamesSheet
-            .getRange(`A2:A${lastRow}`)
-            .getValues()
-            .flat()
-            .map((name) => String(name || "").trim())
-            .filter(Boolean)
-        : [];
+    const managers = getManagers_();
 
-    const clientNameSet = new Set(clientNames);
+    managers.forEach((manager) => {
+      const managerId = manager?.managerId || null;
+      const spreadsheetId = String(manager?.spreadsheetId || "").trim();
 
-    let updated = 0;
+      if (!spreadsheetId) {
+        failed++;
 
-    ss.getSheets().forEach((sheet) => {
-      const name = sheet.getName();
+        results.push({
+          target: "manager",
+          managerId,
+          success: false,
+          updated: 0,
+          failed: 1,
+          error: "Manager operational spreadsheet ID is missing.",
+        });
 
-      if (!clientNameSet.has(name) && name !== "BLANK") {
         return;
       }
 
-      sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+      try {
+        const ss = openSpreadsheetById(spreadsheetId);
 
-      updated++;
+        applyToSpreadsheet(ss, managerId, spreadsheetId);
+
+        const result = results[results.length - 1];
+
+        logResponse(
+          `Main formula update: manager ${managerId}, ` +
+            `cell ${validatedCellRef}, updated ${result.updated}, ` +
+            `failed ${result.failed}.`,
+        );
+      } catch (error) {
+        failed++;
+
+        results.push({
+          target: "manager",
+          managerId,
+          spreadsheetId,
+          success: false,
+          updated: 0,
+          failed: 1,
+          error: String(error?.message || error).slice(0, 300),
+        });
+
+        console.warn(
+          `[Main Sheets] Unable to process manager ${managerId}:`,
+          error,
+        );
+      }
     });
 
-    logResponse(
-      `Main formula update complete. Cell: ${validatedCellRef}, Sheets updated: ${updated}`,
-    );
+    // ---------------------------------------------------------
+    // 2. Update the main sheet template
+    // ---------------------------------------------------------
+
+    const templateId = String(
+      PropertiesService.getScriptProperties().getProperty(
+        "MAIN_SHEET_TEMPLATE_ID",
+      ) || "",
+    ).trim();
+
+    if (!templateId) {
+      failed++;
+
+      results.push({
+        target: "template",
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: "MAIN_SHEET_TEMPLATE_ID is not configured.",
+      });
+    } else {
+      try {
+        const templateSS = openSpreadsheetById(templateId);
+
+        const templateResult = applyToSpreadsheet(templateSS, null, templateId);
+
+        logResponse(
+          `Main template formula update: cell ${validatedCellRef}, ` +
+            `updated ${templateResult.updated}, ` +
+            `failed ${templateResult.failed}.`,
+        );
+      } catch (error) {
+        failed++;
+
+        results.push({
+          target: "template",
+          spreadsheetId: templateId,
+          success: false,
+          updated: 0,
+          failed: 1,
+          error: String(error?.message || error).slice(0, 300),
+        });
+
+        console.warn(
+          "[Main Sheets] Unable to process main sheet template:",
+          error,
+        );
+      }
+    }
 
     return {
-      success: true,
+      success: failed === 0,
       cellRef: validatedCellRef,
       updated,
+      failed,
+      results,
     };
-  } catch (err) {
-    logResponse(`applyFormulaToMainSheets failed: ${err.message}`);
+  } catch (error) {
+    logResponse(`applyFormulaToMainSheets failed: ${error?.message || error}`);
 
-    throw new Error(`Failed to apply formula to main sheets: ${err.message}`);
+    throw new Error(
+      `Failed to apply formula to main sheets: ${error?.message || error}`,
+    );
   }
 }
 
@@ -359,81 +385,135 @@ function applyFormulaToExternalProjects(
   formula,
 ) {
   requireRole(sessionId, signature, "admin");
-
-  const session = requireCapability(sessionId, signature, "clients.manage");
-
-  const workspace = getManagerWorkspaceForSession_(session);
+  requireCapability(sessionId, signature, "clients.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
-
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const externalSheets = getExternalSheetsInternal(workspace.spreadsheet);
-
-    const spreadsheetIds = new Set();
-
-    externalSheets.forEach((external) => {
-      if (external.spreadsheetId) {
-        spreadsheetIds.add(external.spreadsheetId);
-      }
-    });
-
-    /*
-     * Always include the external template.
-     */
-    const templateId = PropertiesService.getScriptProperties().getProperty(
-      EXTERNAL_SHEETS_CONFIG.templateProperty,
-    );
-
-    if (templateId) {
-      spreadsheetIds.add(templateId);
-    }
+    const { targets, errors } = getAllManagerExternalSpreadsheetTargets_();
 
     let updated = 0;
-    let failed = 0;
+    let failed = errors.length;
 
-    spreadsheetIds.forEach((spreadsheetId) => {
+    const results = errors.map((item) => ({
+      spreadsheetId: null,
+      managerId: item.managerId,
+      success: false,
+      error: item.error,
+    }));
+
+    targets.forEach((target) => {
       try {
-        const externalSS = openSpreadsheetById(spreadsheetId);
-
+        const externalSS = openSpreadsheetById(target.spreadsheetId);
         const projectsSheet = externalSS.getSheetByName("Projects");
 
         if (!projectsSheet) {
-          console.warn(`No Projects sheet found in "${externalSS.getName()}".`);
-
-          failed++;
-          return;
+          throw new Error(
+            `Sheet "Projects" was not found in "${externalSS.getName()}".`,
+          );
         }
 
         projectsSheet.getRange(validatedCellRef).setFormula(validatedFormula);
 
         updated++;
 
+        results.push({
+          spreadsheetId: target.spreadsheetId,
+          managerId: target.managerId,
+          source: target.source,
+          success: true,
+        });
+
         logResponse(
-          `Formula applied to ${externalSS.getName()} → Projects!${cellRef}`,
+          `Formula applied to ${externalSS.getName()} → ` +
+            `Projects!${validatedCellRef}`,
         );
-      } catch (err) {
+      } catch (error) {
         failed++;
 
+        results.push({
+          spreadsheetId: target.spreadsheetId,
+          managerId: target.managerId,
+          source: target.source,
+          success: false,
+          error: String(error?.message || error).slice(0, 300),
+        });
+
         console.warn(
-          `Unable to update external Projects sheet "${spreadsheetId}":`,
-          err,
+          `[External Projects] Unable to update spreadsheet ` +
+            `${target.spreadsheetId}:`,
+          error,
         );
       }
     });
 
+    // ---------------------------------------------------------
+    // UPDATE SHARED EXTERNAL SHEET TEMPLATE → PROJECTS
+    // ---------------------------------------------------------
+
+    try {
+      const { spreadsheetId, spreadsheet: templateSS } =
+        getExternalSheetTemplate_();
+
+      const projectsSheet = templateSS.getSheetByName("Projects");
+
+      if (!projectsSheet) {
+        throw new Error(
+          `Sheet "Projects" was not found in the external template.`,
+        );
+      }
+
+      projectsSheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+      updated++;
+
+      results.push({
+        target: "template",
+        spreadsheetId,
+        source: "external-template",
+        sheetName: "Projects",
+        success: true,
+        updated: 1,
+        failed: 0,
+      });
+
+      logResponse(
+        `Formula applied to External Sheet Template → ` +
+          `Projects!${validatedCellRef}`,
+      );
+    } catch (error) {
+      failed++;
+
+      results.push({
+        target: "template",
+        source: "external-template",
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: String(error?.message || error).slice(0, 300),
+      });
+
+      console.warn(
+        "[External Projects] Unable to update external template:",
+        error,
+      );
+    }
+
     return {
       success: failed === 0,
-      cellRef,
+      cellRef: validatedCellRef,
       updated,
       failed,
+      results,
     };
-  } catch (err) {
-    logResponse(`applyFormulaToExternalProjects failed: ${err.message}`);
+  } catch (error) {
+    logResponse(
+      `applyFormulaToExternalProjects failed: ${error?.message || error}`,
+    );
 
     throw new Error(
-      `Failed to update external Projects sheets: ${err.message}`,
+      `Failed to update external Projects sheets: ${error?.message || error}`,
     );
   }
 }
@@ -445,177 +525,540 @@ function applyFormulaToExternalProjectSheets(
   formula,
 ) {
   requireRole(sessionId, signature, "admin");
-
-  const session = requireCapability(sessionId, signature, "clients.manage");
-
-  const workspace = getManagerWorkspaceForSession_(session);
+  requireCapability(sessionId, signature, "clients.manage");
 
   const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
-
   const validatedFormula = Validation.formula(formula, "Formula");
 
   try {
-    const externalSheets = getExternalSheetsInternal(workspace.spreadsheet);
-
-    const spreadsheetIds = new Set();
-
-    externalSheets.forEach((external) => {
-      if (external.spreadsheetId) {
-        spreadsheetIds.add(external.spreadsheetId);
-      }
-    });
-
-    /*
-     * Always include the external template.
-     */
-    const templateId = PropertiesService.getScriptProperties().getProperty(
-      EXTERNAL_SHEETS_CONFIG.templateProperty,
-    );
-
-    if (templateId) {
-      spreadsheetIds.add(templateId);
-    }
+    const { targets, errors } = getAllManagerExternalSpreadsheetTargets_();
 
     let updated = 0;
-    let failed = 0;
+    let failed = errors.length;
 
-    spreadsheetIds.forEach((spreadsheetId) => {
+    const results = errors.map((item) => ({
+      spreadsheetId: null,
+      managerId: item.managerId,
+      success: false,
+      error: item.error,
+    }));
+
+    targets.forEach((target) => {
+      let externalSS;
+      let projectSheets;
+
       try {
-        const externalSS = openSpreadsheetById(spreadsheetId);
-
-        externalSS.getSheets().forEach((sheet) => {
-          const sheetName = sheet.getName();
-
-          /*
-           * Projects is handled separately by
-           * applyFormulaToExternalProjects().
-           */
-          if (sheetName === "Projects") {
-            return;
-          }
-
-          /*
-           * Include BLANK.
-           *
-           * BLANK is the template used when creating
-           * new project sheets, so the formula must be
-           * kept in sync here as well.
-           */
-
-          try {
-            sheet.getRange(validatedCellRef).setFormula(validatedFormula);
-
-            updated++;
-
-            logResponse(
-              `Formula applied to ${externalSS.getName()} → ${sheetName}!${cellRef}`,
-            );
-          } catch (err) {
-            failed++;
-
-            console.warn(
-              `Unable to update ${externalSS.getName()} → ${sheetName}:`,
-              err,
-            );
-          }
-        });
-      } catch (err) {
+        externalSS = openSpreadsheetById(target.spreadsheetId);
+        projectSheets = getExternalProjectSheets_(externalSS);
+      } catch (error) {
         failed++;
 
+        results.push({
+          spreadsheetId: target.spreadsheetId,
+          managerId: target.managerId,
+          source: target.source,
+          success: false,
+          updated: 0,
+          failed: 1,
+          error: String(error?.message || error).slice(0, 300),
+        });
+
         console.warn(
-          `Unable to open external spreadsheet "${spreadsheetId}":`,
-          err,
+          `[External Project Sheets] Unable to access spreadsheet ` +
+            `${target.spreadsheetId}:`,
+          error,
+        );
+
+        return;
+      }
+
+      let spreadsheetUpdated = 0;
+      let spreadsheetFailed = 0;
+
+      projectSheets.forEach((sheet) => {
+        try {
+          sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+          updated++;
+          spreadsheetUpdated++;
+
+          logResponse(
+            `Formula applied to ${externalSS.getName()} → ` +
+              `${sheet.getName()}!${validatedCellRef}`,
+          );
+        } catch (error) {
+          failed++;
+          spreadsheetFailed++;
+
+          console.warn(
+            `[External Project Sheets] Unable to update ` +
+              `${externalSS.getName()} → ${sheet.getName()}:`,
+            error,
+          );
+        }
+      });
+
+      results.push({
+        spreadsheetId: target.spreadsheetId,
+        managerId: target.managerId,
+        source: target.source,
+        success: spreadsheetFailed === 0,
+        updated: spreadsheetUpdated,
+        failed: spreadsheetFailed,
+      });
+    });
+
+    // ---------------------------------------------------------
+    // UPDATE SHARED EXTERNAL SHEET TEMPLATE → INTERNAL TABS
+    // ---------------------------------------------------------
+
+    try {
+      const { spreadsheetId, spreadsheet: templateSS } =
+        getExternalSheetTemplate_();
+
+      const projectSheets = getExternalProjectSheets_(templateSS);
+
+      if (!projectSheets.length) {
+        throw new Error(
+          "No eligible internal project tabs were found in the external template.",
         );
       }
-    });
+
+      let templateUpdated = 0;
+      let templateFailed = 0;
+
+      projectSheets.forEach((sheet) => {
+        try {
+          sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+          updated++;
+          templateUpdated++;
+
+          logResponse(
+            `Formula applied to External Sheet Template → ` +
+              `${sheet.getName()}!${validatedCellRef}`,
+          );
+        } catch (error) {
+          failed++;
+          templateFailed++;
+
+          console.warn(
+            `[External Template] Unable to update ${sheet.getName()}:`,
+            error,
+          );
+        }
+      });
+
+      results.push({
+        target: "template",
+        spreadsheetId,
+        source: "external-template",
+        success: templateFailed === 0,
+        updated: templateUpdated,
+        failed: templateFailed,
+      });
+    } catch (error) {
+      failed++;
+
+      results.push({
+        target: "template",
+        source: "external-template",
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: String(error?.message || error).slice(0, 300),
+      });
+
+      console.warn(
+        "[External Project Sheets] Unable to update external template:",
+        error,
+      );
+    }
 
     return {
       success: failed === 0,
-      cellRef,
+      cellRef: validatedCellRef,
       updated,
       failed,
+      results,
     };
-  } catch (err) {
-    logResponse(`applyFormulaToExternalProjectSheets failed: ${err.message}`);
+  } catch (error) {
+    logResponse(
+      `applyFormulaToExternalProjectSheets failed: ` +
+        `${error?.message || error}`,
+    );
 
-    throw new Error(`Failed to update external project sheets: ${err.message}`);
+    throw new Error(
+      `Failed to update external project sheets: ` +
+        `${error?.message || error}`,
+    );
   }
 }
 
-function reorderActiveClientSheets() {
-  const ss = getMainSpreadsheet();
-  const clientNamesSheet = getSheetSafe("Client Names");
+function applyFormulaInjection(
+  sessionId,
+  signature,
+  target,
+  scope,
+  sheetName,
+  cellRef,
+  formula,
+) {
+  requireRole(sessionId, signature, "admin");
 
-  if (!ss || !clientNamesSheet) {
-    console.warn("[Client Sheets] Client Names sheet not found.");
-    return;
+  const validatedTarget = String(target || "").trim();
+  const validatedScope = String(scope || "").trim();
+  const validatedSheetName = String(sheetName || "").trim();
+
+  const validScopes = {
+    main: ["all", "individual"],
+    "external-main": ["all", "project", "individual"],
+  };
+
+  if (!Object.prototype.hasOwnProperty.call(validScopes, validatedTarget)) {
+    throw new Error("Invalid formula injection target.");
   }
 
-  const lastRow = clientNamesSheet.getLastRow();
-
-  if (lastRow < 2) {
-    console.warn("[Client Sheets] No client names found.");
-    return;
+  if (!validScopes[validatedTarget].includes(validatedScope)) {
+    throw new Error("Invalid deployment scope for the selected target.");
   }
 
-  const clientNames = [
-    ...new Set(
-      clientNamesSheet
-        .getRange(2, 1, lastRow - 1, 1)
-        .getDisplayValues()
-        .flat()
-        .map((name) => name.trim())
-        .filter(Boolean),
-    ),
-  ];
-
-  const activeClientNames = [
-    ...new Set(
-      clientNamesSheet
-        .getRange(2, 9, lastRow - 1, 1)
-        .getDisplayValues()
-        .flat()
-        .map((name) => name.trim())
-        .filter(Boolean),
-    ),
-  ];
-
-  if (!clientNames.length || !activeClientNames.length) {
-    console.warn("[Client Sheets] Client or active client list is empty.");
-    return;
+  if (validatedScope === "individual" && !validatedSheetName) {
+    throw new Error("Please enter a sheet tab name.");
   }
 
-  const sheets = ss.getSheets();
+  // ---------------------------------------------------------
+  // MAIN SHEET
+  // ---------------------------------------------------------
 
-  const clientSheetNames = new Set(clientNames);
+  if (validatedTarget === "main") {
+    if (validatedScope === "all") {
+      return applyFormulaToMainSheets(sessionId, signature, cellRef, formula);
+    }
 
-  const sheetsByName = new Map(sheets.map((sheet) => [sheet.getName(), sheet]));
-
-  // Keep all non-client sheets first, in their current relative order.
-  const systemSheets = sheets.filter(
-    (sheet) => !clientSheetNames.has(sheet.getName()),
-  );
-
-  let targetIndex = systemSheets.length + 1;
-  let reorderedCount = 0;
-
-  activeClientNames.forEach((clientName) => {
-    const sheet = sheetsByName.get(clientName);
-
-    if (!sheet) {
-      console.warn(
-        `[Client Sheets] Sheet not found for active client: ${clientName}`,
+    if (validatedScope === "individual") {
+      return applyFormulaToMainSheetTab_(
+        sessionId,
+        signature,
+        validatedSheetName,
+        cellRef,
+        formula,
       );
+    }
+  }
+
+  // ---------------------------------------------------------
+  // EXTERNAL CLIENT SHEET
+  // ---------------------------------------------------------
+
+  if (validatedTarget === "external-main") {
+    // All internal client/project tabs.
+    if (validatedScope === "all") {
+      return applyFormulaToExternalProjectSheets(
+        sessionId,
+        signature,
+        cellRef,
+        formula,
+      );
+    }
+
+    // External spreadsheet's Projects tab.
+    if (validatedScope === "project") {
+      return applyFormulaToExternalProjects(
+        sessionId,
+        signature,
+        cellRef,
+        formula,
+      );
+    }
+
+    // Any exact existing tab in each external spreadsheet.
+    if (validatedScope === "individual") {
+      return applyFormulaToExternalProjectTab_(
+        sessionId,
+        signature,
+        validatedSheetName,
+        cellRef,
+        formula,
+      );
+    }
+  }
+
+  throw new Error("Unable to process formula injection request.");
+}
+
+function applyFormulaToMainSheetTab_(
+  sessionId,
+  signature,
+  sheetName,
+  cellRef,
+  formula,
+) {
+  requireRole(sessionId, signature, "admin");
+
+  const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
+  const validatedFormula = Validation.formula(formula, "Formula");
+  const validatedSheetName = String(sheetName || "").trim();
+
+  if (!validatedSheetName) {
+    throw new Error("Please enter a sheet tab name.");
+  }
+
+  let updated = 0;
+  let failed = 0;
+  const results = [];
+
+  function applyToSpreadsheet(ss, managerId, spreadsheetId) {
+    try {
+      // Individual deployment: allow ANY existing sheet tab.
+      const sheet = ss.getSheetByName(validatedSheetName);
+
+      if (!sheet) {
+        throw new Error(
+          `Sheet tab "${validatedSheetName}" was not found in this spreadsheet.`,
+        );
+      }
+
+      sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+      updated++;
+
+      results.push({
+        target: managerId ? "manager" : "template",
+        managerId,
+        spreadsheetId,
+        sheetName: validatedSheetName,
+        success: true,
+        updated: 1,
+        failed: 0,
+      });
+    } catch (error) {
+      failed++;
+
+      results.push({
+        target: managerId ? "manager" : "template",
+        managerId,
+        spreadsheetId,
+        sheetName: validatedSheetName,
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: String(error?.message || error).slice(0, 300),
+      });
+    }
+  }
+
+  getManagers_().forEach((manager) => {
+    const managerId = manager?.managerId || null;
+    const spreadsheetId = String(manager?.spreadsheetId || "").trim();
+
+    if (!spreadsheetId) {
+      failed++;
+
+      results.push({
+        target: "manager",
+        managerId,
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: "Manager operational spreadsheet ID is missing.",
+      });
+
       return;
     }
 
-    ss.setActiveSheet(sheet);
-    ss.moveActiveSheet(targetIndex++);
+    try {
+      applyToSpreadsheet(
+        openSpreadsheetById(spreadsheetId),
+        managerId,
+        spreadsheetId,
+      );
+    } catch (error) {
+      failed++;
 
-    reorderedCount++;
+      results.push({
+        target: "manager",
+        managerId,
+        spreadsheetId,
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: String(error?.message || error).slice(0, 300),
+      });
+    }
   });
 
-  console.log(
-    `[Client Sheets] Reordered ${reorderedCount} active client sheets after ${systemSheets.length} system sheets.`,
-  );
+  const templateId = String(
+    PropertiesService.getScriptProperties().getProperty(
+      "MAIN_SHEET_TEMPLATE_ID",
+    ) || "",
+  ).trim();
+
+  if (!templateId) {
+    failed++;
+
+    results.push({
+      target: "template",
+      success: false,
+      updated: 0,
+      failed: 1,
+      error: "MAIN_SHEET_TEMPLATE_ID is not configured.",
+    });
+  } else {
+    try {
+      applyToSpreadsheet(openSpreadsheetById(templateId), null, templateId);
+    } catch (error) {
+      failed++;
+
+      results.push({
+        target: "template",
+        spreadsheetId: templateId,
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: String(error?.message || error).slice(0, 300),
+      });
+    }
+  }
+
+  return {
+    success: failed === 0,
+    target: "main",
+    scope: "individual",
+    sheetName: validatedSheetName,
+    cellRef: validatedCellRef,
+    updated,
+    failed,
+    results,
+  };
 }
+
+function applyFormulaToExternalProjectTab_(
+  sessionId,
+  signature,
+  sheetName,
+  cellRef,
+  formula,
+) {
+  requireRole(sessionId, signature, "admin");
+  requireCapability(sessionId, signature, "clients.manage");
+
+  const validatedSheetName = String(sheetName || "").trim();
+  const validatedCellRef = Validation.cellReference(cellRef, "Cell reference");
+  const validatedFormula = Validation.formula(formula, "Formula");
+
+  const { targets, errors } = getAllManagerExternalSpreadsheetTargets_();
+
+  let updated = 0;
+  let failed = errors.length;
+
+  const results = errors.map((item) => ({
+    managerId: item.managerId,
+    success: false,
+    updated: 0,
+    failed: 1,
+    error: item.error,
+  }));
+
+  targets.forEach((target) => {
+    try {
+      const ss = openSpreadsheetById(target.spreadsheetId);
+      const sheet = ss.getSheetByName(validatedSheetName);
+
+      if (!sheet) {
+        throw new Error(`Sheet tab "${validatedSheetName}" was not found.`);
+      }
+
+      sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+      updated++;
+
+      results.push({
+        managerId: target.managerId,
+        spreadsheetId: target.spreadsheetId,
+        source: target.source,
+        sheetName: validatedSheetName,
+        success: true,
+        updated: 1,
+        failed: 0,
+      });
+    } catch (error) {
+      failed++;
+
+      results.push({
+        managerId: target.managerId,
+        spreadsheetId: target.spreadsheetId,
+        source: target.source,
+        sheetName: validatedSheetName,
+        success: false,
+        updated: 0,
+        failed: 1,
+        error: String(error?.message || error).slice(0, 300),
+      });
+    }
+  });
+
+  // ---------------------------------------------------------
+  // UPDATE SHARED EXTERNAL SHEET TEMPLATE → SPECIFIC TAB
+  // ---------------------------------------------------------
+
+  try {
+    const { spreadsheetId, spreadsheet: templateSS } =
+      getExternalSheetTemplate_();
+
+    const sheet = templateSS.getSheetByName(validatedSheetName);
+
+    if (!sheet) {
+      throw new Error(
+        `Sheet tab "${validatedSheetName}" was not found in the external template.`,
+      );
+    }
+
+    sheet.getRange(validatedCellRef).setFormula(validatedFormula);
+
+    updated++;
+
+    results.push({
+      target: "template",
+      spreadsheetId,
+      source: "external-template",
+      sheetName: validatedSheetName,
+      success: true,
+      updated: 1,
+      failed: 0,
+    });
+
+    logResponse(
+      `Formula applied to External Sheet Template → ` +
+        `${validatedSheetName}!${validatedCellRef}`,
+    );
+  } catch (error) {
+    failed++;
+
+    results.push({
+      target: "template",
+      source: "external-template",
+      success: false,
+      updated: 0,
+      failed: 1,
+      error: String(error?.message || error).slice(0, 300),
+    });
+
+    console.warn(
+      "[External Project Tab] Unable to update external template:",
+      error,
+    );
+  }
+
+  return {
+    success: failed === 0,
+    target: "external-main",
+    scope: "individual",
+    sheetName: validatedSheetName,
+    cellRef: validatedCellRef,
+    updated,
+    failed,
+    results,
+  };
+}
+
+

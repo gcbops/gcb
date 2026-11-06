@@ -1,8 +1,12 @@
 function getPerformanceOverview(sessionId, signature) {
-  requireCapability(sessionId, signature, "hours.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "hours.view",
+  );
 
   try {
-    const analyticsSheet = getSheetSafe("Other Analytics");
+    const analyticsSheet = spreadsheet.getSheetByName("Other Analytics");
 
     if (!analyticsSheet) {
       throw new Error('Sheet "Other Analytics" was not found.');
@@ -48,15 +52,8 @@ function getPerformanceOverview(sessionId, signature) {
     const calculatedHeaders = targetValues[3];
     const calculatedData = targetValues[4];
 
-    const getTargetValue = (header) => {
-      const index = targetHeaders.indexOf(header);
-
-      return index === -1 ? null : targetData[index];
-    };
-
     const getCalculatedValue = (header) => {
       const index = calculatedHeaders.indexOf(header);
-
       return index === -1 ? null : calculatedData[index];
     };
 
@@ -66,15 +63,14 @@ function getPerformanceOverview(sessionId, signature) {
       }
 
       const number = Number(value);
-
       return Number.isFinite(number) ? number : null;
     };
 
     /*
      * Task metrics.
      *
-     * R8  = Tasks Completed This Month
-     * V8  = Tasks Completed This Year
+     * R8 = Tasks Completed This Month
+     * V8 = Tasks Completed This Year
      */
     const tasksCompletedThisMonth = toNumber(
       analyticsSheet.getRange("R8").getValue(),
@@ -95,9 +91,7 @@ function getPerformanceOverview(sessionId, signature) {
         workingDays: toNumber(analyticsSheet.getRange("T2").getValue()),
 
         currentMonthHours: toNumber(analyticsSheet.getRange("U2").getValue()),
-
         ytdHours: toNumber(analyticsSheet.getRange("V2").getValue()),
-
         annualTarget: toNumber(analyticsSheet.getRange("W2").getValue()),
 
         projectedAnnualHours: toNumber(
@@ -105,9 +99,7 @@ function getPerformanceOverview(sessionId, signature) {
         ),
 
         ytdTarget: toNumber(getCalculatedValue("YTD Target")),
-
         ytdProgress: toNumber(getCalculatedValue("YTD Progress")),
-
         annualProgress: toNumber(getCalculatedValue("Annual Progress")),
 
         projectedAnnualProgress: toNumber(
@@ -124,10 +116,14 @@ function getPerformanceOverview(sessionId, signature) {
 }
 
 function getCurrentTargetProgress(sessionId, signature) {
-  requireCapability(sessionId, signature, "hours.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "hours.view",
+  );
 
   try {
-    const sheet = getSheetSafe("Other Analytics");
+    const sheet = spreadsheet.getSheetByName("Other Analytics");
 
     if (!sheet) {
       throw new Error('Sheet "Other Analytics" was not found.');
@@ -143,22 +139,12 @@ function getCurrentTargetProgress(sessionId, signature) {
 
     const getInputValue = (header) => {
       const index = inputHeaders.indexOf(header);
-
-      if (index === -1) {
-        return null;
-      }
-
-      return inputData[index];
+      return index === -1 ? null : inputData[index];
     };
 
     const getCalculatedValue = (header) => {
       const index = calculatedHeaders.indexOf(header);
-
-      if (index === -1) {
-        return null;
-      }
-
-      return calculatedData[index];
+      return index === -1 ? null : calculatedData[index];
     };
 
     const toNumber = (value) => {
@@ -167,24 +153,16 @@ function getCurrentTargetProgress(sessionId, signature) {
       }
 
       const number = Number(value);
-
       return Number.isFinite(number) ? number : null;
     };
 
     const currentYear = toNumber(getInputValue("Target Year"));
-
     const currentMonth = getInputValue("Current Month");
-
     const monthlyTarget = toNumber(getInputValue("Monthly Target"));
-
     const dailyTarget = toNumber(getInputValue("Daily Target"));
-
     const workingDays = toNumber(getInputValue("Working Days"));
-
     const currentMonthHours = toNumber(getInputValue("Current Month Hours"));
-
     const ytdHours = toNumber(getInputValue("YTD Hours"));
-
     const annualTarget = toNumber(getInputValue("Annual Target"));
 
     const projectedAnnualHours = toNumber(
@@ -206,17 +184,13 @@ function getCurrentTargetProgress(sessionId, signature) {
     return {
       currentYear,
       currentMonth,
-
       monthlyTarget,
       dailyTarget,
       workingDays,
-
       currentMonthHours,
       dailyElapsedTarget,
       dailyProgress,
-
       ytdHours,
-
       annualTarget,
       projectedAnnualHours,
 
@@ -225,9 +199,7 @@ function getCurrentTargetProgress(sessionId, signature) {
       monthlyProgress: toNumber(getCalculatedValue("Current Month Progress")),
 
       ytdTarget: toNumber(getCalculatedValue("YTD Target")),
-
       ytdProgress: toNumber(getCalculatedValue("YTD Progress")),
-
       annualProgress: toNumber(getCalculatedValue("Annual Progress")),
 
       projectedProgress: toNumber(
@@ -240,10 +212,14 @@ function getCurrentTargetProgress(sessionId, signature) {
 }
 
 function updatePerformanceTarget(sessionId, signature, type, value) {
-  requireCapability(sessionId, signature, "hours.edit");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "hours.edit",
+  );
 
   try {
-    const sheet = getSheetSafe("Other Analytics");
+    const sheet = spreadsheet.getSheetByName("Other Analytics");
 
     if (!sheet) {
       throw new Error('Sheet "Other Analytics" was not found.');
@@ -260,10 +236,8 @@ function updatePerformanceTarget(sessionId, signature, type, value) {
 
     if (targetType === "monthly") {
       sheet.getRange("R2").setValue(target);
-    } else if (targetType === "daily") {
-      sheet.getRange("S2").setValue(target);
     } else {
-      throw new Error("Invalid performance target type.");
+      sheet.getRange("S2").setValue(target);
     }
 
     SpreadsheetApp.flush();
@@ -279,10 +253,14 @@ function updatePerformanceTarget(sessionId, signature, type, value) {
 }
 
 function getProductivityOverview(sessionId, signature) {
-  requireCapability(sessionId, signature, "hours.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "hours.view",
+  );
 
   try {
-    const analyticsSheet = getSheetSafe("Other Analytics");
+    const analyticsSheet = spreadsheet.getSheetByName("Other Analytics");
 
     if (!analyticsSheet) {
       throw new Error('Sheet "Other Analytics" was not found.');
@@ -295,12 +273,7 @@ function getProductivityOverview(sessionId, signature) {
 
     const getValue = (header) => {
       const index = headers.indexOf(header);
-
-      if (index === -1) {
-        return null;
-      }
-
-      return data[index];
+      return index === -1 ? null : data[index];
     };
 
     const toNumber = (value) => {
@@ -309,27 +282,20 @@ function getProductivityOverview(sessionId, signature) {
       }
 
       const number = Number(value);
-
       return Number.isFinite(number) ? number : null;
     };
 
     return {
       targetYear: toNumber(getValue("Target Year")),
-
       currentMonth: getValue("Current Month"),
-
       currentMonthHours: toNumber(getValue("Current Month Hours")),
-
       ytdHours: toNumber(getValue("YTD Hours")),
-
       projectedAnnualHours: toNumber(getValue("Projected Annual Hours")),
 
-      // Other Analytics!R8
       tasksCompletedThisMonth: toNumber(
         analyticsSheet.getRange("R8").getValue(),
       ),
 
-      // Other Analytics!V8
       tasksCompletedThisYear: toNumber(
         analyticsSheet.getRange("V8").getValue(),
       ),
@@ -340,9 +306,13 @@ function getProductivityOverview(sessionId, signature) {
 }
 
 function getPerformanceSummary(sessionId, signature, yearType) {
-  requireCapability(sessionId, signature, "hours.view");
+  const { spreadsheet } = getManagerWorkspaceForCapability_(
+    sessionId,
+    signature,
+    "hours.view",
+  );
 
-  const sheet = getSheetSafe("Other Analytics");
+  const sheet = spreadsheet.getSheetByName("Other Analytics");
 
   if (!sheet) {
     throw new Error('Sheet "Other Analytics" was not found.');
@@ -418,7 +388,6 @@ function getPerformanceSummary(sessionId, signature, yearType) {
 
   const percentages = requiredMetrics.map((metric) => {
     const value = Number(yearRow[columnMap[metric]]) || 0;
-
     return [metric, value * 100];
   });
 

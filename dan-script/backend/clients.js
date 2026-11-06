@@ -470,7 +470,7 @@ function getClientRecordsData(sessionId, signature, clientName) {
   };
 }
 
-function updateClientRecordStatus(sessionId, signature, payload) {
+function updateClientRecordStatusInternal_(sessionId, signature, payload) {
   const { spreadsheet } = getManagerWorkspaceForCapability_(
     sessionId,
     signature,
@@ -589,6 +589,133 @@ function updateClientRecordStatus(sessionId, signature, payload) {
   }
 }
 
+function updateClientRecordStatuses(sessionId, signature, payload) {
+  const startedAt = Date.now();
+
+  let workspace = null;
+  let results = [];
+
+  const operations = Array.isArray(payload?.operations)
+    ? payload.operations
+    : [];
+
+  const clientName = String(payload?.clientName || "").trim();
+  const requestId = String(payload?.requestId || "").trim();
+
+  try {
+    workspace = getManagerWorkspaceForCapability_(
+      sessionId,
+      signature,
+      "clients.update_status",
+    );
+
+    if (!payload || !clientName || !operations.length) {
+      throw new Error("Invalid status batch request.");
+    }
+
+    const lock = LockService.getScriptLock();
+
+    lock.waitLock(10000);
+
+    try {
+      operations.forEach((operation) => {
+        try {
+          const result = updateClientRecordStatusInternal_(
+            workspace.spreadsheet,
+            {
+              ...operation,
+              clientName,
+              spreadsheetId: payload.spreadsheetId,
+              sheetId: payload.sheetId,
+            },
+          );
+
+          results.push({
+            rowIndex: operation.rowIndex,
+            success: true,
+            result,
+          });
+        } catch (error) {
+          results.push({
+            rowIndex: operation.rowIndex,
+            success: false,
+            message: String(error?.message || error),
+          });
+        }
+      });
+    } finally {
+      lock.releaseLock();
+    }
+
+    const succeeded = results.filter((item) => item.success).length;
+    const failed = results.length - succeeded;
+
+    const completedAt = Date.now();
+
+    recordGcbOperationLog_({
+      startedAt,
+      completedAt,
+      durationMs: completedAt - startedAt,
+      requestId,
+      managerId: workspace.managerId,
+
+      category: "CLIENT_RECORD",
+      operation: "UPDATE_RECORD_STATUSES",
+      status: failed === 0 ? "SUCCESS" : succeeded > 0 ? "PARTIAL" : "FAILED",
+      trigger: "MANAGER",
+
+      processed: results.length,
+      succeeded,
+      failed,
+
+      target: clientName,
+      message: `Client status updates: ${succeeded} succeeded; ${failed} failed.`,
+      error: failed
+        ? results
+            .filter((item) => !item.success)
+            .map((item) => item.message)
+            .join(" | ")
+        : "",
+    });
+
+    return {
+      success: failed === 0,
+      clientName,
+      processed: results.length,
+      succeeded,
+      failed,
+      results,
+    };
+  } catch (error) {
+    const completedAt = Date.now();
+
+    if (workspace?.managerId) {
+      recordGcbOperationLog_({
+        startedAt,
+        completedAt,
+        durationMs: completedAt - startedAt,
+        requestId,
+        managerId: workspace.managerId,
+
+        category: "CLIENT_RECORD",
+        operation: "UPDATE_RECORD_STATUSES",
+        status: "FAILED",
+        trigger: "MANAGER",
+
+        processed: results.length,
+        succeeded: results.filter((item) => item.success).length,
+        failed: Math.max(1, results.filter((item) => !item.success).length),
+
+        target: clientName,
+        message: "Client status batch failed.",
+        error: String(error?.message || error).slice(0, 2000),
+      });
+    }
+
+    throw error;
+  }
+}
+
 function getClientSheetUrl(sessionId, signature, name) {
   const { spreadsheet } = getManagerWorkspaceForCapability_(
     sessionId,
@@ -618,14 +745,18 @@ function getClientSheetUrl(sessionId, signature, name) {
 function createClientSheet(sessionId, signature, input, requestId) {
   const startedAt = Date.now();
   let sheetName = "Unknown client";
+  let managerId = "";
   let result;
+  let requiresReconciliation = false;
 
   try {
-    const { spreadsheet: ss } = getManagerWorkspaceForCapability_(
+    const { workspace, spreadsheet: ss } = getManagerWorkspaceForCapability_(
       sessionId,
       signature,
       "clients.create",
     );
+
+    managerId = workspace.managerId || "";
 
     enforceUserRateLimit("client_sheet_creation", sessionId, 5, 60);
     enforceGlobalRateLimit("client_sheet_creation", 15, 60);
@@ -818,6 +949,7 @@ function createClientSheet(sessionId, signature, input, requestId) {
         } catch (error) {
           // Leave PROCESSING once copyTo() has been attempted.
           // An exception does not prove that the copy was not created.
+          requiresReconciliation = true;
           try {
             writeClientCreationOperation_(journal, operation.row, {
               ...operation,
@@ -844,6 +976,8 @@ function createClientSheet(sessionId, signature, input, requestId) {
     logClientSheetCreation_("SUCCESS", {
       startedAt,
       sheetName,
+      requestId,
+      managerId,
       message: result?.alreadyCompleted
         ? "Previously completed client creation request reused."
         : result?.recovered
@@ -853,10 +987,14 @@ function createClientSheet(sessionId, signature, input, requestId) {
 
     return result;
   } catch (error) {
-    logClientSheetCreation_("FAILED", {
+    logClientSheetCreation_(requiresReconciliation ? "PARTIAL" : "FAILED", {
       startedAt,
       sheetName,
-      message: "Client sheet creation failed or requires reconciliation.",
+      requestId,
+      managerId,
+      message: requiresReconciliation
+        ? "Client sheet creation outcome is uncertain; reconciliation is required."
+        : "Client sheet creation failed.",
       error,
     });
 
@@ -866,21 +1004,36 @@ function createClientSheet(sessionId, signature, input, requestId) {
 
 function logClientSheetCreation_(
   status,
-  { startedAt, sheetName = "Unknown client", message, error = null } = {},
+  {
+    startedAt = Date.now(),
+    sheetName = "Unknown client",
+    message = "",
+    error = null,
+    requestId = "",
+    managerId = "",
+    trigger = "MANUAL",
+  } = {},
 ) {
   try {
+    const completedAt = Date.now();
+
     const logged = recordGcbOperationLog_({
+      timestamp: new Date(completedAt),
+      startedAt,
+      completedAt,
+      requestId,
+      managerId,
       category: "CLIENT",
       operation: "CREATE_CLIENT_SHEET",
       status,
-      trigger: "MANUAL",
-      durationMs: Date.now() - startedAt,
+      trigger,
+      durationMs: Math.max(0, completedAt - startedAt),
       processed: 1,
       succeeded: status === "SUCCESS" ? 1 : 0,
       failed: status === "FAILED" ? 1 : 0,
       target: sheetName,
       message,
-      ...(error ? { error: String(error.message || error).slice(0, 500) } : {}),
+      error: error ? String(error.message || error).slice(0, 2000) : "",
     });
 
     if (logged === false) {
@@ -1461,7 +1614,8 @@ function getDailyActivityData(sessionId, signature) {
     return [];
   }
 
-  const values = sheet.getRange(2, 2, lastRow - 1, 6).getValues();
+  // B:H = 7 columns, including the new Asana Link field.
+  const values = sheet.getRange(2, 2, lastRow - 1, 7).getValues();
 
   return values.filter((row) =>
     row.some((value) => value !== "" && value != null),
@@ -1475,6 +1629,7 @@ function refreshDailyActivityMetrics_(workspace) {
     );
 
   const DESTINATION_SHEET_NAME = "Daily Activities Metrics";
+  const OUTPUT_COLUMN_COUNT = 7;
 
   if (!SOURCE_SPREADSHEET_ID) {
     throw new Error(
@@ -1512,11 +1667,14 @@ function refreshDailyActivityMetrics_(workspace) {
 
   if (sourceFilterSheet) {
     // Prefer the existing manager-specific filter sheet.
+    // A:G now includes the Asana Link in column G.
     const lastRow = sourceFilterSheet.getLastRow();
 
     values =
       lastRow > 0
-        ? sourceFilterSheet.getRange(1, 1, lastRow, 6).getValues()
+        ? sourceFilterSheet
+            .getRange(1, 1, lastRow, OUTPUT_COLUMN_COUNT)
+            .getValues()
         : [];
   } else {
     // No manager-specific filter sheet: find the appropriate year sheet.
@@ -1541,13 +1699,14 @@ function refreshDailyActivityMetrics_(workspace) {
     } else {
       const sourceValues = yearSheet
         .getRange(firstRow, 1, lastRow - firstRow + 1, 16)
-        .getDisplayValues();
+        .getValues();
 
-      // QUERY(..., 1) treats the first row of A12:P10013 as the header.
+      // QUERY(..., 1) treats the first row of A12:P as the header.
       const headers = sourceValues[0];
 
-      // Source columns B, C, E, M, N, P.
-      const selectedColumns = [1, 2, 4, 12, 13, 15];
+      // Source columns B, C, E, M, N, P, G.
+      // G = Asana Link (last output column).
+      const selectedColumns = [1, 2, 4, 12, 13, 15, 6];
 
       values = [
         selectedColumns.map((column) => headers[column]),
@@ -1563,13 +1722,20 @@ function refreshDailyActivityMetrics_(workspace) {
   const existingLastRow = destinationSheet.getLastRow();
 
   if (values.length > 0) {
-    destinationSheet.getRange(1, 1, values.length, 6).setValues(values);
+    destinationSheet
+      .getRange(1, 1, values.length, OUTPUT_COLUMN_COUNT)
+      .setValues(values);
   }
 
   // Clear only stale rows left over from a previous, larger import.
   if (existingLastRow > values.length) {
     destinationSheet
-      .getRange(values.length + 1, 1, existingLastRow - values.length, 6)
+      .getRange(
+        values.length + 1,
+        1,
+        existingLastRow - values.length,
+        OUTPUT_COLUMN_COUNT,
+      )
       .clearContent();
   }
 }
@@ -1608,3 +1774,136 @@ function refreshDailyActivityMetricsIfNeeded_(workspace) {
     lock.releaseLock();
   }
 }
+
+/**
+ * Fetches comments and threaded replies from an Asana task.
+ *
+ * Required Asana scope: stories:read
+ */
+function getAsanaTaskComments(sessionId, signature, taskUrl) {
+  const session = requireCapability(sessionId, signature, "hours.view");
+
+  const workspace = getManagerWorkspaceForSession_(session);
+  const accessToken = String(workspace.asanaAccessToken || "").trim();
+
+  if (!accessToken) {
+    throw new Error(
+      "Asana is not connected. Please ask your manager to configure the Asana integration.",
+    );
+  }
+
+  const taskGid = extractAsanaTaskGid_(taskUrl);
+
+  // Rolling seven-day window.
+  const createdAfter = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const comments = [];
+  let offset = "";
+  let pageCount = 0;
+  const maxPages = 5;
+
+  do {
+    const params = [
+      "limit=100",
+      "resource_subtype=comment_added",
+      "sort_ascending=true",
+      `created_after=${encodeURIComponent(createdAfter)}`,
+      "opt_fields=gid,comment_gid,anchor_gid,created_at,created_by.name,text,html_text",
+    ];
+
+    if (offset) {
+      params.push(`offset=${encodeURIComponent(offset)}`);
+    }
+
+    const endpoint =
+      `https://app.asana.com/api/1.0/tasks/${encodeURIComponent(taskGid)}/stories?` +
+      params.join("&");
+
+    const response = UrlFetchApp.fetch(endpoint, {
+      method: "get",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      muteHttpExceptions: true,
+    });
+
+    const status = response.getResponseCode();
+
+    if (status !== 200) {
+      const responseText = response.getContentText();
+
+      console.error(
+        "[Asana] Comment request failed:",
+        status,
+        responseText.substring(0, 500),
+      );
+
+      if (status === 401) {
+        throw new Error(
+          "The configured Asana access token is invalid or expired.",
+        );
+      }
+
+      if (status === 403) {
+        throw new Error("You do not have permission to view this Asana task.");
+      }
+
+      if (status === 404) {
+        throw new Error("The Asana task could not be found.");
+      }
+
+      throw new Error("Unable to retrieve Asana comments.");
+    }
+
+    const result = JSON.parse(response.getContentText());
+
+    if (Array.isArray(result.data)) {
+      comments.push(...result.data);
+    }
+
+    offset = result.next_page?.offset || "";
+    pageCount++;
+  } while (offset && pageCount < maxPages);
+
+  return {
+    success: true,
+    taskGid,
+    periodDays: 7,
+    comments: comments.map((comment) => ({
+      gid: String(comment.gid || ""),
+      commentGid: String(comment.comment_gid || ""),
+      anchorGid: String(comment.anchor_gid || ""),
+      createdAt: String(comment.created_at || ""),
+      author: String(comment.created_by?.name || "Unknown user"),
+      text: String(comment.text || ""),
+      htmlText: String(comment.html_text || ""),
+    })),
+    hasMore: Boolean(offset),
+  };
+}
+
+function extractAsanaTaskGid_(taskUrl) {
+  const url = String(taskUrl || "").trim();
+
+  const match = url.match(/^https:\/\/(?:[a-z0-9-]+\.)?asana\.com\/([^?#]*)/i);
+
+  if (!match) {
+    throw new Error("Invalid Asana task URL.");
+  }
+
+  const segments = match[1].split("/").filter(Boolean);
+
+  // Asana task links commonly include a numeric task GID
+  // as one of their path segments.
+  const taskGid = segments.reverse().find((segment) => /^\d+$/.test(segment));
+
+  if (!taskGid) {
+    throw new Error("Unable to identify the Asana task ID.");
+  }
+
+  return taskGid;
+}
+

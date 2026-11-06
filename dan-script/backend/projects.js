@@ -277,13 +277,29 @@ function syncClientProjects(sessionId, signature) {
       // V = Active (This Year)
       // W = Active (This Month)
       // X = Start Date
-      const data = clientSheet.getRange(`T51:X${rangeEnd}`).getValues();
+      const data = clientSheet
+        .getRange(`T51:X${rangeEnd}`)
+        .getDisplayValues()
+        .map((row) =>
+          row.map((value) =>
+            /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!|NULL!)/i.test(
+              String(value).trim(),
+            )
+              ? ""
+              : value,
+          ),
+        );
 
       const projectMap = {};
 
       data.forEach(
         ([projectValue, hours, activeYear, activeMonth, startDate]) => {
-          if (!projectValue) {
+          if (
+            !projectValue ||
+            /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!|NULL!)/i.test(
+              String(projectValue).trim(),
+            )
+          ) {
             return;
           }
 

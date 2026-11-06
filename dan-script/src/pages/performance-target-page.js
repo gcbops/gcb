@@ -130,9 +130,7 @@ const performanceTargetPage = (() => {
   }
 
   function openTargetEditor(type) {
-    if (!targetData) {
-      return;
-    }
+    if (!targetData) {return;}
 
     const isDaily = type === "daily";
     const label = isDaily ? "Daily Target" : "Monthly Target";
@@ -149,124 +147,162 @@ const performanceTargetPage = (() => {
 
     const ns = ".performanceTargetModal";
 
-    const header =
-      "<div>" +
-      '<h5 class="modal-title font-weight-bold mb-0">' +
-      "Edit " +
-      label +
-      "</h5>" +
-      '<div class="font-size-xs text-muted mt-1">' +
-      "Update the " +
-      label.toLowerCase() +
-      " used by performance calculations." +
-      "</div>" +
-      "</div>";
-
-    const body =
-      '<div id="target-form-body">' +
-      '<form id="performance-target-form">' +
-      '<div class="form-group mb-0 text-left">' +
-      "<label " +
-      'for="' +
-      inputId +
-      '" ' +
-      'class="form-label font-weight-bold">' +
-      label +
-      "</label>" +
-      '<div class="input-group">' +
-      "<input " +
-      'type="number" ' +
-      'id="' +
-      inputId +
-      '" ' +
-      'class="form-control my-0" ' +
-      'min="0" ' +
-      'step="0.5" ' +
-      'value="' +
-      currentValueText +
-      '" ' +
-      "required>" +
-      '<span class="input-group-text">' +
-      unit +
-      "</span>" +
-      "</div>" +
-      "</div>" +
-      "</form>" +
-      "</div>" +
-      '<div id="target-review-body" class="d-none">' +
-      '<h5 class="modal-title mb-2"><strong>Do you want to proceed?</strong></h5>' +
-      "<p>Please review the target change before applying it.</p>" +
-      '<div class="text-left font-size-sm">' +
-      '<div class="d-flex justify-content-between">' +
-      '<span class="text-muted">' +
-      label +
-      "</span>" +
-      '<strong id="target-review-value"></strong>' +
-      "</div>" +
-      "</div>" +
-      "</div>";
-
-    const footer =
-      '<div id="target-form-footer" class="d-flex gap-2">' +
-      '<button type="button" class="btn btn-light btn-cancel-target">' +
-      "Cancel" +
-      "</button>" +
-      '<button type="button" class="btn btn-primary btn-save-target">' +
-      "Save Changes" +
-      "</button>" +
-      "</div>" +
-      '<div id="target-review-footer" class="d-flex gap-2 d-none">' +
-      '<button type="button" class="btn btn-secondary btn-modal-back-target">' +
-      "Back" +
-      "</button>" +
-      '<button type="button" class="btn btn-success btn-proceed-target">' +
-      "Proceed" +
-      "</button>" +
-      "</div>";
-
     AppUtils.openModal(TARGET_MODAL_ID, {
       size: "md",
       placement: "center",
 
-      header,
-      body,
-      footer,
+      header: `
+      <div>
+        <h5 class="modal-title font-weight-bold mb-0">
+          Edit ${label}
+        </h5>
+        <div class="font-size-xs text-muted mt-1">
+          Update the ${label.toLowerCase()} used by performance calculations.
+        </div>
+      </div>
+    `,
+
+      body: `
+      <div id="target-form-body">
+        <form id="performance-target-form">
+          <div class="form-group mb-0 text-left">
+            <label
+              for="${inputId}"
+              class="form-label font-weight-bold"
+            >
+              ${label}
+            </label>
+
+            <div class="input-group">
+              <input
+                type="number"
+                id="${inputId}"
+                class="form-control my-0"
+                min="0"
+                step="0.5"
+                value="${currentValueText}"
+                required
+              >
+              <span class="input-group-text">${unit}</span>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div id="target-review-body" style="display: none;">
+        <h5 class="modal-title mb-2">
+          <strong>Review Target Change</strong>
+        </h5>
+
+        <p>Please review the new target before applying it.</p>
+
+        <div class="text-left font-size-sm">
+          <div class="d-flex justify-content-between">
+            <span class="text-muted">${label}</span>
+            <strong id="target-review-value"></strong>
+          </div>
+        </div>
+      </div>
+    `,
+
+      footer: `
+      <!-- APP-MODAL-MAIN-ACTIONS -->
+      <div id="target-form-footer" class="d-flex gap-2">
+        <button
+          type="button"
+          class="btn btn-light btn-cancel-target"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-primary btn-review-target"
+        >
+          Save Changes
+        </button>
+      </div>
+
+      <!-- APP-MODAL-REVIEW-ACTIONS -->
+      <div id="target-review-footer" class="d-flex gap-2">
+        <button
+          type="button"
+          class="btn btn-secondary btn-modal-back"
+        >
+          Back
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-success btn-proceed"
+        >
+          Proceed
+        </button>
+      </div>
+    `,
+
+      review: {
+        enabled: true,
+
+        selectors: {
+          main: "#target-form-body, #target-form-footer",
+          review: "#target-review-body, #target-review-footer",
+          trigger: ".btn-review-target",
+          back: ".btn-modal-back",
+          proceed: ".btn-proceed",
+        },
+
+        getData: ($modal) => {
+          const rawValue = $modal.find(`#${inputId}`).val();
+
+          const validation = ValidationModule.number(rawValue, label, {
+            min: Number.EPSILON,
+          });
+
+          if (!validation.valid) {
+            AppUtils.showError(validation.message);
+            return null;
+          }
+
+          const newValue = validation.value;
+
+          const latestCurrentValue = isDaily
+            ? Number(targetData?.dailyTarget)
+            : Number(targetData?.monthlyTarget);
+
+          if (newValue === latestCurrentValue) {
+            AppUtils.showError(`No ${label.toLowerCase()} changes were made.`);
+            return null;
+          }
+
+          return {
+            type,
+            value: newValue,
+            label,
+            unit,
+          };
+        },
+
+        onReview: ($modal, data) => {
+          $modal
+            .find("#target-review-value")
+            .text(`${formatHours(data.value)} ${data.unit}`);
+        },
+
+        onProceed: ($modal, data, $button, controls) => {
+          return savePerformanceTarget(
+            data.type,
+            data.value,
+            $button,
+            controls,
+          );
+        },
+      },
 
       onOpen($modal) {
-        $modal
-          .off(ns)
-
-          // Cancel -> Close modal
-          .on(`click${ns}`, ".btn-cancel-target", () => {
-            AppUtils.closeModal(TARGET_MODAL_ID);
-          })
-
-          // Save Changes -> Validate and show review step
-          .on(`click${ns}`, ".btn-save-target", () => {
-            showTargetReview($modal, type);
-          })
-
-          // Back -> Return to form
-          .on(`click${ns}`, ".btn-back-target", () => {
-            $modal
-              .find("#target-review-body, #target-review-footer")
-              .addClass("d-none");
-
-            $modal
-              .find("#target-form-body, #target-form-footer")
-              .removeClass("d-none");
-          })
-
-          // Proceed -> Save target
-          .on(`click${ns}`, ".btn-proceed-target", () => {
-            const $button = $modal.find(".btn-proceed-target");
-
-            AppUtils.lockModal(TARGET_MODAL_ID);
-
-            const newValue = Number($modal.find(`#${inputId}`).val());
-
-            savePerformanceTarget(type, newValue, $button);
-          });
+        $modal.off(ns).on(`click${ns}`, ".btn-cancel-target", () => {
+          AppUtils.closeModal(TARGET_MODAL_ID);
+        });
       },
 
       onClose($modal) {
@@ -275,53 +311,20 @@ const performanceTargetPage = (() => {
     });
   }
 
-  function showTargetReview($modal, type) {
-    const isDaily = type === "daily";
-
-    const inputId = isDaily
-      ? "#performance-daily-target"
-      : "#performance-monthly-target";
-
-    const label = isDaily ? "Daily Target" : "Monthly Target";
-    const unit = isDaily ? "hrs/day" : "hrs";
-
-    const rawValue = $modal.find(inputId).val();
-
-    const newValueResult = ValidationModule.number(rawValue, label, {
-      min: Number.EPSILON,
-    });
-
-    if (!newValueResult.valid) {
-      AppUtils.showError(newValueResult.message);
-      return;
-    }
-
-    const newValue = newValueResult.value;
-
-    const currentValue = isDaily
-      ? Number(targetData?.dailyTarget)
-      : Number(targetData?.monthlyTarget);
-
-    if (newValue === currentValue) {
-      AppUtils.showError(`No ${label.toLowerCase()} changes were made.`);
-      return;
-    }
-
-    $modal
-      .find("#target-review-value")
-      .text(`${formatHours(newValue)} ${unit}`);
-
-    $modal.find("#target-form-body, #target-form-footer").addClass("d-none");
-
-    $modal
-      .find("#target-review-body, #target-review-footer")
-      .removeClass("d-none");
-  }
-
-  async function savePerformanceTarget(type, value, proceedButton) {
+  async function savePerformanceTarget(
+    type,
+    value,
+    proceedButton,
+    controls = {},
+  ) {
     const loading = proceedButton
-      ? AppUtils.setButtonLoading(proceedButton, "Saving")
+      ? AppUtils.setButtonLoading(proceedButton[0], "Saving")
       : null;
+
+    const releaseSubmission = () => {
+      loading?.restore();
+      controls.release?.();
+    };
 
     try {
       const [sessionId, signature] = await getAuthArgs();
@@ -333,9 +336,11 @@ const performanceTargetPage = (() => {
 
         onSuccess: (result) => {
           if (!result?.success) {
-            loading?.restore();
+            releaseSubmission();
 
-            AppUtils.showError("Unable to update performance target.");
+            AppUtils.showError(
+              result?.message || "Unable to update performance target.",
+            );
 
             return;
           }
@@ -350,27 +355,32 @@ const performanceTargetPage = (() => {
 
           setTimeout(() => {
             AppUtils.closeModal(TARGET_MODAL_ID);
-
             refreshTargetData();
           }, 1000);
         },
 
         onError: (error) => {
-          loading?.restore();
+          releaseSubmission();
 
           AppUtils.showError(
             error?.message || "Unable to update performance target.",
           );
         },
       });
+
+      return true;
     } catch (error) {
-      loading?.restore();
+      releaseSubmission();
 
       if (handleInvalidSessionError(error)) {
-        return;
+        return false;
       }
 
-      AppUtils.showError(error?.message || "Unable to update performance target.");
+      AppUtils.showError(
+        error?.message || "Unable to update performance target.",
+      );
+
+      return false;
     }
   }
 

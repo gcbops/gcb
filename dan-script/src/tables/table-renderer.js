@@ -47,7 +47,7 @@ const TableRenderer = (() => {
     return normalized;
   }
 
-  function renderCell(cell, colIndex, isActivityTable, debug, rowIndex) {
+  function renderCell(cell, colIndex, isActivityTable, debug, rowIndex, row) {
     const log = (...args) => debug && console.log(...args);
 
     log(`[Row ${rowIndex}][Col ${colIndex}] value:`, cell);
@@ -80,6 +80,15 @@ const TableRenderer = (() => {
       </span>
     `);
 
+      return $td;
+    }
+
+    /*
+     * Asana Link and Client-name popover trigger (Activity Today only)
+     * Leave raw URL for DataTables rendering.
+     */
+    if (isActivityTable && (colIndex === 0 || colIndex === 2)) {
+      $td.text(isEmptyCell(cell) ? "" : String(cell).trim());
       return $td;
     }
 
@@ -169,7 +178,14 @@ const TableRenderer = (() => {
 
       normalizedRow.forEach((cell, colIndex) => {
         $tr.append(
-          renderCell(cell, colIndex, isActivityTable, debug, rowIndex),
+          renderCell(
+            cell,
+            colIndex,
+            isActivityTable,
+            debug,
+            rowIndex,
+            normalizedRow,
+          ),
         );
       });
 

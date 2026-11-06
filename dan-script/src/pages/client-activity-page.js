@@ -8,6 +8,7 @@ import { TableClientSelector } from "../tables/client-selector.js";
 import { DataTableModule } from "../components/data-table.js";
 import { AppUtils } from "../utils/utils.js";
 import { performanceTargetPage } from "./performance-target-page.js";
+import { ProfilePopoverModule } from "../clients/profile-popover.js";
 
 const clientActivityPage = (() => {
   let bound = false;
@@ -45,6 +46,36 @@ const clientActivityPage = (() => {
     HourSummary.loadTodayChargedHours();
   }
 
+  function getActivityProfilePopoverOptions(client) {
+    return {
+      profileButton: false,
+      showDetails: true,
+
+      actions: `
+      <button
+        type="button"
+        class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-profile-client-action="add-hours"
+        data-client-name="${AppUtils.escapeHtml(client.name)}"
+      >
+        <i class="pe-7s-magic-wand"></i>
+        <span>Add Hours</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-profile-popover-action btn-transition btn btn-outline-link"
+        data-profile-client-action="view-asana"
+        data-client-name="${AppUtils.escapeHtml(client.name)}"
+        data-asana-url="${AppUtils.escapeHtml(client.asanaUrl || "")}"
+      >
+        <i class="pe-7s-note2"></i>
+        <span>View Asana</span>
+      </button>
+    `,
+    };
+  }
+
   function handleCarousel() {
     if (mobileQuery.matches) {
       if (carouselInstance) {
@@ -76,6 +107,9 @@ const clientActivityPage = (() => {
     );
 
     TableClientSelector.init();
+
+    ProfilePopoverModule.init();
+    ProfilePopoverModule.setProfileBuilder(getActivityProfilePopoverOptions);
     
     HourSummary.loadTodayChargedHours();
     

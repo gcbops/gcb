@@ -6,6 +6,7 @@ import { PerformanceMetrics } from "../performance/performance-metrics.js";
 import { ClientDataService } from "../clients/client-data-service.js";
 import { TableFilterService } from "../tables/table-filter-service.js";
 import { ProfilePopoverModule } from "../clients/profile-popover.js";
+import { AuthorizationUIModule } from "../auth/authorization-ui.js";
 
 const HomePage = (() => {
   let initialized = false;
@@ -22,35 +23,45 @@ const HomePage = (() => {
   }
 
   function loadData() {
-    HourSummary.loadHoursSummary("#hours-summary");
 
-    ChartModule.loadChart("monthly");
-    ChartModule.loadPrevYearCombinedChart();
-    PerformanceMetrics.loadPerformanceSummary(
-      "current-performance-summary",
-      "current-paid-growth",
-      "current",
-    );
+    if (AuthorizationUIModule.canAccessRequirement({ role: "admin" })) {
+      HourSummary.loadAdminHoursSummary("#hours-summary");
+      ChartModule.loadAdminMonthlyChart();
+      ChartModule.loadAdminMonthlyComparisonChart();
 
-    PerformanceMetrics.loadPerformanceSummary(
-      "previous-performance-summary",
-      "previous-paid-growth",
-      "previous",
-    );
+    } else {
+      HourSummary.loadHoursSummary("#hours-summary");
+      ChartModule.loadChart("monthly");
+      ChartModule.loadPrevYearCombinedChart();
+      
+      PerformanceMetrics.loadPerformanceSummary(
+        "current-performance-summary",
+        "current-paid-growth",
+        "current",
+      );
 
-    HourSummary.loadTodayChargedHours();
-    ChartModule.loadChart("daily", false, false, false, false, {
-      showAxes: false,
-      showGrid: false,
-      showPoints: false,
-      showTooltip: false,
-      showLegend: false,
-      showLabel: false,
-    });
-    clientRankings.renderTopPaidClients();
-    ProjectRankings.renderTopProjects();
+      PerformanceMetrics.loadPerformanceSummary(
+        "previous-performance-summary",
+        "previous-paid-growth",
+        "previous",
+      );
 
-    ClientDataService.renderActivePaidOwedClients();
+      HourSummary.loadTodayChargedHours();
+      ChartModule.loadChart("daily", false, false, false, false, {
+        showAxes: false,
+        showGrid: false,
+        showPoints: false,
+        showTooltip: false,
+        showLegend: false,
+        showLabel: false,
+      });
+      clientRankings.renderTopPaidClients();
+      ProjectRankings.renderTopProjects();
+
+      ClientDataService.renderActivePaidOwedClients();
+    }
+
+    
   }
 
   function bindEvents() {
